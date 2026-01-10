@@ -17,6 +17,7 @@ import adminRoutes from "./routes/admin.js";
 import polygonsRoutes from "./routes/polygons.js";
 import bonusesRoutes from "./routes/bonuses.js";
 import syncRoutes from "./routes/sync.js";
+import logsRoutes from "./routes/logs.js";
 
 // Queues and Workers - только если синхронизация включена
 if (process.env.ENABLE_SYNC !== "false") {
@@ -29,6 +30,9 @@ if (process.env.ENABLE_SYNC !== "false") {
 
 // WebSocket
 import WSServer from "./websocket/server.js";
+
+// Logger
+import { logger } from "./utils/logger.js";
 
 // Загрузка переменных окружения
 dotenv.config();
@@ -68,6 +72,7 @@ app.use("/api/admin", adminRoutes);
 app.use("/api/polygons", polygonsRoutes);
 app.use("/api/bonuses", bonusesRoutes);
 app.use("/api/sync", syncRoutes);
+app.use("/api/logs", logsRoutes);
 
 // 404 handler
 app.use(notFoundHandler);
@@ -90,7 +95,21 @@ server.listen(PORT, async () => {
   console.log(`📍 Health check: http://localhost:${PORT}/health`);
   console.log(`🔌 WebSocket server ready on ws://localhost:${PORT}`);
 
+  // Логирование старта сервера
+  await logger.system.startup(PORT);
+
   // Проверка подключений
-  await testConnection();
-  await testRedisConnection();
+  try {
+    await testConnection();
+    await logger.system.dbConnected();
+  } catch (error) {
+    await logger.system.dbError(error.message);
+  }
+
+  try {
+    await testRedisConnection();
+    await logger.system.redisConnected();
+  } catch (error) {
+    await logger.system.redisError(error.message);
+  }
 });

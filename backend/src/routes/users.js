@@ -92,7 +92,9 @@ router.get("/profile", authenticateToken, async (req, res, next) => {
 router.put("/profile", authenticateToken, async (req, res, next) => {
   try {
     const userId = req.user.id;
-    const { first_name, last_name, email, date_of_birth } = req.body;
+    const { first_name, last_name, email, date_of_birth, phone } = req.body;
+
+    console.log(`[PUT /profile] User ${userId} updating profile:`, req.body);
 
     const updates = [];
     const values = [];
@@ -112,6 +114,28 @@ router.put("/profile", authenticateToken, async (req, res, next) => {
     if (date_of_birth !== undefined) {
       updates.push("date_of_birth = ?");
       values.push(date_of_birth);
+    }
+    if (phone !== undefined) {
+      console.log(`[PUT /profile] Processing phone:`, phone, `type:`, typeof phone);
+      const normalizedPhone = String(phone)
+        .trim()
+        .replace(/[^\d+]/g, "");
+      console.log(`[PUT /profile] Normalized phone:`, normalizedPhone);
+
+      if (!normalizedPhone) {
+        return res.status(400).json({ error: "Phone number is required" });
+      }
+      if (normalizedPhone.length > 20) {
+        return res.status(400).json({ error: "Phone number is too long" });
+      }
+
+      const [existingUsers] = await db.query("SELECT id FROM users WHERE phone = ? AND id != ?", [normalizedPhone, userId]);
+      if (existingUsers.length > 0) {
+        return res.status(409).json({ error: "Phone number already in use" });
+      }
+
+      updates.push("phone = ?");
+      values.push(normalizedPhone);
     }
 
     if (updates.length === 0) {

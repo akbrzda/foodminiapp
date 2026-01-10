@@ -3,6 +3,7 @@ import db from "../config/database.js";
 import { authenticateToken, requireRole, checkCityAccess } from "../middleware/auth.js";
 import { calculateEarnedBonuses, validateBonusUsage, earnBonuses, useBonuses } from "../utils/bonuses.js";
 import { addOrderToSyncQueue } from "../queues/sync.js";
+import { logger, adminActionLogger } from "../utils/logger.js";
 
 const router = express.Router();
 
@@ -296,6 +297,9 @@ router.post("/", authenticateToken, async (req, res, next) => {
     // Получаем полные данные заказа
     const [orders] = await db.query(`SELECT * FROM orders WHERE id = ?`, [orderId]);
 
+    // Логирование создания заказа
+    await logger.order.created(orderId, req.user.id, finalTotal);
+
     // WebSocket: уведомление о новом заказе
     try {
       const { wsServer } = await import("../index.js");
@@ -501,56 +505,65 @@ router.get("/admin/all", authenticateToken, requireRole("admin", "manager", "ceo
 });
 
 // Изменить статус заказа
-router.put("/admin/:id/status", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
-  try {
-    const orderId = req.params.id;
-    const { status } = req.body;
-
-    const validStatuses = ["pending", "confirmed", "preparing", "ready", "delivering", "completed", "cancelled"];
-
-    if (!status || !validStatuses.includes(status)) {
-      return res.status(400).json({
-        error: `Status must be one of: ${validStatuses.join(", ")}`,
-      });
-    }
-
-    // Проверяем существование заказа и доступ
-    const [orders] = await db.query("SELECT city_id FROM orders WHERE id = ?", [orderId]);
-
-    if (orders.length === 0) {
-      return res.status(404).json({ error: "Order not found" });
-    }
-
-    // Проверка доступа к городу для менеджеров
-    if (req.user.role === "manager" && !req.user.cities.includes(orders[0].city_id)) {
-      return res.status(403).json({
-        error: "You do not have access to this city",
-      });
-    }
-
-    // Обновляем статус
-    const [oldOrderData] = await db.query("SELECT status, user_id FROM orders WHERE id = ?", [orderId]);
-    const oldStatus = oldOrderData[0]?.status;
-    const userId = oldOrderData[0]?.user_id;
-
-    await db.query("UPDATE orders SET status = ?, completed_at = ? WHERE id = ?", [status, status === "completed" ? new Date() : null, orderId]);
-
-    // Получаем обновленный заказ
-    const [updatedOrders] = await db.query("SELECT * FROM orders WHERE id = ?", [orderId]);
-
-    // WebSocket: уведомление об изменении статуса
+router.put(
+  "/admin/:id/status",
+  authenticateToken,
+  requireRole("admin", "manager", "ceo"),
+  adminActionLogger("update_order_status", "order"),
+  async (req, res, next) => {
     try {
-      const { wsServer } = await import("../index.js");
-      wsServer.notifyOrderStatusUpdate(orderId, userId, status, oldStatus);
-    } catch (wsError) {
-      console.error("Failed to send WebSocket notification:", wsError);
-    }
+      const orderId = req.params.id;
+      const { status } = req.body;
 
-    res.json({ order: updatedOrders[0] });
-  } catch (error) {
-    next(error);
+      const validStatuses = ["pending", "confirmed", "preparing", "ready", "delivering", "completed", "cancelled"];
+
+      if (!status || !validStatuses.includes(status)) {
+        return res.status(400).json({
+          error: `Status must be one of: ${validStatuses.join(", ")}`,
+        });
+      }
+
+      // Проверяем существование заказа и доступ
+      const [orders] = await db.query("SELECT city_id FROM orders WHERE id = ?", [orderId]);
+
+      if (orders.length === 0) {
+        return res.status(404).json({ error: "Order not found" });
+      }
+
+      // Проверка доступа к городу для менеджеров
+      if (req.user.role === "manager" && !req.user.cities.includes(orders[0].city_id)) {
+        return res.status(403).json({
+          error: "You do not have access to this city",
+        });
+      }
+
+      // Обновляем статус
+      const [oldOrderData] = await db.query("SELECT status, user_id FROM orders WHERE id = ?", [orderId]);
+      const oldStatus = oldOrderData[0]?.status;
+      const userId = oldOrderData[0]?.user_id;
+
+      await db.query("UPDATE orders SET status = ?, completed_at = ? WHERE id = ?", [status, status === "completed" ? new Date() : null, orderId]);
+
+      // Получаем обновленный заказ
+      const [updatedOrders] = await db.query("SELECT * FROM orders WHERE id = ?", [orderId]);
+
+      // Логирование изменения статуса
+      await logger.order.statusChanged(orderId, oldStatus, status, req.user.id);
+
+      // WebSocket: уведомление об изменении статуса
+      try {
+        const { wsServer } = await import("../index.js");
+        wsServer.notifyOrderStatusUpdate(orderId, userId, status, oldStatus);
+      } catch (wsError) {
+        console.error("Failed to send WebSocket notification:", wsError);
+      }
+
+      res.json({ order: updatedOrders[0] });
+    } catch (error) {
+      next(error);
+    }
   }
-});
+);
 
 // Получить статистику по заказам
 router.get("/admin/stats", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {

@@ -3,6 +3,7 @@ import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
 import db from "../config/database.js";
+import { parseTelegramUser, validateTelegramData } from "../utils/telegram.js";
 
 const router = express.Router();
 
@@ -28,7 +29,28 @@ function verifyTelegramAuth(data, botToken) {
 // Авторизация через Telegram для клиентов
 router.post("/telegram", async (req, res, next) => {
   try {
-    const { id, first_name, last_name, username, photo_url, auth_date, hash } = req.body;
+    const { initData } = req.body;
+    let telegramPayload = req.body;
+
+    if (initData) {
+      const params = new URLSearchParams(initData);
+      const parsedUser = parseTelegramUser(initData);
+
+      if (!parsedUser) {
+        return res.status(400).json({ error: "Telegram data is required" });
+      }
+
+      telegramPayload = {
+        id: parsedUser.telegram_id,
+        first_name: parsedUser.first_name,
+        last_name: parsedUser.last_name,
+        username: parsedUser.username,
+        auth_date: Number(params.get("auth_date")),
+        hash: params.get("hash"),
+      };
+    }
+
+    const { id, first_name, last_name, username, photo_url, auth_date, hash } = telegramPayload;
 
     if (!id || !hash) {
       return res.status(400).json({ error: "Telegram data is required" });
@@ -37,14 +59,17 @@ router.post("/telegram", async (req, res, next) => {
     // Проверяем подпись Telegram (в продакшене обязательно!)
     const botToken = process.env.TELEGRAM_BOT_TOKEN;
     if (botToken) {
-      const isValid = verifyTelegramAuth(req.body, botToken);
+      const isValid = initData ? validateTelegramData(initData, botToken) : verifyTelegramAuth(telegramPayload, botToken);
       if (!isValid) {
         return res.status(403).json({ error: "Invalid Telegram data" });
       }
     }
 
     // Проверяем не устарели ли данные (24 часа)
-    const authAge = Date.now() / 1000 - auth_date;
+    const authAge = Date.now() / 1000 - Number(auth_date);
+    if (!Number.isFinite(authAge)) {
+      return res.status(400).json({ error: "Telegram data is required" });
+    }
     if (authAge > 86400) {
       return res.status(403).json({ error: "Auth data is too old" });
     }
@@ -86,10 +111,9 @@ router.post("/telegram", async (req, res, next) => {
       }
     } else {
       // Создаем нового пользователя (без номера телефона пока)
-      const tempPhone = `temp_${id}_${Date.now()}`;
       const [result] = await db.query("INSERT INTO users (telegram_id, phone, first_name, last_name) VALUES (?, ?, ?, ?)", [
         id,
-        tempPhone,
+        null,
         first_name || null,
         last_name || null,
       ]);

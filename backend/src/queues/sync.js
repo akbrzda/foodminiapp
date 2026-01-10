@@ -2,11 +2,13 @@ import { Queue, Worker } from "bullmq";
 import Redis from "ioredis";
 import db from "../config/database.js";
 import gulyashClient from "../services/gulyash.js";
+import { logger } from "../utils/logger.js";
 
 // Подключение к Redis
 const connection = new Redis({
   host: process.env.REDIS_HOST || "localhost",
   port: process.env.REDIS_PORT || 6379,
+  ...(process.env.REDIS_PASSWORD ? { password: process.env.REDIS_PASSWORD } : {}),
   maxRetriesPerRequest: null,
 });
 
@@ -63,8 +65,6 @@ export const ordersWorker = new Worker(
   "orders-sync",
   async (job) => {
     const { orderId, action } = job.data;
-
-    console.log(`[Orders Worker] Processing ${action} for order ${orderId}`);
 
     try {
       // Получаем данные заказа из БД
@@ -156,17 +156,20 @@ export const ordersWorker = new Worker(
           console.error("Failed to send WebSocket notification:", wsError);
         }
 
-        console.log(`[Orders Worker] Order ${orderId} synced successfully`);
+        // Логирование успешной синхронизации
+        await logger.sync.success("order", orderId, result.gulyash_order_id);
+
         return { success: true, gulyash_order_id: result.gulyash_order_id };
       } else {
         throw new Error(result.error);
       }
     } catch (error) {
-      console.error(`[Orders Worker] Error processing order ${orderId}:`, error.message);
-
       // Получаем city_id для уведомления
       const [orderData] = await db.query(`SELECT city_id FROM orders WHERE id = ?`, [orderId]);
       const cityId = orderData[0]?.city_id;
+
+      // Логирование ошибки
+      await logger.sync.failed("order", orderId, error.message, job.attemptsMade);
 
       // Обновляем статус синхронизации
       await db.query(
