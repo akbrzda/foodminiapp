@@ -1,0 +1,6 @@
+docs/
+.vscode/mcp.json
+node_modules/
+.DS_Store
+.env
+AGENTS.md
