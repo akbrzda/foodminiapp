@@ -1,26 +1,18 @@
 <template>
   <div class="home">
-    <div class="header">
-      <div class="location" @click="$router.push('/select-city')">
-        <span class="location-icon">📍</span>
-        <div>
-          <div class="city">{{ locationStore.selectedCity?.name || "Выберите город" }}</div>
-          <div class="branch" v-if="locationStore.selectedBranch">
-            {{ locationStore.selectedBranch.name }}
-          </div>
-        </div>
+    <AppHeader @toggleMenu="showMenu = true" />
+
+    <div class="location-bar">
+      <div class="location-tabs">
+        <button @click="setDeliveryType('delivery')" class="pill-tab" :class="{ active: locationStore.isDelivery }">Доставка</button>
+        <button @click="setDeliveryType('pickup')" class="pill-tab" :class="{ active: locationStore.isPickup }">Самовывоз</button>
       </div>
-      <div class="bonus-badge" @click="$router.push('/profile')">🎁 {{ bonusBalance }} б.</div>
-    </div>
 
-    <div class="banner">
-      <h1>Быстрая доставка вкусной еды</h1>
-      <p>Закажите любимые блюда прямо сейчас</p>
-    </div>
-
-    <div class="actions">
-      <button class="action-btn primary" @click="$router.push('/menu')">📋 Меню</button>
-      <button class="action-btn" @click="$router.push('/orders')">📦 Заказы</button>
+      <div class="location-actions">
+        <button @click="openDeliverySelector" class="action-pill">
+          <span class="action-text">{{ actionButtonText }}</span>
+        </button>
+      </div>
     </div>
 
     <div class="quick-order" v-if="lastOrder">
@@ -33,39 +25,57 @@
         <button class="repeat-btn">Повторить</button>
       </div>
     </div>
-
-    <nav class="bottom-nav">
-      <button class="nav-btn active">🏠 Главная</button>
-      <button class="nav-btn" @click="$router.push('/menu')">📋 Меню</button>
-      <button class="nav-btn" @click="$router.push('/cart')">
-        🛒 Корзина
-        <span class="badge" v-if="cartStore.itemsCount">{{ cartStore.itemsCount }}</span>
-      </button>
-      <button class="nav-btn" @click="$router.push('/profile')">👤 Профиль</button>
-    </nav>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from "vue";
-import { useRouter } from "vue-router";
+import { ref, computed, onMounted } from "vue";
+import { useRouter, useRoute } from "vue-router";
 import { useAuthStore } from "../stores/auth";
 import { useLocationStore } from "../stores/location";
 import { useCartStore } from "../stores/cart";
 import { bonusesAPI, ordersAPI } from "../api/endpoints";
 import { hapticFeedback } from "../services/telegram";
+import AppHeader from "../components/AppHeader.vue";
 
 const router = useRouter();
+const route = useRoute();
 const authStore = useAuthStore();
 const locationStore = useLocationStore();
 const cartStore = useCartStore();
 
 const bonusBalance = ref(0);
 const lastOrder = ref(null);
+const showMenu = ref(false);
+
+const cityName = computed(() => locationStore.selectedCity?.name || "Когалым");
+const actionButtonText = computed(() => {
+  if (locationStore.isDelivery) {
+    return locationStore.deliveryAddress ? truncateText(locationStore.deliveryAddress, 24) : "Укажите адрес";
+  }
+
+  if (locationStore.isPickup) {
+    return locationStore.selectedBranch ? truncateText(locationStore.selectedBranch.name, 22) : "Выбрать филиал";
+  }
+
+  return "Укажите адрес";
+});
 
 onMounted(async () => {
   await loadBonusBalance();
   await loadLastOrder();
+
+  // Попытка определить местоположение
+  try {
+    await locationStore.detectUserLocation();
+  } catch (error) {
+    console.log("Location detection failed:", error);
+  }
+
+  if (route.query.openCity === "1") {
+    window.dispatchEvent(new CustomEvent("open-city-popup"));
+    router.replace({ query: {} });
+  }
 });
 
 async function loadBonusBalance() {
@@ -105,52 +115,139 @@ async function repeatOrder() {
     console.error("Failed to repeat order:", error);
   }
 }
-</script>
 
-<style scoped>
+function openCitySelector() {
+  window.dispatchEvent(new CustomEvent("open-city-popup"));
+}
+
+function openDeliverySelector() {
+  if (!locationStore.selectedCity) {
+    window.dispatchEvent(new CustomEvent("open-city-popup"));
+    return;
+  }
+  if (locationStore.isPickup) {
+    router.push("/pickup-map");
+    return;
+  }
+  router.push("/delivery-map");
+}
+
+function setDeliveryType(type) {
+  locationStore.setDeliveryType(type);
+}
+
+function truncateText(text, maxLength) {
+  if (!text) return "";
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, maxLength - 1)}…`;
+}
+</script>
+<style>
 .home {
   min-height: 100vh;
   padding-bottom: 70px;
   background: #f5f5f5;
 }
 
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px;
+.location-bar {
   background: white;
-  border-bottom: 1px solid #e0e0e0;
+  border-bottom: 1px solid #e6e9ef;
+  padding: 10px 16px 14px;
 }
 
-.location {
+.location-tabs {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.pill-tab {
+  width: 100%;
+  padding: 8px 18px;
+  border: 1px solid #e5e7eb;
+  border-radius: 18px;
+  background: #ffffff;
+  font-size: 14px;
+  font-weight: 600;
+  color: #111827;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.04);
+}
+
+.pill-tab.active {
+  background: #3b3f46;
+  border-color: #3b3f46;
+  color: white;
+  box-shadow: none;
+}
+
+.pill-tab:hover:not(.active) {
+  background: #f3f4f6;
+}
+
+.location-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.city-pill {
   display: flex;
   align-items: center;
   gap: 8px;
-  cursor: pointer;
-}
-
-.location-icon {
-  font-size: 20px;
-}
-
-.city {
-  font-weight: 600;
-  font-size: 16px;
-}
-
-.branch {
-  font-size: 12px;
-  color: #666;
-}
-
-.bonus-badge {
   padding: 8px 12px;
-  background: #4caf50;
-  color: white;
-  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+  border-radius: 18px;
+  font-size: 14px;
   font-weight: 600;
+  color: #111827;
   cursor: pointer;
+  transition: all 0.2s;
+}
+
+.city-pill:hover {
+  background: #f5f6f8;
+}
+
+.city-text {
+  max-width: 120px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.action-pill {
+  width: 100%;
+  padding: 8px 14px;
+  border: none;
+  background: #f7d000;
+  color: #1f2937;
+  border-radius: 18px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: transform 0.2s, box-shadow 0.2s;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.08);
+}
+
+.action-text {
+  display: inline-block;
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+}
+
+.action-pill:hover {
+  transform: translateY(-1px);
+}
+
+.action-pill:active {
+  transform: translateY(0);
+  box-shadow: none;
 }
 
 .banner {

@@ -49,13 +49,11 @@ export function getTelegramUser() {
 }
 
 export function getThemeParams() {
-  const webApp = resolveWebApp();
-  return webApp?.themeParams || {};
+  return {};
 }
 
 export function getColorScheme() {
-  const webApp = resolveWebApp();
-  return webApp?.colorScheme || "light";
+  return "light";
 }
 
 export function showBackButton(handler) {

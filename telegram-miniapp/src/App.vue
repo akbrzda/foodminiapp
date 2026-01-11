@@ -1,15 +1,10 @@
 <template>
-  <div id="app" :data-theme="theme">
+  <div id="app">
     <router-view />
   </div>
 </template>
 
 <script setup>
-import { computed } from "vue";
-import { useTelegramStore } from "./stores/telegram";
-
-const telegramStore = useTelegramStore();
-const theme = computed(() => telegramStore.theme);
 </script>
 
 <style>

@@ -7,19 +7,19 @@ const routes = [
     path: "/",
     name: "Home",
     component: () => import("../views/Home.vue"),
-    meta: { requiresAuth: true, requiresCity: true },
+    meta: { requiresAuth: true, requiresLocation: true },
   },
   {
     path: "/menu",
     name: "Menu",
     component: () => import("../views/Menu.vue"),
-    meta: { requiresAuth: true, requiresCity: true },
+    meta: { requiresAuth: true, requiresLocation: true },
   },
   {
     path: "/cart",
     name: "Cart",
     component: () => import("../views/Cart.vue"),
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: true, requiresLocation: true },
   },
   {
     path: "/profile",
@@ -46,16 +46,22 @@ const routes = [
     meta: { requiresAuth: false },
   },
   {
-    path: "/select-city",
-    name: "SelectCity",
-    component: () => import("../views/SelectCity.vue"),
-    meta: { requiresAuth: true },
+    path: "/delivery-map",
+    name: "DeliveryMap",
+    component: () => import("../views/DeliveryMap.vue"),
+    meta: { requiresAuth: false },
   },
   {
-    path: "/select-branch",
-    name: "SelectBranch",
-    component: () => import("../views/SelectBranch.vue"),
-    meta: { requiresAuth: true },
+    path: "/delivery-address",
+    name: "DeliveryAddressDetails",
+    component: () => import("../views/DeliveryAddressDetails.vue"),
+    meta: { requiresAuth: false },
+  },
+  {
+    path: "/pickup-map",
+    name: "PickupMap",
+    component: () => import("../views/PickupMap.vue"),
+    meta: { requiresAuth: false },
   },
 ];
 
@@ -76,12 +82,18 @@ router.beforeEach((to, from, next) => {
 
   // Если уже авторизован и идет на логин - редирект на главную
   if (to.name === "Login" && authStore.isAuthenticated) {
+    // Проверяем, выбран ли город
+    if (!locationStore.selectedCity) {
+      return next("/?openCity=1");
+    }
     return next("/");
   }
 
-  // Проверка выбора города
-  if (to.meta.requiresCity && !locationStore.hasCitySelected) {
-    return next("/select-city");
+  // Проверка выбора города для страниц, требующих местоположение
+  if (to.meta.requiresLocation && authStore.isAuthenticated) {
+    if (!locationStore.selectedCity && to.name !== "DeliveryMap" && to.name !== "PickupMap" && to.name !== "DeliveryAddressDetails") {
+      return next("/?openCity=1");
+    }
   }
 
   next();

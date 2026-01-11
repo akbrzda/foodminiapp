@@ -8,7 +8,6 @@ export const useTelegramStore = defineStore("telegram", () => {
   const startParam = ref(null);
 
   const isReady = computed(() => Boolean(tg.value));
-  const theme = computed(() => tg.value?.colorScheme || "light");
   const platform = computed(() => tg.value?.platform || "unknown");
 
   function initTelegram() {
@@ -84,7 +83,6 @@ export const useTelegramStore = defineStore("telegram", () => {
     console.log("✅ Telegram WebApp инициализирован", {
       platform: webApp.platform,
       version: webApp.version,
-      colorScheme: webApp.colorScheme,
       initDataLength: currentInitData.length,
     });
   }
@@ -196,7 +194,6 @@ export const useTelegramStore = defineStore("telegram", () => {
 
     // getters
     isReady,
-    theme,
     platform,
 
     // actions

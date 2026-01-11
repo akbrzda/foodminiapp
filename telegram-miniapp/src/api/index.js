@@ -5,7 +5,8 @@ const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL,
   timeout: 10000,
   headers: {
-    "Content-Type": "application/json",
+    "Content-Type": "application/json; charset=utf-8",
+    Accept: "application/json; charset=utf-8",
   },
 });
 
@@ -25,7 +26,13 @@ api.interceptors.request.use(
 
 // Response interceptor - обработка ошибок
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // Ensure response data is properly decoded
+    if (response.data && typeof response.data === "object") {
+      response.data = JSON.parse(JSON.stringify(response.data));
+    }
+    return response;
+  },
   (error) => {
     const authStore = useAuthStore();
 

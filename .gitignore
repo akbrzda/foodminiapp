@@ -4,3 +4,4 @@ node_modules/
 .env
 AGENTS.md
 logs/
+design/

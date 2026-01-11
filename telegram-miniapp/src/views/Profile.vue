@@ -25,7 +25,7 @@
           <span>📦 Мои заказы</span>
           <span>→</span>
         </button>
-        <button class="menu-item" @click="$router.push('/select-city')">
+        <button class="menu-item" @click="openCityPopup">
           <span>📍 Изменить город</span>
           <span>→</span>
         </button>
@@ -79,6 +79,11 @@ function logout() {
   hapticFeedback("medium");
   authStore.logout();
   router.push("/login");
+}
+
+function openCityPopup() {
+  hapticFeedback("light");
+  window.dispatchEvent(new CustomEvent("open-city-popup"));
 }
 </script>
 
