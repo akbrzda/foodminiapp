@@ -15,18 +15,9 @@ import menuRoutes from "./routes/menu.js";
 import ordersRoutes from "./routes/orders.js";
 import adminRoutes from "./routes/admin.js";
 import polygonsRoutes from "./routes/polygons.js";
+import geocodeRoutes from "./routes/geocode.js";
 import bonusesRoutes from "./routes/bonuses.js";
-import syncRoutes from "./routes/sync.js";
 import logsRoutes from "./routes/logs.js";
-
-// Queues and Workers - только если синхронизация включена
-if (process.env.ENABLE_SYNC !== "false") {
-  import("./queues/sync.js").then(() => {
-    console.log("⚙️  BullMQ sync queues enabled");
-  });
-} else {
-  console.log("ℹ️  Sync queues disabled (ENABLE_SYNC=false)");
-}
 
 // WebSocket
 import WSServer from "./websocket/server.js";
@@ -76,8 +67,8 @@ app.use("/api/menu", menuRoutes);
 app.use("/api/orders", ordersRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/polygons", polygonsRoutes);
+app.use("/api/geocode", geocodeRoutes);
 app.use("/api/bonuses", bonusesRoutes);
-app.use("/api/sync", syncRoutes);
 app.use("/api/logs", logsRoutes);
 
 // 404 handler

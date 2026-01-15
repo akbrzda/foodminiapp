@@ -1,39 +1,11 @@
 <template>
   <header class="app-header">
-    <div class="header-left">
-      <button @click="toggleMenu" class="menu-button">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-          <path d="M3 6H21M3 12H21M3 18H21" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
-        </svg>
-      </button>
-    </div>
-
     <button class="city-button" @click="openCityPopup">
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-        <path d="M8 8C9.10457 8 10 7.10457 10 6C10 4.89543 9.10457 4 8 4C6.89543 4 6 4.89543 6 6C6 7.10457 6.89543 8 8 8Z" fill="currentColor" />
-        <path
-          d="M8 1C5.23858 1 3 3.23858 3 6C3 9.75 8 15 8 15C8 15 13 9.75 13 6C13 3.23858 10.7614 1 8 1Z"
-          stroke="currentColor"
-          stroke-width="1.5"
-        />
-      </svg>
+      <MapPin :size="16" />
       <span class="city-name">{{ currentCityName }}</span>
     </button>
 
-    <div class="header-right">
-      <button @click="openCart" class="cart-button">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-          <path
-            d="M9 2L7 6H3L6 9L4 14L9 11L12 14L15 11L20 14L18 9L21 6H17L15 2L12 5L9 2Z"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linejoin="round"
-          />
-          <text x="12" y="18" text-anchor="middle" font-size="10" font-weight="bold" fill="currentColor">К</text>
-        </svg>
-        <span v-if="cartStore.itemsCount" class="cart-badge">{{ cartStore.itemsCount }}</span>
-      </button>
-    </div>
+    <div class="header-right"></div>
   </header>
 
   <Teleport to="body">
@@ -42,7 +14,9 @@
         <div class="city-popup" @click.stop>
           <div class="popup-header">
             <div class="popup-title">Выберите город</div>
-            <button class="close-btn" @click="closeCityPopup">×</button>
+            <button class="close-btn" @click="closeCityPopup">
+              <X :size="18" />
+            </button>
           </div>
           <input v-model="cityQuery" class="city-search" placeholder="Город" />
           <div class="city-list">
@@ -59,13 +33,12 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from "vue";
 import { useRouter } from "vue-router";
-import { useCartStore } from "../stores/cart";
+import { Menu, MapPin, X } from "lucide-vue-next";
 import { useLocationStore } from "../stores/location";
 import { citiesAPI } from "../api/endpoints";
 import { hapticFeedback } from "../services/telegram";
 
 const router = useRouter();
-const cartStore = useCartStore();
 const locationStore = useLocationStore();
 
 const emit = defineEmits(["toggleMenu"]);
@@ -83,10 +56,6 @@ const filteredCities = computed(() => {
 
 function toggleMenu() {
   emit("toggleMenu");
-}
-
-function openCart() {
-  router.push("/cart");
 }
 
 async function openCityPopup() {
@@ -133,15 +102,16 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .app-header {
-  position: sticky;
   top: 0;
   z-index: 100;
   display: flex;
-  justify-content: space-between;
+  justify-content: center;
   align-items: center;
   padding: 12px 16px;
-  background: white;
-  border-bottom: 1px solid #e5e7eb;
+  padding-top: calc(12px + var(--tg-content-safe-area-inset-top, 0px));
+  background: var(--color-background);
+  border-bottom: 1px solid var(--color-border);
+  min-height: calc(44px + var(--tg-content-safe-area-inset-top, 0px));
 }
 
 .header-left {
@@ -159,37 +129,17 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #111827;
-  transition: background-color 0.2s;
-  border-radius: 8px;
+  color: var(--color-text-primary);
+  transition: background-color var(--transition-duration) var(--transition-easing);
+  border-radius: var(--border-radius-sm);
 }
 
 .menu-button:hover {
-  background: #f3f4f6;
+  background: var(--color-background-secondary);
 }
 
 .menu-button:active {
   transform: scale(0.95);
-}
-
-.logo {
-  cursor: pointer;
-}
-
-.logo-bg {
-  background: #fbbf24;
-  border-radius: 8px;
-  padding: 6px 12px;
-  position: relative;
-}
-
-.logo-text {
-  font-size: 12px;
-  line-height: 1.2;
-  font-weight: 700;
-  color: #000;
-  text-transform: lowercase;
-  display: block;
 }
 
 .header-right {
@@ -203,13 +153,18 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 6px;
   padding: 8px 12px;
-  border: 1px solid #e5e7eb;
-  border-radius: 16px;
-  background: #ffffff;
-  font-size: 13px;
-  font-weight: 600;
-  color: #111827;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-lg);
+  background: var(--color-background);
+  font-size: var(--font-size-caption);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
   cursor: pointer;
+  transition: background-color var(--transition-duration) var(--transition-easing);
+}
+
+.city-button:hover {
+  background: var(--color-background-secondary);
 }
 
 .city-name {
@@ -217,46 +172,6 @@ onBeforeUnmount(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.cart-button {
-  width: 40px;
-  height: 40px;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  color: #111827;
-  transition: background-color 0.2s;
-  border-radius: 8px;
-}
-
-.cart-button:hover {
-  background: #f3f4f6;
-}
-
-.cart-button:active {
-  transform: scale(0.95);
-}
-
-.cart-badge {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  background: #ef4444;
-  color: white;
-  font-size: 10px;
-  font-weight: 600;
-  min-width: 16px;
-  height: 16px;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 4px;
 }
 
 .city-overlay {
@@ -273,10 +188,10 @@ onBeforeUnmount(() => {
 .city-popup {
   width: 100%;
   max-width: 360px;
-  background: #ffffff;
-  border-radius: 20px;
+  background: var(--color-background);
+  border-radius: var(--border-radius-md);
   padding: 16px;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--shadow-md);
 }
 
 .popup-header {
@@ -287,9 +202,9 @@ onBeforeUnmount(() => {
 }
 
 .popup-title {
-  font-size: 16px;
-  font-weight: 700;
-  color: #111827;
+  font-size: var(--font-size-h3);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
 }
 
 .close-btn {
@@ -297,18 +212,38 @@ onBeforeUnmount(() => {
   height: 28px;
   border-radius: 50%;
   border: none;
-  background: #f3f4f6;
-  font-size: 18px;
+  background: var(--color-background-secondary);
   cursor: pointer;
+  color: var(--color-text-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color var(--transition-duration) var(--transition-easing);
+}
+
+.close-btn:hover {
+  background: var(--color-border);
 }
 
 .city-search {
   width: 100%;
-  padding: 10px 12px;
-  border-radius: 12px;
-  border: 1px solid #e5e7eb;
+  padding: 12px 16px;
+  border-radius: var(--border-radius-md);
+  border: 1px solid var(--color-border);
   margin-bottom: 12px;
-  font-size: 14px;
+  font-size: var(--font-size-body);
+  background: var(--color-background);
+  color: var(--color-text-primary);
+  transition: border-color var(--transition-duration) var(--transition-easing);
+}
+
+.city-search:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.city-search::placeholder {
+  color: var(--color-text-muted);
 }
 
 .city-list {
@@ -322,16 +257,23 @@ onBeforeUnmount(() => {
 .city-item {
   text-align: left;
   border: none;
-  background: #f7f4f2;
-  border-radius: 12px;
-  padding: 10px 12px;
-  font-size: 14px;
+  background: var(--color-background-secondary);
+  border-radius: var(--border-radius-md);
+  padding: 12px 16px;
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-regular);
+  color: var(--color-text-primary);
   cursor: pointer;
+  transition: background-color var(--transition-duration) var(--transition-easing);
+}
+
+.city-item:hover {
+  background: var(--color-border);
 }
 
 .fade-enter-active,
 .fade-leave-active {
-  transition: opacity 0.1s ease;
+  transition: opacity var(--transition-duration) var(--transition-easing);
 }
 
 .fade-enter-from,

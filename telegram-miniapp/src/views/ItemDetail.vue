@@ -1,0 +1,741 @@
+<template>
+  <div class="item-detail">
+    <PageHeader :title="item?.name || 'Позиция'" />
+
+    <div v-if="loading" class="loading">Загрузка...</div>
+    <div v-else-if="error" class="error">{{ error }}</div>
+    <div v-else-if="item" class="content">
+      <!-- Изображение товара -->
+      <div class="item-image-wrapper" v-if="item.image_url">
+        <img :src="item.image_url" :alt="item.name" class="item-image" />
+      </div>
+
+      <!-- Название и описание -->
+      <div class="item-header">
+        <h1 class="item-name">{{ item.name }}</h1>
+        <p class="item-description" v-if="item.description">{{ item.description }}</p>
+      </div>
+
+      <!-- Выбор варианта -->
+      <div class="section" v-if="item.variants && item.variants.length > 0">
+        <div class="variants">
+          <button
+            v-for="variant in item.variants"
+            :key="variant.id"
+            :class="['variant-btn', { active: selectedVariant?.id === variant.id }]"
+            @click="selectVariant(variant)"
+          >
+            <span class="variant-name">{{ variant.name }}</span>
+            <span class="variant-price">{{ formatPrice(variant.price) }} ₽</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Обязательные модификаторы -->
+      <div class="section" v-for="group in requiredModifierGroups" :key="group.id">
+        <h2 class="section-title">
+          {{ group.name }}
+          <span class="required-star">*</span>
+        </h2>
+        <div class="modifiers">
+          <label
+            v-for="modifier in group.modifiers"
+            :key="modifier.id"
+            :class="['modifier-item', { active: isModifierSelected(group.id, modifier.id) }]"
+          >
+            <input
+              :type="group.type === 'single' ? 'radio' : 'checkbox'"
+              :name="`group-${group.id}`"
+              :value="modifier.id"
+              :checked="isModifierSelected(group.id, modifier.id)"
+              @change="toggleModifier(group, modifier)"
+            />
+            <span class="modifier-name">{{ modifier.name }}</span>
+            <span class="modifier-price" v-if="modifier.price > 0">+{{ formatPrice(modifier.price) }} ₽</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Дополнительные модификаторы -->
+      <div class="section" v-for="group in optionalModifierGroups" :key="group.id">
+        <h2 class="section-title">{{ group.name }}</h2>
+        <div class="modifiers">
+          <label
+            v-for="modifier in group.modifiers"
+            :key="modifier.id"
+            :class="['modifier-item', { active: isModifierSelected(group.id, modifier.id) }]"
+          >
+            <input
+              :type="group.type === 'single' ? 'radio' : 'checkbox'"
+              :name="`group-${group.id}`"
+              :value="modifier.id"
+              :checked="isModifierSelected(group.id, modifier.id)"
+              @change="toggleModifier(group, modifier)"
+            />
+            <span class="modifier-name">{{ modifier.name }}</span>
+            <span class="modifier-price" v-if="modifier.price > 0">+{{ formatPrice(modifier.price) }} ₽</span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- Кнопка добавления в корзину -->
+    <div class="footer" v-if="item">
+      <div class="footer-content">
+        <div v-if="!cartItem" class="add-button-wrapper">
+          <button class="add-to-cart-btn" :disabled="!canAddToCart" @click="addToCart">
+            {{ canAddToCart ? `Добавить ${formatPrice(totalPrice)} ₽` : "Выберите обязательные параметры" }}
+          </button>
+        </div>
+        <div v-else class="quantity-button-wrapper">
+          <button class="qty-btn" @click="decreaseQuantity">−</button>
+          <div class="qty-info">
+            <span class="qty-price"> {{ formatPrice(cartItem.totalPrice) }} ₽ × {{ cartItem.quantity }} </span>
+          </div>
+          <button class="qty-btn" @click="increaseQuantity">+</button>
+        </div>
+        <button v-if="cartStore.itemsCount > 0" class="cart-btn" @click="goToCart">
+          <ShoppingCart :size="24" />
+          <span v-if="cartStore.itemsCount > 0" class="cart-badge">{{ cartStore.itemsCount }}</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref, computed, onMounted, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import { ShoppingCart } from "lucide-vue-next";
+import { useCartStore } from "../stores/cart";
+import { menuAPI } from "../api/endpoints";
+import { hapticFeedback } from "../services/telegram";
+import PageHeader from "../components/PageHeader.vue";
+import { formatPrice } from "../utils/format";
+
+const route = useRoute();
+const router = useRouter();
+const cartStore = useCartStore();
+
+const item = ref(null);
+const loading = ref(true);
+const error = ref(null);
+const selectedVariant = ref(null);
+const selectedModifiers = ref({});
+const quantity = ref(1);
+const isAdded = ref(false);
+
+const requiredModifierGroups = computed(() => {
+  if (!item.value?.modifier_groups) return [];
+  return item.value.modifier_groups.filter((g) => g.is_required);
+});
+
+const optionalModifierGroups = computed(() => {
+  if (!item.value?.modifier_groups) return [];
+  return item.value.modifier_groups.filter((g) => !g.is_required);
+});
+
+const cartItem = computed(() => {
+  if (!item.value) return null;
+
+  // Находим все товары с такими же параметрами
+  const matchingItems = cartStore.items.filter((cartItem) => {
+    const sameId = cartItem.id === item.value.id;
+    const sameVariant = (cartItem.variant_id || null) === (selectedVariant.value?.id || null);
+    const sameModifiers = JSON.stringify(cartItem.modifiers || []) === JSON.stringify(getSelectedModifiersArray());
+    return sameId && sameVariant && sameModifiers;
+  });
+
+  if (matchingItems.length === 0) return null;
+
+  // Возвращаем первый товар, но с общим количеством
+  const totalQuantity = matchingItems.reduce((sum, item) => sum + (item.quantity || 1), 0);
+  const totalPrice = matchingItems.reduce((sum, item) => {
+    const price = parseFloat(item.price) || 0;
+    return sum + price * (item.quantity || 1);
+  }, 0);
+
+  return {
+    ...matchingItems[0],
+    quantity: totalQuantity,
+    totalPrice: totalPrice,
+  };
+});
+
+function getSelectedModifiersArray() {
+  const modifiers = [];
+  if (item.value?.modifier_groups) {
+    for (const group of item.value.modifier_groups) {
+      const selectedIds = selectedModifiers.value[group.id] || [];
+      for (const modifierId of selectedIds) {
+        const modifier = group.modifiers.find((m) => m.id === modifierId);
+        if (modifier) {
+          modifiers.push({
+            id: modifier.id,
+            name: modifier.name,
+            price: modifier.price || 0,
+            group_id: group.id,
+            group_name: group.name,
+          });
+        }
+      }
+    }
+  }
+  return modifiers;
+}
+
+onMounted(async () => {
+  await loadItem();
+
+  // Выбираем первый вариант по умолчанию, если есть
+  if (item.value?.variants && item.value.variants.length > 0) {
+    selectedVariant.value = item.value.variants[0];
+  }
+
+  // Проверяем, есть ли уже этот товар в корзине
+  if (cartItem.value) {
+    isAdded.value = true;
+    quantity.value = cartItem.value.quantity;
+  }
+});
+
+watch(
+  () => [selectedVariant.value, selectedModifiers.value],
+  () => {
+    // При изменении варианта или модификаторов проверяем, есть ли такой товар в корзине
+    if (cartItem.value) {
+      isAdded.value = true;
+      quantity.value = cartItem.value.quantity;
+    } else {
+      isAdded.value = false;
+    }
+  },
+  { deep: true }
+);
+
+watch(
+  () => cartStore.items,
+  () => {
+    // Обновляем состояние при изменении корзины
+    if (cartItem.value) {
+      isAdded.value = true;
+      quantity.value = cartItem.value.quantity;
+    } else {
+      isAdded.value = false;
+    }
+  },
+  { deep: true }
+);
+
+async function loadItem() {
+  try {
+    loading.value = true;
+    error.value = null;
+    const response = await menuAPI.getItemDetails(route.params.id);
+    item.value = response.data.item;
+  } catch (err) {
+    console.error("Failed to load item:", err);
+    error.value = "Не удалось загрузить позицию";
+  } finally {
+    loading.value = false;
+  }
+}
+
+function selectVariant(variant) {
+  hapticFeedback("light");
+  selectedVariant.value = variant;
+}
+
+function toggleModifier(group, modifier) {
+  hapticFeedback("light");
+
+  // Создаем новый объект для реактивности
+  const newSelectedModifiers = { ...selectedModifiers.value };
+
+  if (group.type === "single") {
+    newSelectedModifiers[group.id] = [modifier.id];
+  } else {
+    if (!newSelectedModifiers[group.id]) {
+      newSelectedModifiers[group.id] = [];
+    } else {
+      newSelectedModifiers[group.id] = [...newSelectedModifiers[group.id]];
+    }
+    const index = newSelectedModifiers[group.id].indexOf(modifier.id);
+    if (index > -1) {
+      newSelectedModifiers[group.id].splice(index, 1);
+    } else {
+      newSelectedModifiers[group.id].push(modifier.id);
+    }
+  }
+
+  selectedModifiers.value = newSelectedModifiers;
+}
+
+function isModifierSelected(groupId, modifierId) {
+  if (!item.value?.modifier_groups) return false;
+  const group = item.value.modifier_groups.find((g) => g.id === groupId);
+  if (!group) return false;
+
+  if (group.type === "single") {
+    return selectedModifiers.value[groupId]?.[0] === modifierId;
+  } else {
+    return selectedModifiers.value[groupId]?.includes(modifierId) || false;
+  }
+}
+
+function increaseQuantity() {
+  hapticFeedback("light");
+  if (!item.value) return;
+
+  const modifiers = getSelectedModifiersArray();
+  const finalPrice = parseFloat(totalPrice.value) || 0;
+
+  cartStore.addItem({
+    id: item.value.id,
+    name: item.value.name,
+    price: finalPrice,
+    variant_id: selectedVariant.value?.id || null,
+    variant_name: selectedVariant.value?.name || null,
+    quantity: 1,
+    modifiers: modifiers,
+    image_url: item.value.image_url,
+  });
+}
+
+function getMatchingCartItems() {
+  if (!item.value) return [];
+
+  const modifiers = getSelectedModifiersArray();
+
+  return cartStore.items.filter((cartItem) => {
+    const sameId = cartItem.id === item.value.id;
+    const sameVariant = (cartItem.variant_id || null) === (selectedVariant.value?.id || null);
+    const sameModifiers = JSON.stringify(cartItem.modifiers || []) === JSON.stringify(modifiers);
+    return sameId && sameVariant && sameModifiers;
+  });
+}
+
+function decreaseQuantity() {
+  hapticFeedback("light");
+  if (!item.value) return;
+
+  const matchingItems = getMatchingCartItems();
+
+  if (matchingItems.length === 0) {
+    isAdded.value = false;
+    return;
+  }
+
+  // Уменьшаем количество первого товара
+  const firstItem = matchingItems[0];
+  const index = cartStore.items.indexOf(firstItem);
+
+  if (index === -1) {
+    isAdded.value = false;
+    return;
+  }
+
+  if (firstItem.quantity > 1) {
+    cartStore.updateQuantity(index, firstItem.quantity - 1);
+  } else {
+    cartStore.removeItem(index);
+    isAdded.value = false;
+  }
+}
+
+function goToCart() {
+  router.push("/cart");
+}
+
+const canAddToCart = computed(() => {
+  if (!item.value) return false;
+
+  if (item.value.variants && item.value.variants.length > 0) {
+    if (!selectedVariant.value) return false;
+  }
+
+  if (item.value.modifier_groups) {
+    for (const group of item.value.modifier_groups) {
+      if (group.is_required) {
+        if (!selectedModifiers.value[group.id] || selectedModifiers.value[group.id].length === 0) {
+          return false;
+        }
+      }
+    }
+  }
+
+  return true;
+});
+
+const totalPrice = computed(() => {
+  let price = 0;
+
+  if (selectedVariant.value) {
+    price = parseFloat(selectedVariant.value.price) || 0;
+  } else if (item.value) {
+    price = parseFloat(item.value.price) || 0;
+  }
+
+  if (item.value?.modifier_groups) {
+    for (const group of item.value.modifier_groups) {
+      const selectedIds = selectedModifiers.value[group.id] || [];
+      if (selectedIds.length > 0) {
+        for (const modifierId of selectedIds) {
+          const modifier = group.modifiers.find((m) => m.id === modifierId);
+          if (modifier) {
+            price += parseFloat(modifier.price) || 0;
+          }
+        }
+      }
+    }
+  }
+
+  return price;
+});
+
+function addToCart() {
+  if (!canAddToCart.value) return;
+
+  hapticFeedback("success");
+
+  const modifiers = getSelectedModifiersArray();
+
+  // Используем totalPrice, который уже включает все модификаторы
+  const finalPrice = totalPrice.value;
+
+  cartStore.addItem({
+    id: item.value.id,
+    name: item.value.name,
+    price: finalPrice,
+    variant_id: selectedVariant.value?.id || null,
+    variant_name: selectedVariant.value?.name || null,
+    quantity: 1,
+    modifiers: modifiers,
+    image_url: item.value.image_url,
+  });
+
+  isAdded.value = true;
+}
+</script>
+
+<style scoped>
+.item-detail {
+  min-height: 100vh;
+  background: var(--color-background-secondary);
+  padding-bottom: 140px;
+}
+
+.loading,
+.error {
+  text-align: center;
+  padding: 32px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-body);
+}
+
+.error {
+  color: #ff0000;
+}
+
+.content {
+  padding: 16px;
+}
+
+.item-image-wrapper {
+  width: 100%;
+  height: 200px;
+  margin: -16px -16px 16px;
+  overflow: hidden;
+  background: var(--color-background-secondary);
+}
+
+.item-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.item-header {
+  margin-bottom: 24px;
+}
+
+.item-name {
+  font-size: var(--font-size-h1);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+  margin: 0 0 8px 0;
+}
+
+.item-description {
+  font-size: var(--font-size-body);
+  color: var(--color-text-secondary);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.section {
+  margin-bottom: 24px;
+}
+
+.section-title {
+  font-size: var(--font-size-h3);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  margin: 0 0 8px 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.required-star {
+  color: #ff0000;
+}
+
+.section-subtitle {
+  font-size: var(--font-size-caption);
+  color: var(--color-text-secondary);
+  margin: 0 0 12px 0;
+}
+
+.variants {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 4px 0;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.variants::-webkit-scrollbar {
+  display: none;
+}
+
+.variant-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 16px;
+  border: 2px solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  background: var(--color-background-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+  min-width: 100px;
+  flex-shrink: 0;
+}
+
+.variant-btn.active {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+}
+
+.variant-name {
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  margin-bottom: 4px;
+  text-align: center;
+}
+
+.variant-btn.active .variant-name {
+  color: var(--color-text-primary);
+}
+
+.variant-price {
+  font-size: var(--font-size-caption);
+  font-weight: var(--font-weight-regular);
+  color: var(--color-text-secondary);
+  text-align: center;
+}
+
+.variant-btn.active .variant-price {
+  color: var(--color-text-primary);
+}
+
+.modifiers {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.modifier-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  background: var(--color-background);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.modifier-item:hover {
+  background: var(--color-background-secondary);
+}
+
+.modifier-item.active {
+  border-color: var(--color-primary);
+  background: var(--color-background-secondary);
+}
+
+.modifier-item input[type="radio"],
+.modifier-item input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  accent-color: var(--color-primary);
+}
+
+.modifier-name {
+  flex: 1;
+  font-size: var(--font-size-body);
+  color: var(--color-text-primary);
+}
+
+.modifier-price {
+  margin-left: auto;
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-regular);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.footer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 12px;
+  z-index: 100;
+}
+
+.footer-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.add-button-wrapper {
+  flex: 1;
+}
+
+.add-to-cart-btn {
+  width: 100%;
+  padding: 16px;
+  border: none;
+  border-radius: 24px;
+  background: var(--color-primary);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-h3);
+  font-weight: var(--font-weight-bold);
+  cursor: pointer;
+  transition: background-color 0.2s;
+  box-shadow: 0px 2px 8px rgba(255, 210, 0, 0.3);
+}
+
+.add-to-cart-btn:disabled {
+  background: var(--color-background-secondary);
+  color: var(--color-text-secondary);
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.add-to-cart-btn:not(:disabled):hover {
+  background: var(--color-primary-hover);
+}
+
+.quantity-button-wrapper {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 12px 18px;
+  background: var(--color-primary);
+  border-radius: 24px;
+  box-shadow: 0px 2px 8px rgba(255, 210, 0, 0.3);
+}
+
+.qty-btn {
+  width: 44px;
+  height: 44px;
+  border: none;
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.08);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-h2);
+  font-weight: var(--font-weight-bold);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s;
+  flex-shrink: 0;
+}
+
+.qty-btn:hover {
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.qty-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 140px;
+}
+
+.qty-value {
+  font-size: var(--font-size-h3);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+  line-height: 1.2;
+}
+
+.qty-price {
+  font-size: var(--font-size-h3);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+  line-height: 1.2;
+}
+
+.cart-btn {
+  width: 64px;
+  height: 64px;
+  border: none;
+  border-radius: 20px;
+  background: var(--color-primary);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  transition: background-color 0.2s;
+  box-shadow: 0px 6px 16px rgba(255, 210, 0, 0.2);
+  flex-shrink: 0;
+}
+
+.cart-btn:hover {
+  background: rgba(255, 210, 0, 0.35);
+}
+
+.cart-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: var(--color-text-primary);
+  color: var(--color-background);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-bold);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+</style>

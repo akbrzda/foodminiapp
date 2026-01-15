@@ -318,50 +318,6 @@ class WSServer {
     this.sendToUser(userId, message);
   }
 
-  /**
-   * Отправка уведомления об ошибке синхронизации
-   */
-  notifySyncError(entity, entityId, errorMessage, cityId) {
-    const message = {
-      type: "sync-error",
-      data: {
-        entity,
-        entityId,
-        error: errorMessage,
-        timestamp: new Date().toISOString(),
-      },
-    };
-
-    // Отправка в админ-панель
-    this.sendToRoom("admin-orders", message);
-
-    // Отправка менеджерам города, если указан
-    if (cityId) {
-      this.sendToRoom(`city-${cityId}-orders`, message);
-    }
-  }
-
-  /**
-   * Отправка уведомления об успешной синхронизации
-   */
-  notifySyncSuccess(entity, entityId, cityId) {
-    const message = {
-      type: "sync-success",
-      data: {
-        entity,
-        entityId,
-        timestamp: new Date().toISOString(),
-      },
-    };
-
-    // Отправка в админ-панель
-    this.sendToRoom("admin-orders", message);
-
-    // Отправка менеджерам города, если указан
-    if (cityId) {
-      this.sendToRoom(`city-${cityId}-orders`, message);
-    }
-  }
 
   /**
    * Запуск периодического ping для keepalive

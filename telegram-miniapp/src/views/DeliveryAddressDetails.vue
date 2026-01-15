@@ -1,9 +1,6 @@
 <template>
   <div class="address-details">
-    <div class="header">
-      <button class="back-btn" @click="goBack">‹</button>
-      <div class="title">Адрес доставки</div>
-    </div>
+    <PageHeader title="Адрес доставки" />
 
     <div class="content">
       <label class="label">улица, дом</label>
@@ -25,6 +22,7 @@
 
 <script setup>
 import { reactive, ref, watch } from "vue";
+import PageHeader from "../components/PageHeader.vue";
 import { useRouter } from "vue-router";
 import { useLocationStore } from "../stores/location";
 import { hapticFeedback } from "../services/telegram";
@@ -73,31 +71,7 @@ watch(address, (value) => {
 <style scoped>
 .address-details {
   min-height: 100vh;
-  background: #f7f4f2;
-}
-
-.header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  background: #ffffff;
-}
-
-.back-btn {
-  width: 32px;
-  height: 32px;
-  border-radius: 16px;
-  border: none;
-  background: #f2efed;
-  font-size: 20px;
-  cursor: pointer;
-}
-
-.title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #222222;
+  background: var(--color-background-secondary);
 }
 
 .content {
@@ -108,22 +82,29 @@ watch(address, (value) => {
 }
 
 .label {
-  font-size: 12px;
-  color: #9a9a9a;
+  font-size: var(--font-size-small);
+  color: var(--color-text-muted);
+  font-weight: var(--font-weight-regular);
 }
 
 .input {
   width: 100%;
-  padding: 12px 14px;
-  border-radius: 12px;
-  border: 1px solid #dedad7;
-  background: #ffffff;
-  font-size: 14px;
-  color: #1f1f1f;
+  padding: 16px;
+  border-radius: var(--border-radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-background);
+  font-size: var(--font-size-body);
+  color: var(--color-text-primary);
+  transition: border-color var(--transition-duration) var(--transition-easing);
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--color-primary);
 }
 
 .input::placeholder {
-  color: #8b8b8b;
+  color: var(--color-text-muted);
 }
 
 .grid {
@@ -135,28 +116,45 @@ watch(address, (value) => {
 .textarea {
   width: 100%;
   min-height: 120px;
-  padding: 12px 14px;
-  border-radius: 12px;
-  border: 1px solid #dedad7;
-  background: #ffffff;
-  font-size: 14px;
+  padding: 16px;
+  border-radius: var(--border-radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-background);
+  font-size: var(--font-size-body);
   resize: none;
-  color: #1f1f1f;
+  color: var(--color-text-primary);
+  font-family: inherit;
+  transition: border-color var(--transition-duration) var(--transition-easing);
+}
+
+.textarea:focus {
+  outline: none;
+  border-color: var(--color-primary);
 }
 
 .textarea::placeholder {
-  color: #8b8b8b;
+  color: var(--color-text-muted);
 }
 
 .primary-btn {
   width: 100%;
-  padding: 14px;
-  border-radius: 20px;
+  padding: 16px;
+  border-radius: var(--border-radius-md);
   border: none;
-  background: #f7d000;
-  font-size: 14px;
-  font-weight: 700;
+  background: var(--color-primary);
+  font-size: var(--font-size-h3);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
   cursor: pointer;
   margin-top: 8px;
+  transition: background-color var(--transition-duration) var(--transition-easing);
+}
+
+.primary-btn:hover {
+  background: var(--color-primary-hover);
+}
+
+.primary-btn:active {
+  transform: scale(0.98);
 }
 </style>

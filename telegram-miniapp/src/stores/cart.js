@@ -10,20 +10,40 @@ export const useCartStore = defineStore("cart", {
 
     totalPrice: (state) =>
       state.items.reduce((sum, item) => {
-        const itemTotal = item.price * item.quantity;
-        const modifiersTotal = (item.modifiers || []).reduce((modSum, mod) => modSum + mod.price * item.quantity, 0);
-        return sum + itemTotal + modifiersTotal;
+        // item.price уже включает цену варианта и всех модификаторов
+        const itemTotal = (parseFloat(item.price) || 0) * (item.quantity || 1);
+        return sum + itemTotal;
       }, 0),
   },
 
   actions: {
+    replaceItems(items) {
+      this.items = Array.isArray(items) ? items : [];
+      this.saveToLocalStorage();
+    },
+
     addItem(item) {
-      const existingIndex = this.items.findIndex((i) => i.id === item.id && JSON.stringify(i.modifiers) === JSON.stringify(item.modifiers));
+      // Ищем существующий товар с теми же параметрами (id, variant_id, модификаторы)
+      const existingIndex = this.items.findIndex((i) => {
+        const sameId = i.id === item.id;
+        const sameVariant = (i.variant_id || null) === (item.variant_id || null);
+        const sameModifiers = JSON.stringify(i.modifiers || []) === JSON.stringify(item.modifiers || []);
+        return sameId && sameVariant && sameModifiers;
+      });
+
+      // Убеждаемся, что цена - число
+      const price = parseFloat(item.price) || 0;
 
       if (existingIndex >= 0) {
         this.items[existingIndex].quantity += item.quantity || 1;
+        // Обновляем цену на случай, если она изменилась
+        this.items[existingIndex].price = price;
       } else {
-        this.items.push({ ...item, quantity: item.quantity || 1 });
+        this.items.push({ 
+          ...item, 
+          price: price,
+          quantity: item.quantity || 1 
+        });
       }
 
       this.saveToLocalStorage();
@@ -35,6 +55,10 @@ export const useCartStore = defineStore("cart", {
     },
 
     updateQuantity(index, quantity) {
+      if (index < 0 || index >= this.items.length) {
+        console.error("Invalid index for updateQuantity:", index);
+        return;
+      }
       if (quantity <= 0) {
         this.removeItem(index);
       } else {

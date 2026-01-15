@@ -1,9 +1,6 @@
 <template>
   <div class="select-branch">
-    <div class="header">
-      <button class="back-btn" @click="$router.back()">← Назад</button>
-      <h1>Выберите филиал</h1>
-    </div>
+    <PageHeader title="Выберите филиал" />
 
     <div class="city-name">
       {{ locationStore.selectedCity?.name }}
@@ -25,6 +22,8 @@
 </template>
 
 <script setup>
+import { ArrowRight } from "lucide-vue-next";
+import PageHeader from "../components/PageHeader.vue";
 import { useRouter } from "vue-router";
 import { useLocationStore } from "../stores/location";
 import { hapticFeedback } from "../services/telegram";
@@ -42,41 +41,22 @@ function selectBranch(branch) {
 <style scoped>
 .select-branch {
   min-height: 100vh;
-  background: #f5f5f5;
-}
-
-.header {
-  display: flex;
-  align-items: center;
-  padding: 16px;
-  background: white;
-  border-bottom: 1px solid #e0e0e0;
-}
-
-.back-btn {
-  border: none;
-  background: transparent;
-  font-size: 16px;
-  cursor: pointer;
-  margin-right: 12px;
-}
-
-.header h1 {
-  font-size: 20px;
+  background: var(--color-background-secondary);
 }
 
 .city-name {
   padding: 16px;
   text-align: center;
-  font-size: 18px;
-  font-weight: 600;
-  color: #666;
+  font-size: var(--font-size-h3);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
 }
 
 .empty {
   text-align: center;
   padding: 64px 16px;
-  color: #666;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-body);
 }
 
 .branches-list {
@@ -90,16 +70,17 @@ function selectBranch(branch) {
   align-items: center;
   padding: 16px;
   border: none;
-  background: white;
-  border-radius: 12px;
+  background: var(--color-background);
+  border-radius: var(--border-radius-md);
   margin-bottom: 12px;
   text-align: left;
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  transition: transform 0.2s;
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow var(--transition-duration) var(--transition-easing), transform var(--transition-duration) var(--transition-easing);
 }
 
 .branch-card:hover {
+  box-shadow: 0px 4px 12px rgba(0, 0, 0, 0.12);
   transform: translateY(-2px);
 }
 
@@ -108,25 +89,26 @@ function selectBranch(branch) {
 }
 
 .branch-name {
-  font-size: 16px;
-  font-weight: 600;
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
   margin-bottom: 4px;
 }
 
 .branch-address {
-  font-size: 14px;
-  color: #666;
+  font-size: var(--font-size-caption);
+  color: var(--color-text-secondary);
   margin-bottom: 4px;
 }
 
 .branch-hours {
-  font-size: 12px;
-  color: #999;
+  font-size: var(--font-size-small);
+  color: var(--color-text-muted);
 }
 
 .arrow {
-  font-size: 20px;
-  color: #667eea;
+  color: var(--color-primary);
   margin-left: 16px;
+  flex-shrink: 0;
 }
 </style>

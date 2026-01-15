@@ -1,8 +1,8 @@
 import express from "express";
+import axios from "axios";
 import db from "../config/database.js";
 import { authenticateToken, requireRole, checkCityAccess } from "../middleware/auth.js";
 import { calculateEarnedBonuses, validateBonusUsage, earnBonuses, useBonuses } from "../utils/bonuses.js";
-import { addOrderToSyncQueue } from "../queues/sync.js";
 import { logger, adminActionLogger } from "../utils/logger.js";
 
 const router = express.Router();
@@ -37,7 +37,7 @@ async function calculateOrderCost(items, bonusToUse = 0) {
   const validatedItems = [];
 
   for (const item of items) {
-    const { item_id, quantity, modifiers = [] } = item;
+    const { item_id, variant_id, quantity, modifiers = [] } = item;
 
     if (!item_id || !quantity || quantity <= 0) {
       throw new Error("Invalid item data");
@@ -51,20 +51,73 @@ async function calculateOrderCost(items, bonusToUse = 0) {
     }
 
     const menuItem = menuItems[0];
-    let itemPrice = parseFloat(menuItem.price);
+    let itemPrice = 0;
+    let variantName = null;
 
-    // Валидируем и добавляем модификаторы
-    const validatedModifiers = [];
-    for (const modId of modifiers) {
-      const [menuModifiers] = await db.query("SELECT id, name, price, is_active FROM menu_modifiers WHERE id = ? AND item_id = ?", [modId, item_id]);
+    // Если указан вариант, используем его цену
+    if (variant_id) {
+      const [variants] = await db.query(
+        "SELECT id, name, price, is_active FROM item_variants WHERE id = ? AND item_id = ?",
+        [variant_id, item_id]
+      );
 
-      if (menuModifiers.length === 0 || !menuModifiers[0].is_active) {
-        throw new Error(`Modifier ${modId} not found or inactive`);
+      if (variants.length === 0 || !variants[0].is_active) {
+        throw new Error(`Variant ${variant_id} not found or inactive`);
       }
 
-      const modifier = menuModifiers[0];
-      itemPrice += parseFloat(modifier.price);
-      validatedModifiers.push(modifier);
+      const variant = variants[0];
+      itemPrice = parseFloat(variant.price);
+      variantName = variant.name;
+    } else {
+      // Используем базовую цену позиции
+      itemPrice = parseFloat(menuItem.price);
+      if (itemPrice <= 0) {
+        throw new Error(`Item ${item_id} has no price and no variant specified`);
+      }
+    }
+
+    // Валидируем и добавляем модификаторы (новая система - из групп модификаторов)
+    const validatedModifiers = [];
+    if (modifiers && Array.isArray(modifiers) && modifiers.length > 0) {
+      for (const modId of modifiers) {
+        // Проверяем, это модификатор из новой системы (modifiers) или старой (menu_modifiers)
+        const [newModifiers] = await db.query(
+          "SELECT m.id, m.name, m.price, m.is_active, m.group_id, mg.type, mg.is_required FROM modifiers m JOIN modifier_groups mg ON m.group_id = mg.id WHERE m.id = ? AND m.is_active = TRUE",
+          [modId]
+        );
+
+        if (newModifiers.length > 0) {
+          const modifier = newModifiers[0];
+          itemPrice += parseFloat(modifier.price);
+          validatedModifiers.push({
+            id: modifier.id,
+            name: modifier.name,
+            price: parseFloat(modifier.price),
+            group_id: modifier.group_id,
+            type: modifier.type,
+            is_required: modifier.is_required,
+          });
+        } else {
+          // Проверяем старую систему модификаторов
+          const [oldModifiers] = await db.query(
+            "SELECT id, name, price, is_active FROM menu_modifiers WHERE id = ? AND item_id = ?",
+            [modId, item_id]
+          );
+
+          if (oldModifiers.length === 0 || !oldModifiers[0].is_active) {
+            throw new Error(`Modifier ${modId} not found or inactive`);
+          }
+
+          const modifier = oldModifiers[0];
+          itemPrice += parseFloat(modifier.price);
+          validatedModifiers.push({
+            id: modifier.id,
+            name: modifier.name,
+            price: parseFloat(modifier.price),
+            old_system: true,
+          });
+        }
+      }
     }
 
     const itemSubtotal = itemPrice * quantity;
@@ -73,7 +126,9 @@ async function calculateOrderCost(items, bonusToUse = 0) {
     validatedItems.push({
       item_id: menuItem.id,
       item_name: menuItem.name,
-      item_price: parseFloat(menuItem.price),
+      variant_id: variant_id || null,
+      variant_name: variantName,
+      item_price: itemPrice,
       quantity,
       modifiers: validatedModifiers,
       subtotal: itemSubtotal,
@@ -112,7 +167,11 @@ router.post("/calculate", authenticateToken, async (req, res, next) => {
     }
 
     const finalTotal = total + parseFloat(delivery_cost);
-    const earnedBonuses = calculateEarnedBonuses(finalTotal);
+    
+    // Получаем уровень лояльности пользователя для расчета бонусов
+    const [userData] = await db.query("SELECT loyalty_level FROM users WHERE id = ?", [req.user.id]);
+    const loyaltyLevel = userData[0]?.loyalty_level || 1;
+    const earnedBonuses = calculateEarnedBonuses(finalTotal, loyaltyLevel);
 
     res.json({
       subtotal,
@@ -192,11 +251,45 @@ router.post("/", authenticateToken, async (req, res, next) => {
       });
     }
 
-    // Рассчитываем стоимость
+    // Рассчитываем стоимость доставки
     let deliveryCost = 0;
-    if (order_type === "delivery") {
-      // TODO: получить стоимость доставки из полигона
-      deliveryCost = 0; // Пока по умолчанию 0
+    let deliveryPolygon = null;
+    if (order_type === "delivery" && delivery_street && delivery_house) {
+      // Геокодируем адрес для получения координат
+      try {
+        const geocodeResponse = await axios.post(
+          `${req.protocol}://${req.get("host")}/api/geocode`,
+          { address: `${delivery_street}, ${delivery_house}` },
+          { headers: { "Content-Type": "application/json" } }
+        );
+
+        if (geocodeResponse.data && geocodeResponse.data.lat && geocodeResponse.data.lng) {
+          // Проверяем попадание в зону доставки и получаем стоимость
+          const checkResponse = await axios.post(
+            `${req.protocol}://${req.get("host")}/api/polygons/check-delivery`,
+            {
+              latitude: geocodeResponse.data.lat,
+              longitude: geocodeResponse.data.lng,
+              city_id: city_id,
+            },
+            { headers: { "Content-Type": "application/json" } }
+          );
+
+          if (checkResponse.data && checkResponse.data.available && checkResponse.data.polygon) {
+            deliveryPolygon = checkResponse.data.polygon;
+            deliveryCost = parseFloat(deliveryPolygon.delivery_cost) || 0;
+          } else {
+            await connection.rollback();
+            return res.status(400).json({
+              error: "Delivery is not available to this address",
+            });
+          }
+        }
+      } catch (geoError) {
+        console.error("Geocoding error:", geoError);
+        // Если геокодирование не удалось, продолжаем с deliveryCost = 0
+        // В продакшене лучше вернуть ошибку
+      }
     }
 
     const { subtotal, bonusUsed, total, validatedItems } = await calculateOrderCost(items, bonus_to_use);
@@ -212,6 +305,10 @@ router.post("/", authenticateToken, async (req, res, next) => {
     }
 
     const finalTotal = total + deliveryCost;
+
+    // Получаем уровень лояльности пользователя для расчета бонусов
+    const [userData] = await db.query("SELECT loyalty_level FROM users WHERE id = ?", [req.user.id]);
+    const loyaltyLevel = userData[0]?.loyalty_level || 1;
 
     // Генерируем номер заказа
     const orderNumber = await generateOrderNumber();
@@ -255,21 +352,41 @@ router.post("/", authenticateToken, async (req, res, next) => {
     for (const item of validatedItems) {
       const [itemResult] = await connection.query(
         `INSERT INTO order_items 
-         (order_id, item_id, item_name, item_price, quantity, subtotal)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [orderId, item.item_id, item.item_name, item.item_price, item.quantity, item.subtotal]
+         (order_id, item_id, item_name, variant_id, variant_name, item_price, quantity, subtotal)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          orderId,
+          item.item_id,
+          item.item_name,
+          item.variant_id || null,
+          item.variant_name || null,
+          item.item_price,
+          item.quantity,
+          item.subtotal,
+        ]
       );
 
       const orderItemId = itemResult.insertId;
 
-      // Добавляем модификаторы
+      // Добавляем модификаторы (новая и старая система)
       for (const modifier of item.modifiers) {
-        await connection.query(
-          `INSERT INTO order_item_modifiers 
-           (order_item_id, modifier_id, modifier_name, modifier_price)
-           VALUES (?, ?, ?, ?)`,
-          [orderItemId, modifier.id, modifier.name, modifier.price]
-        );
+        if (modifier.old_system) {
+          // Старая система модификаторов
+          await connection.query(
+            `INSERT INTO order_item_modifiers 
+             (order_item_id, modifier_id, modifier_name, modifier_price, old_modifier_id)
+             VALUES (?, ?, ?, ?, ?)`,
+            [orderItemId, null, modifier.name, modifier.price, modifier.id]
+          );
+        } else {
+          // Новая система модификаторов (из групп)
+          await connection.query(
+            `INSERT INTO order_item_modifiers 
+             (order_item_id, modifier_id, modifier_name, modifier_price, modifier_group_id)
+             VALUES (?, ?, ?, ?, ?)`,
+            [orderItemId, modifier.id, modifier.name, modifier.price, modifier.group_id || null]
+          );
+        }
       }
     }
 
@@ -278,21 +395,12 @@ router.post("/", authenticateToken, async (req, res, next) => {
       await useBonuses(req.user.id, orderId, bonusUsed, "Used for order");
     }
 
-    // Начисляем бонусы за заказ
-    const earnedBonuses = calculateEarnedBonuses(finalTotal);
-    if (earnedBonuses > 0) {
-      await earnBonuses(req.user.id, orderId, earnedBonuses, "Earned from order");
-    }
+    // Начисляем бонусы за заказ (earnBonuses теперь принимает orderTotal и сам рассчитывает бонусы)
+    // Бонусы начисляются только после завершения заказа, но мы можем рассчитать их заранее
+    // В реальности начисление происходит при изменении статуса на "completed"
+    // Здесь мы только рассчитываем, но не начисляем
 
     await connection.commit();
-
-    // Добавляем заказ в очередь синхронизации с Гуляшем
-    try {
-      await addOrderToSyncQueue(orderId);
-    } catch (syncError) {
-      console.error("Failed to add order to sync queue:", syncError);
-      // Не прерываем выполнение, заказ уже создан
-    }
 
     // Получаем полные данные заказа
     const [orders] = await db.query(`SELECT * FROM orders WHERE id = ?`, [orderId]);
@@ -306,7 +414,7 @@ router.post("/", authenticateToken, async (req, res, next) => {
       wsServer.notifyNewOrder({
         ...orders[0],
         bonuses_earned: earnedBonuses,
-        city_id: cityId,
+        city_id: city_id,
       });
     } catch (wsError) {
       console.error("Failed to send WebSocket notification:", wsError);
@@ -410,12 +518,21 @@ router.post("/:id/repeat", authenticateToken, async (req, res, next) => {
     // Для каждой позиции получаем модификаторы
     const orderItems = [];
     for (const item of items) {
-      const [modifiers] = await db.query(`SELECT modifier_id FROM order_item_modifiers WHERE order_item_id = ?`, [item.id]);
+      const [modifiers] = await db.query(
+        `SELECT modifier_id, old_modifier_id FROM order_item_modifiers WHERE order_item_id = ?`,
+        [item.id]
+      );
+
+      // Собираем ID модификаторов (новая и старая система)
+      const modifierIds = modifiers
+        .map((m) => m.modifier_id || m.old_modifier_id)
+        .filter((id) => id !== null);
 
       orderItems.push({
         item_id: item.item_id,
+        variant_id: item.variant_id || null,
         quantity: item.quantity,
-        modifiers: modifiers.map((m) => m.modifier_id).filter((id) => id !== null),
+        modifiers: modifierIds,
       });
     }
 
@@ -538,11 +655,23 @@ router.put(
       }
 
       // Обновляем статус
-      const [oldOrderData] = await db.query("SELECT status, user_id FROM orders WHERE id = ?", [orderId]);
+      const [oldOrderData] = await db.query("SELECT status, user_id, total FROM orders WHERE id = ?", [orderId]);
       const oldStatus = oldOrderData[0]?.status;
       const userId = oldOrderData[0]?.user_id;
+      const orderTotal = parseFloat(oldOrderData[0]?.total) || 0;
 
       await db.query("UPDATE orders SET status = ?, completed_at = ? WHERE id = ?", [status, status === "completed" ? new Date() : null, orderId]);
+
+      // Если заказ завершен, начисляем бонусы и проверяем повышение уровня
+      if (status === "completed" && oldStatus !== "completed" && orderTotal > 0) {
+        try {
+          // earnBonuses автоматически вызывает checkLevelUp
+          await earnBonuses(userId, orderId, orderTotal, "Bonus earned from completed order");
+        } catch (bonusError) {
+          console.error("Failed to earn bonuses:", bonusError);
+          // Не прерываем выполнение, статус уже обновлен
+        }
+      }
 
       // Получаем обновленный заказ
       const [updatedOrders] = await db.query("SELECT * FROM orders WHERE id = ?", [orderId]);

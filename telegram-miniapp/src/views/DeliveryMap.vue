@@ -1,9 +1,6 @@
 <template>
   <div class="delivery-map">
-    <div class="map-header">
-      <button class="back-btn" @click="goBack">‹</button>
-      <div class="header-title">Выберите адрес</div>
-    </div>
+    <PageHeader title="Выберите адрес" />
 
     <div ref="mapContainerRef" class="map"></div>
 
@@ -18,16 +15,13 @@
           @input="onAddressInput"
           @focus="showSuggestions = true"
         />
-        <button v-if="deliveryAddress" class="clear-btn" @click="clearAddress">×</button>
+        <button v-if="deliveryAddress" class="clear-btn" @click="clearAddress">
+          <X :size="16" />
+        </button>
       </div>
 
       <div v-if="showSuggestions && addressSuggestions.length" class="suggestions">
-        <button
-          v-for="(suggestion, index) in addressSuggestions"
-          :key="index"
-          class="suggestion"
-          @click="selectAddress(suggestion)"
-        >
+        <button v-for="(suggestion, index) in addressSuggestions" :key="index" class="suggestion" @click="selectAddress(suggestion)">
           {{ suggestion.label }}
         </button>
       </div>
@@ -45,6 +39,8 @@
 
 <script setup>
 import { ref, computed, onMounted } from "vue";
+import { X } from "lucide-vue-next";
+import PageHeader from "../components/PageHeader.vue";
 import { useRouter } from "vue-router";
 import { useLocationStore } from "../stores/location";
 import { hapticFeedback } from "../services/telegram";
@@ -106,7 +102,7 @@ function onAddressInput() {
 
   searchTimeout = setTimeout(() => {
     fetchAddressSuggestions(deliveryAddress.value.trim());
-  }, 350);
+  }, 150);
 }
 
 function selectAddress(address) {
@@ -277,13 +273,7 @@ function buildNominatimUrl(query, limit = 5) {
 function formatAddressSuggestion(item) {
   const address = item?.address || {};
   const street =
-    address.road ||
-    address.pedestrian ||
-    address.footway ||
-    address.residential ||
-    address.living_street ||
-    address.street ||
-    address.neighbourhood;
+    address.road || address.pedestrian || address.footway || address.residential || address.living_street || address.street || address.neighbourhood;
   const house = address.house_number || address.building;
 
   if (!street || !house) {
@@ -325,62 +315,38 @@ async function loadLeaflet() {
 .delivery-map {
   position: relative;
   min-height: 100vh;
-  background: #f7f4f2;
+  background: var(--color-background-secondary);
   isolation: isolate;
-}
-
-.map-header {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 20;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  background: rgba(255, 255, 255, 0.9);
-}
-
-.back-btn {
-  width: 32px;
-  height: 32px;
-  border-radius: 16px;
-  border: none;
-  background: #ffffff;
-  font-size: 20px;
-  cursor: pointer;
-}
-
-.header-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #222222;
 }
 
 .map {
   position: absolute;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   z-index: 0;
 }
 
 .bottom-sheet {
-  position: absolute;
+  position: fixed;
   left: 16px;
   right: 16px;
   bottom: 20px;
-  background: #ffffff;
-  border-radius: 24px;
+  background: var(--color-background);
+  border-radius: var(--border-radius-xl) var(--border-radius-xl) 0 0;
   padding: 16px;
   z-index: 20;
-  box-shadow: 0 16px 28px rgba(0, 0, 0, 0.12);
+  box-shadow: var(--shadow-md);
+  /* Учитываем safe area для нижних элементов */
+  bottom: calc(20px + var(--tg-content-safe-area-inset-bottom, 0px));
 }
 
 .sheet-handle {
   width: 40px;
   height: 4px;
-  border-radius: 4px;
-  background: #e5e2df;
+  border-radius: 2px;
+  background: var(--color-border);
   margin: 0 auto 12px;
 }
 
@@ -392,15 +358,22 @@ async function loadLeaflet() {
 .address-input {
   width: 100%;
   padding: 12px 40px 12px 16px;
-  border-radius: 12px;
-  border: 1px solid #dedad7;
-  font-size: 14px;
-  background: #f9f7f6;
-  color: #1f1f1f;
+  border-radius: var(--border-radius-md);
+  border: none;
+  font-size: var(--font-size-body);
+  background: var(--color-background-secondary);
+  color: var(--color-text-primary);
+  transition: background-color var(--transition-duration) var(--transition-easing);
+}
+
+.address-input:focus {
+  outline: none;
+  background: var(--color-background);
+  border: 1px solid var(--color-primary);
 }
 
 .address-input::placeholder {
-  color: #8b8b8b;
+  color: var(--color-text-muted);
 }
 
 .clear-btn {
@@ -412,9 +385,15 @@ async function loadLeaflet() {
   height: 28px;
   border-radius: 50%;
   border: none;
-  background: #f0edeb;
+  background: var(--color-background-secondary);
   font-size: 18px;
+  color: var(--color-text-primary);
   cursor: pointer;
+  transition: background-color var(--transition-duration) var(--transition-easing);
+}
+
+.clear-btn:hover {
+  background: var(--color-border);
 }
 
 .suggestions {
@@ -429,35 +408,51 @@ async function loadLeaflet() {
 .suggestion {
   text-align: left;
   padding: 10px 12px;
-  background: #f7f4f2;
-  border-radius: 10px;
+  background: var(--color-background-secondary);
+  border-radius: var(--border-radius-sm);
   border: none;
-  font-size: 13px;
+  font-size: var(--font-size-caption);
+  font-weight: var(--font-weight-regular);
+  color: var(--color-text-primary);
   cursor: pointer;
-  color: #1f1f1f;
+  transition: background-color var(--transition-duration) var(--transition-easing);
+}
+
+.suggestion:hover {
+  background: var(--color-border);
 }
 
 .primary-btn {
   width: 100%;
-  padding: 14px;
-  border-radius: 20px;
+  padding: 16px;
+  border-radius: var(--border-radius-md);
   border: none;
-  background: #f7d000;
-  font-size: 14px;
-  font-weight: 700;
+  background: var(--color-primary);
+  font-size: var(--font-size-h3);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
   cursor: pointer;
+  transition: background-color var(--transition-duration) var(--transition-easing);
+}
+
+.primary-btn:hover {
+  background: var(--color-primary-hover);
+}
+
+.primary-btn:active {
+  transform: scale(0.98);
 }
 
 .map-suggestion {
-  position: absolute;
+  position: fixed;
   left: 16px;
   right: 16px;
-  bottom: 190px;
-  background: #ffffff;
-  border-radius: 18px;
+  bottom: calc(190px + var(--tg-content-safe-area-inset-bottom, 0px));
+  background: var(--color-background);
+  border-radius: var(--border-radius-lg);
   padding: 12px 14px;
   z-index: 20;
-  box-shadow: 0 12px 20px rgba(0, 0, 0, 0.12);
+  box-shadow: var(--shadow-md);
 }
 
 .bottom-sheet .suggestions {
@@ -465,17 +460,17 @@ async function loadLeaflet() {
 }
 
 .map-suggestion-title {
-  font-size: 11px;
+  font-size: var(--font-size-small);
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: #9b9b9b;
+  color: var(--color-text-muted);
   margin-bottom: 6px;
 }
 
 .map-suggestion-text {
-  font-size: 14px;
-  font-weight: 600;
-  color: #1f1f1f;
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
   margin-bottom: 10px;
 }
 </style>

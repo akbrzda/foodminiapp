@@ -1,9 +1,6 @@
 <template>
   <div class="pickup-map">
-    <div class="map-header">
-      <button class="back-btn" @click="goBack">‹</button>
-      <div class="header-title">Найти пиццерию</div>
-    </div>
+    <PageHeader title="Найти пиццерию" />
 
     <div ref="mapContainerRef" class="map"></div>
 
@@ -27,7 +24,9 @@
     </div>
 
     <div v-if="selectedBranch" class="branch-sheet">
-      <button class="sheet-close" @click="selectedBranch = null">×</button>
+      <button class="sheet-close" @click="selectedBranch = null">
+        <X :size="16" />
+      </button>
       <div class="sheet-title">{{ selectedBranch.displayName || selectedBranch.name }}</div>
       <div class="sheet-address">{{ selectedBranch.displayAddress || selectedBranch.address }}</div>
       <div class="sheet-status" :class="selectedBranch.isOpen ? 'open' : 'closed'">
@@ -42,6 +41,8 @@
 
 <script setup>
 import { ref, computed, onMounted } from "vue";
+import { X, MapPin } from "lucide-vue-next";
+import PageHeader from "../components/PageHeader.vue";
 import { useRouter } from "vue-router";
 import { useLocationStore } from "../stores/location";
 import { citiesAPI } from "../api/endpoints";
@@ -227,72 +228,53 @@ async function loadLeaflet() {
 .pickup-map {
   position: relative;
   min-height: 100vh;
-  background: #f7f4f2;
+  background: var(--color-background-secondary);
   isolation: isolate;
-}
-
-.map-header {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 20;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  background: rgba(255, 255, 255, 0.92);
-}
-
-.back-btn {
-  width: 32px;
-  height: 32px;
-  border-radius: 16px;
-  border: none;
-  background: #ffffff;
-  font-size: 20px;
-  cursor: pointer;
-}
-
-.header-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #222222;
 }
 
 .map {
   position: absolute;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   z-index: 0;
 }
 
 .search-bar {
-  position: absolute;
+  position: fixed;
   left: 16px;
   right: 16px;
-  bottom: 92px;
+  bottom: calc(92px + var(--tg-content-safe-area-inset-bottom, 0px));
   z-index: 20;
 }
 
 .search-input {
   width: 100%;
-  padding: 12px 14px;
-  border-radius: 14px;
-  border: 1px solid #dedad7;
-  background: #ffffff;
-  font-size: 14px;
-  color: #1f1f1f;
+  padding: 12px 16px;
+  border-radius: var(--border-radius-md);
+  border: none;
+  background: var(--color-background);
+  font-size: var(--font-size-body);
+  color: var(--color-text-primary);
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow var(--transition-duration) var(--transition-easing);
+}
+
+.search-input:focus {
+  outline: none;
+  box-shadow: 0px 4px 12px rgba(0, 0, 0, 0.12);
 }
 
 .search-input::placeholder {
-  color: #8b8b8b;
+  color: var(--color-text-muted);
 }
 
 .branch-list {
-  position: absolute;
+  position: fixed;
   left: 16px;
   right: 16px;
-  bottom: 150px;
+  bottom: calc(150px + var(--tg-content-safe-area-inset-bottom, 0px));
   z-index: 20;
   max-height: 220px;
   overflow-y: auto;
@@ -302,51 +284,56 @@ async function loadLeaflet() {
 }
 
 .branch-card {
-  background: #ffffff;
-  border-radius: 16px;
+  background: var(--color-background);
+  border-radius: var(--border-radius-lg);
   padding: 12px 14px;
   border: none;
   text-align: left;
   cursor: pointer;
-  box-shadow: 0 12px 18px rgba(0, 0, 0, 0.08);
-  color: #1f1f1f;
+  box-shadow: var(--shadow-sm);
+  color: var(--color-text-primary);
+  transition: box-shadow var(--transition-duration) var(--transition-easing);
+}
+
+.branch-card:hover {
+  box-shadow: 0px 4px 12px rgba(0, 0, 0, 0.12);
 }
 
 .branch-title {
-  font-size: 14px;
-  font-weight: 700;
-  color: #1f1f1f;
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
 }
 
 .branch-address {
-  font-size: 12px;
-  color: #6d6d6d;
+  font-size: var(--font-size-small);
+  color: var(--color-text-secondary);
   margin: 4px 0;
 }
 
 .branch-status {
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-semibold);
 }
 
 .branch-status.open {
-  color: #22c55e;
+  color: var(--color-success);
 }
 
 .branch-status.closed {
-  color: #ef4444;
+  color: var(--color-error);
 }
 
 .branch-sheet {
-  position: absolute;
+  position: fixed;
   left: 16px;
   right: 16px;
-  bottom: 20px;
-  background: #ffffff;
-  border-radius: 24px;
+  bottom: calc(20px + var(--tg-content-safe-area-inset-bottom, 0px));
+  background: var(--color-background);
+  border-radius: var(--border-radius-xl) var(--border-radius-xl) 0 0;
   padding: 18px 16px 16px;
   z-index: 20;
-  box-shadow: 0 18px 28px rgba(0, 0, 0, 0.16);
+  box-shadow: var(--shadow-md);
 }
 
 .sheet-close {
@@ -355,59 +342,78 @@ async function loadLeaflet() {
   right: 12px;
   width: 24px;
   height: 24px;
-  border-radius: 12px;
+  border-radius: 50%;
   border: none;
-  background: #f0edeb;
-  font-size: 16px;
+  background: var(--color-background-secondary);
+  color: var(--color-text-primary);
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color var(--transition-duration) var(--transition-easing);
+}
+
+.sheet-close:hover {
+  background: var(--color-border);
 }
 
 .sheet-title {
-  font-size: 16px;
-  font-weight: 700;
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
   margin-bottom: 6px;
 }
 
 .sheet-address {
-  font-size: 13px;
-  color: #6d6d6d;
+  font-size: var(--font-size-caption);
+  color: var(--color-text-secondary);
   margin-bottom: 6px;
 }
 
 .sheet-status {
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-semibold);
   margin-bottom: 4px;
 }
 
 .sheet-status.open {
-  color: #22c55e;
+  color: var(--color-success);
 }
 
 .sheet-status.closed {
-  color: #ef4444;
+  color: var(--color-error);
 }
 
 .sheet-hours {
-  font-size: 12px;
-  color: #6d6d6d;
+  font-size: var(--font-size-small);
+  color: var(--color-text-secondary);
   margin-bottom: 6px;
 }
 
 .sheet-phone {
-  font-size: 12px;
-  color: #3b82f6;
+  font-size: var(--font-size-small);
+  color: var(--color-primary);
   margin-bottom: 12px;
 }
 
 .primary-btn {
   width: 100%;
-  padding: 14px;
-  border-radius: 20px;
+  padding: 16px;
+  border-radius: var(--border-radius-md);
   border: none;
-  background: #f7d000;
-  font-size: 14px;
-  font-weight: 700;
+  background: var(--color-primary);
+  font-size: var(--font-size-h3);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
   cursor: pointer;
+  transition: background-color var(--transition-duration) var(--transition-easing);
+}
+
+.primary-btn:hover {
+  background: var(--color-primary-hover);
+}
+
+.primary-btn:active {
+  transform: scale(0.98);
 }
 </style>

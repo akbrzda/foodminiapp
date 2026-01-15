@@ -1,9 +1,6 @@
 <template>
   <div class="profile">
-    <div class="header">
-      <button class="back-btn" @click="$router.back()">← Назад</button>
-      <h1>Профиль</h1>
-    </div>
+    <PageHeader title="Профиль" />
 
     <div class="profile-content">
       <div class="user-info">
@@ -40,6 +37,8 @@
 
 <script setup>
 import { ref, computed, onMounted } from "vue";
+import { Package, ArrowRight, MapPin, LogOut } from "lucide-vue-next";
+import PageHeader from "../components/PageHeader.vue";
 import { useRouter } from "vue-router";
 import { useAuthStore } from "../stores/auth";
 import { bonusesAPI } from "../api/endpoints";
@@ -90,27 +89,7 @@ function openCityPopup() {
 <style scoped>
 .profile {
   min-height: 100vh;
-  background: #f5f5f5;
-}
-
-.header {
-  display: flex;
-  align-items: center;
-  padding: 16px;
-  background: white;
-  border-bottom: 1px solid #e0e0e0;
-}
-
-.back-btn {
-  border: none;
-  background: transparent;
-  font-size: 16px;
-  cursor: pointer;
-  margin-right: 12px;
-}
-
-.header h1 {
-  font-size: 20px;
+  background: var(--color-background-secondary);
 }
 
 .profile-content {
@@ -122,68 +101,82 @@ function openCityPopup() {
   align-items: center;
   gap: 16px;
   padding: 20px;
-  background: white;
-  border-radius: 12px;
+  background: var(--color-background);
+  border-radius: var(--border-radius-md);
   margin-bottom: 16px;
+  box-shadow: var(--shadow-sm);
 }
 
 .avatar {
   width: 60px;
   height: 60px;
-  border-radius: 30px;
-  background: #667eea;
-  color: white;
+  border-radius: 50%;
+  background: var(--color-primary);
+  color: var(--color-text-primary);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 24px;
-  font-weight: 600;
+  font-size: var(--font-size-h2);
+  font-weight: var(--font-weight-bold);
 }
 
 .user-info h2 {
-  font-size: 18px;
+  font-size: var(--font-size-h3);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
   margin-bottom: 4px;
 }
 
 .user-info p {
-  font-size: 14px;
-  color: #666;
+  font-size: var(--font-size-caption);
+  color: var(--color-text-secondary);
 }
 
 .bonus-card {
   padding: 24px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border-radius: 12px;
-  color: white;
+  background: var(--color-primary);
+  border-radius: var(--border-radius-md);
+  color: var(--color-text-primary);
   margin-bottom: 16px;
   text-align: center;
+  box-shadow: var(--shadow-sm);
 }
 
 .bonus-label {
-  font-size: 14px;
-  opacity: 0.9;
+  font-size: var(--font-size-caption);
+  color: var(--color-text-primary);
+  opacity: 0.8;
   margin-bottom: 8px;
 }
 
 .bonus-amount {
   font-size: 48px;
-  font-weight: 700;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
   margin-bottom: 16px;
 }
 
 .history-btn {
   padding: 8px 16px;
-  border: 1px solid white;
-  border-radius: 8px;
+  border: 1px solid var(--color-text-primary);
+  border-radius: var(--border-radius-sm);
   background: transparent;
-  color: white;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-semibold);
   cursor: pointer;
+  transition: background-color var(--transition-duration) var(--transition-easing);
+}
+
+.history-btn:hover {
+  background: rgba(0, 0, 0, 0.1);
 }
 
 .menu-list {
-  background: white;
-  border-radius: 12px;
+  background: var(--color-background);
+  border-radius: var(--border-radius-md);
   overflow: hidden;
+  box-shadow: var(--shadow-sm);
 }
 
 .menu-item {
@@ -193,11 +186,20 @@ function openCityPopup() {
   align-items: center;
   padding: 16px;
   border: none;
-  background: white;
-  border-bottom: 1px solid #f5f5f5;
+  background: var(--color-background);
+  border-bottom: 1px solid var(--color-border);
   text-align: left;
-  font-size: 16px;
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-regular);
+  color: var(--color-text-primary);
   cursor: pointer;
+  transition: background-color var(--transition-duration) var(--transition-easing);
+}
+
+.menu-item span:first-child {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .menu-item:last-child {
@@ -205,6 +207,6 @@ function openCityPopup() {
 }
 
 .menu-item:hover {
-  background: #f9f9f9;
+  background: var(--color-background-secondary);
 }
 </style>

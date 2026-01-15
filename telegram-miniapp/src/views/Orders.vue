@@ -1,9 +1,6 @@
 <template>
   <div class="orders">
-    <div class="header">
-      <button class="back-btn" @click="$router.back()">← Назад</button>
-      <h1>Мои заказы</h1>
-    </div>
+    <PageHeader title="Мои заказы" />
 
     <div v-if="loading" class="loading">Загрузка...</div>
 
@@ -27,11 +24,13 @@
 
         <div class="order-details">
           <div>{{ order.items_count }} позиций</div>
-          <div class="order-total">{{ order.total_amount }} ₽</div>
+          <div class="order-total">{{ formatPrice(order.total_amount) }} ₽</div>
         </div>
 
         <div class="order-type">
-          {{ order.order_type === "delivery" ? "🚚 Доставка" : "🏪 Самовывоз" }}
+          <Truck v-if="order.order_type === 'delivery'" :size="16" />
+          <Store v-else :size="16" />
+          {{ order.order_type === "delivery" ? "Доставка" : "Самовывоз" }}
         </div>
       </div>
     </div>
@@ -40,9 +39,12 @@
 
 <script setup>
 import { ref, onMounted } from "vue";
+import { Truck, Store } from "lucide-vue-next";
+import PageHeader from "../components/PageHeader.vue";
 import { useRouter } from "vue-router";
 import { ordersAPI } from "../api/endpoints";
 import { hapticFeedback } from "../services/telegram";
+import { formatPrice } from "../utils/format";
 
 const router = useRouter();
 const orders = ref([]);
@@ -106,33 +108,14 @@ function formatDate(dateString) {
 <style scoped>
 .orders {
   min-height: 100vh;
-  background: #f5f5f5;
-}
-
-.header {
-  display: flex;
-  align-items: center;
-  padding: 16px;
-  background: white;
-  border-bottom: 1px solid #e0e0e0;
-}
-
-.back-btn {
-  border: none;
-  background: transparent;
-  font-size: 16px;
-  cursor: pointer;
-  margin-right: 12px;
-}
-
-.header h1 {
-  font-size: 20px;
+  background: var(--color-background-secondary);
 }
 
 .loading {
   text-align: center;
   padding: 64px 16px;
-  color: #666;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-body);
 }
 
 .empty {
@@ -141,20 +124,9 @@ function formatDate(dateString) {
 }
 
 .empty p {
-  font-size: 18px;
-  color: #666;
+  font-size: var(--font-size-h3);
+  color: var(--color-text-secondary);
   margin-bottom: 24px;
-}
-
-.btn-primary {
-  padding: 12px 24px;
-  border: none;
-  border-radius: 12px;
-  background: #667eea;
-  color: white;
-  font-size: 16px;
-  font-weight: 600;
-  cursor: pointer;
 }
 
 .orders-list {
@@ -163,11 +135,16 @@ function formatDate(dateString) {
 
 .order-card {
   padding: 16px;
-  background: white;
-  border-radius: 12px;
+  background: var(--color-background);
+  border-radius: var(--border-radius-md);
   margin-bottom: 12px;
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow var(--transition-duration) var(--transition-easing);
+}
+
+.order-card:hover {
+  box-shadow: 0px 4px 12px rgba(0, 0, 0, 0.12);
 }
 
 .order-header {
@@ -178,15 +155,16 @@ function formatDate(dateString) {
 }
 
 .order-number {
-  font-weight: 600;
-  font-size: 18px;
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-h3);
+  color: var(--color-text-primary);
 }
 
 .order-status {
   padding: 4px 12px;
   border-radius: 12px;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-bold);
 }
 
 .status-pending {
@@ -198,29 +176,29 @@ function formatDate(dateString) {
   color: #0c5460;
 }
 .status-preparing {
-  background: #d1ecf1;
-  color: #0c5460;
+  background: #fff3cd;
+  color: #856404;
 }
 .status-ready {
-  background: #d4edda;
-  color: #155724;
+  background: #cce5ff;
+  color: #004085;
 }
 .status-delivering {
   background: #cce5ff;
   color: #004085;
 }
 .status-completed {
-  background: #d4edda;
-  color: #155724;
+  background: var(--color-success);
+  color: var(--color-background);
 }
 .status-cancelled {
-  background: #f8d7da;
-  color: #721c24;
+  background: var(--color-error);
+  color: var(--color-background);
 }
 
 .order-date {
-  font-size: 14px;
-  color: #666;
+  font-size: var(--font-size-caption);
+  color: var(--color-text-secondary);
   margin-bottom: 12px;
 }
 
@@ -232,12 +210,16 @@ function formatDate(dateString) {
 }
 
 .order-total {
-  font-weight: 600;
-  font-size: 18px;
+  font-weight: var(--font-weight-bold);
+  font-size: var(--font-size-h3);
+  color: var(--color-text-primary);
 }
 
 .order-type {
-  font-size: 14px;
-  color: #666;
+  font-size: var(--font-size-caption);
+  color: var(--color-text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 </style>

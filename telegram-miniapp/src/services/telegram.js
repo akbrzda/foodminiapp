@@ -48,32 +48,73 @@ export function getTelegramUser() {
   return webApp?.initDataUnsafe?.user || null;
 }
 
-export function getThemeParams() {
-  return {};
-}
 
 export function getColorScheme() {
   return "light";
 }
 
+export function isDesktop() {
+  const webApp = resolveWebApp();
+  if (!webApp) {
+    return true; // Если нет WebApp, считаем что это десктоп
+  }
+  const platform = webApp.platform || "";
+  return platform === "web" || platform === "desktop" || platform === "unknown";
+}
+
 export function showBackButton(handler) {
   const webApp = resolveWebApp();
+  
+  // На десктопе нативная кнопка не работает, возвращаем флаг для UI
+  if (isDesktop()) {
+    // Возвращаем функцию-заглушку, которая сигнализирует что нужна UI кнопка
+    return () => {};
+  }
+  
   if (!webApp) {
     return () => {};
   }
 
-  webApp.BackButton.show();
-  if (handler) {
-    webApp.onEvent("backButtonClicked", handler);
-    return () => {
-      webApp.offEvent("backButtonClicked", handler);
-      webApp.BackButton.hide();
-    };
+  // Вспомогательная функция для проверки версии SDK
+  const isVersionAtLeast = (version) => {
+    if (typeof webApp.isVersionAtLeast === "function") {
+      return webApp.isVersionAtLeast(version);
+    }
+    const currentVersion = parseFloat(webApp.version || "0");
+    const requiredVersion = parseFloat(version);
+    return currentVersion >= requiredVersion;
+  };
+
+  // BackButton требует версию 6.1+
+  if (!isVersionAtLeast("6.1") || !webApp.BackButton) {
+    return () => {};
   }
 
-  return () => {
-    webApp.BackButton.hide();
-  };
+  try {
+    webApp.BackButton.show();
+    if (handler) {
+      webApp.BackButton.onClick(handler);
+      return () => {
+        try {
+          webApp.BackButton.offClick(handler);
+          webApp.BackButton.hide();
+        } catch (error) {
+          // Игнорируем ошибки при очистке
+        }
+      };
+    }
+
+    return () => {
+      try {
+        webApp.BackButton.hide();
+      } catch (error) {
+        // Игнорируем ошибки при скрытии
+      }
+    };
+  } catch (error) {
+    // Игнорируем ошибки, если метод не поддерживается
+    return () => {};
+  }
 }
 
 export function hideBackButton() {
@@ -160,7 +201,17 @@ export function hapticFeedback(style = "light") {
     return;
   }
 
-  if (typeof webApp?.isVersionAtLeast === "function" && !webApp.isVersionAtLeast("6.1")) {
+  // HapticFeedback требует версию 6.1+
+  const isVersionAtLeast = (version) => {
+    if (typeof webApp.isVersionAtLeast === "function") {
+      return webApp.isVersionAtLeast(version);
+    }
+    const currentVersion = parseFloat(webApp.version || "0");
+    const requiredVersion = parseFloat(version);
+    return currentVersion >= requiredVersion;
+  };
+
+  if (!isVersionAtLeast("6.1")) {
     return;
   }
 

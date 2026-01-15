@@ -17,6 +17,16 @@ export const authAPI = {
   },
 };
 
+export const userStateAPI = {
+  getState() {
+    return api.get("/users/state");
+  },
+
+  updateState(state) {
+    return api.put("/users/state", state);
+  },
+};
+
 export const citiesAPI = {
   // Получить все города
   getCities() {
@@ -37,10 +47,15 @@ export const menuAPI = {
 
   // Получить позиции меню
   getItems(categoryId) {
-    return api.get(`/menu/items`, { params: { category_id: categoryId } });
+    return api.get(`/menu/categories/${categoryId}/items`);
   },
 
-  // Получить модификаторы позиции
+  // Получить детали позиции с вариантами и модификаторами
+  getItemDetails(itemId) {
+    return api.get(`/menu/items/${itemId}`);
+  },
+
+  // Получить модификаторы позиции (старая система)
   getModifiers(itemId) {
     return api.get(`/menu/items/${itemId}/modifiers`);
   },
@@ -54,7 +69,7 @@ export const ordersAPI = {
 
   // Получить список заказов пользователя
   getMyOrders() {
-    return api.get("/orders/my");
+    return api.get("/orders");
   },
 
   // Получить детали заказа
@@ -97,7 +112,14 @@ export const addressesAPI = {
   },
 
   // Проверить адрес в зоне доставки
-  checkDeliveryZone(address, cityId) {
-    return api.post("/orders/check-delivery-zone", { address, city_id: cityId });
+  checkDeliveryZone(lat, lng, cityId) {
+    return api.post("/polygons/check-delivery", { latitude: lat, longitude: lng, city_id: cityId });
+  },
+};
+
+export const geocodeAPI = {
+  // Геокодирование адреса
+  geocode(address) {
+    return api.post("/geocode", { address });
   },
 };

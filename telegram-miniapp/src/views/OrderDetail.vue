@@ -1,9 +1,6 @@
 <template>
   <div class="order-detail">
-    <div class="header">
-      <button class="back-btn" @click="$router.back()">← Назад</button>
-      <h1>Заказ #{{ order?.order_number }}</h1>
-    </div>
+    <PageHeader :title="`Заказ #${order?.order_number || ''}`" />
 
     <div v-if="loading" class="loading">Загрузка...</div>
 
@@ -23,7 +20,7 @@
               <div>{{ item.name }}</div>
               <div class="item-qty">× {{ item.quantity }}</div>
             </div>
-            <div class="item-price">{{ item.price * item.quantity }} ₽</div>
+            <div class="item-price">{{ formatPrice(item.price * item.quantity) }} ₽</div>
           </div>
         </div>
       </div>
@@ -43,15 +40,15 @@
         <h3>Итого</h3>
         <div class="total-row">
           <span>Товары</span>
-          <span>{{ order.total_amount }} ₽</span>
+          <span>{{ formatPrice(order.total_amount) }} ₽</span>
         </div>
         <div class="total-row" v-if="order.bonus_used > 0">
           <span>Оплачено бонусами</span>
-          <span>-{{ order.bonus_used }} ₽</span>
+          <span>-{{ formatPrice(order.bonus_used) }} ₽</span>
         </div>
         <div class="total-row final">
           <span>К оплате</span>
-          <span>{{ order.total_amount - order.bonus_used }} ₽</span>
+          <span>{{ formatPrice(order.total_amount - order.bonus_used) }} ₽</span>
         </div>
       </div>
     </div>
@@ -60,8 +57,10 @@
 
 <script setup>
 import { ref, onMounted } from "vue";
+import PageHeader from "../components/PageHeader.vue";
 import { useRoute } from "vue-router";
 import { ordersAPI } from "../api/endpoints";
+import { formatPrice } from "../utils/format";
 
 const route = useRoute();
 const order = ref(null);
@@ -111,33 +110,14 @@ function formatDate(dateString) {
 <style scoped>
 .order-detail {
   min-height: 100vh;
-  background: #f5f5f5;
-}
-
-.header {
-  display: flex;
-  align-items: center;
-  padding: 16px;
-  background: white;
-  border-bottom: 1px solid #e0e0e0;
-}
-
-.back-btn {
-  border: none;
-  background: transparent;
-  font-size: 16px;
-  cursor: pointer;
-  margin-right: 12px;
-}
-
-.header h1 {
-  font-size: 20px;
+  background: var(--color-background-secondary);
 }
 
 .loading {
   text-align: center;
   padding: 64px 16px;
-  color: #666;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-body);
 }
 
 .order-content {
@@ -146,18 +126,19 @@ function formatDate(dateString) {
 
 .status-card {
   padding: 20px;
-  background: white;
-  border-radius: 12px;
+  background: var(--color-background);
+  border-radius: var(--border-radius-md);
   text-align: center;
   margin-bottom: 16px;
+  box-shadow: var(--shadow-sm);
 }
 
 .status-badge {
   display: inline-block;
   padding: 8px 16px;
   border-radius: 20px;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: var(--font-size-caption);
+  font-weight: var(--font-weight-bold);
   margin-bottom: 8px;
 }
 
@@ -170,50 +151,54 @@ function formatDate(dateString) {
   color: #0c5460;
 }
 .status-preparing {
-  background: #d1ecf1;
-  color: #0c5460;
+  background: #fff3cd;
+  color: #856404;
 }
 .status-ready {
-  background: #d4edda;
-  color: #155724;
+  background: #cce5ff;
+  color: #004085;
 }
 .status-delivering {
   background: #cce5ff;
   color: #004085;
 }
 .status-completed {
-  background: #d4edda;
-  color: #155724;
+  background: var(--color-success);
+  color: var(--color-background);
 }
 .status-cancelled {
-  background: #f8d7da;
-  color: #721c24;
+  background: var(--color-error);
+  color: var(--color-background);
 }
 
 .order-date {
-  font-size: 14px;
-  color: #666;
+  font-size: var(--font-size-caption);
+  color: var(--color-text-secondary);
 }
 
 .section {
   padding: 16px;
-  background: white;
-  border-radius: 12px;
+  background: var(--color-background);
+  border-radius: var(--border-radius-md);
   margin-bottom: 16px;
+  box-shadow: var(--shadow-sm);
 }
 
 .section h3 {
-  font-size: 16px;
+  font-size: var(--font-size-h3);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
   margin-bottom: 12px;
 }
 
 .section p {
-  color: #666;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-body);
 }
 
 .text-secondary {
-  font-size: 14px;
-  color: #999;
+  font-size: var(--font-size-caption);
+  color: var(--color-text-muted);
   margin-top: 4px;
 }
 
@@ -233,27 +218,36 @@ function formatDate(dateString) {
   flex: 1;
 }
 
+.item-info > div:first-child {
+  font-size: var(--font-size-body);
+  color: var(--color-text-primary);
+}
+
 .item-qty {
-  font-size: 14px;
-  color: #666;
+  font-size: var(--font-size-caption);
+  color: var(--color-text-secondary);
   margin-top: 4px;
 }
 
 .item-price {
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-h3);
+  color: var(--color-text-primary);
 }
 
 .total-row {
   display: flex;
   justify-content: space-between;
   margin-bottom: 8px;
+  font-size: var(--font-size-body);
+  color: var(--color-text-primary);
 }
 
 .total-row.final {
-  font-size: 18px;
-  font-weight: 600;
+  font-size: var(--font-size-h2);
+  font-weight: var(--font-weight-bold);
   padding-top: 12px;
-  border-top: 1px solid #e0e0e0;
+  border-top: 1px solid var(--color-border);
   margin-top: 4px;
   margin-bottom: 0;
 }

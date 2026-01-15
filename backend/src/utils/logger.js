@@ -106,18 +106,6 @@ export const logger = {
     error: (orderId, error) => logSystem("error", "order", `Order ${orderId} error: ${error}`, { orderId, error }),
   },
 
-  // Логи синхронизации
-  sync: {
-    started: (entity, entityId) => logSystem("info", "sync", `Sync started for ${entity} ${entityId}`, { entity, entityId }),
-
-    success: (entity, entityId, gulyashId) => logSystem("info", "sync", `Sync successful for ${entity} ${entityId}`, { entity, entityId, gulyashId }),
-
-    failed: (entity, entityId, error, attempt) =>
-      logSystem("error", "sync", `Sync failed for ${entity} ${entityId} (attempt ${attempt}): ${error}`, { entity, entityId, error, attempt }),
-
-    retry: (entity, entityId, nextRetryAt) =>
-      logSystem("warning", "sync", `Sync will retry for ${entity} ${entityId} at ${nextRetryAt}`, { entity, entityId, nextRetryAt }),
-  },
 
   // Логи аутентификации
   auth: {

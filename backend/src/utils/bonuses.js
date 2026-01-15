@@ -3,20 +3,22 @@ import db from "../config/database.js";
 /**
  * Правила бонусной программы (можно вынести в конфиг)
  */
+const LOYALTY_LEVELS = {
+  1: { name: "Бронза", earnRate: 0.05, threshold: 0 }, // 5% от суммы, порог 0₽
+  2: { name: "Серебро", earnRate: 0.07, threshold: 10000 }, // 7% от суммы, порог 10,000₽
+  3: { name: "Золото", earnRate: 0.10, threshold: 50000 }, // 10% от суммы, порог 50,000₽
+};
+
 const BONUS_RULES = {
-  earnRate: 0.03, // 3% от суммы заказа начисляется бонусами
-  maxUsePercent: 0.25, // Максимум 25% от суммы заказа можно оплатить бонусами
-  minOrderForBonus: 500, // Минимальная сумма заказа для начисления бонусов
+  maxUsePercent: 0.5, // Максимум 50% от суммы заказа можно оплатить бонусами
 };
 
 /**
- * Рассчитать количество бонусов к начислению
+ * Рассчитать количество бонусов к начислению на основе уровня лояльности
  */
-export function calculateEarnedBonuses(orderTotal) {
-  if (orderTotal < BONUS_RULES.minOrderForBonus) {
-    return 0;
-  }
-  return Math.floor(orderTotal * BONUS_RULES.earnRate);
+export function calculateEarnedBonuses(orderTotal, loyaltyLevel = 1) {
+  const level = LOYALTY_LEVELS[loyaltyLevel] || LOYALTY_LEVELS[1];
+  return Math.floor(orderTotal * level.earnRate);
 }
 
 /**
@@ -64,27 +66,96 @@ export async function validateBonusUsage(userId, bonusToUse, orderSubtotal) {
 }
 
 /**
- * Начислить бонусы пользователю
+ * Проверить и повысить уровень лояльности пользователя
  */
-export async function earnBonuses(userId, orderId, amount, description = null) {
+export async function checkLevelUp(userId) {
+  // Получаем текущий уровень и total_spent
+  const [users] = await db.query(
+    "SELECT loyalty_level, total_spent FROM users WHERE id = ?",
+    [userId]
+  );
+
+  if (users.length === 0) {
+    return null;
+  }
+
+  const currentLevel = users[0].loyalty_level || 1;
+  const totalSpent = parseFloat(users[0].total_spent) || 0;
+
+  // Определяем новый уровень на основе total_spent
+  let newLevel = currentLevel;
+  if (totalSpent >= LOYALTY_LEVELS[3].threshold && currentLevel < 3) {
+    newLevel = 3;
+  } else if (totalSpent >= LOYALTY_LEVELS[2].threshold && currentLevel < 2) {
+    newLevel = 2;
+  }
+
+  // Если уровень изменился, обновляем
+  if (newLevel !== currentLevel) {
+    await db.query("UPDATE users SET loyalty_level = ? WHERE id = ?", [newLevel, userId]);
+
+    // WebSocket: уведомление о повышении уровня
+    try {
+      const { wsServer } = await import("../index.js");
+      wsServer.notifyLevelUp(userId, newLevel, LOYALTY_LEVELS[newLevel].name);
+    } catch (wsError) {
+      console.error("Failed to send WebSocket notification:", wsError);
+    }
+
+    return {
+      old_level: currentLevel,
+      new_level: newLevel,
+      level_name: LOYALTY_LEVELS[newLevel].name,
+    };
+  }
+
+  return null;
+}
+
+/**
+ * Начислить бонусы пользователю и обновить total_spent
+ */
+export async function earnBonuses(userId, orderId, orderTotal, description = null) {
+  // Получаем текущий уровень пользователя
+  const [users] = await db.query(
+    "SELECT loyalty_level, bonus_balance FROM users WHERE id = ?",
+    [userId]
+  );
+
+  if (users.length === 0) {
+    throw new Error("User not found");
+  }
+
+  const loyaltyLevel = users[0].loyalty_level || 1;
+
+  // Рассчитываем бонусы на основе уровня
+  const amount = calculateEarnedBonuses(orderTotal, loyaltyLevel);
+
   if (amount <= 0) {
     return null;
   }
 
-  // Обновляем баланс пользователя
-  await db.query("UPDATE users SET bonus_balance = bonus_balance + ? WHERE id = ?", [amount, userId]);
+  // Обновляем баланс бонусов и total_spent
+  await db.query(
+    "UPDATE users SET bonus_balance = bonus_balance + ?, total_spent = total_spent + ? WHERE id = ?",
+    [amount, orderTotal, userId]
+  );
 
   // Получаем новый баланс
-  const [users] = await db.query("SELECT bonus_balance FROM users WHERE id = ?", [userId]);
-  const newBalance = parseFloat(users[0].bonus_balance);
+  const [updatedUsers] = await db.query("SELECT bonus_balance, total_spent FROM users WHERE id = ?", [userId]);
+  const newBalance = parseFloat(updatedUsers[0].bonus_balance);
+  const newTotalSpent = parseFloat(updatedUsers[0].total_spent);
 
   // Записываем в историю
   const [result] = await db.query(
     `INSERT INTO bonus_history 
      (user_id, order_id, type, amount, balance_after, description)
      VALUES (?, ?, 'earned', ?, ?, ?)`,
-    [userId, orderId, amount, newBalance, description || "Bonus earned from order"]
+    [userId, orderId, amount, newBalance, description || `Bonus earned from order (${LOYALTY_LEVELS[loyaltyLevel].name} level)`]
   );
+
+  // Проверяем повышение уровня
+  const levelUp = await checkLevelUp(userId);
 
   // WebSocket: уведомление о начислении бонусов
   try {
@@ -93,6 +164,7 @@ export async function earnBonuses(userId, orderId, amount, description = null) {
       type: "earned",
       amount,
       orderId,
+      level_up: levelUp,
     });
   } catch (wsError) {
     console.error("Failed to send WebSocket notification:", wsError);
@@ -102,6 +174,8 @@ export async function earnBonuses(userId, orderId, amount, description = null) {
     id: result.insertId,
     amount,
     balance_after: newBalance,
+    total_spent: newTotalSpent,
+    level_up: levelUp,
   };
 }
 
@@ -182,4 +256,5 @@ export default {
   earnBonuses,
   useBonuses,
   getBonusHistory,
+  checkLevelUp,
 };

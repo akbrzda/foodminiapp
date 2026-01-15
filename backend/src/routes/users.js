@@ -88,6 +88,95 @@ router.get("/profile", authenticateToken, async (req, res, next) => {
   }
 });
 
+// Получить синхронизированное состояние пользователя
+router.get("/state", authenticateToken, async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+
+    const [rows] = await db.query(
+      `SELECT user_id, selected_city_id, selected_branch_id, delivery_type, delivery_address, delivery_coords, delivery_details, cart, updated_at
+       FROM user_states WHERE user_id = ?`,
+      [userId]
+    );
+
+    if (rows.length === 0) {
+      return res.json({ state: null });
+    }
+
+    const state = rows[0];
+    const parseJson = (value) => {
+      if (!value) return null;
+      if (typeof value === "object") return value;
+      try {
+        return JSON.parse(value);
+      } catch {
+        return null;
+      }
+    };
+
+    res.json({
+      state: {
+        user_id: state.user_id,
+        selected_city_id: state.selected_city_id,
+        selected_branch_id: state.selected_branch_id,
+        delivery_type: state.delivery_type,
+        delivery_address: state.delivery_address,
+        delivery_coords: parseJson(state.delivery_coords),
+        delivery_details: parseJson(state.delivery_details),
+        cart: parseJson(state.cart) || [],
+        updated_at: state.updated_at,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Обновить синхронизированное состояние пользователя
+router.put("/state", authenticateToken, async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const {
+      selected_city_id,
+      selected_branch_id,
+      delivery_type,
+      delivery_address,
+      delivery_coords,
+      delivery_details,
+      cart,
+    } = req.body || {};
+
+    await db.query(
+      `INSERT INTO user_states
+        (user_id, selected_city_id, selected_branch_id, delivery_type, delivery_address, delivery_coords, delivery_details, cart)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE
+        selected_city_id = VALUES(selected_city_id),
+        selected_branch_id = VALUES(selected_branch_id),
+        delivery_type = VALUES(delivery_type),
+        delivery_address = VALUES(delivery_address),
+        delivery_coords = VALUES(delivery_coords),
+        delivery_details = VALUES(delivery_details),
+        cart = VALUES(cart),
+        updated_at = CURRENT_TIMESTAMP`,
+      [
+        userId,
+        selected_city_id || null,
+        selected_branch_id || null,
+        delivery_type || "delivery",
+        delivery_address || "",
+        delivery_coords ? JSON.stringify(delivery_coords) : null,
+        delivery_details ? JSON.stringify(delivery_details) : null,
+        cart ? JSON.stringify(cart) : JSON.stringify([]),
+      ]
+    );
+
+    res.json({ ok: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // Обновить профиль пользователя
 router.put("/profile", authenticateToken, async (req, res, next) => {
   try {

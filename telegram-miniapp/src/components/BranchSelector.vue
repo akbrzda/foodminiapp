@@ -5,7 +5,9 @@
         <div class="dialog-content" @click.stop>
           <div class="header">
             <h3>{{ isDelivery ? "Доставка" : "Самовывоз" }}</h3>
-            <button @click="closeDialog" class="close-btn">✕</button>
+            <button @click="closeDialog" class="close-btn">
+              <X :size="18" />
+            </button>
           </div>
 
           <div class="tabs">
@@ -45,13 +47,13 @@
                   <div class="branch-address">{{ branch.address }}</div>
                   <div class="branch-hours">{{ branch.work_hours }}</div>
                 </div>
-                <span v-if="branch.id === locationStore.selectedBranch?.id" class="checkmark">✓</span>
+                <Check v-if="branch.id === locationStore.selectedBranch?.id" :size="24" class="checkmark" />
               </button>
             </div>
 
             <!-- Карта (placeholder) -->
             <div class="map-placeholder">
-              <div class="map-pin">📍</div>
+              <MapPin :size="48" class="map-pin" />
               <p>{{ locationStore.selectedCity?.name || "Когалым" }}</p>
             </div>
           </div>
@@ -65,6 +67,7 @@
 
 <script setup>
 import { ref, computed, watch, onMounted } from "vue";
+import { X, Check, MapPin } from "lucide-vue-next";
 import { useLocationStore } from "../stores/location";
 import { citiesAPI } from "../api/endpoints";
 import { hapticFeedback } from "../services/telegram";
@@ -165,14 +168,15 @@ function closeDialog() {
 }
 
 .dialog-content {
-  background: white;
-  border-radius: 20px 20px 0 0;
+  background: var(--color-background);
+  border-radius: var(--border-radius-xl) var(--border-radius-xl) 0 0;
   width: 100%;
   max-width: 600px;
   max-height: 80vh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  box-shadow: var(--shadow-md);
 }
 
 .dialog-enter-active,
@@ -200,13 +204,26 @@ function closeDialog() {
   justify-content: space-between;
   align-items: center;
   padding: 16px;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--color-border);
+  position: relative;
+}
+
+.header::before {
+  content: "";
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 40px;
+  height: 4px;
+  background: var(--color-border);
+  border-radius: 2px;
 }
 
 .header h3 {
-  font-size: 18px;
-  font-weight: 600;
-  color: #111827;
+  font-size: var(--font-size-h3);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
 }
 
 .close-btn {
@@ -214,46 +231,48 @@ function closeDialog() {
   height: 32px;
   border-radius: 50%;
   border: none;
-  background: #f3f4f6;
+  background: var(--color-background-secondary);
   font-size: 20px;
+  color: var(--color-text-primary);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background-color 0.2s;
+  transition: background-color var(--transition-duration) var(--transition-easing);
 }
 
 .close-btn:hover {
-  background: #e5e7eb;
+  background: var(--color-border);
 }
 
 .tabs {
   display: flex;
   padding: 8px;
   gap: 8px;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .tab {
   flex: 1;
   padding: 12px;
   border: none;
-  background: #f3f4f6;
-  border-radius: 12px;
-  font-size: 14px;
-  font-weight: 500;
-  color: #6b7280;
+  background: var(--color-background-secondary);
+  border-radius: var(--border-radius-md);
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-regular);
+  color: var(--color-text-secondary);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all var(--transition-duration) var(--transition-easing);
 }
 
 .tab.active {
-  background: #374151;
-  color: white;
+  background: var(--color-text-primary);
+  color: var(--color-background);
+  font-weight: var(--font-weight-semibold);
 }
 
 .tab:hover:not(.active) {
-  background: #e5e7eb;
+  background: var(--color-border);
 }
 
 .delivery-section,
@@ -272,30 +291,37 @@ function closeDialog() {
 .address-input {
   width: 100%;
   padding: 12px 16px;
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  font-size: 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  font-size: var(--font-size-body);
+  background: var(--color-background);
+  color: var(--color-text-primary);
   outline: none;
+  transition: border-color var(--transition-duration) var(--transition-easing);
 }
 
 .address-input:focus {
-  border-color: #fbbf24;
+  border-color: var(--color-primary);
+}
+
+.address-input::placeholder {
+  color: var(--color-text-muted);
 }
 
 .select-address-btn {
   padding: 14px;
-  background: #fbbf24;
-  color: #000;
+  background: var(--color-primary);
+  color: var(--color-text-primary);
   border: none;
-  border-radius: 12px;
-  font-size: 16px;
-  font-weight: 600;
+  border-radius: var(--border-radius-md);
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-semibold);
   cursor: pointer;
-  transition: background-color 0.2s;
+  transition: background-color var(--transition-duration) var(--transition-easing);
 }
 
 .select-address-btn:hover {
-  background: #f59e0b;
+  background: var(--color-primary-hover);
 }
 
 .loading-state,
@@ -305,14 +331,15 @@ function closeDialog() {
   align-items: center;
   justify-content: center;
   padding: 40px 16px;
-  color: #6b7280;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-body);
 }
 
 .spinner {
   width: 32px;
   height: 32px;
-  border: 3px solid #e5e7eb;
-  border-top-color: #fbbf24;
+  border: 3px solid var(--color-border);
+  border-top-color: var(--color-primary);
   border-radius: 50%;
   animation: spin 1s linear infinite;
   margin-bottom: 12px;
@@ -335,17 +362,17 @@ function closeDialog() {
   justify-content: space-between;
   padding: 16px;
   border: none;
-  background: white;
-  border-radius: 12px;
+  background: var(--color-background);
+  border-radius: var(--border-radius-md);
   margin-bottom: 8px;
   text-align: left;
   cursor: pointer;
-  transition: background-color 0.2s, transform 0.1s;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  transition: background-color var(--transition-duration) var(--transition-easing), transform var(--transition-duration) var(--transition-easing);
+  box-shadow: var(--shadow-sm);
 }
 
 .branch-item:hover {
-  background: #f9fafb;
+  background: var(--color-background-secondary);
 }
 
 .branch-item:active {
@@ -353,8 +380,8 @@ function closeDialog() {
 }
 
 .branch-item.active {
-  background: #fef3c7;
-  border: 1px solid #fbbf24;
+  background: var(--color-primary);
+  border: 1px solid var(--color-primary);
 }
 
 .branch-info {
@@ -362,41 +389,40 @@ function closeDialog() {
 }
 
 .branch-name {
-  font-size: 16px;
-  font-weight: 600;
-  color: #111827;
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
   margin-bottom: 4px;
 }
 
 .branch-address {
-  font-size: 14px;
-  color: #6b7280;
+  font-size: var(--font-size-caption);
+  color: var(--color-text-secondary);
   margin-bottom: 4px;
 }
 
 .branch-hours {
-  font-size: 12px;
-  color: #9ca3af;
-  background: #f3f4f6;
+  font-size: var(--font-size-small);
+  color: var(--color-text-muted);
+  background: var(--color-background-secondary);
   padding: 4px 8px;
-  border-radius: 6px;
+  border-radius: var(--border-radius-sm);
   display: inline-block;
   margin-top: 4px;
 }
 
 .checkmark {
-  color: #fbbf24;
-  font-size: 24px;
-  font-weight: 600;
+  color: var(--color-text-primary);
   margin-left: 8px;
+  flex-shrink: 0;
 }
 
 .map-placeholder {
-  background: #e5e7eb;
-  border-radius: 12px;
+  background: var(--color-background-secondary);
+  border-radius: var(--border-radius-md);
   padding: 40px;
   text-align: center;
-  color: #6b7280;
+  color: var(--color-text-secondary);
 }
 
 .map-pin {
@@ -407,18 +433,18 @@ function closeDialog() {
 .confirm-btn {
   margin: 16px;
   padding: 14px;
-  background: #fbbf24;
-  color: #000;
+  background: var(--color-primary);
+  color: var(--color-text-primary);
   border: none;
-  border-radius: 12px;
-  font-size: 16px;
-  font-weight: 600;
+  border-radius: var(--border-radius-md);
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-semibold);
   cursor: pointer;
-  transition: background-color 0.2s;
+  transition: background-color var(--transition-duration) var(--transition-easing), transform var(--transition-duration) var(--transition-easing);
 }
 
 .confirm-btn:hover {
-  background: #f59e0b;
+  background: var(--color-primary-hover);
 }
 
 .confirm-btn:active {

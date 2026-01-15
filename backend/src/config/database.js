@@ -10,7 +10,7 @@ const dbConfig = {
   user: process.env.DB_USER || "miniapp_user",
   password: process.env.DB_PASSWORD || "miniapp_password_change_me",
   database: process.env.DB_NAME || "miniapp_panda",
-  charset: "utf8mb4_unicode_ci",
+  charset: "utf8_general_ci",
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,

@@ -29,6 +29,13 @@ export const useTelegramStore = defineStore("telegram", () => {
     let currentInitData = webApp.initData || "";
     let currentInitDataUnsafe = webApp.initDataUnsafe || {};
 
+    console.log("📱 Инициализация Telegram WebApp:", {
+      platform: webApp.platform,
+      version: webApp.version,
+      hasInitData: !!currentInitData,
+      hasInitDataUnsafe: !!currentInitDataUnsafe && Object.keys(currentInitDataUnsafe).length > 0,
+    });
+
     if (!currentInitData) {
       const savedInitData = sessionStorage.getItem("tg_init_data");
       const savedInitDataUnsafe = sessionStorage.getItem("tg_init_data_unsafe");
@@ -47,7 +54,12 @@ export const useTelegramStore = defineStore("telegram", () => {
           }
         }
       } else {
-        console.warn("⚠️ initData пустой и не найден в sessionStorage.");
+        // initData может быть пустым при разработке вне Telegram
+        if (webApp.platform !== "unknown") {
+          console.warn("⚠️ initData пустой и не найден в sessionStorage. Платформа:", webApp.platform);
+        } else {
+          console.log("ℹ️ Запуск вне Telegram (платформа: unknown)");
+        }
       }
     } else {
       console.log("💾 Сохраняем initData в sessionStorage");
@@ -69,21 +81,65 @@ export const useTelegramStore = defineStore("telegram", () => {
     window.__telegramInitDataOverride = currentInitData;
     window.__telegramStartParam = tgStartParam || null;
 
+    // Инициализация SDK согласно официальной документации
+    // https://core.telegram.org/bots/webapps
     webApp.ready();
     webApp.expand();
 
-    if (typeof webApp.disableVerticalSwipes === "function") {
-      webApp.disableVerticalSwipes();
+    // Вспомогательная функция для проверки версии SDK
+    const isVersionAtLeast = (version) => {
+      if (typeof webApp.isVersionAtLeast === "function") {
+        return webApp.isVersionAtLeast(version);
+      }
+      // Fallback: сравниваем версию вручную, если метод недоступен
+      const currentVersion = parseFloat(webApp.version || "0");
+      const requiredVersion = parseFloat(version);
+      return currentVersion >= requiredVersion;
+    };
+
+    // Настройка FullScreen режима
+    // setHeaderColor и setBackgroundColor требуют версию 6.1+
+    if (isVersionAtLeast("6.1")) {
+      try {
+        if (typeof webApp.setHeaderColor === "function") {
+          webApp.setHeaderColor("#000000");
+        }
+        if (typeof webApp.setBackgroundColor === "function") {
+          webApp.setBackgroundColor("#F5F5F5");
+        }
+      } catch (error) {
+        // Игнорируем ошибки, если метод не поддерживается
+      }
     }
 
-    if (typeof webApp.disableClosingConfirmation === "function") {
-      webApp.disableClosingConfirmation();
+    // disableVerticalSwipes требует версию 6.1+
+    if (isVersionAtLeast("6.1")) {
+      try {
+        if (typeof webApp.disableVerticalSwipes === "function") {
+          webApp.disableVerticalSwipes();
+        }
+      } catch (error) {
+        // Игнорируем ошибки, если метод не поддерживается
+      }
+    }
+
+    // disableClosingConfirmation требует версию 6.2+
+    if (isVersionAtLeast("6.2")) {
+      try {
+        if (typeof webApp.disableClosingConfirmation === "function") {
+          webApp.disableClosingConfirmation();
+        }
+      } catch (error) {
+        // Игнорируем ошибки, если метод не поддерживается
+      }
     }
 
     console.log("✅ Telegram WebApp инициализирован", {
       platform: webApp.platform,
       version: webApp.version,
       initDataLength: currentInitData.length,
+      supportsBackButton: isVersionAtLeast("6.1") && !!webApp.BackButton,
+      supportsHeaderColor: isVersionAtLeast("6.1") && typeof webApp.setHeaderColor === "function",
     });
   }
 
@@ -157,31 +213,62 @@ export const useTelegramStore = defineStore("telegram", () => {
 
   function showBackButton(onClick) {
     const telegramApp = resolveTelegramApp();
-    const backButton = telegramApp?.BackButton;
-    if (!backButton) {
+    if (!telegramApp) {
       return () => {};
     }
 
-    backButton.show();
+    // Вспомогательная функция для проверки версии SDK
+    const isVersionAtLeast = (version) => {
+      if (typeof telegramApp.isVersionAtLeast === "function") {
+        return telegramApp.isVersionAtLeast(version);
+      }
+      const currentVersion = parseFloat(telegramApp.version || "0");
+      const requiredVersion = parseFloat(version);
+      return currentVersion >= requiredVersion;
+    };
 
-    if (typeof onClick === "function") {
-      backButton.onClick(onClick);
-      return () => {
-        backButton.offClick(onClick);
-        backButton.hide();
-      };
+    // BackButton требует версию 6.1+
+    if (!isVersionAtLeast("6.1") || !telegramApp.BackButton) {
+      return () => {};
     }
 
-    return () => {
-      backButton.hide();
-    };
+    try {
+      const backButton = telegramApp.BackButton;
+      backButton.show();
+
+      if (typeof onClick === "function") {
+        backButton.onClick(onClick);
+        return () => {
+          try {
+            backButton.offClick(onClick);
+            backButton.hide();
+          } catch (error) {
+            // Игнорируем ошибки при очистке
+          }
+        };
+      }
+
+      return () => {
+        try {
+          backButton.hide();
+        } catch (error) {
+          // Игнорируем ошибки при скрытии
+        }
+      };
+    } catch (error) {
+      // Игнорируем ошибки, если метод не поддерживается
+      return () => {};
+    }
   }
 
   function hideBackButton() {
     const telegramApp = resolveTelegramApp();
-    const backButton = telegramApp?.BackButton;
-    if (backButton?.hide) {
-      backButton.hide();
+    if (telegramApp?.BackButton?.hide) {
+      try {
+        telegramApp.BackButton.hide();
+      } catch (error) {
+        // Игнорируем ошибки, если метод не поддерживается
+      }
     }
   }
 

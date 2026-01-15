@@ -1,13 +1,10 @@
 <template>
   <div class="cart">
-    <div class="header">
-      <button class="back-btn" @click="$router.back()">← Назад</button>
-      <h1>Корзина</h1>
-    </div>
+    <PageHeader title="Корзина" />
 
     <div v-if="cartStore.items.length === 0" class="empty">
       <p>Корзина пуста</p>
-      <button class="btn-primary" @click="$router.push('/menu')">Перейти в меню</button>
+      <button class="btn-primary" @click="$router.push('/')">Перейти в меню</button>
     </div>
 
     <div v-else class="cart-content">
@@ -15,10 +12,15 @@
         <div v-for="(item, index) in cartStore.items" :key="index" class="cart-item">
           <div class="item-info">
             <h3>{{ item.name }}</h3>
-            <div class="modifiers" v-if="item.modifiers?.length">
-              <span v-for="mod in item.modifiers" :key="mod.id" class="modifier"> + {{ mod.name }} </span>
+            <div class="variant" v-if="item.variant_name">
+              <span class="variant-text">{{ item.variant_name }}</span>
             </div>
-            <div class="price">{{ item.price }} ₽</div>
+            <div class="modifiers" v-if="item.modifiers?.length">
+              <div v-for="mod in item.modifiers" :key="`${mod.id}-${mod.group_id}`" class="modifier">
+                + {{ mod.name }}
+              </div>
+            </div>
+            <div class="price">{{ getItemTotalPrice(item) }} ₽</div>
           </div>
 
           <div class="quantity-controls">
@@ -32,7 +34,7 @@
       <div class="summary">
         <div class="summary-row">
           <span>Товары ({{ cartStore.itemsCount }})</span>
-          <span>{{ cartStore.totalPrice }} ₽</span>
+          <span>{{ formatPrice(cartStore.totalPrice) }} ₽</span>
         </div>
         <div class="summary-row">
           <span>Доставка</span>
@@ -40,7 +42,7 @@
         </div>
         <div class="summary-row total">
           <span>Итого</span>
-          <span>{{ cartStore.totalPrice }} ₽</span>
+          <span>{{ formatPrice(cartStore.totalPrice) }} ₽</span>
         </div>
       </div>
 
@@ -51,11 +53,27 @@
 
 <script setup>
 import { useRouter } from "vue-router";
+import PageHeader from "../components/PageHeader.vue";
 import { useCartStore } from "../stores/cart";
 import { hapticFeedback } from "../services/telegram";
+import { formatPrice } from "../utils/format";
 
 const router = useRouter();
 const cartStore = useCartStore();
+
+function getItemTotalPrice(item) {
+  // item.price уже включает цену варианта и всех модификаторов
+  const price = parseFloat(item.price) || 0;
+  const quantity = parseInt(item.quantity) || 1;
+  const total = price * quantity;
+  
+  if (isNaN(total)) {
+    console.error("Invalid price calculation:", { item, price, quantity, total });
+    return "0";
+  }
+  
+  return formatPrice(total);
+}
 
 function increaseQuantity(index) {
   hapticFeedback("light");
@@ -69,35 +87,14 @@ function decreaseQuantity(index) {
 
 function checkout() {
   hapticFeedback("medium");
-  // TODO: Переход на экран оформления заказа
-  console.log("Checkout");
+  router.push("/checkout");
 }
 </script>
 
 <style scoped>
 .cart {
   min-height: 100vh;
-  background: #f5f5f5;
-}
-
-.header {
-  display: flex;
-  align-items: center;
-  padding: 16px;
-  background: white;
-  border-bottom: 1px solid #e0e0e0;
-}
-
-.back-btn {
-  border: none;
-  background: transparent;
-  font-size: 16px;
-  cursor: pointer;
-  margin-right: 12px;
-}
-
-.header h1 {
-  font-size: 20px;
+  background: var(--color-background-secondary);
 }
 
 .empty {
@@ -106,24 +103,14 @@ function checkout() {
 }
 
 .empty p {
-  font-size: 18px;
-  color: #666;
+  font-size: var(--font-size-h3);
+  color: var(--color-text-secondary);
   margin-bottom: 24px;
-}
-
-.btn-primary {
-  padding: 12px 24px;
-  border: none;
-  border-radius: 12px;
-  background: #667eea;
-  color: white;
-  font-size: 16px;
-  font-weight: 600;
-  cursor: pointer;
 }
 
 .cart-content {
   padding: 16px;
+  padding-bottom: 100px;
 }
 
 .items {
@@ -135,34 +122,53 @@ function checkout() {
   justify-content: space-between;
   align-items: center;
   padding: 16px;
-  background: white;
-  border-radius: 12px;
+  background: var(--color-background);
+  border-radius: var(--border-radius-md);
   margin-bottom: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow-sm);
+}
+
+.item-info {
+  flex: 1;
 }
 
 .item-info h3 {
-  font-size: 16px;
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-regular);
+  color: var(--color-text-primary);
   margin-bottom: 4px;
 }
 
 .modifiers {
   display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
+  flex-direction: column;
+  gap: 2px;
   margin-top: 4px;
 }
 
+.variant {
+  margin-top: 4px;
+  margin-bottom: 4px;
+}
+
+.variant-text {
+  font-size: var(--font-size-caption);
+  color: var(--color-text-secondary);
+  font-style: italic;
+}
+
 .modifier {
-  font-size: 12px;
-  color: #666;
+  font-size: var(--font-size-small);
+  color: var(--color-text-secondary);
   padding: 2px 8px;
-  background: #f5f5f5;
-  border-radius: 4px;
+  background: var(--color-background-secondary);
+  border-radius: var(--border-radius-sm);
 }
 
 .price {
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-h3);
+  color: var(--color-text-primary);
   margin-top: 8px;
 }
 
@@ -175,37 +181,48 @@ function checkout() {
 .quantity-controls button {
   width: 32px;
   height: 32px;
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
-  background: white;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  background: var(--color-background);
   font-size: 18px;
+  color: var(--color-text-primary);
   cursor: pointer;
+  transition: background-color var(--transition-duration) var(--transition-easing);
+}
+
+.quantity-controls button:hover {
+  background: var(--color-background-secondary);
 }
 
 .quantity-controls span {
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-body);
   min-width: 24px;
   text-align: center;
+  color: var(--color-text-primary);
 }
 
 .summary {
   padding: 16px;
-  background: white;
-  border-radius: 12px;
+  background: var(--color-background);
+  border-radius: var(--border-radius-md);
   margin-bottom: 16px;
+  box-shadow: var(--shadow-sm);
 }
 
 .summary-row {
   display: flex;
   justify-content: space-between;
   margin-bottom: 12px;
+  font-size: var(--font-size-body);
+  color: var(--color-text-primary);
 }
 
 .summary-row.total {
-  font-weight: 600;
-  font-size: 18px;
+  font-weight: var(--font-weight-bold);
+  font-size: var(--font-size-h2);
   padding-top: 12px;
-  border-top: 1px solid #e0e0e0;
+  border-top: 1px solid var(--color-border);
   margin-bottom: 0;
 }
 
@@ -213,11 +230,20 @@ function checkout() {
   width: 100%;
   padding: 16px;
   border: none;
-  border-radius: 12px;
-  background: #4caf50;
-  color: white;
-  font-size: 18px;
-  font-weight: 600;
+  border-radius: var(--border-radius-md);
+  background: var(--color-primary);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-h3);
+  font-weight: var(--font-weight-semibold);
   cursor: pointer;
+  transition: background-color var(--transition-duration) var(--transition-easing);
+}
+
+.checkout-btn:hover {
+  background: var(--color-primary-hover);
+}
+
+.checkout-btn:active {
+  transform: scale(0.98);
 }
 </style>
