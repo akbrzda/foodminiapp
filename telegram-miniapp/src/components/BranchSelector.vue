@@ -169,7 +169,7 @@ function closeDialog() {
 
 .dialog-content {
   background: var(--color-background);
-  border-radius: var(--border-radius-xl) var(--border-radius-xl) 0 0;
+  border-radius: var(--border-radius-md);
   width: 100%;
   max-width: 600px;
   max-height: 80vh;

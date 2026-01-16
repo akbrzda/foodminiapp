@@ -4,19 +4,11 @@
 
     <div class="content">
       <div class="order-type-tabs">
-        <button
-          class="order-tab"
-          :class="{ active: orderType === 'delivery' }"
-          @click="selectOrderType('delivery')"
-        >
+        <button class="order-tab" :class="{ active: orderType === 'delivery' }" @click="selectOrderType('delivery')">
           <Truck :size="18" />
           Доставка
         </button>
-        <button
-          class="order-tab"
-          :class="{ active: orderType === 'pickup' }"
-          @click="selectOrderType('pickup')"
-        >
+        <button class="order-tab" :class="{ active: orderType === 'pickup' }" @click="selectOrderType('pickup')">
           <Store :size="18" />
           Самовывоз
         </button>
@@ -30,36 +22,20 @@
 
         <div class="form-group">
           <label class="label">Улица, дом</label>
-          <input
-            v-model="deliveryAddress"
-            class="input"
-            placeholder="Введите адрес"
-            @input="onAddressInput"
-            @focus="showAddressSuggestions = true"
-          />
-          
+          <input v-model="deliveryAddress" class="input" placeholder="Введите адрес" @input="onAddressInput" @focus="showAddressSuggestions = true" />
+
           <div v-if="showAddressSuggestions && addressSuggestions.length" class="suggestions">
-            <button
-              v-for="(suggestion, index) in addressSuggestions"
-              :key="index"
-              class="suggestion-item"
-              @click="selectAddress(suggestion)"
-            >
+            <button v-for="(suggestion, index) in addressSuggestions" :key="index" class="suggestion-item" @click="selectAddress(suggestion)">
               {{ suggestion.label }}
             </button>
           </div>
         </div>
 
         <div v-if="addressValidated && inDeliveryZone" class="address-details">
-          <div class="form-group">
-            <label class="label">Подъезд</label>
-            <input v-model="deliveryDetails.entrance" class="input" placeholder="Номер подъезда" />
-          </div>
-
           <div class="form-row">
             <div class="form-group">
-              <label class="label">Код на двери</label>
-              <input v-model="deliveryDetails.doorCode" class="input" placeholder="Код" />
+              <label class="label">Подъезд</label>
+              <input v-model="deliveryDetails.entrance" class="input" placeholder="Номер подъезда" />
             </div>
             <div class="form-group">
               <label class="label">Этаж</label>
@@ -67,18 +43,20 @@
             </div>
           </div>
 
-          <div class="form-group">
-            <label class="label">Квартира</label>
-            <input v-model="deliveryDetails.apartment" class="input" placeholder="Номер квартиры" />
+          <div class="form-row">
+            <div class="form-group">
+              <label class="label">Квартира</label>
+              <input v-model="deliveryDetails.apartment" class="input" placeholder="Номер квартиры" />
+            </div>
+            <div class="form-group">
+              <label class="label">Код на двери</label>
+              <input v-model="deliveryDetails.doorCode" class="input" placeholder="Код" />
+            </div>
           </div>
 
           <div class="form-group">
             <label class="label">Комментарий к адресу</label>
-            <textarea
-              v-model="deliveryDetails.comment"
-              class="textarea"
-              placeholder="Дополнительная информация для курьера"
-            ></textarea>
+            <textarea v-model="deliveryDetails.comment" class="textarea" placeholder="Дополнительная информация для курьера" resize="none"></textarea>
           </div>
         </div>
 
@@ -121,17 +99,11 @@
         <div class="form-group">
           <label class="label">Способ оплаты</label>
           <div class="payment-options">
-            <button
-              :class="['payment-option', { active: paymentMethod === 'cash' }]"
-              @click="paymentMethod = 'cash'"
-            >
+            <button :class="['payment-option', { active: paymentMethod === 'cash' }]" @click="paymentMethod = 'cash'">
               <Banknote :size="16" />
               Наличные
             </button>
-            <button
-              :class="['payment-option', { active: paymentMethod === 'card' }]"
-              @click="paymentMethod = 'card'"
-            >
+            <button :class="['payment-option', { active: paymentMethod === 'card' }]" @click="paymentMethod = 'card'">
               <CreditCard :size="16" />
               Карта
             </button>
@@ -140,23 +112,12 @@
 
         <div class="form-group" v-if="paymentMethod === 'cash'">
           <label class="label">Сдача с</label>
-          <input
-            v-model.number="changeFrom"
-            type="number"
-            class="input"
-            placeholder="Сумма"
-            min="0"
-            step="100"
-          />
+          <input v-model.number="changeFrom" type="number" class="input" placeholder="Сумма" min="0" step="100" />
         </div>
 
         <div class="form-group">
           <label class="label">Комментарий к заказу</label>
-          <textarea
-            v-model="orderComment"
-            class="textarea"
-            placeholder="Дополнительные пожелания"
-          ></textarea>
+          <textarea v-model="orderComment" class="textarea" placeholder="Дополнительные пожелания"></textarea>
         </div>
       </div>
 
@@ -180,7 +141,7 @@
     <!-- Кнопка подтверждения -->
     <div class="footer" v-if="canSubmitOrder">
       <button class="submit-btn" @click="submitOrder" :disabled="submitting">
-        {{ submitting ? 'Оформление...' : `Оформить заказ • ${formatPrice(totalPrice)} ₽` }}
+        {{ submitting ? "Оформление..." : `Оформить заказ • ${formatPrice(totalPrice)} ₽` }}
       </button>
     </div>
   </div>
@@ -228,7 +189,7 @@ let addressSearchTimeout = null;
 
 const canSubmitOrder = computed(() => {
   if (!orderType.value) return false;
-  
+
   if (orderType.value === "delivery") {
     return addressValidated.value && inDeliveryZone.value && deliveryAddress.value.trim();
   } else {
@@ -256,15 +217,18 @@ onMounted(async () => {
   }
 });
 
-watch(() => orderType.value, async (newType) => {
-  if (newType === "pickup") {
-    await loadBranches();
+watch(
+  () => orderType.value,
+  async (newType) => {
+    if (newType === "pickup") {
+      await loadBranches();
+    }
+    if (newType === "delivery" && locationStore.deliveryAddress && locationStore.deliveryCoords) {
+      addressValidated.value = true;
+      inDeliveryZone.value = true;
+    }
   }
-  if (newType === "delivery" && locationStore.deliveryAddress && locationStore.deliveryCoords) {
-    addressValidated.value = true;
-    inDeliveryZone.value = true;
-  }
-});
+);
 
 function selectOrderType(type) {
   hapticFeedback("light");
@@ -291,10 +255,7 @@ async function onAddressInput() {
     try {
       // Здесь будет запрос к API для автоподсказок адресов
       // Пока используем простую логику
-      const response = await addressesAPI.checkDeliveryZone(
-        deliveryAddress.value,
-        locationStore.selectedCity.id
-      );
+      const response = await addressesAPI.checkDeliveryZone(deliveryAddress.value, locationStore.selectedCity.id);
       // TODO: Реализовать автоподсказки через Nominatim
     } catch (error) {
       console.error("Address search error:", error);
@@ -306,19 +267,15 @@ async function selectAddress(suggestion) {
   hapticFeedback("light");
   deliveryAddress.value = suggestion.label;
   showAddressSuggestions.value = false;
-  
+
   // Геокодируем адрес
   try {
     const geocodeResponse = await geocodeAPI.geocode(deliveryAddress.value);
     const geocodeData = geocodeResponse.data;
-    
+
     // Проверяем зону доставки
-    const checkResponse = await addressesAPI.checkDeliveryZone(
-      geocodeData.lat,
-      geocodeData.lng,
-      locationStore.selectedCity.id
-    );
-    
+    const checkResponse = await addressesAPI.checkDeliveryZone(geocodeData.lat, geocodeData.lng, locationStore.selectedCity.id);
+
     if (checkResponse.data.available) {
       inDeliveryZone.value = true;
       addressValidated.value = true;
@@ -346,7 +303,7 @@ function resetAddress() {
 
 async function loadBranches() {
   if (!locationStore.selectedCity) return;
-  
+
   try {
     loadingBranches.value = true;
     const response = await citiesAPI.getBranches(locationStore.selectedCity.id);
@@ -366,10 +323,10 @@ function selectBranch(branch) {
 
 async function submitOrder() {
   if (!canSubmitOrder.value || submitting.value) return;
-  
+
   submitting.value = true;
   hapticFeedback("medium");
-  
+
   try {
     const orderData = {
       city_id: locationStore.selectedCity.id,
@@ -400,7 +357,7 @@ async function submitOrder() {
     }
 
     const response = await ordersAPI.createOrder(orderData);
-    
+
     hapticFeedback("success");
     cartStore.clearCart();
     router.push(`/order/${response.data.order.id}`);
@@ -417,12 +374,12 @@ async function submitOrder() {
 <style scoped>
 .checkout {
   min-height: 100vh;
-  background: var(--color-background-secondary);
+  background: var(--color-background);
   padding-bottom: 100px;
 }
 
 .content {
-  padding: 16px;
+  padding: 16px 12px;
 }
 
 .order-type-tabs {
@@ -430,8 +387,8 @@ async function submitOrder() {
   gap: 10px;
   background: var(--color-background);
   border: 1px solid var(--color-border);
-  border-radius: 18px;
-  padding: 6px;
+  border-radius: var(--border-radius-md);
+  padding: 2px;
 }
 
 .order-tab {
@@ -442,7 +399,7 @@ async function submitOrder() {
   gap: 8px;
   padding: 10px 12px;
   border: none;
-  border-radius: 14px;
+  border-radius: var(--border-radius-md);
   background: transparent;
   color: var(--color-text-primary);
   font-size: var(--font-size-body);
@@ -452,8 +409,8 @@ async function submitOrder() {
 }
 
 .order-tab.active {
-  background: var(--color-text-primary);
-  color: var(--color-background);
+  background: var(--color-primary);
+  color: var(--color-text-primary);
 }
 
 .order-tab:not(.active):hover {
@@ -609,7 +566,7 @@ async function submitOrder() {
 .branch-card {
   padding: 16px;
   background: var(--color-background);
-  border: 2px solid var(--color-border);
+  border: 1px solid var(--color-border);
   border-radius: var(--border-radius-md);
   text-align: left;
   cursor: pointer;
@@ -651,7 +608,7 @@ async function submitOrder() {
 .payment-option {
   flex: 1;
   padding: 12px 16px;
-  border: 2px solid var(--color-border);
+  border: 1px solid var(--color-border);
   border-radius: var(--border-radius-md);
   background: var(--color-background);
   font-size: var(--font-size-body);
@@ -671,9 +628,9 @@ async function submitOrder() {
 }
 
 .order-summary {
-  margin-top: 24px;
-  padding: 16px;
-  background: var(--color-background);
+  margin-top: 16px;
+  padding: 12px;
+  border: 1px solid var(--color-border);
   border-radius: var(--border-radius-md);
 }
 
@@ -704,12 +661,12 @@ async function submitOrder() {
 
 .submit-btn {
   width: 100%;
-  padding: 16px;
+  padding: 18px;
   border: none;
   border-radius: var(--border-radius-md);
   background: var(--color-primary);
   color: var(--color-text-primary);
-  font-size: var(--font-size-body);
+  font-size: var(--font-size-h3);
   font-weight: var(--font-weight-semibold);
   cursor: pointer;
   transition: background-color 0.2s;

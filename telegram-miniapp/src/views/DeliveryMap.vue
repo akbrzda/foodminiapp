@@ -315,7 +315,7 @@ async function loadLeaflet() {
 .delivery-map {
   position: relative;
   min-height: 100vh;
-  background: var(--color-background-secondary);
+  background: var(--color-background);
   isolation: isolate;
 }
 
@@ -330,12 +330,12 @@ async function loadLeaflet() {
 
 .bottom-sheet {
   position: fixed;
-  left: 16px;
-  right: 16px;
+  left: 12px;
+  right: 12px;
   bottom: 20px;
   background: var(--color-background);
   border-radius: var(--border-radius-xl) var(--border-radius-xl) 0 0;
-  padding: 16px;
+  padding: 12px;
   z-index: 20;
   box-shadow: var(--shadow-md);
   /* Учитываем safe area для нижних элементов */

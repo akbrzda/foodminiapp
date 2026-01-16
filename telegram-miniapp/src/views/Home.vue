@@ -206,11 +206,7 @@ function truncateText(text, maxLength) {
 async function loadMenu() {
   if (!locationStore.selectedCity) return;
 
-  if (
-    menuStore.cityId === locationStore.selectedCity.id &&
-    menuStore.categories.length > 0 &&
-    menuStore.items.length > 0
-  ) {
+  if (menuStore.cityId === locationStore.selectedCity.id && menuStore.categories.length > 0 && menuStore.items.length > 0) {
     await nextTick();
     setupIntersectionObserver();
     return;
@@ -218,7 +214,7 @@ async function loadMenu() {
 
   try {
     menuStore.setLoading(true);
-    
+
     // Загружаем все категории
     const categoriesResponse = await menuAPI.getCategories(locationStore.selectedCity.id);
     const categories = categoriesResponse.data.categories;
@@ -236,7 +232,7 @@ async function loadMenu() {
         console.error(`Failed to load items for category ${category.id}:`, error);
       }
     }
-    
+
     menuStore.setMenuData({
       cityId: locationStore.selectedCity.id,
       categories,
@@ -434,12 +430,12 @@ function goToCart() {
 <style scoped>
 .home {
   min-height: 100vh;
-  padding-bottom: 120px;
-  background: var(--color-background-secondary);
+  padding-bottom: 100px;
+  background: var(--color-background);
 }
 
 .location-bar {
-  padding: 10px 16px 14px;
+  padding: 12px;
   background: var(--color-background);
 }
 
@@ -453,7 +449,7 @@ function goToCart() {
   width: 100%;
   padding: 8px 18px;
   border: 1px solid var(--color-border);
-  border-radius: 18px;
+  border-radius: var(--border-radius-md);
   background: var(--color-background);
   font-size: var(--font-size-body);
   font-weight: var(--font-weight-semibold);
@@ -484,7 +480,7 @@ function goToCart() {
   border: none;
   background: var(--color-primary);
   color: var(--color-text-primary);
-  border-radius: 18px;
+  border-radius: var(--border-radius-md);
   font-size: var(--font-size-body);
   font-weight: var(--font-weight-semibold);
   cursor: pointer;
@@ -509,7 +505,7 @@ function goToCart() {
 }
 
 .quick-order {
-  padding: 16px;
+  padding: 16px 12px;
 }
 
 .quick-order h3 {
@@ -577,8 +573,8 @@ function goToCart() {
 
 .categories {
   display: flex;
-  gap: 8px;
-  padding: 16px;
+  gap: 6px;
+  padding: 12px;
   overflow-x: auto;
 }
 
@@ -594,7 +590,7 @@ function goToCart() {
 .category-btn {
   padding: 8px 16px;
   border: 1px solid var(--color-border);
-  border-radius: 20px;
+  border-radius: var(--border-radius-xl);
   background: var(--color-background);
   white-space: nowrap;
   cursor: pointer;
@@ -616,11 +612,10 @@ function goToCart() {
 }
 
 .menu-content {
-  padding: 0 16px 16px;
+  padding: 0 12px 12px;
 }
 
 .category-section {
-  margin-bottom: 32px;
   scroll-margin-top: 80px;
 }
 
@@ -628,8 +623,8 @@ function goToCart() {
   font-size: var(--font-size-h2);
   font-weight: var(--font-weight-bold);
   color: var(--color-text-primary);
-  margin: 0 0 16px 0;
-  padding-top: 16px;
+  margin: 0 0 12px 0;
+  padding-top: 12px;
 }
 
 .items {
@@ -640,13 +635,11 @@ function goToCart() {
 
 .item-card {
   display: flex;
-  gap: 12px;
+  gap: 8px;
   padding: 12px;
   background: var(--color-background);
   border-radius: var(--border-radius-lg);
-  margin-bottom: 12px;
   cursor: pointer;
-  box-shadow: var(--shadow-sm);
   transition: box-shadow var(--transition-duration) var(--transition-easing);
 }
 
@@ -655,10 +648,10 @@ function goToCart() {
 }
 
 .item-image {
-  width: 64px;
-  height: 64px;
-  border-radius: 50%;
+  border-radius: 16px;
   overflow: hidden;
+  max-width: 128px;
+  max-height: 128px;
   flex-shrink: 0;
 }
 
@@ -728,13 +721,13 @@ function goToCart() {
 }
 
 .qty-btn {
-  width: 32px;
-  height: 32px;
+  width: 26px;
+  height: 26px;
   border: none;
-  border-radius: var(--border-radius-sm);
+  border-radius: var(--border-radius-md);
   background: transparent;
   color: var(--color-text-primary);
-  font-size: var(--font-size-h3);
+  font-size: 12px;
   font-weight: var(--font-weight-bold);
   cursor: pointer;
   display: flex;
@@ -765,20 +758,19 @@ function goToCart() {
 
 .floating-cart {
   position: fixed;
-  left: 16px;
-  right: 16px;
-  bottom: calc(16px + var(--tg-content-safe-area-inset-bottom, 0px));
+  left: 12px;
+  right: 12px;
+  bottom: 40px;
   z-index: 120;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 14px 18px;
+  padding: 12px;
   border: none;
-  border-radius: 20px;
+  border-radius: var(--border-radius-md);
   background: var(--color-primary);
   color: var(--color-text-primary);
-  box-shadow: 0px 8px 20px rgba(255, 210, 0, 0.35);
   cursor: pointer;
   transition: background-color var(--transition-duration) var(--transition-easing), transform 0.15s ease;
 }

@@ -107,10 +107,14 @@ onMounted(() => {
   loadRemoteState();
 });
 
-watch(stateToSync, () => {
-  if (!isHydrated.value) return;
-  scheduleSync();
-}, { deep: true });
+watch(
+  stateToSync,
+  () => {
+    if (!isHydrated.value) return;
+    scheduleSync();
+  },
+  { deep: true }
+);
 
 watch(
   () => authStore.isAuthenticated,
@@ -135,7 +139,7 @@ body {
   font-family: var(--font-family);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: var(--color-background-secondary);
+  background: var(--color-background);
 }
 
 #app {

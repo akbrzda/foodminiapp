@@ -1,13 +1,11 @@
 <template>
   <div class="item-detail">
-    <PageHeader :title="item?.name || 'Позиция'" />
-
     <div v-if="loading" class="loading">Загрузка...</div>
     <div v-else-if="error" class="error">{{ error }}</div>
     <div v-else-if="item" class="content">
       <!-- Изображение товара -->
-      <div class="item-image-wrapper" v-if="item.image_url">
-        <img :src="item.image_url" :alt="item.name" class="item-image" />
+      <div class="item-image-wrapper" v-if="displayImageUrl">
+        <img :src="displayImageUrl" :alt="item.name" class="item-image" />
       </div>
 
       <!-- Название и описание -->
@@ -108,14 +106,15 @@ import { ref, computed, onMounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ShoppingCart } from "lucide-vue-next";
 import { useCartStore } from "../stores/cart";
+import { useMenuStore } from "../stores/menu";
 import { menuAPI } from "../api/endpoints";
 import { hapticFeedback } from "../services/telegram";
-import PageHeader from "../components/PageHeader.vue";
 import { formatPrice } from "../utils/format";
 
 const route = useRoute();
 const router = useRouter();
 const cartStore = useCartStore();
+const menuStore = useMenuStore();
 
 const item = ref(null);
 const loading = ref(true);
@@ -128,6 +127,18 @@ const isAdded = ref(false);
 const requiredModifierGroups = computed(() => {
   if (!item.value?.modifier_groups) return [];
   return item.value.modifier_groups.filter((g) => g.is_required);
+});
+
+function normalizeImageUrl(url) {
+  if (!url) return null;
+  if (url.startsWith("/") || /^https?:\/\//i.test(url)) return url;
+  return `/${url}`;
+}
+
+const displayImageUrl = computed(() => {
+  if (item.value?.image_url) return normalizeImageUrl(item.value.image_url);
+  const fallbackItem = menuStore.getItemById?.(parseInt(route.params.id, 10));
+  return normalizeImageUrl(fallbackItem?.image_url);
 });
 
 const optionalModifierGroups = computed(() => {
@@ -421,7 +432,7 @@ function addToCart() {
 <style scoped>
 .item-detail {
   min-height: 100vh;
-  background: var(--color-background-secondary);
+  background: var(--color-background);
   padding-bottom: 140px;
 }
 
@@ -438,15 +449,13 @@ function addToCart() {
 }
 
 .content {
-  padding: 16px;
+  padding: 12px;
 }
 
 .item-image-wrapper {
   width: 100%;
-  height: 200px;
-  margin: -16px -16px 16px;
+  max-height: 300px;
   overflow: hidden;
-  background: var(--color-background-secondary);
 }
 
 .item-image {
@@ -456,14 +465,13 @@ function addToCart() {
 }
 
 .item-header {
-  margin-bottom: 24px;
+  margin-bottom: 16px;
 }
 
 .item-name {
   font-size: var(--font-size-h1);
   font-weight: var(--font-weight-bold);
   color: var(--color-text-primary);
-  margin: 0 0 8px 0;
 }
 
 .item-description {
@@ -498,12 +506,12 @@ function addToCart() {
 }
 
 .variants {
-  display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  padding: 4px 0;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+  gap: 4px;
+  padding: 2px;
+  border-radius: var(--border-radius-md);
+  background: #f5f7f9;
 }
 
 .variants::-webkit-scrollbar {
@@ -515,26 +523,26 @@ function addToCart() {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 12px 16px;
-  border: 2px solid var(--color-border);
-  border-radius: var(--border-radius-md);
-  background: var(--color-background-secondary);
+  padding: 4px;
   cursor: pointer;
   transition: all 0.2s;
   min-width: 100px;
   flex-shrink: 0;
+  background: none;
+  border: none;
 }
 
 .variant-btn.active {
+  border-radius: var(--border-radius-md);
   border-color: var(--color-primary);
   background: var(--color-primary);
+  margin: 1px;
 }
 
 .variant-name {
   font-size: var(--font-size-body);
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-primary);
-  margin-bottom: 4px;
   text-align: center;
 }
 
@@ -562,8 +570,8 @@ function addToCart() {
 .modifier-item {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
+  gap: 8px;
+  padding: 8px;
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius-md);
   background: var(--color-background);
@@ -604,17 +612,17 @@ function addToCart() {
 
 .footer {
   position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  padding: 12px;
-  z-index: 100;
+  bottom: 40px;
+  left: 12px;
+  right: 12px;
+  z-index: 120;
 }
 
 .footer-content {
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-wrap: wrap;
 }
 
 .add-button-wrapper {
@@ -623,27 +631,31 @@ function addToCart() {
 
 .add-to-cart-btn {
   width: 100%;
-  padding: 16px;
+  padding: 12px;
   border: none;
-  border-radius: 24px;
+  border-radius: var(--border-radius-md);
   background: var(--color-primary);
   color: var(--color-text-primary);
   font-size: var(--font-size-h3);
-  font-weight: var(--font-weight-bold);
+  font-weight: var(--font-weight-semibold);
   cursor: pointer;
-  transition: background-color 0.2s;
-  box-shadow: 0px 2px 8px rgba(255, 210, 0, 0.3);
+  transition: background-color var(--transition-duration) var(--transition-easing), transform 0.15s ease;
+  min-height: 56px;
 }
 
 .add-to-cart-btn:disabled {
   background: var(--color-background-secondary);
   color: var(--color-text-secondary);
   cursor: not-allowed;
-  box-shadow: none;
+  transform: none;
 }
 
 .add-to-cart-btn:not(:disabled):hover {
   background: var(--color-primary-hover);
+}
+
+.add-to-cart-btn:active {
+  transform: scale(0.98);
 }
 
 .quantity-button-wrapper {
@@ -652,20 +664,20 @@ function addToCart() {
   align-items: center;
   justify-content: center;
   gap: 12px;
-  padding: 12px 18px;
+  padding: 12px;
   background: var(--color-primary);
-  border-radius: 24px;
-  box-shadow: 0px 2px 8px rgba(255, 210, 0, 0.3);
+  border-radius: var(--border-radius-md);
+  min-height: 52px;
 }
 
 .qty-btn {
-  width: 44px;
-  height: 44px;
+  width: 24px;
+  height: 24px;
   border: none;
-  border-radius: 14px;
+  border-radius: var(--border-radius-sm);
   background: rgba(0, 0, 0, 0.08);
   color: var(--color-text-primary);
-  font-size: var(--font-size-h2);
+  font-size: 12px;
   font-weight: var(--font-weight-bold);
   cursor: pointer;
   display: flex;
@@ -702,10 +714,10 @@ function addToCart() {
 }
 
 .cart-btn {
-  width: 64px;
-  height: 64px;
+  width: 56px;
+  height: 56px;
   border: none;
-  border-radius: 20px;
+  border-radius: var(--border-radius-md);
   background: var(--color-primary);
   color: var(--color-text-primary);
   cursor: pointer;
@@ -713,19 +725,22 @@ function addToCart() {
   align-items: center;
   justify-content: center;
   position: relative;
-  transition: background-color 0.2s;
-  box-shadow: 0px 6px 16px rgba(255, 210, 0, 0.2);
+  transition: background-color var(--transition-duration) var(--transition-easing), transform 0.15s ease;
   flex-shrink: 0;
 }
 
 .cart-btn:hover {
-  background: rgba(255, 210, 0, 0.35);
+  background: var(--color-primary-hover);
+}
+
+.cart-btn:active {
+  transform: scale(0.98);
 }
 
 .cart-badge {
   position: absolute;
-  top: -4px;
-  right: -4px;
+  top: 8px;
+  right: 12px;
   min-width: 20px;
   height: 20px;
   padding: 0 6px;

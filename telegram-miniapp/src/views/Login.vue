@@ -106,8 +106,8 @@ async function handleLogin() {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--color-primary);
-  padding: 16px;
+  background: var(--color-background);
+  padding: 16px 12px;
 }
 
 .login-content {

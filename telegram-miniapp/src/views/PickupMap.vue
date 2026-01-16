@@ -9,16 +9,11 @@
     </div>
 
     <div v-if="filteredBranches.length" class="branch-list">
-      <button
-        v-for="branch in filteredBranches"
-        :key="branch.id"
-        class="branch-card"
-        @click="selectBranch(branch)"
-      >
+      <button v-for="branch in filteredBranches" :key="branch.id" class="branch-card" @click="selectBranch(branch)">
         <div class="branch-title">{{ branch.displayName || branch.name }}</div>
         <div class="branch-address">{{ branch.displayAddress || branch.address }}</div>
         <div class="branch-status" :class="branch.isOpen ? 'open' : 'closed'">
-          {{ branch.isOpen ? 'Открыто' : 'Закрыто' }}
+          {{ branch.isOpen ? "Открыто" : "Закрыто" }}
         </div>
       </button>
     </div>
@@ -30,10 +25,10 @@
       <div class="sheet-title">{{ selectedBranch.displayName || selectedBranch.name }}</div>
       <div class="sheet-address">{{ selectedBranch.displayAddress || selectedBranch.address }}</div>
       <div class="sheet-status" :class="selectedBranch.isOpen ? 'open' : 'closed'">
-        {{ selectedBranch.isOpen ? 'Открыто' : 'Закрыто' }}
+        {{ selectedBranch.isOpen ? "Открыто" : "Закрыто" }}
       </div>
-      <div class="sheet-hours">{{ selectedBranch.work_hours || 'Время работы уточняйте' }}</div>
-      <div class="sheet-phone">{{ selectedBranch.phone || '+7 (800) 777-70-55' }}</div>
+      <div class="sheet-hours">{{ selectedBranch.work_hours || "Время работы уточняйте" }}</div>
+      <div class="sheet-phone">{{ selectedBranch.phone || "+7 (800) 777-70-55" }}</div>
       <button class="primary-btn" @click="confirmPickup">Заберу отсюда</button>
     </div>
   </div>
@@ -228,7 +223,7 @@ async function loadLeaflet() {
 .pickup-map {
   position: relative;
   min-height: 100vh;
-  background: var(--color-background-secondary);
+  background: var(--color-background);
   isolation: isolate;
 }
 
@@ -243,8 +238,8 @@ async function loadLeaflet() {
 
 .search-bar {
   position: fixed;
-  left: 16px;
-  right: 16px;
+  left: 12px;
+  right: 12px;
   bottom: calc(92px + var(--tg-content-safe-area-inset-bottom, 0px));
   z-index: 20;
 }
@@ -272,8 +267,8 @@ async function loadLeaflet() {
 
 .branch-list {
   position: fixed;
-  left: 16px;
-  right: 16px;
+  left: 12px;
+  right: 12px;
   bottom: calc(150px + var(--tg-content-safe-area-inset-bottom, 0px));
   z-index: 20;
   max-height: 220px;
@@ -326,14 +321,13 @@ async function loadLeaflet() {
 
 .branch-sheet {
   position: fixed;
-  left: 16px;
-  right: 16px;
+  left: 12px;
+  right: 12px;
   bottom: calc(20px + var(--tg-content-safe-area-inset-bottom, 0px));
   background: var(--color-background);
-  border-radius: var(--border-radius-xl) var(--border-radius-xl) 0 0;
+  border-radius: var(--border-radius-md) ;
   padding: 18px 16px 16px;
   z-index: 20;
-  box-shadow: var(--shadow-md);
 }
 
 .sheet-close {

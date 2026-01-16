@@ -110,7 +110,7 @@ function formatDate(dateString) {
 <style scoped>
 .order-detail {
   min-height: 100vh;
-  background: var(--color-background-secondary);
+  background: var(--color-background);
 }
 
 .loading {
@@ -121,7 +121,7 @@ function formatDate(dateString) {
 }
 
 .order-content {
-  padding: 16px;
+  padding: 16px 12px;
 }
 
 .status-card {

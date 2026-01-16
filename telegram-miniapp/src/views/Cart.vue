@@ -16,9 +16,7 @@
               <span class="variant-text">{{ item.variant_name }}</span>
             </div>
             <div class="modifiers" v-if="item.modifiers?.length">
-              <div v-for="mod in item.modifiers" :key="`${mod.id}-${mod.group_id}`" class="modifier">
-                + {{ mod.name }}
-              </div>
+              <div v-for="mod in item.modifiers" :key="`${mod.id}-${mod.group_id}`" class="modifier">+ {{ mod.name }}</div>
             </div>
             <div class="price">{{ getItemTotalPrice(item) }} ₽</div>
           </div>
@@ -66,12 +64,12 @@ function getItemTotalPrice(item) {
   const price = parseFloat(item.price) || 0;
   const quantity = parseInt(item.quantity) || 1;
   const total = price * quantity;
-  
+
   if (isNaN(total)) {
     console.error("Invalid price calculation:", { item, price, quantity, total });
     return "0";
   }
-  
+
   return formatPrice(total);
 }
 
@@ -94,7 +92,7 @@ function checkout() {
 <style scoped>
 .cart {
   min-height: 100vh;
-  background: var(--color-background-secondary);
+  background: var(--color-background);
 }
 
 .empty {
@@ -109,8 +107,7 @@ function checkout() {
 }
 
 .cart-content {
-  padding: 16px;
-  padding-bottom: 100px;
+  padding: 16px 12px 100px;
 }
 
 .items {
@@ -122,10 +119,9 @@ function checkout() {
   justify-content: space-between;
   align-items: center;
   padding: 16px;
-  background: var(--color-background);
+  border: 1px solid var(--color-border);
   border-radius: var(--border-radius-md);
   margin-bottom: 12px;
-  box-shadow: var(--shadow-sm);
 }
 
 .item-info {
@@ -161,7 +157,6 @@ function checkout() {
   font-size: var(--font-size-small);
   color: var(--color-text-secondary);
   padding: 2px 8px;
-  background: var(--color-background-secondary);
   border-radius: var(--border-radius-sm);
 }
 
@@ -204,10 +199,9 @@ function checkout() {
 
 .summary {
   padding: 16px;
-  background: var(--color-background);
+  border: 1px solid var(--color-border);
   border-radius: var(--border-radius-md);
   margin-bottom: 16px;
-  box-shadow: var(--shadow-sm);
 }
 
 .summary-row {
@@ -228,7 +222,7 @@ function checkout() {
 
 .checkout-btn {
   width: 100%;
-  padding: 16px;
+  padding: 18px;
   border: none;
   border-radius: var(--border-radius-md);
   background: var(--color-primary);

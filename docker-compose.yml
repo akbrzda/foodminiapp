@@ -34,11 +34,11 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
-    command: redis-server --appendonly yes --requirepass redis_password
+    command: redis-server --appendonly yes --requirepass a9k1m9a0l1t1
     networks:
       - miniapp-network
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "redis_password", "ping"]
+      test: ["CMD", "redis-cli", "-a", "a9k1m9a0l1t1", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5

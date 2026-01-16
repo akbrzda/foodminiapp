@@ -8,59 +8,59 @@
 
 :root {
   /* Цветовая палитра */
-  --color-primary: #FFD200;
-  --color-primary-hover: #FFC700;
-  --color-primary-disabled: #FFE680;
-  
-  --color-background: #FFFFFF;
-  --color-background-secondary: #F5F5F5;
-  
+  --color-primary: #fddc04;
+  --color-primary-hover: #ffc700;
+  --color-primary-disabled: #ffe680;
+
+  --color-background: #ffffff;
+  --color-background-secondary: #f5f5f5;
+
   --color-text-primary: #000000;
   --color-text-secondary: #666666;
   --color-text-muted: #999999;
-  
-  --color-success: #4CAF50;
-  --color-error: #FF0000;
-  --color-warning: #FFA500;
-  
-  --color-badge-yellow: #FFD200;
-  --color-border: #E0E0E0;
-  
+
+  --color-success: #4caf50;
+  --color-error: #ff0000;
+  --color-warning: #ffa500;
+
+  --color-badge-yellow: #ffd200;
+  --color-border: #e0e0e0;
+
   /* Типографика */
   --font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
   --line-height: 1.4;
-  
+
   --font-size-h1: 28px;
   --font-size-h2: 20px;
   --font-size-h3: 17px;
   --font-size-body: 15px;
   --font-size-caption: 13px;
   --font-size-small: 11px;
-  
+
   --font-weight-bold: 700;
   --font-weight-semibold: 600;
   --font-weight-regular: 400;
-  
+
   /* Компоненты */
   --border-radius-sm: 6px;
   --border-radius-md: 12px;
   --border-radius-lg: 16px;
   --border-radius-xl: 24px;
-  
+
   --shadow-sm: 0px 2px 8px rgba(0, 0, 0, 0.08);
   --shadow-md: 0px -4px 16px rgba(0, 0, 0, 0.12);
-  
+
   /* Анимации */
   --transition-duration: 200ms;
   --transition-easing: ease-out;
-  
+
   /* Базовые стили */
   font-family: var(--font-family);
   line-height: var(--line-height);
   font-weight: var(--font-weight-regular);
   color: var(--color-text-primary);
-  background-color: var(--color-background-secondary);
-  
+  background-color: var(--color-background);
+
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -73,13 +73,13 @@ body {
   min-height: 100vh;
   touch-action: manipulation;
   overscroll-behavior: none;
-  background: var(--color-background-secondary);
+  background: var(--color-background);
 }
 
 #app {
   width: 100%;
   min-height: 100vh;
-  background: var(--color-background-secondary);
+  background: var(--color-background);
   /* Контент начинается под нативным header Telegram */
   /* Safe area insets учитываются автоматически через CSS переменные Telegram */
 }

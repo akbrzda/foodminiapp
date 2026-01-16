@@ -89,11 +89,11 @@ function openCityPopup() {
 <style scoped>
 .profile {
   min-height: 100vh;
-  background: var(--color-background-secondary);
+  background: var(--color-background);
 }
 
 .profile-content {
-  padding: 16px;
+  padding: 16px 12px;
 }
 
 .user-info {

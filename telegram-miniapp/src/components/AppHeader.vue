@@ -110,7 +110,6 @@ onBeforeUnmount(() => {
   padding: 12px 16px;
   padding-top: calc(12px + var(--tg-content-safe-area-inset-top, 0px));
   background: var(--color-background);
-  border-bottom: 1px solid var(--color-border);
   min-height: calc(44px + var(--tg-content-safe-area-inset-top, 0px));
 }
 
@@ -154,7 +153,7 @@ onBeforeUnmount(() => {
   gap: 6px;
   padding: 8px 12px;
   border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-lg);
+  border-radius: var(--border-radius-md);
   background: var(--color-background);
   font-size: var(--font-size-caption);
   font-weight: var(--font-weight-semibold);

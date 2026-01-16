@@ -71,11 +71,11 @@ watch(address, (value) => {
 <style scoped>
 .address-details {
   min-height: 100vh;
-  background: var(--color-background-secondary);
+  background: var(--color-background);
 }
 
 .content {
-  padding: 20px 16px;
+  padding: 20px 12px;
   display: flex;
   flex-direction: column;
   gap: 12px;
