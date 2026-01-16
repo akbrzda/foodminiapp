@@ -12,6 +12,7 @@
       <div class="item-header">
         <h1 class="item-name">{{ item.name }}</h1>
         <p class="item-description" v-if="item.description">{{ item.description }}</p>
+        <p class="item-weight" v-if="displayWeight">{{ displayWeight }}</p>
       </div>
 
       <!-- Выбор варианта -->
@@ -82,7 +83,7 @@
       <div class="footer-content">
         <div v-if="!cartItem" class="add-button-wrapper">
           <button class="add-to-cart-btn" :disabled="!canAddToCart" @click="addToCart">
-            {{ canAddToCart ? `Добавить ${formatPrice(totalPrice)} ₽` : "Выберите обязательные параметры" }}
+            {{ canAddToCart ? `Добавить за ${formatPrice(totalPrice)} ₽` : "Выберите обязательные параметры" }}
           </button>
         </div>
         <div v-else class="quantity-button-wrapper">
@@ -109,7 +110,7 @@ import { useCartStore } from "../stores/cart";
 import { useMenuStore } from "../stores/menu";
 import { menuAPI } from "../api/endpoints";
 import { hapticFeedback } from "../services/telegram";
-import { formatPrice } from "../utils/format";
+import { formatPrice, normalizeImageUrl } from "../utils/format";
 
 const route = useRoute();
 const router = useRouter();
@@ -128,12 +129,6 @@ const requiredModifierGroups = computed(() => {
   if (!item.value?.modifier_groups) return [];
   return item.value.modifier_groups.filter((g) => g.is_required);
 });
-
-function normalizeImageUrl(url) {
-  if (!url) return null;
-  if (url.startsWith("/") || /^https?:\/\//i.test(url)) return url;
-  return `/${url}`;
-}
 
 const displayImageUrl = computed(() => {
   if (item.value?.image_url) return normalizeImageUrl(item.value.image_url);
@@ -305,6 +300,7 @@ function increaseQuantity() {
     id: item.value.id,
     name: item.value.name,
     price: finalPrice,
+    weight: item.value.weight || null,
     variant_id: selectedVariant.value?.id || null,
     variant_name: selectedVariant.value?.name || null,
     quantity: 1,
@@ -404,6 +400,17 @@ const totalPrice = computed(() => {
   return price;
 });
 
+const displayWeight = computed(() => {
+  if (!item.value) return "";
+  if (selectedVariant.value) {
+    const variantWeight = formatWeightValue(selectedVariant.value.weight_value, selectedVariant.value.weight_unit);
+    if (variantWeight) return variantWeight;
+  }
+  const itemWeight = formatWeightValue(item.value.weight_value, item.value.weight_unit);
+  if (itemWeight) return itemWeight;
+  return formatWeight(item.value.weight);
+});
+
 function addToCart() {
   if (!canAddToCart.value) return;
 
@@ -418,6 +425,9 @@ function addToCart() {
     id: item.value.id,
     name: item.value.name,
     price: finalPrice,
+    weight: item.value.weight || null,
+    weight_value: selectedVariant.value?.weight_value ?? item.value.weight_value ?? null,
+    weight_unit: selectedVariant.value?.weight_unit ?? item.value.weight_unit ?? null,
     variant_id: selectedVariant.value?.id || null,
     variant_name: selectedVariant.value?.name || null,
     quantity: 1,
@@ -426,6 +436,32 @@ function addToCart() {
   });
 
   isAdded.value = true;
+}
+
+function formatWeight(value) {
+  if (!value) return "";
+  return String(value);
+}
+
+function getUnitLabel(unit) {
+  const units = {
+    g: "г",
+    kg: "кг",
+    ml: "мл",
+    l: "л",
+    pcs: "шт",
+  };
+  return units[unit] || "";
+}
+
+function formatWeightValue(value, unit) {
+  const parsedValue = Number(value);
+  if (!Number.isFinite(parsedValue) || parsedValue <= 0 || !unit) {
+    return "";
+  }
+  const unitLabel = getUnitLabel(unit);
+  if (!unitLabel) return "";
+  return `${formatPrice(parsedValue)} ${unitLabel}`;
 }
 </script>
 
@@ -479,6 +515,12 @@ function addToCart() {
   color: var(--color-text-secondary);
   margin: 0;
   line-height: 1.5;
+}
+
+.item-weight {
+  font-size: var(--font-size-caption);
+  color: var(--color-text-muted);
+  margin-top: 6px;
 }
 
 .section {

@@ -218,7 +218,7 @@ router.get("/admin/branch/:branchId", authenticateToken, requireRole("admin", "m
                 ST_AsGeoJSON(polygon) as polygon,
                 delivery_time_min, delivery_time_max,
                 min_order_amount, delivery_cost, is_active,
-                gulyash_polygon_id, created_at, updated_at
+                created_at, updated_at
          FROM delivery_polygons
          WHERE branch_id = ?
          ORDER BY name`,
@@ -287,7 +287,7 @@ router.post("/admin", authenticateToken, requireRole("admin", "manager", "ceo"),
                 ST_AsGeoJSON(polygon) as polygon,
                 delivery_time_min, delivery_time_max,
                 min_order_amount, delivery_cost, is_active,
-                gulyash_polygon_id, created_at, updated_at
+                created_at, updated_at
          FROM delivery_polygons WHERE id = ?`,
       [result.insertId]
     );
@@ -380,7 +380,7 @@ router.put("/admin/:id", authenticateToken, requireRole("admin", "manager", "ceo
                 ST_AsGeoJSON(polygon) as polygon,
                 delivery_time_min, delivery_time_max,
                 min_order_amount, delivery_cost, is_active,
-                gulyash_polygon_id, created_at, updated_at
+                created_at, updated_at
          FROM delivery_polygons WHERE id = ?`,
       [polygonId]
     );

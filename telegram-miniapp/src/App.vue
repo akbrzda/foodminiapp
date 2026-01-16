@@ -5,11 +5,12 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useAuthStore } from "./stores/auth";
 import { useCartStore } from "./stores/cart";
 import { useLocationStore } from "./stores/location";
 import { citiesAPI, userStateAPI } from "./api/endpoints";
+import { wsService } from "./services/websocket";
 
 const authStore = useAuthStore();
 const cartStore = useCartStore();
@@ -18,6 +19,9 @@ const locationStore = useLocationStore();
 const isHydrated = ref(false);
 const lastSyncedPayload = ref("");
 let syncTimer = null;
+let blurListenersAttached = false;
+let blurTouchHandler = null;
+let blurScrollHandler = null;
 
 const stateToSync = computed(() => ({
   selected_city_id: locationStore.selectedCity?.id || null,
@@ -103,9 +107,109 @@ function scheduleSync() {
   }, 600);
 }
 
-onMounted(() => {
-  loadRemoteState();
+onMounted(async () => {
+  await loadRemoteState();
+  setupWebSocket();
+  attachBlurListeners();
 });
+
+onUnmounted(() => {
+  wsService.disconnect();
+  detachBlurListeners();
+});
+
+function setupWebSocket() {
+  // Подключаемся только если пользователь авторизован
+  if (!authStore.isAuthenticated) return;
+
+  wsService.connect(authStore.user?.id);
+
+  // Обрабатываем обновление статуса заказа
+  wsService.on("order_status_update", (data) => {
+    console.log("Order status updated:", data);
+    // Можно добавить уведомление через Telegram Mini App API
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.showAlert(`Статус заказа #${data.order_number} изменён: ${getStatusText(data.status)}`);
+    }
+  });
+
+  // Обрабатываем обновление бонусов
+  wsService.on("bonus_update", (data) => {
+    console.log("Bonus updated:", data);
+    // Можно обновить баланс в сторе или показать уведомление
+  });
+
+  // Переподключаемся при восстановлении авторизации
+  watch(
+    () => authStore.isAuthenticated,
+    (isAuth) => {
+      if (isAuth) {
+        wsService.connect(authStore.user?.id);
+      } else {
+        wsService.disconnect();
+      }
+    }
+  );
+}
+
+function getStatusText(status) {
+  const statuses = {
+    pending: "Ожидает подтверждения",
+    confirmed: "Подтверждён",
+    preparing: "Готовится",
+    ready: "Готов к выдаче",
+    delivering: "В пути",
+    completed: "Доставлен",
+    cancelled: "Отменён",
+  };
+  return statuses[status] || status;
+}
+
+function shouldBlurOnEvent(event) {
+  const target = event?.target;
+  if (!target) return true;
+  const isEditable = target.closest?.("input, textarea, [contenteditable='true']");
+  return !isEditable;
+}
+
+function blurActiveElement() {
+  const active = document.activeElement;
+  if (!active) return;
+  if (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.isContentEditable) {
+    active.blur();
+  }
+}
+
+function attachBlurListeners() {
+  if (blurListenersAttached || typeof window === "undefined") return;
+  const handleTouch = (event) => {
+    if (shouldBlurOnEvent(event)) {
+      blurActiveElement();
+    }
+  };
+  const handleScroll = () => {
+    blurActiveElement();
+  };
+
+  window.addEventListener("touchstart", handleTouch, { passive: true, capture: true });
+  window.addEventListener("scroll", handleScroll, { passive: true, capture: true });
+  blurTouchHandler = handleTouch;
+  blurScrollHandler = handleScroll;
+  blurListenersAttached = true;
+}
+
+function detachBlurListeners() {
+  if (!blurListenersAttached || typeof window === "undefined") return;
+  if (blurTouchHandler) {
+    window.removeEventListener("touchstart", blurTouchHandler, { capture: true });
+  }
+  if (blurScrollHandler) {
+    window.removeEventListener("scroll", blurScrollHandler, { capture: true });
+  }
+  blurTouchHandler = null;
+  blurScrollHandler = null;
+  blurListenersAttached = false;
+}
 
 watch(
   stateToSync,

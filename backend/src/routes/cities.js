@@ -94,7 +94,7 @@ router.get("/admin/all", authenticateToken, requireRole("admin", "manager", "ceo
   try {
     let query = `
         SELECT id, name, latitude, longitude, is_active, 
-               gulyash_city_id, created_at, updated_at
+               created_at, updated_at
         FROM cities
       `;
     const params = [];
@@ -118,21 +118,21 @@ router.get("/admin/all", authenticateToken, requireRole("admin", "manager", "ceo
 // Создать город (только admin и ceo)
 router.post("/admin", authenticateToken, requireRole("admin", "ceo"), async (req, res, next) => {
   try {
-    const { name, latitude, longitude, gulyash_city_id } = req.body;
+    const { name, latitude, longitude } = req.body;
 
     if (!name) {
       return res.status(400).json({ error: "Name is required" });
     }
 
     const [result] = await db.query(
-      `INSERT INTO cities (name, latitude, longitude, gulyash_city_id)
-         VALUES (?, ?, ?, ?)`,
-      [name, latitude || null, longitude || null, gulyash_city_id || null]
+      `INSERT INTO cities (name, latitude, longitude)
+         VALUES (?, ?, ?)`,
+      [name, latitude || null, longitude || null]
     );
 
     const [newCity] = await db.query(
       `SELECT id, name, latitude, longitude, is_active, 
-                gulyash_city_id, created_at, updated_at
+                created_at, updated_at
          FROM cities WHERE id = ?`,
       [result.insertId]
     );
@@ -147,7 +147,7 @@ router.post("/admin", authenticateToken, requireRole("admin", "ceo"), async (req
 router.put("/admin/:id", authenticateToken, requireRole("admin", "ceo"), async (req, res, next) => {
   try {
     const cityId = req.params.id;
-    const { name, latitude, longitude, is_active, gulyash_city_id } = req.body;
+    const { name, latitude, longitude, is_active } = req.body;
 
     const [cities] = await db.query("SELECT id FROM cities WHERE id = ?", [cityId]);
 
@@ -174,11 +174,6 @@ router.put("/admin/:id", authenticateToken, requireRole("admin", "ceo"), async (
       updates.push("is_active = ?");
       values.push(is_active);
     }
-    if (gulyash_city_id !== undefined) {
-      updates.push("gulyash_city_id = ?");
-      values.push(gulyash_city_id);
-    }
-
     if (updates.length === 0) {
       return res.status(400).json({ error: "No fields to update" });
     }
@@ -188,7 +183,7 @@ router.put("/admin/:id", authenticateToken, requireRole("admin", "ceo"), async (
 
     const [updatedCity] = await db.query(
       `SELECT id, name, latitude, longitude, is_active, 
-                gulyash_city_id, created_at, updated_at
+                created_at, updated_at
          FROM cities WHERE id = ?`,
       [cityId]
     );
@@ -234,7 +229,7 @@ router.get("/admin/:cityId/branches", authenticateToken, requireRole("admin", "m
 
     const [branches] = await db.query(
       `SELECT id, city_id, name, address, latitude, longitude, phone, 
-                working_hours, is_active, gulyash_branch_id, created_at, updated_at
+              working_hours, is_active, created_at, updated_at
          FROM branches
          WHERE city_id = ?
          ORDER BY name`,
@@ -251,7 +246,7 @@ router.get("/admin/:cityId/branches", authenticateToken, requireRole("admin", "m
 router.post("/admin/:cityId/branches", authenticateToken, requireRole("admin", "manager", "ceo"), checkCityAccess, async (req, res, next) => {
   try {
     const cityId = req.params.cityId;
-    const { name, address, latitude, longitude, phone, working_hours, gulyash_branch_id } = req.body;
+    const { name, address, latitude, longitude, phone, working_hours } = req.body;
 
     if (!name) {
       return res.status(400).json({ error: "Name is required" });
@@ -266,8 +261,8 @@ router.post("/admin/:cityId/branches", authenticateToken, requireRole("admin", "
 
     const [result] = await db.query(
       `INSERT INTO branches 
-         (city_id, name, address, latitude, longitude, phone, working_hours, gulyash_branch_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+         (city_id, name, address, latitude, longitude, phone, working_hours)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
         cityId,
         name,
@@ -276,13 +271,12 @@ router.post("/admin/:cityId/branches", authenticateToken, requireRole("admin", "
         longitude || null,
         phone || null,
         working_hours ? JSON.stringify(working_hours) : null,
-        gulyash_branch_id || null,
       ]
     );
 
     const [newBranch] = await db.query(
       `SELECT id, city_id, name, address, latitude, longitude, phone, 
-                working_hours, is_active, gulyash_branch_id, created_at, updated_at
+                working_hours, is_active, created_at, updated_at
          FROM branches WHERE id = ?`,
       [result.insertId]
     );
@@ -302,7 +296,7 @@ router.put(
   async (req, res, next) => {
     try {
       const { cityId, branchId } = req.params;
-      const { name, address, latitude, longitude, phone, working_hours, is_active, gulyash_branch_id } = req.body;
+    const { name, address, latitude, longitude, phone, working_hours, is_active } = req.body;
 
       const [branches] = await db.query("SELECT id FROM branches WHERE id = ? AND city_id = ?", [branchId, cityId]);
 
@@ -341,24 +335,19 @@ router.put(
         updates.push("is_active = ?");
         values.push(is_active);
       }
-      if (gulyash_branch_id !== undefined) {
-        updates.push("gulyash_branch_id = ?");
-        values.push(gulyash_branch_id);
-      }
-
-      if (updates.length === 0) {
-        return res.status(400).json({ error: "No fields to update" });
-      }
+    if (updates.length === 0) {
+      return res.status(400).json({ error: "No fields to update" });
+    }
 
       values.push(branchId);
       await db.query(`UPDATE branches SET ${updates.join(", ")} WHERE id = ?`, values);
 
-      const [updatedBranch] = await db.query(
-        `SELECT id, city_id, name, address, latitude, longitude, phone, 
-                working_hours, is_active, gulyash_branch_id, created_at, updated_at
+    const [updatedBranch] = await db.query(
+      `SELECT id, city_id, name, address, latitude, longitude, phone, 
+                working_hours, is_active, created_at, updated_at
          FROM branches WHERE id = ?`,
-        [branchId]
-      );
+      [branchId]
+    );
 
       res.json({ branch: updatedBranch[0] });
     } catch (error) {

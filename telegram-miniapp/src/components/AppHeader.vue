@@ -1,13 +1,58 @@
 <template>
   <header class="app-header">
+    <button class="menu-button" @click="toggleSidebar">
+      <Menu :size="20" />
+    </button>
+
     <button class="city-button" @click="openCityPopup">
       <MapPin :size="16" />
       <span class="city-name">{{ currentCityName }}</span>
     </button>
 
-    <div class="header-right"></div>
+    <button v-if="authStore.isAuthenticated" class="bonus-button" @click="openBonusHistory">
+      <Gift :size="16" />
+      <span class="bonus-value">{{ bonusBalance }}</span>
+    </button>
   </header>
 
+  <!-- Сайдбар меню -->
+  <Teleport to="body">
+    <Transition name="sidebar">
+      <div v-if="showSidebar" class="sidebar-overlay" @click="closeSidebar">
+        <div class="sidebar" @click.stop>
+          <div class="sidebar-header">
+            <div class="sidebar-title">Меню</div>
+            <button class="close-btn" @click="closeSidebar">
+              <X :size="18" />
+            </button>
+          </div>
+
+          <div class="sidebar-content">
+            <nav class="sidebar-nav">
+              <button class="sidebar-item" @click="navigateTo('/')">
+                <Home :size="20" />
+                <span>Главная</span>
+              </button>
+              <button class="sidebar-item" @click="navigateTo('/orders')">
+                <Package :size="20" />
+                <span>Мои заказы</span>
+              </button>
+              <button class="sidebar-item" @click="navigateTo('/bonus-history')">
+                <Gift :size="20" />
+                <span>Бонусы</span>
+              </button>
+              <button class="sidebar-item" @click="navigateTo('/profile')">
+                <User :size="20" />
+                <span>Профиль</span>
+              </button>
+            </nav>
+          </div>
+        </div>
+      </div>
+    </Transition>
+  </Teleport>
+
+  <!-- Попап выбора города -->
   <Teleport to="body">
     <Transition name="fade">
       <div v-if="showCityPopup" class="city-overlay" @click="closeCityPopup">
@@ -33,19 +78,23 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from "vue";
 import { useRouter } from "vue-router";
-import { Menu, MapPin, X } from "lucide-vue-next";
+import { Menu, MapPin, X, Home, Package, Gift, User } from "lucide-vue-next";
 import { useLocationStore } from "../stores/location";
-import { citiesAPI } from "../api/endpoints";
+import { useAuthStore } from "../stores/auth";
+import { citiesAPI, bonusesAPI } from "../api/endpoints";
 import { hapticFeedback } from "../services/telegram";
 
 const router = useRouter();
 const locationStore = useLocationStore();
+const authStore = useAuthStore();
 
 const emit = defineEmits(["toggleMenu"]);
 
+const showSidebar = ref(false);
 const showCityPopup = ref(false);
 const cityQuery = ref("");
 const cities = ref([]);
+const bonusBalance = ref(0);
 
 const currentCityName = computed(() => locationStore.selectedCity?.name || "Город");
 const filteredCities = computed(() => {
@@ -53,6 +102,36 @@ const filteredCities = computed(() => {
   const query = cityQuery.value.toLowerCase();
   return cities.value.filter((city) => city.name.toLowerCase().includes(query));
 });
+
+function toggleSidebar() {
+  hapticFeedback("light");
+  showSidebar.value = !showSidebar.value;
+}
+
+function closeSidebar() {
+  showSidebar.value = false;
+}
+
+function navigateTo(path) {
+  hapticFeedback("light");
+  closeSidebar();
+  router.push(path);
+}
+
+function openBonusHistory() {
+  hapticFeedback("light");
+  router.push("/bonus-history");
+}
+
+async function loadBonusBalance() {
+  if (!authStore.isAuthenticated) return;
+  try {
+    const response = await bonusesAPI.getBalance();
+    bonusBalance.value = response.data.balance || 0;
+  } catch (error) {
+    console.error("Failed to load bonus balance:", error);
+  }
+}
 
 function toggleMenu() {
   emit("toggleMenu");
@@ -93,6 +172,12 @@ function handleOpenCityPopup() {
 
 onMounted(() => {
   window.addEventListener("open-city-popup", handleOpenCityPopup);
+  loadBonusBalance();
+
+  // Обновляем баланс при изменении маршрута
+  router.afterEach(() => {
+    loadBonusBalance();
+  });
 });
 
 onBeforeUnmount(() => {
@@ -102,77 +187,188 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .app-header {
+  position: sticky;
   top: 0;
   z-index: 100;
   display: flex;
-  justify-content: center;
   align-items: center;
-  padding: 12px 16px;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
   padding-top: calc(12px + var(--tg-content-safe-area-inset-top, 0px));
   background: var(--color-background);
-  min-height: calc(44px + var(--tg-content-safe-area-inset-top, 0px));
-}
-
-.header-left {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .menu-button {
   width: 40px;
   height: 40px;
   border: none;
-  background: transparent;
+  border-radius: var(--border-radius-md);
+  background: var(--color-background-secondary);
+  color: var(--color-text-primary);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--color-text-primary);
   transition: background-color var(--transition-duration) var(--transition-easing);
-  border-radius: var(--border-radius-sm);
 }
 
 .menu-button:hover {
-  background: var(--color-background-secondary);
+  background: var(--color-border);
 }
 
 .menu-button:active {
   transform: scale(0.95);
 }
 
-.header-right {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
 .city-button {
+  flex: 1;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
-  border: 1px solid var(--color-border);
+  gap: 8px;
+  padding: 10px 16px;
+  border: none;
   border-radius: var(--border-radius-md);
-  background: var(--color-background);
-  font-size: var(--font-size-caption);
-  font-weight: var(--font-weight-semibold);
+  background: var(--color-background-secondary);
   color: var(--color-text-primary);
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-semibold);
   cursor: pointer;
   transition: background-color var(--transition-duration) var(--transition-easing);
 }
 
 .city-button:hover {
-  background: var(--color-background-secondary);
+  background: var(--color-border);
 }
 
 .city-name {
-  max-width: 120px;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
+.bonus-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+  border: none;
+  border-radius: var(--border-radius-md);
+  background: rgba(252, 219, 4, 0.50);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+  transition: transform 0.15s, opacity var(--transition-duration);
+}
+
+.bonus-button:active {
+  transform: scale(0.95);
+}
+
+.bonus-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.bonus-value {
+  font-size: var(--font-size-caption);
+}
+
+/* Сайдбар */
+.sidebar-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+}
+
+.sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 280px;
+  background: var(--color-background);
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.sidebar-title {
+  font-size: var(--font-size-h3);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.sidebar-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border: none;
+  border-radius: var(--border-radius-md);
+  background: transparent;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-regular);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--transition-duration) var(--transition-easing);
+}
+
+.sidebar-item:hover {
+  background: var(--color-background-secondary);
+}
+
+.sidebar-enter-active {
+  transition: transform 0.3s ease-out;
+}
+
+.sidebar-leave-active {
+  transition: transform 0.3s ease-in;
+}
+
+.sidebar-enter-from,
+.sidebar-leave-to {
+  transform: translateX(-100%);
+}
+
+.sidebar-overlay.sidebar-enter-active,
+.sidebar-overlay.sidebar-leave-active {
+  transition: opacity 0.3s;
+}
+
+.sidebar-overlay.sidebar-enter-from,
+.sidebar-overlay.sidebar-leave-to {
+  opacity: 0;
+}
+
+/* Попап города */
 .city-overlay {
   position: fixed;
   inset: 0;

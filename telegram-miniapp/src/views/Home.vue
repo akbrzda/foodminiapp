@@ -41,12 +41,13 @@
           <div class="items">
             <div v-for="item in getItemsByCategory(category.id)" :key="item.id" class="item-card" @click="openItem(item)">
               <div class="item-image" v-if="item.image_url">
-                <img :src="item.image_url" :alt="item.name" />
+                <img :src="normalizeImageUrl(item.image_url)" :alt="item.name" />
               </div>
               <div class="item-info">
                 <div class="item-text">
                   <h3>{{ item.name }}</h3>
                   <p class="description">{{ item.description }}</p>
+                  <p class="item-weight" v-if="getDisplayWeight(item)">{{ getDisplayWeight(item) }}</p>
                 </div>
                 <div class="item-footer">
                   <button v-if="!getCartItem(item)" class="add-btn" @click.stop="handleItemAction(item)">
@@ -92,7 +93,7 @@ import { useMenuStore } from "../stores/menu";
 import { bonusesAPI, menuAPI } from "../api/endpoints";
 import { hapticFeedback } from "../services/telegram";
 import AppHeader from "../components/AppHeader.vue";
-import { formatPrice } from "../utils/format";
+import { formatPrice, normalizeImageUrl } from "../utils/format";
 
 const router = useRouter();
 const route = useRoute();
@@ -103,7 +104,6 @@ const menuStore = useMenuStore();
 
 const categoriesRef = ref(null);
 const categoryRefs = ref({});
-const bonusBalance = ref(0);
 const showMenu = ref(false);
 const activeCategory = ref(null);
 const isScrolling = ref(false);
@@ -112,7 +112,7 @@ let observer = null;
 const cityName = computed(() => locationStore.selectedCity?.name || "Когалым");
 const actionButtonText = computed(() => {
   if (locationStore.isDelivery) {
-    return locationStore.deliveryAddress ? truncateText(locationStore.deliveryAddress, 24) : "Укажите адрес";
+    return locationStore.deliveryAddress ? truncateText(locationStore.deliveryAddress, 48) : "Укажите адрес";
   }
 
   if (locationStore.isPickup) {
@@ -123,8 +123,6 @@ const actionButtonText = computed(() => {
 });
 
 onMounted(async () => {
-  await loadBonusBalance();
-
   // Попытка определить местоположение
   try {
     await locationStore.detectUserLocation();
@@ -168,15 +166,6 @@ watch(
   }
 );
 
-async function loadBonusBalance() {
-  try {
-    const response = await bonusesAPI.getBalance();
-    bonusBalance.value = response.data.balance;
-  } catch (error) {
-    console.error("Failed to load bonus balance:", error);
-  }
-}
-
 function openCitySelector() {
   window.dispatchEvent(new CustomEvent("open-city-popup"));
 }
@@ -215,23 +204,10 @@ async function loadMenu() {
   try {
     menuStore.setLoading(true);
 
-    // Загружаем все категории
-    const categoriesResponse = await menuAPI.getCategories(locationStore.selectedCity.id);
-    const categories = categoriesResponse.data.categories;
+    const menuResponse = await menuAPI.getMenu(locationStore.selectedCity.id);
+    const categories = menuResponse.data.categories || [];
     menuStore.setCategories(categories);
-
-    // Загружаем все позиции для всех категорий
-    const allItems = [];
-    for (const category of categories) {
-      try {
-        const itemsResponse = await menuAPI.getItems(category.id);
-        if (itemsResponse.data.items) {
-          allItems.push(...itemsResponse.data.items);
-        }
-      } catch (error) {
-        console.error(`Failed to load items for category ${category.id}:`, error);
-      }
-    }
+    const allItems = categories.flatMap((category) => category.items || []);
 
     menuStore.setMenuData({
       cityId: locationStore.selectedCity.id,
@@ -284,6 +260,9 @@ function handleItemAction(item) {
     id: item.id,
     name: item.name,
     price: item.price || 0,
+    weight: item.weight || null,
+    weight_value: item.weight_value || null,
+    weight_unit: item.weight_unit || null,
     variant_id: null,
     variant_name: null,
     quantity: 1,
@@ -292,6 +271,45 @@ function handleItemAction(item) {
   });
 
   hapticFeedback("success");
+}
+
+function formatWeight(value) {
+  if (!value) return "";
+  return String(value);
+}
+
+function getUnitLabel(unit) {
+  const units = {
+    g: "г",
+    kg: "кг",
+    ml: "мл",
+    l: "л",
+    pcs: "шт",
+  };
+  return units[unit] || "";
+}
+
+function formatWeightValue(value, unit) {
+  const parsedValue = Number(value);
+  if (!Number.isFinite(parsedValue) || parsedValue <= 0 || !unit) {
+    return "";
+  }
+  const unitLabel = getUnitLabel(unit);
+  if (!unitLabel) return "";
+  return `${formatPrice(parsedValue)} ${unitLabel}`;
+}
+
+function getDisplayWeight(item) {
+  if (!item) return "";
+  if (item.variants && item.variants.length > 0) {
+    const sorted = [...item.variants].sort((a, b) => (parseFloat(a.price) || 0) - (parseFloat(b.price) || 0));
+    const cheapest = sorted[0];
+    const variantWeight = formatWeightValue(cheapest?.weight_value, cheapest?.weight_unit);
+    if (variantWeight) return variantWeight;
+  }
+  const itemWeight = formatWeightValue(item.weight_value, item.weight_unit);
+  if (itemWeight) return itemWeight;
+  return formatWeight(item.weight);
 }
 
 function increaseItemQuantity(item) {
@@ -686,6 +704,12 @@ function goToCart() {
   color: var(--color-text-secondary);
   margin-bottom: 8px;
   flex: 1;
+}
+
+.item-weight {
+  font-size: var(--font-size-caption);
+  color: var(--color-text-muted);
+  margin: 0;
 }
 
 .item-footer {

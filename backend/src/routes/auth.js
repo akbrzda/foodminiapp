@@ -4,6 +4,7 @@ import bcrypt from "bcrypt";
 import crypto from "crypto";
 import db from "../config/database.js";
 import { parseTelegramUser, validateTelegramData } from "../utils/telegram.js";
+import { normalizePhone } from "../utils/phone.js";
 
 const router = express.Router();
 
@@ -75,9 +76,10 @@ router.post("/telegram", async (req, res, next) => {
     }
 
     // Находим или создаем пользователя по telegram_id
-    const [users] = await db.query("SELECT id, telegram_id, phone, first_name, last_name, email, bonus_balance FROM users WHERE telegram_id = ?", [
-      id,
-    ]);
+    const [users] = await db.query(
+      "SELECT id, telegram_id, phone, first_name, last_name, email, date_of_birth, bonus_balance FROM users WHERE telegram_id = ?",
+      [id]
+    );
 
     let userId;
     let user;
@@ -104,10 +106,18 @@ router.post("/telegram", async (req, res, next) => {
         await db.query(`UPDATE users SET ${updates.join(", ")} WHERE id = ?`, values);
 
         // Получаем обновленные данные
-        const [updatedUsers] = await db.query("SELECT id, telegram_id, phone, first_name, last_name, email, bonus_balance FROM users WHERE id = ?", [
-          userId,
-        ]);
+        const [updatedUsers] = await db.query(
+          "SELECT id, telegram_id, phone, first_name, last_name, email, date_of_birth, bonus_balance FROM users WHERE id = ?",
+          [userId]
+        );
         user = updatedUsers[0];
+      }
+      if (user.phone) {
+        const normalizedPhone = normalizePhone(user.phone);
+        if (normalizedPhone && normalizedPhone !== user.phone) {
+          await db.query("UPDATE users SET phone = ? WHERE id = ?", [normalizedPhone, userId]);
+          user.phone = normalizedPhone;
+        }
       }
     } else {
       // Создаем нового пользователя (без номера телефона пока)
@@ -120,9 +130,10 @@ router.post("/telegram", async (req, res, next) => {
 
       userId = result.insertId;
 
-      const [newUser] = await db.query("SELECT id, telegram_id, phone, first_name, last_name, email, bonus_balance FROM users WHERE id = ?", [
-        userId,
-      ]);
+      const [newUser] = await db.query(
+        "SELECT id, telegram_id, phone, first_name, last_name, email, date_of_birth, bonus_balance FROM users WHERE id = ?",
+        [userId]
+      );
       user = newUser[0];
     }
 

@@ -3,6 +3,7 @@ import { defineStore } from "pinia";
 export const useCartStore = defineStore("cart", {
   state: () => ({
     items: JSON.parse(localStorage.getItem("cart") || "[]"),
+    bonusUsage: JSON.parse(localStorage.getItem("cart_bonus_usage") || '{"useBonuses":false,"bonusToUse":0}'),
   }),
 
   getters: {
@@ -70,10 +71,34 @@ export const useCartStore = defineStore("cart", {
     clearCart() {
       this.items = [];
       this.saveToLocalStorage();
+      this.resetBonusUsage();
     },
 
     saveToLocalStorage() {
       localStorage.setItem("cart", JSON.stringify(this.items));
+    },
+
+    setUseBonuses(value) {
+      this.bonusUsage.useBonuses = Boolean(value);
+      if (!this.bonusUsage.useBonuses) {
+        this.bonusUsage.bonusToUse = 0;
+      }
+      this.saveBonusUsage();
+    },
+
+    setBonusToUse(value) {
+      const parsedValue = Number(value);
+      this.bonusUsage.bonusToUse = Number.isFinite(parsedValue) ? Math.max(0, Math.floor(parsedValue)) : 0;
+      this.saveBonusUsage();
+    },
+
+    resetBonusUsage() {
+      this.bonusUsage = { useBonuses: false, bonusToUse: 0 };
+      this.saveBonusUsage();
+    },
+
+    saveBonusUsage() {
+      localStorage.setItem("cart_bonus_usage", JSON.stringify(this.bonusUsage));
     },
   },
 });

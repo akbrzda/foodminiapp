@@ -1,8 +1,10 @@
 import axios from "axios";
 import { useAuthStore } from "../stores/auth";
 
+const apiBase = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL,
+  baseURL: `${apiBase}/api`,
   timeout: 10000,
   headers: {
     "Content-Type": "application/json; charset=utf-8",

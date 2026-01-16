@@ -6,7 +6,7 @@ import db from "../config/database.js";
 const LOYALTY_LEVELS = {
   1: { name: "Бронза", earnRate: 0.05, threshold: 0 }, // 5% от суммы, порог 0₽
   2: { name: "Серебро", earnRate: 0.07, threshold: 10000 }, // 7% от суммы, порог 10,000₽
-  3: { name: "Золото", earnRate: 0.10, threshold: 50000 }, // 10% от суммы, порог 50,000₽
+  3: { name: "Золото", earnRate: 0.1, threshold: 50000 }, // 10% от суммы, порог 50,000₽
 };
 
 const BONUS_RULES = {
@@ -70,10 +70,7 @@ export async function validateBonusUsage(userId, bonusToUse, orderSubtotal) {
  */
 export async function checkLevelUp(userId) {
   // Получаем текущий уровень и total_spent
-  const [users] = await db.query(
-    "SELECT loyalty_level, total_spent FROM users WHERE id = ?",
-    [userId]
-  );
+  const [users] = await db.query("SELECT loyalty_level, total_spent FROM users WHERE id = ?", [userId]);
 
   if (users.length === 0) {
     return null;
@@ -117,10 +114,7 @@ export async function checkLevelUp(userId) {
  */
 export async function earnBonuses(userId, orderId, orderTotal, description = null) {
   // Получаем текущий уровень пользователя
-  const [users] = await db.query(
-    "SELECT loyalty_level, bonus_balance FROM users WHERE id = ?",
-    [userId]
-  );
+  const [users] = await db.query("SELECT loyalty_level, bonus_balance FROM users WHERE id = ?", [userId]);
 
   if (users.length === 0) {
     throw new Error("User not found");
@@ -136,10 +130,7 @@ export async function earnBonuses(userId, orderId, orderTotal, description = nul
   }
 
   // Обновляем баланс бонусов и total_spent
-  await db.query(
-    "UPDATE users SET bonus_balance = bonus_balance + ?, total_spent = total_spent + ? WHERE id = ?",
-    [amount, orderTotal, userId]
-  );
+  await db.query("UPDATE users SET bonus_balance = bonus_balance + ?, total_spent = total_spent + ? WHERE id = ?", [amount, orderTotal, userId]);
 
   // Получаем новый баланс
   const [updatedUsers] = await db.query("SELECT bonus_balance, total_spent FROM users WHERE id = ?", [userId]);
@@ -182,55 +173,69 @@ export async function earnBonuses(userId, orderId, orderTotal, description = nul
 /**
  * Списать бонусы у пользователя
  */
-export async function useBonuses(userId, orderId, amount, description = null) {
+export async function useBonuses(userId, orderId, amount, description = null, connection = null) {
   if (amount <= 0) {
     return null;
   }
 
-  // Проверяем достаточно ли бонусов
-  const [users] = await db.query("SELECT bonus_balance FROM users WHERE id = ?", [userId]);
+  const executor = connection || db;
+  const maxAttempts = 3;
+  const selectBalanceSql = connection ? "SELECT bonus_balance FROM users WHERE id = ? FOR UPDATE" : "SELECT bonus_balance FROM users WHERE id = ?";
 
-  if (users.length === 0) {
-    throw new Error("User not found");
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      // Проверяем достаточно ли бонусов
+      const [users] = await executor.query(selectBalanceSql, [userId]);
+
+      if (users.length === 0) {
+        throw new Error("User not found");
+      }
+
+      const currentBalance = parseFloat(users[0].bonus_balance);
+      if (amount > currentBalance) {
+        throw new Error("Insufficient bonus balance");
+      }
+
+      const newBalance = currentBalance - amount;
+
+      // Списываем бонусы
+      await executor.query("UPDATE users SET bonus_balance = ? WHERE id = ?", [newBalance, userId]);
+
+      // Записываем в историю
+      const [result] = await executor.query(
+        `INSERT INTO bonus_history 
+         (user_id, order_id, type, amount, balance_after, description)
+         VALUES (?, ?, 'used', ?, ?, ?)`,
+        [userId, orderId, amount, newBalance, description || "Bonus used for order"]
+      );
+
+      // WebSocket: уведомление о списании бонусов
+      try {
+        const { wsServer } = await import("../index.js");
+        wsServer.notifyBonusUpdate(userId, newBalance, {
+          type: "used",
+          amount,
+          orderId,
+        });
+      } catch (wsError) {
+        console.error("Failed to send WebSocket notification:", wsError);
+      }
+
+      return {
+        id: result.insertId,
+        amount,
+        balance_after: newBalance,
+      };
+    } catch (error) {
+      const isLockError = error?.code === "ER_LOCK_WAIT_TIMEOUT" || error?.code === "ER_LOCK_DEADLOCK";
+      if (!isLockError || attempt === maxAttempts) {
+        throw error;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 100 * attempt));
+    }
   }
 
-  const currentBalance = parseFloat(users[0].bonus_balance);
-  if (amount > currentBalance) {
-    throw new Error("Insufficient bonus balance");
-  }
-
-  // Списываем бонусы
-  await db.query("UPDATE users SET bonus_balance = bonus_balance - ? WHERE id = ?", [amount, userId]);
-
-  // Получаем новый баланс
-  const [updatedUsers] = await db.query("SELECT bonus_balance FROM users WHERE id = ?", [userId]);
-  const newBalance = parseFloat(updatedUsers[0].bonus_balance);
-
-  // Записываем в историю
-  const [result] = await db.query(
-    `INSERT INTO bonus_history 
-     (user_id, order_id, type, amount, balance_after, description)
-     VALUES (?, ?, 'used', ?, ?, ?)`,
-    [userId, orderId, amount, newBalance, description || "Bonus used for order"]
-  );
-
-  // WebSocket: уведомление о списании бонусов
-  try {
-    const { wsServer } = await import("../index.js");
-    wsServer.notifyBonusUpdate(userId, newBalance, {
-      type: "used",
-      amount,
-      orderId,
-    });
-  } catch (wsError) {
-    console.error("Failed to send WebSocket notification:", wsError);
-  }
-
-  return {
-    id: result.insertId,
-    amount,
-    balance_after: newBalance,
-  };
+  return null;
 }
 
 /**

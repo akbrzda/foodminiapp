@@ -2,6 +2,8 @@ import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
 import http from "http";
+import path from "path";
+import { fileURLToPath } from "url";
 import { testConnection } from "./config/database.js";
 import { testRedisConnection } from "./config/redis.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
@@ -22,6 +24,9 @@ import logsRoutes from "./routes/logs.js";
 // WebSocket
 import WSServer from "./websocket/server.js";
 
+// Workers
+import { startWorkers, stopWorkers } from "./workers/index.js";
+
 // Logger
 import { logger } from "./utils/logger.js";
 
@@ -31,10 +36,19 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 // Middleware
 app.use(cors());
-app.use(express.json({ charset: "utf-8" }));
-app.use(express.urlencoded({ extended: true, charset: "utf-8" }));
+app.use(express.json({ charset: "utf-8", limit: "2mb" }));
+app.use(express.urlencoded({ extended: true, charset: "utf-8", limit: "2mb" }));
+
+// Static files for uploaded images
+app.use("/uploads", express.static(path.join(__dirname, "../../uploads")));
+// Backward compatibility for old storage and URLs
+app.use("/uploads", express.static(path.join(__dirname, "../../upload")));
+app.use("/upload", express.static(path.join(__dirname, "../../uploads")));
 
 // Set charset for all responses
 app.use((req, res, next) => {
@@ -109,4 +123,34 @@ server.listen(PORT, async () => {
   } catch (error) {
     await logger.system.redisError(error.message);
   }
+
+  // Запуск воркеров для фоновой обработки задач
+  try {
+    await startWorkers();
+    console.log("✅ Background workers started");
+  } catch (error) {
+    console.error("❌ Failed to start workers:", error);
+    await logger.system.dbError(`Failed to start workers: ${error.message}`);
+  }
+});
+
+// Graceful shutdown
+process.on("SIGTERM", async () => {
+  console.log("📥 SIGTERM received, shutting down gracefully...");
+  await logger.system.shutdown("SIGTERM received");
+  await stopWorkers();
+  server.close(() => {
+    console.log("✅ Server closed");
+    process.exit(0);
+  });
+});
+
+process.on("SIGINT", async () => {
+  console.log("📥 SIGINT received, shutting down gracefully...");
+  await logger.system.shutdown("SIGINT received");
+  await stopWorkers();
+  server.close(() => {
+    console.log("✅ Server closed");
+    process.exit(0);
+  });
 });

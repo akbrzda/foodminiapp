@@ -124,16 +124,23 @@
       <!-- Итоговая сумма -->
       <div class="order-summary">
         <div class="summary-row">
-          <span>Товары ({{ cartStore.itemsCount }})</span>
-          <span>{{ formatPrice(cartStore.totalPrice) }} ₽</span>
+          <span>Сумма</span>
+          <span>{{ formatPrice(summarySubtotal) }} ₽</span>
         </div>
-        <div class="summary-row">
-          <span>Доставка</span>
-          <span>{{ formatPrice(deliveryCost) }} ₽</span>
+        <div class="summary-row bonus-earn" v-if="bonusesToEarn > 0">
+          <span>Будет начислено</span>
+          <span class="earn">{{ formatPrice(bonusesToEarn) }} бонусов</span>
+        </div>
+        <div class="summary-row bonus-discount" v-if="appliedBonusToUse > 0">
+          <span>Будет списано</span>
+          <span class="discount">{{ formatPrice(appliedBonusToUse) }} бонусов</span>
         </div>
         <div class="summary-row total">
-          <span>Итого</span>
-          <span>{{ formatPrice(totalPrice) }} ₽</span>
+          <span>Итого к оплате</span>
+          <span>{{ formatPrice(finalTotalPrice) }} ₽</span>
+        </div>
+        <div class="summary-info" v-if="estimatedDeliveryTime">
+          <span class="delivery-time">⏱ Доставка до {{ estimatedDeliveryTime }}</span>
         </div>
       </div>
     </div>
@@ -141,7 +148,7 @@
     <!-- Кнопка подтверждения -->
     <div class="footer" v-if="canSubmitOrder">
       <button class="submit-btn" @click="submitOrder" :disabled="submitting">
-        {{ submitting ? "Оформление..." : `Оформить заказ • ${formatPrice(totalPrice)} ₽` }}
+        {{ submitting ? "Оформление..." : `Оформить заказ • ${formatPrice(finalTotalPrice)} ₽` }}
       </button>
     </div>
   </div>
@@ -152,6 +159,7 @@ import { ref, computed, onMounted, watch } from "vue";
 import { useRouter } from "vue-router";
 import { Banknote, CreditCard, Phone, Store, Truck } from "lucide-vue-next";
 import { useCartStore } from "../stores/cart";
+import { useLoyaltyStore } from "../stores/loyalty";
 import { useLocationStore } from "../stores/location";
 import { citiesAPI, addressesAPI, ordersAPI, geocodeAPI } from "../api/endpoints";
 import { hapticFeedback } from "../services/telegram";
@@ -161,6 +169,7 @@ import { formatPrice } from "../utils/format";
 const router = useRouter();
 const cartStore = useCartStore();
 const locationStore = useLocationStore();
+const loyaltyStore = useLoyaltyStore();
 
 const orderType = ref(locationStore.deliveryType || null);
 const deliveryAddress = ref(locationStore.deliveryAddress || "");
@@ -176,6 +185,8 @@ const changeFrom = ref(null);
 const orderComment = ref("");
 const deliveryCost = ref(0);
 const submitting = ref(false);
+const deliveryTimeMin = ref(0);
+const deliveryTimeMax = ref(0);
 
 const deliveryDetails = ref({
   entrance: locationStore.deliveryDetails?.entrance || "",
@@ -197,9 +208,38 @@ const canSubmitOrder = computed(() => {
   }
 });
 
-const totalPrice = computed(() => {
+const appliedBonusToUse = computed(() => {
+  if (!cartStore.bonusUsage.useBonuses) return 0;
+  return Math.min(cartStore.bonusUsage.bonusToUse, Math.floor(cartStore.totalPrice * loyaltyStore.maxRedeemPercent));
+});
+
+const finalTotalPrice = computed(() => {
+  return cartStore.totalPrice + deliveryCost.value - appliedBonusToUse.value;
+});
+
+const summarySubtotal = computed(() => {
   return cartStore.totalPrice + deliveryCost.value;
 });
+
+const bonusesToEarn = computed(() => {
+  return Math.floor(finalTotalPrice.value * loyaltyStore.rate);
+});
+
+const estimatedDeliveryTime = computed(() => {
+  if (!deliveryTimeMin.value || !deliveryTimeMax.value) return null;
+
+  const now = new Date();
+  const minTime = new Date(now.getTime() + deliveryTimeMin.value * 60000);
+  const maxTime = new Date(now.getTime() + deliveryTimeMax.value * 60000);
+
+  return `${minTime.getHours()}:${String(minTime.getMinutes()).padStart(2, "0")} - ${maxTime.getHours()}:${String(maxTime.getMinutes()).padStart(
+    2,
+    "0"
+  )}`;
+});
+
+// Для совместимости со старыми ссылками
+const totalPrice = computed(() => finalTotalPrice.value);
 
 onMounted(async () => {
   if (!orderType.value) {
@@ -215,6 +255,8 @@ onMounted(async () => {
     addressValidated.value = true;
     inDeliveryZone.value = true;
   }
+
+  loyaltyStore.refreshFromOrders();
 });
 
 watch(
@@ -226,6 +268,15 @@ watch(
     if (newType === "delivery" && locationStore.deliveryAddress && locationStore.deliveryCoords) {
       addressValidated.value = true;
       inDeliveryZone.value = true;
+    }
+  }
+);
+
+watch(
+  () => cartStore.totalPrice,
+  () => {
+    if (cartStore.bonusUsage.bonusToUse > appliedBonusToUse.value) {
+      cartStore.setBonusToUse(appliedBonusToUse.value);
     }
   }
 );
@@ -283,6 +334,8 @@ async function selectAddress(suggestion) {
       locationStore.setDeliveryCoords({ lat: geocodeData.lat, lng: geocodeData.lng });
       if (checkResponse.data.polygon) {
         deliveryCost.value = parseFloat(checkResponse.data.polygon.delivery_cost || 0);
+        deliveryTimeMin.value = parseInt(checkResponse.data.polygon.delivery_time_min || 30);
+        deliveryTimeMax.value = parseInt(checkResponse.data.polygon.delivery_time_max || 60);
       }
     } else {
       inDeliveryZone.value = false;
@@ -328,6 +381,11 @@ async function submitOrder() {
   hapticFeedback("medium");
 
   try {
+    if (!locationStore.selectedCity?.id) {
+      alert("Выберите город перед оформлением заказа");
+      return;
+    }
+
     const orderData = {
       city_id: locationStore.selectedCity.id,
       order_type: orderType.value,
@@ -335,15 +393,45 @@ async function submitOrder() {
         item_id: item.id,
         variant_id: item.variant_id || null,
         quantity: item.quantity,
-        modifiers: item.modifiers?.map((m) => m.id) || [],
+        modifiers:
+          item.modifiers
+            ?.map((mod) => {
+              if (typeof mod === "number") return mod;
+              if (typeof mod === "string") return parseInt(mod, 10);
+              return mod?.id ?? mod?.modifier_id ?? mod?.old_modifier_id ?? null;
+            })
+            .filter((id) => Number.isFinite(id)) || [],
       })),
       payment_method: paymentMethod.value,
       comment: orderComment.value,
+      bonus_to_use: appliedBonusToUse.value,
     };
 
     if (orderType.value === "delivery") {
-      orderData.delivery_street = deliveryAddress.value;
-      orderData.delivery_house = ""; // Извлекается из адреса
+      // Разделяем адрес на улицу и дом
+      const addressParts = deliveryAddress.value.split(",").map((s) => s.trim());
+      let street = "";
+      let house = "";
+
+      if (addressParts.length >= 2) {
+        // Последняя часть обычно содержит дом
+        house = addressParts[addressParts.length - 1];
+        // Все остальное - улица
+        street = addressParts.slice(0, -1).join(", ");
+      } else {
+        // Если адрес не содержит запятых, пытаемся найти номер дома
+        const match = deliveryAddress.value.match(/^(.+?)\s+(\d+.*)$/);
+        if (match) {
+          street = match[1];
+          house = match[2];
+        } else {
+          street = deliveryAddress.value;
+          house = "";
+        }
+      }
+
+      orderData.delivery_street = street;
+      orderData.delivery_house = house;
       orderData.delivery_entrance = deliveryDetails.value.entrance;
       orderData.delivery_apartment = deliveryDetails.value.apartment;
       orderData.delivery_intercom = deliveryDetails.value.doorCode;
@@ -364,7 +452,33 @@ async function submitOrder() {
   } catch (error) {
     console.error("Failed to create order:", error);
     hapticFeedback("error");
-    alert(error.response?.data?.error || "Ошибка при оформлении заказа");
+
+    // Перевод ошибок на русский
+    let errorMessage = "Ошибка при оформлении заказа";
+
+    // Словарь переводов ошибок
+    const errorTranslations = {
+      "Delivery is not available to this address": "Доставка по этому адресу недоступна. Возможно, адрес находится вне зоны доставки.",
+      "delivery address is required for delivery orders": "Укажите адрес доставки",
+      "branch_id is required for pickup orders": "Выберите филиал для самовывоза",
+      "Cart is empty": "Корзина пуста",
+      "Insufficient stock": "Недостаточно товара на складе",
+    };
+
+    // API клиент преобразует ошибки в формат {message, status, data}
+    if (error.status === 0) {
+      // Нет связи с сервером
+      errorMessage = "Нет связи с сервером. Проверьте интернет-соединение и убедитесь, что backend запущен.";
+    } else if (error.data?.error) {
+      // Ошибка с сервера
+      const serverError = error.data.error;
+      errorMessage = errorTranslations[serverError] || serverError;
+    } else if (error.message) {
+      // Другая ошибка
+      errorMessage = error.message;
+    }
+
+    alert(errorMessage);
   } finally {
     submitting.value = false;
   }
@@ -629,25 +743,48 @@ async function submitOrder() {
 
 .order-summary {
   margin-top: 16px;
-  padding: 12px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-md);
+  padding: 8px 4px;
 }
 
 .summary-row {
   display: flex;
   justify-content: space-between;
-  margin-bottom: 12px;
-  font-size: var(--font-size-body);
+  align-items: center;
+  margin-bottom: 14px;
+  font-size: var(--font-size-h3);
   color: var(--color-text-primary);
+}
+
+.summary-row.bonus-discount .discount {
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-semibold);
+}
+
+.summary-row.bonus-earn .earn {
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-semibold);
 }
 
 .summary-row.total {
   font-weight: var(--font-weight-bold);
-  font-size: var(--font-size-h2);
-  padding-top: 12px;
+  font-size: var(--font-size-h1);
+  padding-top: 16px;
   border-top: 1px solid var(--color-border);
   margin-bottom: 0;
+}
+
+.summary-info {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border);
+  font-size: var(--font-size-body);
+  color: var(--color-text-secondary);
+  text-align: center;
+}
+
+.delivery-time {
+  display: block;
+  margin-bottom: 8px;
 }
 
 .footer {

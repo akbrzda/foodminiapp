@@ -35,6 +35,12 @@ const routes = [
     meta: { requiresAuth: true, showBackButton: true },
   },
   {
+    path: "/bonus-history",
+    name: "BonusHistory",
+    component: () => import("../views/BonusHistory.vue"),
+    meta: { requiresAuth: true, showBackButton: true },
+  },
+  {
     path: "/orders",
     name: "Orders",
     component: () => import("../views/Orders.vue"),
@@ -121,7 +127,7 @@ router.beforeEach((to, from, next) => {
     if (to.name === "Home" && to.query?.openCity === "1") {
       return next();
     }
-    
+
     // Для остальных страниц проверяем наличие города
     if (!locationStore.selectedCity && to.name !== "DeliveryMap" && to.name !== "PickupMap" && to.name !== "DeliveryAddressDetails") {
       // Если мы уже на главной с openCity, не делаем редирект

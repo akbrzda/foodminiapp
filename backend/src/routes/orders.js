@@ -4,6 +4,7 @@ import db from "../config/database.js";
 import { authenticateToken, requireRole, checkCityAccess } from "../middleware/auth.js";
 import { calculateEarnedBonuses, validateBonusUsage, earnBonuses, useBonuses } from "../utils/bonuses.js";
 import { logger, adminActionLogger } from "../utils/logger.js";
+import { addTelegramNotification } from "../queues/config.js";
 
 const router = express.Router();
 
@@ -56,10 +57,7 @@ async function calculateOrderCost(items, bonusToUse = 0) {
 
     // Если указан вариант, используем его цену
     if (variant_id) {
-      const [variants] = await db.query(
-        "SELECT id, name, price, is_active FROM item_variants WHERE id = ? AND item_id = ?",
-        [variant_id, item_id]
-      );
+      const [variants] = await db.query("SELECT id, name, price, is_active FROM item_variants WHERE id = ? AND item_id = ?", [variant_id, item_id]);
 
       if (variants.length === 0 || !variants[0].is_active) {
         throw new Error(`Variant ${variant_id} not found or inactive`);
@@ -99,10 +97,10 @@ async function calculateOrderCost(items, bonusToUse = 0) {
           });
         } else {
           // Проверяем старую систему модификаторов
-          const [oldModifiers] = await db.query(
-            "SELECT id, name, price, is_active FROM menu_modifiers WHERE id = ? AND item_id = ?",
-            [modId, item_id]
-          );
+          const [oldModifiers] = await db.query("SELECT id, name, price, is_active FROM menu_modifiers WHERE id = ? AND item_id = ?", [
+            modId,
+            item_id,
+          ]);
 
           if (oldModifiers.length === 0 || !oldModifiers[0].is_active) {
             throw new Error(`Modifier ${modId} not found or inactive`);
@@ -167,7 +165,7 @@ router.post("/calculate", authenticateToken, async (req, res, next) => {
     }
 
     const finalTotal = total + parseFloat(delivery_cost);
-    
+
     // Получаем уровень лояльности пользователя для расчета бонусов
     const [userData] = await db.query("SELECT loyalty_level FROM users WHERE id = ?", [req.user.id]);
     const loyaltyLevel = userData[0]?.loyalty_level || 1;
@@ -309,6 +307,7 @@ router.post("/", authenticateToken, async (req, res, next) => {
     // Получаем уровень лояльности пользователя для расчета бонусов
     const [userData] = await db.query("SELECT loyalty_level FROM users WHERE id = ?", [req.user.id]);
     const loyaltyLevel = userData[0]?.loyalty_level || 1;
+    const earnedBonuses = calculateEarnedBonuses(finalTotal, loyaltyLevel);
 
     // Генерируем номер заказа
     const orderNumber = await generateOrderNumber();
@@ -354,16 +353,7 @@ router.post("/", authenticateToken, async (req, res, next) => {
         `INSERT INTO order_items 
          (order_id, item_id, item_name, variant_id, variant_name, item_price, quantity, subtotal)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          orderId,
-          item.item_id,
-          item.item_name,
-          item.variant_id || null,
-          item.variant_name || null,
-          item.item_price,
-          item.quantity,
-          item.subtotal,
-        ]
+        [orderId, item.item_id, item.item_name, item.variant_id || null, item.variant_name || null, item.item_price, item.quantity, item.subtotal]
       );
 
       const orderItemId = itemResult.insertId;
@@ -392,7 +382,7 @@ router.post("/", authenticateToken, async (req, res, next) => {
 
     // Обрабатываем бонусы
     if (bonusUsed > 0) {
-      await useBonuses(req.user.id, orderId, bonusUsed, "Used for order");
+      await useBonuses(req.user.id, orderId, bonusUsed, "Used for order", connection);
     }
 
     // Начисляем бонусы за заказ (earnBonuses теперь принимает orderTotal и сам рассчитывает бонусы)
@@ -404,6 +394,20 @@ router.post("/", authenticateToken, async (req, res, next) => {
 
     // Получаем полные данные заказа
     const [orders] = await db.query(`SELECT * FROM orders WHERE id = ?`, [orderId]);
+    const order = orders[0];
+
+    // Получаем позиции заказа для уведомления
+    const [orderItems] = await db.query(
+      `SELECT oi.*, 
+        (SELECT JSON_ARRAYAGG(
+          JSON_OBJECT('modifier_id', oim.modifier_id, 'modifier_name', oim.modifier_name, 'modifier_price', oim.modifier_price)
+        ) 
+        FROM order_item_modifiers oim 
+        WHERE oim.order_item_id = oi.id) as modifiers
+      FROM order_items oi 
+      WHERE oi.order_id = ?`,
+      [orderId]
+    );
 
     // Логирование создания заказа
     await logger.order.created(orderId, req.user.id, finalTotal);
@@ -412,7 +416,7 @@ router.post("/", authenticateToken, async (req, res, next) => {
     try {
       const { wsServer } = await import("../index.js");
       wsServer.notifyNewOrder({
-        ...orders[0],
+        ...order,
         bonuses_earned: earnedBonuses,
         city_id: city_id,
       });
@@ -420,8 +424,49 @@ router.post("/", authenticateToken, async (req, res, next) => {
       console.error("Failed to send WebSocket notification:", wsError);
     }
 
+    // Отправляем уведомление в Telegram через очередь
+    try {
+      await addTelegramNotification({
+        type: "new_order",
+        priority: 1,
+        data: {
+          order_number: orderNumber,
+          order_type: order_type,
+          branch_name: branch_id ? (await db.query("SELECT name FROM branches WHERE id = ?", [branch_id]))[0]?.[0]?.name : null,
+          delivery_street,
+          delivery_house,
+          delivery_apartment,
+          delivery_entrance,
+          total: finalTotal,
+          items: orderItems.map((item) => ({
+            item_name: item.item_name,
+            variant_name: item.variant_name,
+            quantity: item.quantity,
+            subtotal: item.subtotal,
+            modifiers: (() => {
+              if (!item.modifiers) return [];
+              if (Array.isArray(item.modifiers)) return item.modifiers;
+              if (typeof item.modifiers === "string") {
+                try {
+                  return JSON.parse(item.modifiers);
+                } catch (parseError) {
+                  return [];
+                }
+              }
+              return [];
+            })(),
+          })),
+          payment_method,
+          comment,
+        },
+      });
+    } catch (queueError) {
+      console.error("Failed to queue Telegram notification:", queueError);
+      // Не прерываем выполнение, заказ уже создан
+    }
+
     res.status(201).json({
-      order: orders[0],
+      order: order,
       bonuses_earned: earnedBonuses,
     });
   } catch (error) {
@@ -518,15 +563,10 @@ router.post("/:id/repeat", authenticateToken, async (req, res, next) => {
     // Для каждой позиции получаем модификаторы
     const orderItems = [];
     for (const item of items) {
-      const [modifiers] = await db.query(
-        `SELECT modifier_id, old_modifier_id FROM order_item_modifiers WHERE order_item_id = ?`,
-        [item.id]
-      );
+      const [modifiers] = await db.query(`SELECT modifier_id, old_modifier_id FROM order_item_modifiers WHERE order_item_id = ?`, [item.id]);
 
       // Собираем ID модификаторов (новая и старая система)
-      const modifierIds = modifiers
-        .map((m) => m.modifier_id || m.old_modifier_id)
-        .filter((id) => id !== null);
+      const modifierIds = modifiers.map((m) => m.modifier_id || m.old_modifier_id).filter((id) => id !== null);
 
       orderItems.push({
         item_id: item.item_id,

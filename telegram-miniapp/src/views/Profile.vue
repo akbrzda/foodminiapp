@@ -3,75 +3,104 @@
     <PageHeader title="Профиль" />
 
     <div class="profile-content">
-      <div class="user-info">
-        <div class="avatar">{{ userInitials }}</div>
-        <div>
-          <h2>{{ authStore.user?.first_name }} {{ authStore.user?.last_name }}</h2>
-          <p>{{ authStore.user?.phone }}</p>
-        </div>
+      <div class="form-card phone-card">
+        <label class="field-label">Телефон</label>
+        <div class="field-value">{{ formatPhone(authStore.user?.phone) || "—" }}</div>
       </div>
 
-      <div class="bonus-card">
-        <div class="bonus-label">Ваши бонусы</div>
-        <div class="bonus-amount">{{ bonusBalance }}</div>
-        <button class="history-btn" @click="showBonusHistory">История бонусов</button>
+      <div class="form-card">
+        <label class="field-label" for="first-name">Имя</label>
+        <input id="first-name" v-model="profileForm.first_name" class="field-input" type="text" placeholder="Введите имя" />
       </div>
 
-      <div class="menu-list">
-        <button class="menu-item" @click="$router.push('/orders')">
-          <span>📦 Мои заказы</span>
-          <span>→</span>
-        </button>
-        <button class="menu-item" @click="openCityPopup">
-          <span>📍 Изменить город</span>
-          <span>→</span>
-        </button>
-        <button class="menu-item" @click="logout">
-          <span>🚪 Выйти</span>
-          <span>→</span>
-        </button>
+      <div class="form-card">
+        <label class="field-label" for="last-name">Фамилия</label>
+        <input id="last-name" v-model="profileForm.last_name" class="field-input" type="text" placeholder="Введите фамилию" />
       </div>
+
+      <div class="form-card">
+        <label class="field-label" for="email">Email</label>
+        <input id="email" v-model="profileForm.email" class="field-input" type="email" placeholder="Введите email" />
+      </div>
+
+      <div class="form-card">
+        <label class="field-label" for="birthdate">День рождения</label>
+        <input id="birthdate" v-model="profileForm.date_of_birth" class="field-input" type="date" />
+      </div>
+
+      <button class="save-btn" @click="saveProfile" :disabled="saving">
+        {{ saving ? "Сохранение..." : "Сохранить" }}
+      </button>
+      <p v-if="saveMessage" class="save-message">{{ saveMessage }}</p>
+      <p v-if="saveError" class="save-error">{{ saveError }}</p>
+
+      <button class="logout-btn" @click="logout">Выйти</button>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from "vue";
-import { Package, ArrowRight, MapPin, LogOut } from "lucide-vue-next";
+import { ref, onMounted } from "vue";
 import PageHeader from "../components/PageHeader.vue";
 import { useRouter } from "vue-router";
 import { useAuthStore } from "../stores/auth";
-import { bonusesAPI } from "../api/endpoints";
+import { authAPI } from "../api/endpoints";
 import { hapticFeedback } from "../services/telegram";
+import { formatPhone } from "../utils/phone";
 
 const router = useRouter();
 const authStore = useAuthStore();
 
-const bonusBalance = ref(0);
-
-const userInitials = computed(() => {
-  const firstName = authStore.user?.first_name || "";
-  const lastName = authStore.user?.last_name || "";
-  return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase() || "?";
+const saving = ref(false);
+const saveMessage = ref("");
+const saveError = ref("");
+const profileForm = ref({
+  first_name: "",
+  last_name: "",
+  email: "",
+  date_of_birth: "",
 });
 
 onMounted(async () => {
-  await loadBonusBalance();
+  hydrateForm();
 });
 
-async function loadBonusBalance() {
-  try {
-    const response = await bonusesAPI.getBalance();
-    bonusBalance.value = response.data.balance;
-  } catch (error) {
-    console.error("Failed to load bonus balance:", error);
-  }
+function hydrateForm() {
+  profileForm.value = {
+    first_name: authStore.user?.first_name || "",
+    last_name: authStore.user?.last_name || "",
+    email: authStore.user?.email || "",
+    date_of_birth: normalizeDateForInput(authStore.user?.date_of_birth),
+  };
 }
 
-function showBonusHistory() {
+async function saveProfile() {
+  if (saving.value) return;
+  saving.value = true;
+  saveMessage.value = "";
+  saveError.value = "";
   hapticFeedback("light");
-  // TODO: Показать историю бонусов
-  console.log("Show bonus history");
+
+  try {
+    const response = await authAPI.updateProfile({
+      first_name: profileForm.value.first_name?.trim() || "",
+      last_name: profileForm.value.last_name?.trim() || "",
+      email: profileForm.value.email?.trim() || "",
+      date_of_birth: profileForm.value.date_of_birth || null,
+    });
+    if (response?.data?.user) {
+      authStore.setUser(response.data.user);
+      hydrateForm();
+    }
+    hapticFeedback("success");
+    saveMessage.value = "Профиль обновлен";
+  } catch (error) {
+    console.error("Failed to update profile:", error);
+    hapticFeedback("error");
+    saveError.value = error.response?.data?.error || "Не удалось сохранить профиль";
+  } finally {
+    saving.value = false;
+  }
 }
 
 function logout() {
@@ -80,9 +109,17 @@ function logout() {
   router.push("/login");
 }
 
-function openCityPopup() {
-  hapticFeedback("light");
-  window.dispatchEvent(new CustomEvent("open-city-popup"));
+function normalizeDateForInput(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    const match = String(value).match(/^(\d{4}-\d{2}-\d{2})/);
+    return match ? match[1] : "";
+  }
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 </script>
 
@@ -93,120 +130,85 @@ function openCityPopup() {
 }
 
 .profile-content {
-  padding: 16px 12px;
+  padding: 16px 12px 32px;
 }
 
-.user-info {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 20px;
+.form-card {
   background: var(--color-background);
-  border-radius: var(--border-radius-md);
-  margin-bottom: 16px;
-  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-lg);
+  padding: 14px 16px;
+  margin-bottom: 14px;
 }
 
-.avatar {
-  width: 60px;
-  height: 60px;
-  border-radius: 50%;
-  background: var(--color-primary);
-  color: var(--color-text-primary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: var(--font-size-h2);
-  font-weight: var(--font-weight-bold);
+.phone-card {
+  background: var(--color-background-secondary);
+  border: none;
 }
 
-.user-info h2 {
-  font-size: var(--font-size-h3);
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-text-primary);
-  margin-bottom: 4px;
-}
-
-.user-info p {
+.field-label {
+  display: block;
   font-size: var(--font-size-caption);
   color: var(--color-text-secondary);
-}
-
-.bonus-card {
-  padding: 24px;
-  background: var(--color-primary);
-  border-radius: var(--border-radius-md);
-  color: var(--color-text-primary);
-  margin-bottom: 16px;
-  text-align: center;
-  box-shadow: var(--shadow-sm);
-}
-
-.bonus-label {
-  font-size: var(--font-size-caption);
-  color: var(--color-text-primary);
-  opacity: 0.8;
   margin-bottom: 8px;
 }
 
-.bonus-amount {
-  font-size: 48px;
-  font-weight: var(--font-weight-bold);
-  color: var(--color-text-primary);
-  margin-bottom: 16px;
+.field-value {
+  font-size: var(--font-size-h3);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
 }
 
-.history-btn {
-  padding: 8px 16px;
-  border: 1px solid var(--color-text-primary);
-  border-radius: var(--border-radius-sm);
+.field-input {
+  width: 100%;
+  border: none;
+  outline: none;
   background: transparent;
+  font-size: var(--font-size-h3);
+  font-weight: var(--font-weight-semibold);
   color: var(--color-text-primary);
-  font-size: var(--font-size-body);
+}
+
+.save-btn {
+  width: 100%;
+  padding: 18px;
+  border: none;
+  border-radius: var(--border-radius-lg);
+  background: var(--color-primary);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-h3);
   font-weight: var(--font-weight-semibold);
   cursor: pointer;
   transition: background-color var(--transition-duration) var(--transition-easing);
 }
 
-.history-btn:hover {
-  background: rgba(0, 0, 0, 0.1);
+.save-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
-.menu-list {
-  background: var(--color-background);
-  border-radius: var(--border-radius-md);
-  overflow: hidden;
-  box-shadow: var(--shadow-sm);
-}
-
-.menu-item {
+.logout-btn {
   width: 100%;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+  margin-top: 12px;
   padding: 16px;
   border: none;
-  background: var(--color-background);
-  border-bottom: 1px solid var(--color-border);
-  text-align: left;
-  font-size: var(--font-size-body);
-  font-weight: var(--font-weight-regular);
-  color: var(--color-text-primary);
-  cursor: pointer;
-  transition: background-color var(--transition-duration) var(--transition-easing);
-}
-
-.menu-item span:first-child {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.menu-item:last-child {
-  border-bottom: none;
-}
-
-.menu-item:hover {
+  border-radius: var(--border-radius-lg);
   background: var(--color-background-secondary);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+}
+
+.save-message {
+  margin: 8px 4px 0;
+  font-size: var(--font-size-caption);
+  color: var(--color-success);
+}
+
+.save-error {
+  margin: 8px 4px 0;
+  font-size: var(--font-size-caption);
+  color: var(--color-error);
 }
 </style>

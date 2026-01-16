@@ -1,6 +1,7 @@
 import express from "express";
 import db from "../config/database.js";
 import { authenticateToken } from "../middleware/auth.js";
+import { normalizePhone } from "../utils/phone.js";
 
 const router = express.Router();
 
@@ -206,9 +207,7 @@ router.put("/profile", authenticateToken, async (req, res, next) => {
     }
     if (phone !== undefined) {
       console.log(`[PUT /profile] Processing phone:`, phone, `type:`, typeof phone);
-      const normalizedPhone = String(phone)
-        .trim()
-        .replace(/[^\d+]/g, "");
+      const normalizedPhone = normalizePhone(phone);
       console.log(`[PUT /profile] Normalized phone:`, normalizedPhone);
 
       if (!normalizedPhone) {

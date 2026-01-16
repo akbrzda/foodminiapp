@@ -65,7 +65,9 @@ class WSServer {
    * Обработка нового подключения
    */
   handleConnection(ws, userData) {
-    const { userId, role, city_ids } = userData;
+    const userId = userData.userId ?? userData.id;
+    const role = userData.role;
+    const city_ids = userData.city_ids ?? userData.cities;
 
     console.log(`WebSocket connected: userId=${userId}, role=${role}`);
 

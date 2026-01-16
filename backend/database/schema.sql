@@ -2,6 +2,11 @@
 -- Схема базы данных Miniapp Panda
 -- Версия: 2.0
 -- Обновлено: Добавлены варианты позиций, группы модификаторов, поля программы лояльности
+-- 
+-- Примечание о геоданных:
+-- Используется MySQL 8.0 Spatial Extensions для работы с полигонами доставки.
+-- MySQL поддерживает типы GEOMETRY, POINT, POLYGON и функции ST_GeomFromText, ST_Contains, ST_AsGeoJSON.
+-- Это обеспечивает необходимую функциональность для работы с зонами доставки без необходимости PostGIS.
 -- ============================================
 
 -- Таблица пользователей (клиентов)
@@ -16,7 +21,6 @@ CREATE TABLE IF NOT EXISTS users (
     bonus_balance DECIMAL(10, 2) DEFAULT 0.00,
     loyalty_level INT DEFAULT 1 COMMENT '1=Бронза, 2=Серебро, 3=Золото',
     total_spent DECIMAL(10, 2) DEFAULT 0.00 COMMENT 'Общая сумма всех заказов для расчета уровня лояльности',
-    gulyash_client_id VARCHAR(100),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_phone (phone),
@@ -30,7 +34,6 @@ CREATE TABLE IF NOT EXISTS cities (
     latitude DECIMAL(10, 8),
     longitude DECIMAL(11, 8),
     is_active BOOLEAN DEFAULT TRUE,
-    gulyash_city_id VARCHAR(100),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_active (is_active)
@@ -47,7 +50,6 @@ CREATE TABLE IF NOT EXISTS branches (
     phone VARCHAR(20),
     working_hours JSON,
     is_active BOOLEAN DEFAULT TRUE,
-    gulyash_branch_id VARCHAR(100),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (city_id) REFERENCES cities(id) ON DELETE CASCADE,
@@ -104,7 +106,6 @@ CREATE TABLE IF NOT EXISTS delivery_polygons (
     min_order_amount DECIMAL(10, 2) DEFAULT 0.00,
     delivery_cost DECIMAL(10, 2) DEFAULT 0.00,
     is_active BOOLEAN DEFAULT TRUE,
-    gulyash_polygon_id VARCHAR(100),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE CASCADE,
@@ -121,7 +122,6 @@ CREATE TABLE IF NOT EXISTS menu_categories (
     image_url VARCHAR(500),
     sort_order INT DEFAULT 0,
     is_active BOOLEAN DEFAULT TRUE,
-    gulyash_category_id VARCHAR(100),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (city_id) REFERENCES cities(id) ON DELETE CASCADE,
@@ -137,10 +137,11 @@ CREATE TABLE IF NOT EXISTS menu_items (
     price DECIMAL(10, 2) DEFAULT 0.00 COMMENT 'Базовая цена (используется если нет вариантов)',
     image_url VARCHAR(500),
     weight VARCHAR(50),
+    weight_value DECIMAL(10, 2),
+    weight_unit ENUM('g', 'kg', 'ml', 'l', 'pcs'),
     calories INT,
     sort_order INT DEFAULT 0,
     is_active BOOLEAN DEFAULT TRUE,
-    gulyash_item_id VARCHAR(100),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (category_id) REFERENCES menu_categories(id) ON DELETE CASCADE,
@@ -153,6 +154,8 @@ CREATE TABLE IF NOT EXISTS item_variants (
     item_id INT NOT NULL,
     name VARCHAR(100) NOT NULL COMMENT 'Название варианта (например: "Маленькая (25см)")',
     price DECIMAL(10, 2) NOT NULL,
+    weight_value DECIMAL(10, 2),
+    weight_unit ENUM('g', 'kg', 'ml', 'l', 'pcs'),
     sort_order INT DEFAULT 0,
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -181,7 +184,6 @@ CREATE TABLE IF NOT EXISTS modifiers (
     price DECIMAL(10, 2) DEFAULT 0.00,
     sort_order INT DEFAULT 0,
     is_active BOOLEAN DEFAULT TRUE,
-    gulyash_modifier_id VARCHAR(100),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (group_id) REFERENCES modifier_groups(id) ON DELETE CASCADE,
@@ -209,7 +211,6 @@ CREATE TABLE IF NOT EXISTS menu_modifiers (
     price DECIMAL(10, 2) DEFAULT 0.00,
     is_required BOOLEAN DEFAULT FALSE,
     is_active BOOLEAN DEFAULT TRUE,
-    gulyash_modifier_id VARCHAR(100),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (item_id) REFERENCES menu_items(id) ON DELETE CASCADE,
@@ -253,7 +254,6 @@ CREATE TABLE IF NOT EXISTS orders (
     completed_at DATETIME,
     
     -- Синхронизация
-    gulyash_order_id VARCHAR(100),
     sync_status ENUM('pending', 'synced', 'failed') DEFAULT 'pending',
     sync_attempts INT DEFAULT 0,
     sync_error TEXT,
@@ -319,7 +319,6 @@ CREATE TABLE IF NOT EXISTS bonus_history (
     amount DECIMAL(10, 2) NOT NULL,
     balance_after DECIMAL(10, 2) NOT NULL,
     description TEXT,
-    gulyash_transaction_id VARCHAR(100),
     sync_status ENUM('pending', 'synced', 'failed') DEFAULT 'pending',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
@@ -448,12 +447,80 @@ DEALLOCATE PREPARE alterIfNotExists;
 ALTER TABLE menu_items 
 MODIFY COLUMN price DECIMAL(10, 2) DEFAULT 0.00 COMMENT 'Базовая цена (используется если нет вариантов)';
 
+SET @tablename = 'menu_items';
+SET @columnname = 'weight_value';
+SET @preparedStatement = (SELECT IF(
+  (
+    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE
+      (TABLE_SCHEMA = DATABASE())
+      AND (TABLE_NAME = @tablename)
+      AND (COLUMN_NAME = @columnname)
+  ) > 0,
+  'SELECT 1',
+  CONCAT('ALTER TABLE ', @tablename, ' ADD COLUMN ', @columnname, ' DECIMAL(10, 2) NULL AFTER weight')
+));
+PREPARE alterIfNotExists FROM @preparedStatement;
+EXECUTE alterIfNotExists;
+DEALLOCATE PREPARE alterIfNotExists;
+
+SET @columnname = 'weight_unit';
+SET @preparedStatement = (SELECT IF(
+  (
+    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE
+      (TABLE_SCHEMA = DATABASE())
+      AND (TABLE_NAME = @tablename)
+      AND (COLUMN_NAME = @columnname)
+  ) > 0,
+  'SELECT 1',
+  CONCAT('ALTER TABLE ', @tablename, ' ADD COLUMN ', @columnname, " ENUM('g','kg','ml','l','pcs') NULL AFTER weight_value")
+));
+PREPARE alterIfNotExists FROM @preparedStatement;
+EXECUTE alterIfNotExists;
+DEALLOCATE PREPARE alterIfNotExists;
+
+SET @tablename = 'item_variants';
+SET @columnname = 'weight_value';
+SET @preparedStatement = (SELECT IF(
+  (
+    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE
+      (TABLE_SCHEMA = DATABASE())
+      AND (TABLE_NAME = @tablename)
+      AND (COLUMN_NAME = @columnname)
+  ) > 0,
+  'SELECT 1',
+  CONCAT('ALTER TABLE ', @tablename, ' ADD COLUMN ', @columnname, ' DECIMAL(10, 2) NULL AFTER price')
+));
+PREPARE alterIfNotExists FROM @preparedStatement;
+EXECUTE alterIfNotExists;
+DEALLOCATE PREPARE alterIfNotExists;
+
+SET @columnname = 'weight_unit';
+SET @preparedStatement = (SELECT IF(
+  (
+    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE
+      (TABLE_SCHEMA = DATABASE())
+      AND (TABLE_NAME = @tablename)
+      AND (COLUMN_NAME = @columnname)
+  ) > 0,
+  'SELECT 1',
+  CONCAT('ALTER TABLE ', @tablename, " ADD COLUMN ", @columnname, " ENUM('g','kg','ml','l','pcs') NULL AFTER weight_value")
+));
+PREPARE alterIfNotExists FROM @preparedStatement;
+EXECUTE alterIfNotExists;
+DEALLOCATE PREPARE alterIfNotExists;
+
 
 CREATE TABLE IF NOT EXISTS item_variants (
     id INT AUTO_INCREMENT PRIMARY KEY,
     item_id INT NOT NULL,
     name VARCHAR(100) NOT NULL COMMENT 'Название варианта (например: "Маленькая (25см)")',
     price DECIMAL(10, 2) NOT NULL,
+    weight_value DECIMAL(10, 2),
+    weight_unit ENUM('g', 'kg', 'ml', 'l', 'pcs'),
     sort_order INT DEFAULT 0,
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -482,7 +549,6 @@ CREATE TABLE IF NOT EXISTS modifiers (
     price DECIMAL(10, 2) DEFAULT 0.00,
     sort_order INT DEFAULT 0,
     is_active BOOLEAN DEFAULT TRUE,
-    gulyash_modifier_id VARCHAR(100),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (group_id) REFERENCES modifier_groups(id) ON DELETE CASCADE,
@@ -676,13 +742,13 @@ DELETE FROM branches;
 DELETE FROM cities;
 
 
-INSERT INTO cities (name, latitude, longitude, is_active, gulyash_city_id) VALUES
+INSERT INTO cities (name, latitude, longitude, is_active) VALUES
 ('Когалым', 62.2667, 74.4833, TRUE, NULL),
 ('Москва', 55.7558, 37.6173, TRUE, NULL),
 ('Пенза', 53.2001, 45.0047, TRUE, NULL);
 
 
-INSERT INTO branches (city_id, name, address, latitude, longitude, phone, working_hours, is_active, gulyash_branch_id) 
+INSERT INTO branches (city_id, name, address, latitude, longitude, phone, working_hours, is_active) 
 SELECT 
     c.id,
     'Улица Бакинская, 6А',

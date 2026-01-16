@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "nodemon src/index.js",
     "start": "node src/index.js",
+    "worker": "node src/workers/index.js",
     "init-db": "node src/scripts/init-db.js",
     "migrate": "node src/scripts/migrate.js",
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -30,6 +31,7 @@
     "jsonwebtoken": "^9.0.3",
     "mysql2": "^3.16.0",
     "redis": "^5.10.0",
+    "sharp": "^0.34.5",
     "winston": "^3.19.0",
     "ws": "^8.19.0"
   },

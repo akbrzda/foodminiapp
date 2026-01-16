@@ -1,7 +1,15 @@
 import express from "express";
 import bcrypt from "bcrypt";
+import crypto from "crypto";
+import fs from "fs/promises";
+import path from "path";
+import { fileURLToPath } from "url";
 import db from "../config/database.js";
 import { authenticateToken, requireRole } from "../middleware/auth.js";
+import { telegramQueue, imageQueue, getQueueStats, getFailedJobs, retryFailedJobs, cleanQueue, addImageProcessing } from "../queues/config.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const router = express.Router();
 
@@ -90,6 +98,159 @@ router.get("/users/:id", requireRole("admin", "ceo"), async (req, res, next) => 
     }
 
     res.json({ user });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ===== Клиенты (админ-панель) =====
+router.get("/clients", requireRole("admin", "manager", "ceo"), async (req, res, next) => {
+  try {
+    const { search, city_id, limit = 50, offset = 0 } = req.query;
+
+    let whereClause = "WHERE 1=1";
+    const params = [];
+
+    if (search) {
+      whereClause += " AND (u.phone LIKE ? OR u.first_name LIKE ? OR u.last_name LIKE ?)";
+      params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+    }
+
+    if (req.user.role === "manager") {
+      whereClause += " AND EXISTS (SELECT 1 FROM orders o2 WHERE o2.user_id = u.id AND o2.city_id IN (?))";
+      params.push(req.user.cities);
+    } else if (city_id) {
+      whereClause += " AND EXISTS (SELECT 1 FROM orders o2 WHERE o2.user_id = u.id AND o2.city_id = ?)";
+      params.push(city_id);
+    }
+
+    const query = `
+      SELECT u.id, u.phone, u.first_name, u.last_name, u.email, u.bonus_balance,
+             COUNT(o.id) as orders_count,
+             last_order.created_at as last_order_at,
+             c.name as city_name
+      FROM users u
+      LEFT JOIN orders o ON o.user_id = u.id
+      LEFT JOIN orders last_order ON last_order.id = (
+        SELECT id FROM orders WHERE user_id = u.id ORDER BY created_at DESC LIMIT 1
+      )
+      LEFT JOIN cities c ON c.id = last_order.city_id
+      ${whereClause}
+      GROUP BY u.id
+      ORDER BY last_order_at DESC, u.created_at DESC
+      LIMIT ? OFFSET ?
+    `;
+
+    params.push(parseInt(limit), parseInt(offset));
+
+    const [clients] = await db.query(query, params);
+    res.json({ clients });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/clients/:id/orders", requireRole("admin", "manager", "ceo"), async (req, res, next) => {
+  try {
+    const userId = req.params.id;
+
+    let whereClause = "WHERE o.user_id = ?";
+    const params = [userId];
+
+    if (req.user.role === "manager") {
+      whereClause += " AND o.city_id IN (?)";
+      params.push(req.user.cities);
+    }
+
+    const [orders] = await db.query(
+      `
+      SELECT o.id, o.order_number, o.total, o.status, o.created_at,
+             c.name as city_name, b.name as branch_name
+      FROM orders o
+      LEFT JOIN cities c ON o.city_id = c.id
+      LEFT JOIN branches b ON o.branch_id = b.id
+      ${whereClause}
+      ORDER BY o.created_at DESC
+      LIMIT 20
+      `,
+      params
+    );
+
+    res.json({ orders });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/clients/:id/bonuses", requireRole("admin", "manager", "ceo"), async (req, res, next) => {
+  try {
+    const userId = req.params.id;
+
+    if (req.user.role === "manager") {
+      const [orders] = await db.query("SELECT id FROM orders WHERE user_id = ? AND city_id IN (?) LIMIT 1", [
+        userId,
+        req.user.cities,
+      ]);
+      if (orders.length === 0) {
+        return res.status(403).json({ error: "You do not have access to this user" });
+      }
+    }
+
+    const [transactions] = await db.query(
+      `SELECT id, order_id, type, amount, balance_after, description, created_at
+       FROM bonus_history
+       WHERE user_id = ?
+       ORDER BY created_at DESC
+       LIMIT 50`,
+      [userId]
+    );
+
+    res.json({ transactions });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ===== Загрузка изображений =====
+router.post("/uploads/images", requireRole("admin", "manager", "ceo"), async (req, res, next) => {
+  try {
+    const { data, filename } = req.body || {};
+
+    if (!data) {
+      return res.status(400).json({ error: "data is required" });
+    }
+
+    const matches = data.match(/^data:(.+);base64,(.*)$/);
+    const base64 = matches ? matches[2] : data;
+    const mime = matches ? matches[1] : null;
+
+    const buffer = Buffer.from(base64, "base64");
+    if (buffer.length > 500 * 1024) {
+      return res.status(400).json({ error: "File exceeds 500KB limit" });
+    }
+
+    const extensionFromMime = mime?.split("/")[1] || "png";
+    const safeExtension = extensionFromMime.replace(/[^a-z0-9]/gi, "").slice(0, 6) || "png";
+    const safeName = `${Date.now()}_${crypto.randomBytes(4).toString("hex")}.${safeExtension}`;
+
+    const uploadDir = path.join(__dirname, "../../../uploads");
+    await fs.mkdir(uploadDir, { recursive: true });
+    const filePath = path.join(uploadDir, safeName);
+    await fs.writeFile(filePath, buffer);
+
+    const job = await addImageProcessing({
+      inputPath: filePath,
+      filename: filename || safeName,
+      options: { format: "webp" },
+    });
+
+    res.json({
+      file: {
+        filename: safeName,
+        url: `/uploads/${safeName}`,
+      },
+      jobId: job.id,
+    });
   } catch (error) {
     next(error);
   }
@@ -286,6 +447,125 @@ router.delete("/users/:id", requireRole("admin", "ceo"), async (req, res, next) 
     await db.query("DELETE FROM admin_users WHERE id = ?", [userId]);
 
     res.json({ message: "User deleted successfully" });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ==================== API мониторинга очередей ====================
+
+/**
+ * Получить статистику всех очередей
+ * GET /api/admin/queues
+ */
+router.get("/queues", requireRole("admin", "ceo"), async (req, res, next) => {
+  try {
+    const [telegramStats, imageStats] = await Promise.all([getQueueStats(telegramQueue), getQueueStats(imageQueue)]);
+
+    res.json({
+      queues: {
+        telegram: {
+          name: "Telegram Notifications",
+          ...telegramStats,
+        },
+        images: {
+          name: "Image Processing",
+          ...imageStats,
+        },
+      },
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * Получить список failed задач конкретной очереди
+ * GET /api/admin/queues/:queueType/failed
+ */
+router.get("/queues/:queueType/failed", requireRole("admin", "ceo"), async (req, res, next) => {
+  try {
+    const { queueType } = req.params;
+    const { limit = 50, offset = 0 } = req.query;
+
+    let queue;
+    if (queueType === "telegram") {
+      queue = telegramQueue;
+    } else if (queueType === "images") {
+      queue = imageQueue;
+    } else {
+      return res.status(400).json({ error: "Invalid queue type. Must be 'telegram' or 'images'" });
+    }
+
+    const failedJobs = await getFailedJobs(queue, parseInt(offset), parseInt(offset) + parseInt(limit));
+
+    res.json({
+      queueType,
+      failed: failedJobs,
+      total: failedJobs.length,
+      limit: parseInt(limit),
+      offset: parseInt(offset),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * Повторить failed задачи конкретной очереди
+ * POST /api/admin/queues/:queueType/retry
+ */
+router.post("/queues/:queueType/retry", requireRole("admin", "ceo"), async (req, res, next) => {
+  try {
+    const { queueType } = req.params;
+
+    let queue;
+    if (queueType === "telegram") {
+      queue = telegramQueue;
+    } else if (queueType === "images") {
+      queue = imageQueue;
+    } else {
+      return res.status(400).json({ error: "Invalid queue type. Must be 'telegram' or 'images'" });
+    }
+
+    const retriedCount = await retryFailedJobs(queue);
+
+    res.json({
+      queueType,
+      retriedCount,
+      message: `Successfully retried ${retriedCount} failed jobs`,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * Очистить completed задачи конкретной очереди
+ * POST /api/admin/queues/:queueType/clean
+ */
+router.post("/queues/:queueType/clean", requireRole("admin", "ceo"), async (req, res, next) => {
+  try {
+    const { queueType } = req.params;
+    const { grace = 86400000 } = req.body; // По умолчанию 24 часа
+
+    let queue;
+    if (queueType === "telegram") {
+      queue = telegramQueue;
+    } else if (queueType === "images") {
+      queue = imageQueue;
+    } else {
+      return res.status(400).json({ error: "Invalid queue type. Must be 'telegram' or 'images'" });
+    }
+
+    const cleaned = await cleanQueue(queue, parseInt(grace));
+
+    res.json({
+      queueType,
+      cleanedCount: cleaned.length,
+      message: `Successfully cleaned ${cleaned.length} completed jobs`,
+    });
   } catch (error) {
     next(error);
   }

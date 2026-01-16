@@ -44,31 +44,69 @@
         </div>
         <div class="total-row" v-if="order.bonus_used > 0">
           <span>Оплачено бонусами</span>
-          <span>-{{ formatPrice(order.bonus_used) }} ₽</span>
+          <span class="bonus-used">-{{ formatPrice(order.bonus_used) }} ₽</span>
+        </div>
+        <div class="total-row" v-if="order.bonus_earned > 0">
+          <span>Начислено бонусов</span>
+          <span class="bonus-earned">+{{ formatPrice(order.bonus_earned) }} ₽</span>
         </div>
         <div class="total-row final">
           <span>К оплате</span>
           <span>{{ formatPrice(order.total_amount - order.bonus_used) }} ₽</span>
         </div>
       </div>
+
+      <!-- Кнопка повторения заказа -->
+      <div class="actions" v-if="order.status === 'completed' || order.status === 'cancelled'">
+        <button class="repeat-btn" @click="repeatOrder">
+          <span>🔄</span>
+          Повторить заказ
+        </button>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from "vue";
+import { ref, onMounted, onUnmounted } from "vue";
 import PageHeader from "../components/PageHeader.vue";
-import { useRoute } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
+import { useCartStore } from "../stores/cart";
 import { ordersAPI } from "../api/endpoints";
 import { formatPrice } from "../utils/format";
+import { hapticFeedback } from "../services/telegram";
+import { wsService } from "../services/websocket";
 
 const route = useRoute();
+const router = useRouter();
+const cartStore = useCartStore();
 const order = ref(null);
 const loading = ref(false);
 
+let statusUpdateHandler = null;
+
 onMounted(async () => {
   await loadOrder();
+  setupWebSocketListeners();
 });
+
+onUnmounted(() => {
+  if (statusUpdateHandler) {
+    wsService.off("order_status_update", statusUpdateHandler);
+  }
+});
+
+function setupWebSocketListeners() {
+  // Слушаем обновления статуса заказа
+  statusUpdateHandler = (data) => {
+    if (order.value && data.order_id === order.value.id) {
+      order.value.status = data.status;
+      hapticFeedback("light");
+    }
+  };
+
+  wsService.on("order_status_update", statusUpdateHandler);
+}
 
 async function loadOrder() {
   try {
@@ -80,6 +118,32 @@ async function loadOrder() {
   } finally {
     loading.value = false;
   }
+}
+
+async function repeatOrder() {
+  if (!order.value) return;
+
+  hapticFeedback("medium");
+
+  // Очищаем корзину
+  cartStore.clearCart();
+
+  // Добавляем все товары из заказа в корзину
+  order.value.items.forEach((item) => {
+    for (let i = 0; i < item.quantity; i++) {
+      cartStore.addItem({
+        id: item.item_id,
+        name: item.name,
+        price: item.price,
+        image_url: item.image_url,
+        variant_id: item.variant_id || null,
+        modifiers: item.modifiers || [],
+      });
+    }
+  });
+
+  hapticFeedback("success");
+  router.push("/cart");
 }
 
 function getStatusText(status) {
@@ -243,6 +307,16 @@ function formatDate(dateString) {
   color: var(--color-text-primary);
 }
 
+.total-row .bonus-used {
+  color: #f44336;
+  font-weight: var(--font-weight-semibold);
+}
+
+.total-row .bonus-earned {
+  color: #4caf50;
+  font-weight: var(--font-weight-semibold);
+}
+
 .total-row.final {
   font-size: var(--font-size-h2);
   font-weight: var(--font-weight-bold);
@@ -250,5 +324,39 @@ function formatDate(dateString) {
   border-top: 1px solid var(--color-border);
   margin-top: 4px;
   margin-bottom: 0;
+}
+
+.actions {
+  padding: 0 16px;
+  margin-top: 16px;
+}
+
+.repeat-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px;
+  border: none;
+  border-radius: var(--border-radius-md);
+  background: var(--color-primary);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-h3);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+  transition: background-color 0.2s, transform 0.15s;
+}
+
+.repeat-btn:hover {
+  background: var(--color-primary-hover);
+}
+
+.repeat-btn:active {
+  transform: scale(0.98);
+}
+
+.repeat-btn span {
+  font-size: 20px;
 }
 </style>

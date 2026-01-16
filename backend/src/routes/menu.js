@@ -1,8 +1,48 @@
 import express from "express";
 import db from "../config/database.js";
+import redis from "../config/redis.js";
 import { authenticateToken, requireRole, checkCityAccess } from "../middleware/auth.js";
 
 const router = express.Router();
+const MENU_CACHE_TTL = 300;
+
+async function getMenuCache(cityId) {
+  try {
+    const cached = await redis.get(`menu:city:${cityId}`);
+    return cached ? JSON.parse(cached) : null;
+  } catch (error) {
+    console.error("Failed to read menu cache:", error);
+    return null;
+  }
+}
+
+async function setMenuCache(cityId, payload) {
+  try {
+    await redis.set(`menu:city:${cityId}`, JSON.stringify(payload), "EX", MENU_CACHE_TTL);
+  } catch (error) {
+    console.error("Failed to write menu cache:", error);
+  }
+}
+
+async function invalidateMenuCacheByCity(cityId) {
+  if (!cityId) return;
+  try {
+    await redis.del(`menu:city:${cityId}`);
+  } catch (error) {
+    console.error("Failed to invalidate menu cache:", error);
+  }
+}
+
+async function invalidateAllMenuCache() {
+  try {
+    const keys = await redis.keys("menu:city:*");
+    if (keys.length > 0) {
+      await redis.del(keys);
+    }
+  } catch (error) {
+    console.error("Failed to invalidate all menu cache:", error);
+  }
+}
 
 // ==================== Публичные эндпоинты ====================
 
@@ -13,6 +53,12 @@ router.get("/", async (req, res, next) => {
 
     if (!city_id) {
       return res.status(400).json({ error: "city_id is required" });
+    }
+
+    const cachedMenu = await getMenuCache(city_id);
+    if (cachedMenu) {
+      res.setHeader("X-Cache", "HIT");
+      return res.json(cachedMenu);
     }
 
     // Получаем категории
@@ -29,7 +75,7 @@ router.get("/", async (req, res, next) => {
     for (const category of categories) {
       const [items] = await db.query(
         `SELECT id, category_id, name, description, price, image_url, 
-                weight, calories, sort_order, is_active, created_at, updated_at
+                weight, weight_value, weight_unit, calories, sort_order, is_active, created_at, updated_at
          FROM menu_items
          WHERE category_id = ? AND is_active = TRUE
          ORDER BY sort_order, name`,
@@ -39,7 +85,7 @@ router.get("/", async (req, res, next) => {
       // Для каждой позиции получаем варианты
       for (const item of items) {
         const [variants] = await db.query(
-          `SELECT id, item_id, name, price, sort_order, is_active
+          `SELECT id, item_id, name, price, weight_value, weight_unit, sort_order, is_active
            FROM item_variants
            WHERE item_id = ? AND is_active = TRUE
            ORDER BY sort_order, name`,
@@ -85,7 +131,10 @@ router.get("/", async (req, res, next) => {
       category.items = items;
     }
 
-    res.json({ categories });
+    const payload = { categories };
+    await setMenuCache(city_id, payload);
+    res.setHeader("X-Cache", "MISS");
+    res.json(payload);
   } catch (error) {
     next(error);
   }
@@ -145,7 +194,7 @@ router.get("/categories/:categoryId/items", async (req, res, next) => {
 
     const [items] = await db.query(
       `SELECT id, category_id, name, description, price, image_url, 
-              weight, calories, sort_order, is_active, created_at, updated_at
+              weight, weight_value, weight_unit, calories, sort_order, is_active, created_at, updated_at
        FROM menu_items
        WHERE category_id = ? AND is_active = TRUE
        ORDER BY sort_order, name`,
@@ -155,7 +204,7 @@ router.get("/categories/:categoryId/items", async (req, res, next) => {
     // Для каждой позиции получаем варианты
     for (const item of items) {
       const [variants] = await db.query(
-        `SELECT id, item_id, name, price, sort_order, is_active
+        `SELECT id, item_id, name, price, weight_value, weight_unit, sort_order, is_active
          FROM item_variants
          WHERE item_id = ? AND is_active = TRUE
          ORDER BY sort_order, name`,
@@ -201,7 +250,7 @@ router.get("/items/:id", async (req, res, next) => {
 
     const [items] = await db.query(
       `SELECT id, category_id, name, description, price, image_url, 
-              weight, calories, sort_order, is_active, created_at, updated_at
+              weight, weight_value, weight_unit, calories, sort_order, is_active, created_at, updated_at
        FROM menu_items
        WHERE id = ? AND is_active = TRUE`,
       [itemId]
@@ -215,7 +264,7 @@ router.get("/items/:id", async (req, res, next) => {
 
     // Получаем варианты позиции
     const [variants] = await db.query(
-      `SELECT id, item_id, name, price, sort_order, is_active
+      `SELECT id, item_id, name, price, weight_value, weight_unit, sort_order, is_active
        FROM item_variants
        WHERE item_id = ? AND is_active = TRUE
        ORDER BY sort_order, name`,
@@ -291,7 +340,7 @@ router.get("/items/:itemId/variants", async (req, res, next) => {
     const itemId = req.params.itemId;
 
     const [variants] = await db.query(
-      `SELECT id, item_id, name, price, sort_order, is_active, created_at, updated_at
+      `SELECT id, item_id, name, price, weight_value, weight_unit, sort_order, is_active, created_at, updated_at
        FROM item_variants
        WHERE item_id = ? AND is_active = TRUE
        ORDER BY sort_order, name`,
@@ -324,7 +373,7 @@ router.get("/admin/categories", authenticateToken, requireRole("admin", "manager
 
     const [categories] = await db.query(
       `SELECT id, city_id, name, description, image_url, sort_order, 
-                is_active, gulyash_category_id, created_at, updated_at
+                is_active, created_at, updated_at
          FROM menu_categories
          WHERE city_id = ?
          ORDER BY sort_order, name`,
@@ -363,11 +412,12 @@ router.post("/admin/categories", authenticateToken, requireRole("admin", "manage
 
     const [newCategory] = await db.query(
       `SELECT id, city_id, name, description, image_url, sort_order, 
-                is_active, gulyash_category_id, created_at, updated_at
+                is_active, created_at, updated_at
          FROM menu_categories WHERE id = ?`,
       [result.insertId]
     );
 
+    await invalidateMenuCacheByCity(city_id);
     res.status(201).json({ category: newCategory[0] });
   } catch (error) {
     next(error);
@@ -427,11 +477,12 @@ router.put("/admin/categories/:id", authenticateToken, requireRole("admin", "man
 
     const [updatedCategory] = await db.query(
       `SELECT id, city_id, name, description, image_url, sort_order, 
-                is_active, gulyash_category_id, created_at, updated_at
+                is_active, created_at, updated_at
          FROM menu_categories WHERE id = ?`,
       [categoryId]
     );
 
+    await invalidateMenuCacheByCity(updatedCategory[0]?.city_id);
     res.json({ category: updatedCategory[0] });
   } catch (error) {
     next(error);
@@ -468,6 +519,7 @@ router.delete("/admin/categories/:id", authenticateToken, requireRole("admin", "
 
     await db.query("DELETE FROM menu_categories WHERE id = ?", [categoryId]);
 
+    await invalidateMenuCacheByCity(categories[0].city_id);
     res.json({ message: "Category deleted successfully" });
   } catch (error) {
     next(error);
@@ -495,8 +547,8 @@ router.get("/admin/categories/:categoryId/items", authenticateToken, requireRole
 
     const [items] = await db.query(
       `SELECT id, category_id, name, description, price, image_url, 
-                weight, calories, sort_order, is_active, 
-                gulyash_item_id, created_at, updated_at
+                weight, weight_value, weight_unit, calories, sort_order, is_active, 
+                created_at, updated_at
          FROM menu_items
          WHERE category_id = ?
          ORDER BY sort_order, name`,
@@ -512,7 +564,20 @@ router.get("/admin/categories/:categoryId/items", authenticateToken, requireRole
 // Создать позицию меню (с вариантами и привязкой групп модификаторов)
 router.post("/admin/items", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
   try {
-    const { category_id, name, description, price, image_url, weight, calories, sort_order, variants, modifier_group_ids } = req.body;
+    const {
+      category_id,
+      name,
+      description,
+      price,
+      image_url,
+      weight,
+      weight_value,
+      weight_unit,
+      calories,
+      sort_order,
+      variants,
+      modifier_group_ids,
+    } = req.body;
 
     if (!category_id || !name) {
       return res.status(400).json({
@@ -540,6 +605,7 @@ router.post("/admin/items", authenticateToken, requireRole("admin", "manager", "
         error: "You do not have access to this city",
       });
     }
+    const categoryCityId = categories[0].city_id;
 
     const connection = await db.getConnection();
     try {
@@ -548,9 +614,20 @@ router.post("/admin/items", authenticateToken, requireRole("admin", "manager", "
       // Создаем позицию
       const [result] = await connection.query(
         `INSERT INTO menu_items 
-         (category_id, name, description, price, image_url, weight, calories, sort_order)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [category_id, name, description || null, price || 0, image_url || null, weight || null, calories || null, sort_order || 0]
+         (category_id, name, description, price, image_url, weight, weight_value, weight_unit, calories, sort_order)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          category_id,
+          name,
+          description || null,
+          price || 0,
+          image_url || null,
+          weight || null,
+          weight_value || null,
+          weight_unit || null,
+          calories || null,
+          sort_order || 0,
+        ]
       );
 
       const itemId = result.insertId;
@@ -562,9 +639,9 @@ router.post("/admin/items", authenticateToken, requireRole("admin", "manager", "
             throw new Error("Variant name and price are required");
           }
           await connection.query(
-            `INSERT INTO item_variants (item_id, name, price, sort_order)
-             VALUES (?, ?, ?, ?)`,
-            [itemId, variant.name, variant.price, variant.sort_order || 0]
+            `INSERT INTO item_variants (item_id, name, price, weight_value, weight_unit, sort_order)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+            [itemId, variant.name, variant.price, variant.weight_value || null, variant.weight_unit || null, variant.sort_order || 0]
           );
         }
       }
@@ -575,10 +652,7 @@ router.post("/admin/items", authenticateToken, requireRole("admin", "manager", "
           // Проверяем существование группы
           const [groups] = await connection.query("SELECT id FROM modifier_groups WHERE id = ?", [groupId]);
           if (groups.length > 0) {
-            await connection.query(
-              "INSERT INTO item_modifier_groups (item_id, modifier_group_id) VALUES (?, ?)",
-              [itemId, groupId]
-            );
+            await connection.query("INSERT INTO item_modifier_groups (item_id, modifier_group_id) VALUES (?, ?)", [itemId, groupId]);
           }
         }
       }
@@ -588,14 +662,14 @@ router.post("/admin/items", authenticateToken, requireRole("admin", "manager", "
       // Получаем созданную позицию с вариантами и группами
       const [newItem] = await connection.query(
         `SELECT id, category_id, name, description, price, image_url, 
-                weight, calories, sort_order, is_active, 
-                gulyash_item_id, created_at, updated_at
+                weight, weight_value, weight_unit, calories, sort_order, is_active, 
+                created_at, updated_at
          FROM menu_items WHERE id = ?`,
         [itemId]
       );
 
       const [itemVariants] = await connection.query(
-        `SELECT id, item_id, name, price, sort_order, is_active
+        `SELECT id, item_id, name, price, weight_value, weight_unit, sort_order, is_active
          FROM item_variants WHERE item_id = ?`,
         [itemId]
       );
@@ -611,6 +685,7 @@ router.post("/admin/items", authenticateToken, requireRole("admin", "manager", "
       newItem[0].variants = itemVariants;
       newItem[0].modifier_groups = itemModifierGroups;
 
+      await invalidateMenuCacheByCity(categoryCityId);
       res.status(201).json({ item: newItem[0] });
     } catch (error) {
       await connection.rollback();
@@ -627,7 +702,7 @@ router.post("/admin/items", authenticateToken, requireRole("admin", "manager", "
 router.put("/admin/items/:id", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
   try {
     const itemId = req.params.id;
-    const { category_id, name, description, price, image_url, weight, calories, sort_order, is_active } = req.body;
+    const { category_id, name, description, price, image_url, weight, weight_value, weight_unit, calories, sort_order, is_active } = req.body;
 
     // Проверяем существование позиции
     const [items] = await db.query(
@@ -642,13 +717,14 @@ router.put("/admin/items/:id", authenticateToken, requireRole("admin", "manager"
       return res.status(404).json({ error: "Item not found" });
     }
 
+    const itemCityId = items[0].city_id;
+
     // Проверка доступа к городу для менеджеров
-    if (req.user.role === "manager" && !req.user.cities.includes(items[0].city_id)) {
+    if (req.user.role === "manager" && !req.user.cities.includes(itemCityId)) {
       return res.status(403).json({
         error: "You do not have access to this city",
       });
     }
-
     const updates = [];
     const values = [];
 
@@ -681,6 +757,14 @@ router.put("/admin/items/:id", authenticateToken, requireRole("admin", "manager"
       updates.push("weight = ?");
       values.push(weight);
     }
+    if (weight_value !== undefined) {
+      updates.push("weight_value = ?");
+      values.push(weight_value);
+    }
+    if (weight_unit !== undefined) {
+      updates.push("weight_unit = ?");
+      values.push(weight_unit);
+    }
     if (calories !== undefined) {
       updates.push("calories = ?");
       values.push(calories);
@@ -703,12 +787,13 @@ router.put("/admin/items/:id", authenticateToken, requireRole("admin", "manager"
 
     const [updatedItem] = await db.query(
       `SELECT id, category_id, name, description, price, image_url, 
-                weight, calories, sort_order, is_active, 
-                gulyash_item_id, created_at, updated_at
+                weight, weight_value, weight_unit, calories, sort_order, is_active, 
+                created_at, updated_at
          FROM menu_items WHERE id = ?`,
       [itemId]
     );
 
+    await invalidateMenuCacheByCity(itemCityId);
     res.json({ item: updatedItem[0] });
   } catch (error) {
     next(error);
@@ -742,6 +827,7 @@ router.delete("/admin/items/:id", authenticateToken, requireRole("admin", "manag
 
     await db.query("DELETE FROM menu_items WHERE id = ?", [itemId]);
 
+    await invalidateMenuCacheByCity(items[0].city_id);
     res.json({ message: "Item deleted successfully" });
   } catch (error) {
     next(error);
@@ -775,7 +861,7 @@ router.get("/admin/items/:itemId/modifiers", authenticateToken, requireRole("adm
 
     const [modifiers] = await db.query(
       `SELECT id, item_id, name, price, is_required, is_active, 
-                gulyash_modifier_id, created_at, updated_at
+                created_at, updated_at
          FROM menu_modifiers
          WHERE item_id = ?
          ORDER BY name`,
@@ -783,157 +869,6 @@ router.get("/admin/items/:itemId/modifiers", authenticateToken, requireRole("adm
     );
 
     res.json({ modifiers });
-  } catch (error) {
-    next(error);
-  }
-});
-
-// Создать модификатор
-router.post("/admin/modifiers", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
-  try {
-    const { item_id, name, price, is_required } = req.body;
-
-    if (!item_id || !name) {
-      return res.status(400).json({
-        error: "item_id and name are required",
-      });
-    }
-
-    // Проверяем существование позиции и доступ
-    const [items] = await db.query(
-      `SELECT mi.id, mc.city_id 
-         FROM menu_items mi
-         JOIN menu_categories mc ON mi.category_id = mc.id
-         WHERE mi.id = ?`,
-      [item_id]
-    );
-
-    if (items.length === 0) {
-      return res.status(404).json({ error: "Item not found" });
-    }
-
-    // Проверка доступа к городу для менеджеров
-    if (req.user.role === "manager" && !req.user.cities.includes(items[0].city_id)) {
-      return res.status(403).json({
-        error: "You do not have access to this city",
-      });
-    }
-
-    const [result] = await db.query(
-      `INSERT INTO menu_modifiers (item_id, name, price, is_required)
-         VALUES (?, ?, ?, ?)`,
-      [item_id, name, price || 0, is_required || false]
-    );
-
-    const [newModifier] = await db.query(
-      `SELECT id, item_id, name, price, is_required, is_active, 
-                gulyash_modifier_id, created_at, updated_at
-         FROM menu_modifiers WHERE id = ?`,
-      [result.insertId]
-    );
-
-    res.status(201).json({ modifier: newModifier[0] });
-  } catch (error) {
-    next(error);
-  }
-});
-
-// Обновить модификатор
-router.put("/admin/modifiers/:id", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
-  try {
-    const modifierId = req.params.id;
-    const { name, price, is_required, is_active } = req.body;
-
-    // Проверяем существование модификатора и доступ
-    const [modifiers] = await db.query(
-      `SELECT mm.id, mc.city_id 
-         FROM menu_modifiers mm
-         JOIN menu_items mi ON mm.item_id = mi.id
-         JOIN menu_categories mc ON mi.category_id = mc.id
-         WHERE mm.id = ?`,
-      [modifierId]
-    );
-
-    if (modifiers.length === 0) {
-      return res.status(404).json({ error: "Modifier not found" });
-    }
-
-    // Проверка доступа к городу для менеджеров
-    if (req.user.role === "manager" && !req.user.cities.includes(modifiers[0].city_id)) {
-      return res.status(403).json({
-        error: "You do not have access to this city",
-      });
-    }
-
-    const updates = [];
-    const values = [];
-
-    if (name !== undefined) {
-      updates.push("name = ?");
-      values.push(name);
-    }
-    if (price !== undefined) {
-      updates.push("price = ?");
-      values.push(price);
-    }
-    if (is_required !== undefined) {
-      updates.push("is_required = ?");
-      values.push(is_required);
-    }
-    if (is_active !== undefined) {
-      updates.push("is_active = ?");
-      values.push(is_active);
-    }
-
-    if (updates.length === 0) {
-      return res.status(400).json({ error: "No fields to update" });
-    }
-
-    values.push(modifierId);
-    await db.query(`UPDATE menu_modifiers SET ${updates.join(", ")} WHERE id = ?`, values);
-
-    const [updatedModifier] = await db.query(
-      `SELECT id, item_id, name, price, is_required, is_active, 
-                gulyash_modifier_id, created_at, updated_at
-         FROM menu_modifiers WHERE id = ?`,
-      [modifierId]
-    );
-
-    res.json({ modifier: updatedModifier[0] });
-  } catch (error) {
-    next(error);
-  }
-});
-
-// Удалить модификатор
-router.delete("/admin/modifiers/:id", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
-  try {
-    const modifierId = req.params.id;
-
-    // Проверяем существование модификатора и доступ
-    const [modifiers] = await db.query(
-      `SELECT mm.id, mc.city_id 
-         FROM menu_modifiers mm
-         JOIN menu_items mi ON mm.item_id = mi.id
-         JOIN menu_categories mc ON mi.category_id = mc.id
-         WHERE mm.id = ?`,
-      [modifierId]
-    );
-
-    if (modifiers.length === 0) {
-      return res.status(404).json({ error: "Modifier not found" });
-    }
-
-    // Проверка доступа к городу для менеджеров
-    if (req.user.role === "manager" && !req.user.cities.includes(modifiers[0].city_id)) {
-      return res.status(403).json({
-        error: "You do not have access to this city",
-      });
-    }
-
-    await db.query("DELETE FROM menu_modifiers WHERE id = ?", [modifierId]);
-
-    res.json({ message: "Modifier deleted successfully" });
   } catch (error) {
     next(error);
   }
@@ -967,7 +902,7 @@ router.get("/admin/items/:itemId/variants", authenticateToken, requireRole("admi
     }
 
     const [variants] = await db.query(
-      `SELECT id, item_id, name, price, sort_order, is_active, created_at, updated_at
+      `SELECT id, item_id, name, price, weight_value, weight_unit, sort_order, is_active, created_at, updated_at
        FROM item_variants
        WHERE item_id = ?
        ORDER BY sort_order, name`,
@@ -984,7 +919,7 @@ router.get("/admin/items/:itemId/variants", authenticateToken, requireRole("admi
 router.post("/admin/items/:itemId/variants", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
   try {
     const itemId = req.params.itemId;
-    const { name, price, sort_order } = req.body;
+    const { name, price, weight_value, weight_unit, sort_order } = req.body;
 
     if (!name || price === undefined) {
       return res.status(400).json({
@@ -1013,17 +948,18 @@ router.post("/admin/items/:itemId/variants", authenticateToken, requireRole("adm
     }
 
     const [result] = await db.query(
-      `INSERT INTO item_variants (item_id, name, price, sort_order)
-       VALUES (?, ?, ?, ?)`,
-      [itemId, name, price, sort_order || 0]
+      `INSERT INTO item_variants (item_id, name, price, weight_value, weight_unit, sort_order)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [itemId, name, price, weight_value || null, weight_unit || null, sort_order || 0]
     );
 
     const [newVariant] = await db.query(
-      `SELECT id, item_id, name, price, sort_order, is_active, created_at, updated_at
+      `SELECT id, item_id, name, price, weight_value, weight_unit, sort_order, is_active, created_at, updated_at
        FROM item_variants WHERE id = ?`,
       [result.insertId]
     );
 
+    await invalidateMenuCacheByCity(itemCityId);
     res.status(201).json({ variant: newVariant[0] });
   } catch (error) {
     next(error);
@@ -1034,7 +970,7 @@ router.post("/admin/items/:itemId/variants", authenticateToken, requireRole("adm
 router.put("/admin/variants/:id", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
   try {
     const variantId = req.params.id;
-    const { name, price, sort_order, is_active } = req.body;
+    const { name, price, weight_value, weight_unit, sort_order, is_active } = req.body;
 
     // Проверяем существование варианта и доступ
     const [variants] = await db.query(
@@ -1056,6 +992,7 @@ router.put("/admin/variants/:id", authenticateToken, requireRole("admin", "manag
         error: "You do not have access to this city",
       });
     }
+    const variantCityId = variants[0].city_id;
 
     const updates = [];
     const values = [];
@@ -1067,6 +1004,14 @@ router.put("/admin/variants/:id", authenticateToken, requireRole("admin", "manag
     if (price !== undefined) {
       updates.push("price = ?");
       values.push(price);
+    }
+    if (weight_value !== undefined) {
+      updates.push("weight_value = ?");
+      values.push(weight_value);
+    }
+    if (weight_unit !== undefined) {
+      updates.push("weight_unit = ?");
+      values.push(weight_unit);
     }
     if (sort_order !== undefined) {
       updates.push("sort_order = ?");
@@ -1085,11 +1030,12 @@ router.put("/admin/variants/:id", authenticateToken, requireRole("admin", "manag
     await db.query(`UPDATE item_variants SET ${updates.join(", ")} WHERE id = ?`, values);
 
     const [updatedVariant] = await db.query(
-      `SELECT id, item_id, name, price, sort_order, is_active, created_at, updated_at
+      `SELECT id, item_id, name, price, weight_value, weight_unit, sort_order, is_active, created_at, updated_at
        FROM item_variants WHERE id = ?`,
       [variantId]
     );
 
+    await invalidateMenuCacheByCity(variantCityId);
     res.json({ variant: updatedVariant[0] });
   } catch (error) {
     next(error);
@@ -1121,9 +1067,11 @@ router.delete("/admin/variants/:id", authenticateToken, requireRole("admin", "ma
         error: "You do not have access to this city",
       });
     }
+    const variantCityId = variants[0].city_id;
 
     await db.query("DELETE FROM item_variants WHERE id = ?", [variantId]);
 
+    await invalidateMenuCacheByCity(variantCityId);
     res.json({ message: "Variant deleted successfully" });
   } catch (error) {
     next(error);
@@ -1282,6 +1230,7 @@ router.post("/admin/modifier-groups", authenticateToken, requireRole("admin", "m
 
       newGroup[0].modifiers = groupModifiers;
 
+      await invalidateAllMenuCache();
       res.status(201).json({ modifier_group: newGroup[0] });
     } catch (error) {
       await connection.rollback();
@@ -1343,6 +1292,7 @@ router.put("/admin/modifier-groups/:id", authenticateToken, requireRole("admin",
       [groupId]
     );
 
+    await invalidateAllMenuCache();
     res.json({ modifier_group: updatedGroup[0] });
   } catch (error) {
     next(error);
@@ -1362,10 +1312,7 @@ router.delete("/admin/modifier-groups/:id", authenticateToken, requireRole("admi
     }
 
     // Проверяем, используется ли группа в позициях
-    const [items] = await db.query(
-      "SELECT COUNT(*) as count FROM item_modifier_groups WHERE modifier_group_id = ?",
-      [groupId]
-    );
+    const [items] = await db.query("SELECT COUNT(*) as count FROM item_modifier_groups WHERE modifier_group_id = ?", [groupId]);
 
     if (items[0].count > 0) {
       return res.status(400).json({
@@ -1375,6 +1322,7 @@ router.delete("/admin/modifier-groups/:id", authenticateToken, requireRole("admi
 
     await db.query("DELETE FROM modifier_groups WHERE id = ?", [groupId]);
 
+    await invalidateAllMenuCache();
     res.json({ message: "Modifier group deleted successfully" });
   } catch (error) {
     next(error);
@@ -1410,6 +1358,7 @@ router.post("/admin/items/:itemId/modifier-groups", authenticateToken, requireRo
         error: "You do not have access to this city",
       });
     }
+    const itemCityId = items[0].city_id;
 
     // Проверяем существование группы
     const [groups] = await db.query("SELECT id FROM modifier_groups WHERE id = ?", [modifier_group_id]);
@@ -1419,21 +1368,55 @@ router.post("/admin/items/:itemId/modifier-groups", authenticateToken, requireRo
     }
 
     // Проверяем, не привязана ли уже группа
-    const [existing] = await db.query(
-      "SELECT id FROM item_modifier_groups WHERE item_id = ? AND modifier_group_id = ?",
-      [itemId, modifier_group_id]
-    );
+    const [existing] = await db.query("SELECT id FROM item_modifier_groups WHERE item_id = ? AND modifier_group_id = ?", [itemId, modifier_group_id]);
 
     if (existing.length > 0) {
       return res.status(400).json({ error: "Modifier group is already associated with this item" });
     }
 
-    await db.query(
-      "INSERT INTO item_modifier_groups (item_id, modifier_group_id) VALUES (?, ?)",
-      [itemId, modifier_group_id]
+    await db.query("INSERT INTO item_modifier_groups (item_id, modifier_group_id) VALUES (?, ?)", [itemId, modifier_group_id]);
+
+    await invalidateMenuCacheByCity(itemCityId);
+    res.status(201).json({ message: "Modifier group associated with item successfully" });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Получить группы модификаторов позиции
+router.get("/admin/items/:itemId/modifier-groups", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
+  try {
+    const itemId = req.params.itemId;
+
+    // Проверяем существование позиции и доступ
+    const [items] = await db.query(
+      `SELECT mi.id, mc.city_id 
+       FROM menu_items mi
+       JOIN menu_categories mc ON mi.category_id = mc.id
+       WHERE mi.id = ?`,
+      [itemId]
     );
 
-    res.status(201).json({ message: "Modifier group associated with item successfully" });
+    if (items.length === 0) {
+      return res.status(404).json({ error: "Item not found" });
+    }
+
+    if (req.user.role === "manager" && !req.user.cities.includes(items[0].city_id)) {
+      return res.status(403).json({
+        error: "You do not have access to this city",
+      });
+    }
+
+    const [groups] = await db.query(
+      `SELECT mg.id, mg.name, mg.type, mg.is_required
+       FROM modifier_groups mg
+       JOIN item_modifier_groups img ON mg.id = img.modifier_group_id
+       WHERE img.item_id = ?
+       ORDER BY mg.name`,
+      [itemId]
+    );
+
+    res.json({ modifier_groups: groups });
   } catch (error) {
     next(error);
   }
@@ -1464,12 +1447,11 @@ router.delete("/admin/items/:itemId/modifier-groups/:groupId", authenticateToken
         error: "You do not have access to this city",
       });
     }
+    const itemCityId = items[0].city_id;
 
-    await db.query(
-      "DELETE FROM item_modifier_groups WHERE item_id = ? AND modifier_group_id = ?",
-      [itemId, groupId]
-    );
+    await db.query("DELETE FROM item_modifier_groups WHERE item_id = ? AND modifier_group_id = ?", [itemId, groupId]);
 
+    await invalidateMenuCacheByCity(itemCityId);
     res.json({ message: "Modifier group unassociated from item successfully" });
   } catch (error) {
     next(error);
@@ -1528,6 +1510,7 @@ router.post("/admin/modifier-groups/:groupId/modifiers", authenticateToken, requ
       [result.insertId]
     );
 
+    await invalidateAllMenuCache();
     res.status(201).json({ modifier: newModifier[0] });
   } catch (error) {
     next(error);
@@ -1580,6 +1563,7 @@ router.put("/admin/modifiers/:id", authenticateToken, requireRole("admin", "mana
       [modifierId]
     );
 
+    await invalidateAllMenuCache();
     res.json({ modifier: updatedModifier[0] });
   } catch (error) {
     next(error);
@@ -1600,6 +1584,7 @@ router.delete("/admin/modifiers/:id", authenticateToken, requireRole("admin", "m
 
     await db.query("DELETE FROM modifiers WHERE id = ?", [modifierId]);
 
+    await invalidateAllMenuCache();
     res.json({ message: "Modifier deleted successfully" });
   } catch (error) {
     next(error);

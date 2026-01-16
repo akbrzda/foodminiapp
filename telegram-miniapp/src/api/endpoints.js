@@ -40,6 +40,11 @@ export const citiesAPI = {
 };
 
 export const menuAPI = {
+  // Получить полное меню города
+  getMenu(cityId) {
+    return api.get(`/menu`, { params: { city_id: cityId } });
+  },
+
   // Получить категории меню
   getCategories(cityId) {
     return api.get(`/menu/categories`, { params: { city_id: cityId } });
@@ -91,7 +96,12 @@ export const bonusesAPI = {
 
   // Получить историю бонусов
   getHistory() {
-    return api.get("/bonuses/history");
+    return api.get("/bonuses/history").then((response) => ({
+      ...response,
+      data: {
+        transactions: response.data.history || [],
+      },
+    }));
   },
 };
 
