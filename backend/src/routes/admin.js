@@ -150,6 +150,128 @@ router.get("/clients", requireRole("admin", "manager", "ceo"), async (req, res, 
   }
 });
 
+const ensureManagerClientAccess = async (req, userId) => {
+  if (req.user.role !== "manager") return true;
+  const [orders] = await db.query("SELECT id FROM orders WHERE user_id = ? AND city_id IN (?) LIMIT 1", [userId, req.user.cities]);
+  return orders.length > 0;
+};
+
+router.get("/clients/:id", requireRole("admin", "manager", "ceo"), async (req, res, next) => {
+  try {
+    const userId = req.params.id;
+
+    const hasAccess = await ensureManagerClientAccess(req, userId);
+    if (!hasAccess) {
+      return res.status(403).json({ error: "You do not have access to this user" });
+    }
+
+    const [users] = await db.query(
+      `SELECT u.id, u.phone, u.first_name, u.last_name, u.email, u.bonus_balance, u.created_at,
+              c.name as city_name
+       FROM users u
+       LEFT JOIN orders o ON o.id = (
+         SELECT id FROM orders WHERE user_id = u.id ORDER BY created_at DESC LIMIT 1
+       )
+       LEFT JOIN cities c ON c.id = o.city_id
+       WHERE u.id = ?`,
+      [userId]
+    );
+
+    if (users.length === 0) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    res.json({ user: users[0] });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.put("/clients/:id", requireRole("admin", "manager", "ceo"), async (req, res, next) => {
+  try {
+    const userId = req.params.id;
+    const { phone, first_name, last_name, email } = req.body;
+
+    const hasAccess = await ensureManagerClientAccess(req, userId);
+    if (!hasAccess) {
+      return res.status(403).json({ error: "You do not have access to this user" });
+    }
+
+    const [users] = await db.query("SELECT id FROM users WHERE id = ?", [userId]);
+    if (users.length === 0) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    await db.query("UPDATE users SET phone = ?, first_name = ?, last_name = ?, email = ? WHERE id = ?", [
+      phone || null,
+      first_name || null,
+      last_name || null,
+      email || null,
+      userId,
+    ]);
+
+    const [updated] = await db.query(
+      `SELECT u.id, u.phone, u.first_name, u.last_name, u.email, u.bonus_balance, u.created_at,
+              c.name as city_name
+       FROM users u
+       LEFT JOIN orders o ON o.id = (
+         SELECT id FROM orders WHERE user_id = u.id ORDER BY created_at DESC LIMIT 1
+       )
+       LEFT JOIN cities c ON c.id = o.city_id
+       WHERE u.id = ?`,
+      [userId]
+    );
+
+    res.json({ user: updated[0] });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/clients/:id/bonuses", requireRole("admin", "manager", "ceo"), async (req, res, next) => {
+  try {
+    const userId = req.params.id;
+    const { amount, mode = "add", description } = req.body;
+
+    const hasAccess = await ensureManagerClientAccess(req, userId);
+    if (!hasAccess) {
+      return res.status(403).json({ error: "You do not have access to this user" });
+    }
+
+    const parsedAmount = Number(amount);
+    if (!Number.isFinite(parsedAmount)) {
+      return res.status(400).json({ error: "Amount must be a number" });
+    }
+
+    const [users] = await db.query("SELECT bonus_balance FROM users WHERE id = ?", [userId]);
+    if (users.length === 0) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    const currentBalance = parseFloat(users[0].bonus_balance) || 0;
+    let newBalance = currentBalance;
+
+    if (mode === "set") {
+      newBalance = Math.max(0, parsedAmount);
+    } else {
+      newBalance = Math.max(0, currentBalance + parsedAmount);
+    }
+
+    await db.query("UPDATE users SET bonus_balance = ? WHERE id = ?", [newBalance, userId]);
+
+    await db.query("INSERT INTO bonus_history (user_id, order_id, type, amount, balance_after, description) VALUES (?, NULL, 'manual', ?, ?, ?)", [
+      userId,
+      parsedAmount,
+      newBalance,
+      description || (mode === "set" ? "Ручная установка бонусов" : "Ручное изменение бонусов"),
+    ]);
+
+    res.json({ balance: newBalance });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.get("/clients/:id/orders", requireRole("admin", "manager", "ceo"), async (req, res, next) => {
   try {
     const userId = req.params.id;
@@ -165,6 +287,7 @@ router.get("/clients/:id/orders", requireRole("admin", "manager", "ceo"), async 
     const [orders] = await db.query(
       `
       SELECT o.id, o.order_number, o.total, o.status, o.created_at,
+             (SELECT COUNT(*) FROM order_items WHERE order_id = o.id) as items_count,
              c.name as city_name, b.name as branch_name
       FROM orders o
       LEFT JOIN cities c ON o.city_id = c.id
@@ -187,10 +310,7 @@ router.get("/clients/:id/bonuses", requireRole("admin", "manager", "ceo"), async
     const userId = req.params.id;
 
     if (req.user.role === "manager") {
-      const [orders] = await db.query("SELECT id FROM orders WHERE user_id = ? AND city_id IN (?) LIMIT 1", [
-        userId,
-        req.user.cities,
-      ]);
+      const [orders] = await db.query("SELECT id FROM orders WHERE user_id = ? AND city_id IN (?) LIMIT 1", [userId, req.user.cities]);
       if (orders.length === 0) {
         return res.status(403).json({ error: "You do not have access to this user" });
       }
@@ -341,7 +461,7 @@ router.put("/users/:id", requireRole("admin", "ceo"), async (req, res, next) => 
       values.push(email);
     }
 
-    if (password !== undefined) {
+    if (password !== undefined && password !== "") {
       const passwordHash = await bcrypt.hash(password, 10);
       updates.push("password_hash = ?");
       values.push(passwordHash);
@@ -369,8 +489,9 @@ router.put("/users/:id", requireRole("admin", "ceo"), async (req, res, next) => 
     }
 
     if (telegram_id !== undefined) {
+      const normalizedTelegramId = telegram_id === "" ? null : telegram_id;
       updates.push("telegram_id = ?");
-      values.push(telegram_id);
+      values.push(normalizedTelegramId);
     }
 
     if (is_active !== undefined) {

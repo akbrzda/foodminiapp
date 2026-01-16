@@ -14,45 +14,123 @@
 
       <div class="section">
         <h3>Состав заказа</h3>
-        <div class="items-list">
+        <div v-if="order.items && order.items.length > 0" class="items-list">
           <div v-for="item in order.items" :key="item.id" class="item-row">
             <div class="item-info">
-              <div>{{ item.name }}</div>
-              <div class="item-qty">× {{ item.quantity }}</div>
+              <div class="item-name">
+                {{ item.item_name }}
+                <span v-if="item.variant_name" class="variant">({{ item.variant_name }})</span>
+              </div>
+              <div class="item-qty">× {{ item.quantity }} • {{ formatPrice(item.item_price) }} ₽</div>
+              <div v-if="item.modifiers && item.modifiers.length > 0" class="item-modifiers">
+                <div v-for="mod in item.modifiers" :key="mod.id" class="modifier">
+                  + {{ mod.modifier_name }} (+{{ formatPrice(mod.modifier_price) }} ₽)
+                </div>
+              </div>
             </div>
-            <div class="item-price">{{ formatPrice(item.price * item.quantity) }} ₽</div>
+            <div class="item-price">{{ formatPrice(item.subtotal) }} ₽</div>
           </div>
         </div>
+        <div v-else class="empty-state">Заказ пуст</div>
       </div>
 
       <div class="section" v-if="order.order_type === 'delivery'">
         <h3>Адрес доставки</h3>
-        <p>{{ order.delivery_address }}</p>
+        <div class="delivery-info">
+          <div class="info-row" v-if="formatDeliveryAddress(order)">
+            <span class="label">Адрес:</span>
+            <span>{{ formatDeliveryAddress(order) }}</span>
+          </div>
+          <div class="info-row">
+            <span class="label">Город:</span>
+            <span>{{ order.city_name }}</span>
+          </div>
+          <div class="info-row" v-if="order.delivery_street">
+            <span class="label">Улица:</span>
+            <span>{{ order.delivery_street }}</span>
+          </div>
+          <div class="info-row" v-if="order.delivery_house">
+            <span class="label">Дом:</span>
+            <span>{{ order.delivery_house }}</span>
+          </div>
+          <div class="info-row" v-if="order.delivery_apartment">
+            <span class="label">Квартира:</span>
+            <span>{{ order.delivery_apartment }}</span>
+          </div>
+          <div class="info-row" v-if="order.delivery_entrance">
+            <span class="label">Подъезд:</span>
+            <span>{{ order.delivery_entrance }}</span>
+          </div>
+          <div class="info-row" v-if="order.delivery_floor">
+            <span class="label">Этаж:</span>
+            <span>{{ order.delivery_floor }}</span>
+          </div>
+          <div class="info-row" v-if="order.delivery_intercom">
+            <span class="label">Код двери:</span>
+            <span>{{ order.delivery_intercom }}</span>
+          </div>
+          <div class="info-row" v-if="order.delivery_comment">
+            <span class="label">Комментарий к адресу:</span>
+            <span>{{ order.delivery_comment }}</span>
+          </div>
+          <div class="info-row" v-if="order.comment">
+            <span class="label">Комментарий к заказу:</span>
+            <span>{{ order.comment }}</span>
+          </div>
+        </div>
       </div>
 
       <div class="section" v-else>
         <h3>Самовывоз</h3>
-        <p>{{ order.branch_name }}</p>
-        <p class="text-secondary">{{ order.branch_address }}</p>
+        <div class="pickup-info">
+          <div class="info-row">
+            <span class="label">Филиал:</span>
+            <span>{{ order.branch_name }}</span>
+          </div>
+          <div class="info-row" v-if="order.branch_address">
+            <span class="label">Адрес:</span>
+            <span>{{ order.branch_address }}</span>
+          </div>
+          <div class="info-row" v-if="order.comment">
+            <span class="label">Комментарий к заказу:</span>
+            <span>{{ order.comment }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="section" v-if="order.payment_method === 'cash' && order.change_from">
+        <h3>Оплата</h3>
+        <div class="info-row">
+          <span class="label">Сдача с:</span>
+          <span>{{ formatPrice(order.change_from) }} ₽</span>
+        </div>
+        <div class="info-row">
+          <span class="label">Сдача:</span>
+          <span>{{ formatPrice(getChangeAmount(order)) }} ₽</span>
+        </div>
       </div>
 
       <div class="section">
         <h3>Итого</h3>
         <div class="total-row">
-          <span>Товары</span>
-          <span>{{ formatPrice(order.total_amount) }} ₽</span>
+          <span>Сумма без скидок</span>
+          <span>{{ formatPrice(order.subtotal) }} ₽</span>
+        </div>
+        <div class="total-row" v-if="order.delivery_cost > 0">
+          <span>Доставка</span>
+          <span>{{ formatPrice(order.delivery_cost) }} ₽</span>
         </div>
         <div class="total-row" v-if="order.bonus_used > 0">
-          <span>Оплачено бонусами</span>
-          <span class="bonus-used">-{{ formatPrice(order.bonus_used) }} ₽</span>
+          <span>Списано бонусов</span>
+          <span class="bonus-used">-{{ formatPrice(order.bonus_used) }} бонусов</span>
         </div>
-        <div class="total-row" v-if="order.bonus_earned > 0">
+        <div class="total-row" v-if="order.bonuses_earned > 0">
           <span>Начислено бонусов</span>
-          <span class="bonus-earned">+{{ formatPrice(order.bonus_earned) }} ₽</span>
+          <span class="bonus-earned">{{ formatPrice(order.bonuses_earned) }} бонусов</span>
         </div>
         <div class="total-row final">
           <span>К оплате</span>
-          <span>{{ formatPrice(order.total_amount - order.bonus_used) }} ₽</span>
+          <span>{{ formatPrice(order.total) }} ₽</span>
         </div>
       </div>
 
@@ -92,20 +170,20 @@ onMounted(async () => {
 
 onUnmounted(() => {
   if (statusUpdateHandler) {
-    wsService.off("order_status_update", statusUpdateHandler);
+    wsService.off("order-status-updated", statusUpdateHandler);
   }
 });
 
 function setupWebSocketListeners() {
   // Слушаем обновления статуса заказа
   statusUpdateHandler = (data) => {
-    if (order.value && data.order_id === order.value.id) {
-      order.value.status = data.status;
+    if (order.value && data.orderId === order.value.id) {
+      order.value.status = data.newStatus;
       hapticFeedback("light");
     }
   };
 
-  wsService.on("order_status_update", statusUpdateHandler);
+  wsService.on("order-status-updated", statusUpdateHandler);
 }
 
 async function loadOrder() {
@@ -130,16 +208,27 @@ async function repeatOrder() {
 
   // Добавляем все товары из заказа в корзину
   order.value.items.forEach((item) => {
-    for (let i = 0; i < item.quantity; i++) {
-      cartStore.addItem({
-        id: item.item_id,
-        name: item.name,
-        price: item.price,
-        image_url: item.image_url,
-        variant_id: item.variant_id || null,
-        modifiers: item.modifiers || [],
-      });
-    }
+    const modifiers = (item.modifiers || []).map((mod) => ({
+      id: mod.modifier_id || mod.old_modifier_id || mod.id,
+      name: mod.modifier_name || mod.name,
+      price: Number(mod.modifier_price || mod.price || 0),
+      group_id: mod.modifier_group_id || mod.group_id || null,
+    }));
+
+    const modifiersTotal = modifiers.reduce((sum, mod) => sum + (Number(mod.price) || 0), 0);
+    const basePrice = Number(item.item_price || item.price || 0);
+    const unitPrice = basePrice + modifiersTotal;
+
+    cartStore.addItem({
+      id: item.item_id || item.id,
+      name: item.item_name || item.name,
+      price: unitPrice,
+      image_url: item.image_url || null,
+      variant_id: item.variant_id || null,
+      variant_name: item.variant_name || null,
+      modifiers: modifiers,
+      quantity: item.quantity || 1,
+    });
   });
 
   hapticFeedback("success");
@@ -147,15 +236,28 @@ async function repeatOrder() {
 }
 
 function getStatusText(status) {
-  const statuses = {
+  const isDelivery = order.value?.order_type === "delivery";
+
+  const deliveryStatuses = {
     pending: "Ожидает подтверждения",
     confirmed: "Подтвержден",
     preparing: "Готовится",
-    ready: "Готов к выдаче",
+    ready: "Готов",
     delivering: "В пути",
     completed: "Доставлен",
     cancelled: "Отменен",
   };
+
+  const pickupStatuses = {
+    pending: "Ожидает подтверждения",
+    confirmed: "Подтвержден",
+    preparing: "Готовится",
+    ready: "Готов к выдаче",
+    completed: "Выдан",
+    cancelled: "Отменен",
+  };
+
+  const statuses = isDelivery ? deliveryStatuses : pickupStatuses;
   return statuses[status] || status;
 }
 
@@ -168,6 +270,22 @@ function formatDate(dateString) {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function formatDeliveryAddress(orderData) {
+  if (!orderData) return "";
+  const parts = [orderData.delivery_street, orderData.delivery_house, orderData.delivery_apartment]
+    .map((value) => (value ? String(value).trim() : ""))
+    .filter(Boolean);
+  return parts.join(", ");
+}
+
+function getChangeAmount(orderData) {
+  if (!orderData) return 0;
+  const changeFrom = Number(orderData.change_from || 0);
+  const total = Number(orderData.total || 0);
+  if (!Number.isFinite(changeFrom) || !Number.isFinite(total)) return 0;
+  return Math.max(0, changeFrom - total);
 }
 </script>
 
@@ -260,6 +378,26 @@ function formatDate(dateString) {
   font-size: var(--font-size-body);
 }
 
+.delivery-info,
+.pickup-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--font-size-body);
+  color: var(--color-text-primary);
+}
+
+.info-row .label {
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-medium);
+  min-width: 100px;
+}
+
 .text-secondary {
   font-size: var(--font-size-caption);
   color: var(--color-text-muted);
@@ -275,22 +413,51 @@ function formatDate(dateString) {
 .item-row {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
+  padding: 12px;
+  background: var(--color-background-secondary);
+  border-radius: var(--border-radius-sm);
 }
 
 .item-info {
   flex: 1;
 }
 
-.item-info > div:first-child {
+.item-name {
   font-size: var(--font-size-body);
   color: var(--color-text-primary);
+  font-weight: var(--font-weight-semibold);
+}
+
+.variant {
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-normal);
+  font-size: var(--font-size-caption);
 }
 
 .item-qty {
   font-size: var(--font-size-caption);
   color: var(--color-text-secondary);
   margin-top: 4px;
+}
+
+.item-modifiers {
+  margin-top: 8px;
+  padding-left: 12px;
+  border-left: 2px solid var(--color-border);
+}
+
+.modifier {
+  font-size: var(--font-size-caption);
+  color: var(--color-text-muted);
+  margin-top: 4px;
+}
+
+.empty-state {
+  text-align: center;
+  color: var(--color-text-secondary);
+  padding: 24px;
+  font-size: var(--font-size-body);
 }
 
 .item-price {

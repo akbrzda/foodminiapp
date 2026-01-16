@@ -38,6 +38,16 @@ export const useLocationStore = defineStore("location", {
       const raw = localStorage.getItem("deliveryDetails");
       return raw ? JSON.parse(raw) : null;
     })(),
+    deliveryZoneByCity: JSON.parse(localStorage.getItem("deliveryZoneByCity") || "{}"),
+    deliveryZone: (() => {
+      const storedCity = JSON.parse(localStorage.getItem("selectedCity") || "null");
+      const zoneByCity = JSON.parse(localStorage.getItem("deliveryZoneByCity") || "{}");
+      if (storedCity?.id && zoneByCity[storedCity.id]) {
+        return zoneByCity[storedCity.id];
+      }
+      const raw = localStorage.getItem("deliveryZone");
+      return raw ? JSON.parse(raw) : null;
+    })(),
   }),
 
   getters: {
@@ -58,6 +68,8 @@ export const useLocationStore = defineStore("location", {
         localStorage.setItem("deliveryCoordsByCity", JSON.stringify(this.deliveryCoordsByCity));
         this.deliveryDetailsByCity[previousCityId] = this.deliveryDetails || null;
         localStorage.setItem("deliveryDetailsByCity", JSON.stringify(this.deliveryDetailsByCity));
+        this.deliveryZoneByCity[previousCityId] = this.deliveryZone || null;
+        localStorage.setItem("deliveryZoneByCity", JSON.stringify(this.deliveryZoneByCity));
         this.selectedBranchByCity[previousCityId] = this.selectedBranch || null;
         localStorage.setItem("selectedBranchByCity", JSON.stringify(this.selectedBranchByCity));
       }
@@ -72,6 +84,8 @@ export const useLocationStore = defineStore("location", {
         this.deliveryDetails = this.deliveryDetailsByCity[city.id] || null;
         localStorage.setItem("deliveryDetails", JSON.stringify(this.deliveryDetails || null));
         this.selectedBranch = this.selectedBranchByCity[city.id] || null;
+        this.deliveryZone = this.deliveryZoneByCity[city.id] || null;
+        localStorage.setItem("deliveryZone", JSON.stringify(this.deliveryZone || null));
         if (this.selectedBranch) {
           localStorage.setItem("selectedBranch", JSON.stringify(this.selectedBranch));
         } else {
@@ -85,6 +99,8 @@ export const useLocationStore = defineStore("location", {
         localStorage.removeItem("deliveryCoords");
         this.deliveryDetails = null;
         localStorage.removeItem("deliveryDetails");
+        this.deliveryZone = null;
+        localStorage.removeItem("deliveryZone");
         this.selectedBranch = null;
         localStorage.removeItem("selectedBranch");
       }
@@ -152,6 +168,15 @@ export const useLocationStore = defineStore("location", {
       if (this.selectedCity?.id) {
         this.deliveryDetailsByCity[this.selectedCity.id] = details || null;
         localStorage.setItem("deliveryDetailsByCity", JSON.stringify(this.deliveryDetailsByCity));
+      }
+    },
+
+    setDeliveryZone(zone) {
+      this.deliveryZone = zone;
+      localStorage.setItem("deliveryZone", JSON.stringify(zone || null));
+      if (this.selectedCity?.id) {
+        this.deliveryZoneByCity[this.selectedCity.id] = zone || null;
+        localStorage.setItem("deliveryZoneByCity", JSON.stringify(this.deliveryZoneByCity));
       }
     },
 

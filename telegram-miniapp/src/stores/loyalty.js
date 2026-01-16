@@ -45,7 +45,7 @@ export const useLoyaltyStore = defineStore("loyalty", {
         const createdAt = new Date(order.created_at);
         if (createdAt < cutoff) return total;
 
-        const orderTotal = Number(order.total_amount) || 0;
+        const orderTotal = Number(order.total ?? order.total_amount) || 0;
         return total + orderTotal;
       }, 0);
     },

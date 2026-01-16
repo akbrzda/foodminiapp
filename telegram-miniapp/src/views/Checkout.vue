@@ -13,6 +13,12 @@
           Самовывоз
         </button>
       </div>
+
+      <div v-if="orderType" class="time-panel">
+        <div v-if="estimatedFulfillmentTime" class="time-info">
+          <span class="delivery-time">{{ estimatedFulfillmentTime }}</span>
+        </div>
+      </div>
     </div>
 
     <!-- Форма доставки -->
@@ -127,6 +133,10 @@
           <span>Сумма</span>
           <span>{{ formatPrice(summarySubtotal) }} ₽</span>
         </div>
+        <div class="summary-row" v-if="orderType === 'delivery' && deliveryCost > 0">
+          <span>Доставка</span>
+          <span>{{ formatPrice(deliveryCost) }} ₽</span>
+        </div>
         <div class="summary-row bonus-earn" v-if="bonusesToEarn > 0">
           <span>Будет начислено</span>
           <span class="earn">{{ formatPrice(bonusesToEarn) }} бонусов</span>
@@ -139,15 +149,15 @@
           <span>Итого к оплате</span>
           <span>{{ formatPrice(finalTotalPrice) }} ₽</span>
         </div>
-        <div class="summary-info" v-if="estimatedDeliveryTime">
-          <span class="delivery-time">⏱ Доставка до {{ estimatedDeliveryTime }}</span>
+        <div class="summary-info" v-if="orderType === 'delivery' && !isMinOrderReached">
+          <span class="delivery-time">Минимальная сумма заказа: {{ formatPrice(minOrderAmount) }} ₽</span>
         </div>
       </div>
     </div>
 
     <!-- Кнопка подтверждения -->
-    <div class="footer" v-if="canSubmitOrder">
-      <button class="submit-btn" @click="submitOrder" :disabled="submitting">
+    <div class="footer" v-if="orderType">
+      <button class="submit-btn" @click="submitOrder" :disabled="submitting || !canSubmitOrder">
         {{ submitting ? "Оформление..." : `Оформить заказ • ${formatPrice(finalTotalPrice)} ₽` }}
       </button>
     </div>
@@ -185,8 +195,10 @@ const changeFrom = ref(null);
 const orderComment = ref("");
 const deliveryCost = ref(0);
 const submitting = ref(false);
-const deliveryTimeMin = ref(0);
-const deliveryTimeMax = ref(0);
+const deliveryTime = ref(0);
+const minOrderAmount = ref(0);
+const prepTime = ref(0);
+const assemblyTime = ref(0);
 
 const deliveryDetails = ref({
   entrance: locationStore.deliveryDetails?.entrance || "",
@@ -202,10 +214,16 @@ const canSubmitOrder = computed(() => {
   if (!orderType.value) return false;
 
   if (orderType.value === "delivery") {
-    return addressValidated.value && inDeliveryZone.value && deliveryAddress.value.trim();
+    return addressValidated.value && inDeliveryZone.value && deliveryAddress.value.trim() && isMinOrderReached.value;
   } else {
     return selectedBranch.value !== null;
   }
+});
+
+const isMinOrderReached = computed(() => {
+  if (orderType.value !== "delivery") return true;
+  if (!minOrderAmount.value) return true;
+  return summarySubtotal.value >= minOrderAmount.value;
 });
 
 const appliedBonusToUse = computed(() => {
@@ -218,24 +236,38 @@ const finalTotalPrice = computed(() => {
 });
 
 const summarySubtotal = computed(() => {
-  return cartStore.totalPrice + deliveryCost.value;
+  return cartStore.totalPrice;
 });
 
 const bonusesToEarn = computed(() => {
   return Math.floor(finalTotalPrice.value * loyaltyStore.rate);
 });
 
-const estimatedDeliveryTime = computed(() => {
-  if (!deliveryTimeMin.value || !deliveryTimeMax.value) return null;
+const estimatedFulfillmentTime = computed(() => {
+  if (!orderType.value) return null;
+
+  const formatTime = (date) => `${date.getHours()}:${String(date.getMinutes()).padStart(2, "0")}`;
+  const buildRange = (centerMinutes) => {
+    const total = Number(centerMinutes || 0);
+    if (!total) return null;
+    const centerTime = new Date(now.getTime() + total * 60000);
+    const minTime = new Date(centerTime.getTime() - 5 * 60000);
+    const maxTime = new Date(centerTime.getTime() + 5 * 60000);
+    return `${formatTime(minTime)}-${formatTime(maxTime)}`;
+  };
 
   const now = new Date();
-  const minTime = new Date(now.getTime() + deliveryTimeMin.value * 60000);
-  const maxTime = new Date(now.getTime() + deliveryTimeMax.value * 60000);
 
-  return `${minTime.getHours()}:${String(minTime.getMinutes()).padStart(2, "0")} - ${maxTime.getHours()}:${String(maxTime.getMinutes()).padStart(
-    2,
-    "0"
-  )}`;
+  if (orderType.value === "delivery") {
+    const total = deliveryTime.value + prepTime.value + assemblyTime.value;
+    const range = buildRange(total);
+    if (!range) return null;
+    return `Заказ доставим до ${range}`;
+  }
+
+  const pickupRange = buildRange(prepTime.value);
+  if (!pickupRange) return null;
+  return `Заказ приготовим до ${pickupRange}`;
 });
 
 // Для совместимости со старыми ссылками
@@ -249,11 +281,30 @@ onMounted(async () => {
 
   if (orderType.value === "pickup") {
     await loadBranches();
+    applyBranchTimes(selectedBranch.value);
   }
 
   if (orderType.value === "delivery" && locationStore.deliveryAddress && locationStore.deliveryCoords) {
     addressValidated.value = true;
     inDeliveryZone.value = true;
+  }
+
+  if (locationStore.deliveryZone) {
+    applyDeliveryZone(locationStore.deliveryZone);
+  } else if (orderType.value === "delivery" && locationStore.deliveryCoords && locationStore.selectedCity?.id) {
+    try {
+      const checkResponse = await addressesAPI.checkDeliveryZone(
+        locationStore.deliveryCoords.lat,
+        locationStore.deliveryCoords.lng,
+        locationStore.selectedCity.id
+      );
+      if (checkResponse.data?.available && checkResponse.data?.polygon) {
+        applyDeliveryZone(checkResponse.data.polygon);
+        locationStore.setDeliveryZone(checkResponse.data.polygon);
+      }
+    } catch (error) {
+      console.error("Failed to refresh delivery zone:", error);
+    }
   }
 
   loyaltyStore.refreshFromOrders();
@@ -264,10 +315,20 @@ watch(
   async (newType) => {
     if (newType === "pickup") {
       await loadBranches();
+      deliveryCost.value = 0;
+      deliveryTime.value = 0;
+      minOrderAmount.value = 0;
+      assemblyTime.value = 0;
+      applyBranchTimes(selectedBranch.value);
     }
     if (newType === "delivery" && locationStore.deliveryAddress && locationStore.deliveryCoords) {
+      prepTime.value = 0;
+      assemblyTime.value = 0;
       addressValidated.value = true;
       inDeliveryZone.value = true;
+      if (locationStore.deliveryZone) {
+        applyDeliveryZone(locationStore.deliveryZone);
+      }
     }
   }
 );
@@ -287,8 +348,18 @@ function selectOrderType(type) {
   locationStore.setDeliveryType(type);
   if (type === "delivery") {
     deliveryAddress.value = locationStore.deliveryAddress || "";
+    prepTime.value = 0;
+    assemblyTime.value = 0;
+    if (locationStore.deliveryZone) {
+      applyDeliveryZone(locationStore.deliveryZone);
+    }
   } else if (type === "pickup") {
     selectedBranch.value = locationStore.selectedBranch || null;
+    deliveryCost.value = 0;
+    deliveryTime.value = 0;
+    minOrderAmount.value = 0;
+    assemblyTime.value = 0;
+    applyBranchTimes(selectedBranch.value);
   }
 }
 
@@ -333,9 +404,8 @@ async function selectAddress(suggestion) {
       locationStore.setDeliveryAddress(deliveryAddress.value);
       locationStore.setDeliveryCoords({ lat: geocodeData.lat, lng: geocodeData.lng });
       if (checkResponse.data.polygon) {
-        deliveryCost.value = parseFloat(checkResponse.data.polygon.delivery_cost || 0);
-        deliveryTimeMin.value = parseInt(checkResponse.data.polygon.delivery_time_min || 30);
-        deliveryTimeMax.value = parseInt(checkResponse.data.polygon.delivery_time_max || 60);
+        applyDeliveryZone(checkResponse.data.polygon);
+        locationStore.setDeliveryZone(checkResponse.data.polygon);
       }
     } else {
       inDeliveryZone.value = false;
@@ -352,6 +422,12 @@ function resetAddress() {
   addressValidated.value = false;
   inDeliveryZone.value = false;
   showAddressSuggestions.value = false;
+  deliveryCost.value = 0;
+  deliveryTime.value = 0;
+  minOrderAmount.value = 0;
+  prepTime.value = 0;
+  assemblyTime.value = 0;
+  locationStore.setDeliveryZone(null);
 }
 
 async function loadBranches() {
@@ -372,6 +448,19 @@ function selectBranch(branch) {
   hapticFeedback("light");
   selectedBranch.value = branch;
   locationStore.setBranch(branch);
+  applyBranchTimes(branch);
+}
+
+function applyBranchTimes(branch) {
+  prepTime.value = parseInt(branch?.prep_time || 0);
+}
+
+function applyDeliveryZone(zone) {
+  deliveryCost.value = parseFloat(zone?.delivery_cost || 0);
+  deliveryTime.value = parseInt(zone?.delivery_time || 0);
+  minOrderAmount.value = parseFloat(zone?.min_order_amount || 0);
+  prepTime.value = parseInt(zone?.prep_time || 0);
+  assemblyTime.value = parseInt(zone?.assembly_time || 0);
 }
 
 async function submitOrder() {
@@ -433,6 +522,7 @@ async function submitOrder() {
       orderData.delivery_street = street;
       orderData.delivery_house = house;
       orderData.delivery_entrance = deliveryDetails.value.entrance;
+      orderData.delivery_floor = deliveryDetails.value.floor;
       orderData.delivery_apartment = deliveryDetails.value.apartment;
       orderData.delivery_intercom = deliveryDetails.value.doorCode;
       orderData.delivery_comment = deliveryDetails.value.comment;
@@ -448,7 +538,8 @@ async function submitOrder() {
 
     hapticFeedback("success");
     cartStore.clearCart();
-    router.push(`/order/${response.data.order.id}`);
+    // Перенаправляем на главную, где отображается активный заказ
+    router.push("/");
   } catch (error) {
     console.error("Failed to create order:", error);
     hapticFeedback("error");
@@ -463,6 +554,7 @@ async function submitOrder() {
       "branch_id is required for pickup orders": "Выберите филиал для самовывоза",
       "Cart is empty": "Корзина пуста",
       "Insufficient stock": "Недостаточно товара на складе",
+      "Minimum order amount is": "Минимальная сумма заказа не достигнута",
     };
 
     // API клиент преобразует ошибки в формат {message, status, data}
@@ -472,7 +564,12 @@ async function submitOrder() {
     } else if (error.data?.error) {
       // Ошибка с сервера
       const serverError = error.data.error;
-      errorMessage = errorTranslations[serverError] || serverError;
+      if (serverError.startsWith("Minimum order amount is")) {
+        const amount = serverError.replace("Minimum order amount is", "").trim();
+        errorMessage = `Минимальная сумма заказа ${amount} ₽`;
+      } else {
+        errorMessage = errorTranslations[serverError] || serverError;
+      }
     } else if (error.message) {
       // Другая ошибка
       errorMessage = error.message;
@@ -494,6 +591,20 @@ async function submitOrder() {
 
 .content {
   padding: 16px 12px;
+}
+
+.time-panel {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: var(--border-radius-md);
+  background: var(--color-background-secondary);
+  border: 1px solid var(--color-border);
+}
+
+.time-info {
+  margin-bottom: 10px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-small);
 }
 
 .order-type-tabs {

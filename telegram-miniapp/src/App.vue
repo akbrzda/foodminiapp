@@ -125,16 +125,16 @@ function setupWebSocket() {
   wsService.connect(authStore.user?.id);
 
   // Обрабатываем обновление статуса заказа
-  wsService.on("order_status_update", (data) => {
+  wsService.on("order-status-updated", (data) => {
     console.log("Order status updated:", data);
     // Можно добавить уведомление через Telegram Mini App API
     if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.showAlert(`Статус заказа #${data.order_number} изменён: ${getStatusText(data.status)}`);
+      window.Telegram.WebApp.showAlert(`Статус заказа изменён: ${getStatusText(data.newStatus)}`);
     }
   });
 
   // Обрабатываем обновление бонусов
-  wsService.on("bonus_update", (data) => {
+  wsService.on("bonus-updated", (data) => {
     console.log("Bonus updated:", data);
     // Можно обновить баланс в сторе или показать уведомление
   });

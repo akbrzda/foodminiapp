@@ -2,6 +2,45 @@
   <div class="home">
     <AppHeader @toggleMenu="showMenu = true" />
 
+    <!-- Активные заказы -->
+    <div v-if="activeOrders.length > 0" class="active-orders-container">
+      <div class="active-orders" :class="{ 'has-scroll': activeOrders.length > 1 }">
+        <div v-for="order in activeOrders" :key="order.id" class="active-order" @click="router.push(`/order/${order.id}`)">
+          <div class="order-status">
+            <div class="order-type-icon">
+              <svg
+                v-if="order.order_type === 'delivery'"
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <rect x="1" y="3" width="15" height="13"></rect>
+                <polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon>
+                <circle cx="5.5" cy="18.5" r="2.5"></circle>
+                <circle cx="18.5" cy="18.5" r="2.5"></circle>
+              </svg>
+              <svg v-else width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                <polyline points="9 22 9 12 15 12 15 22"></polyline>
+              </svg>
+            </div>
+            <div class="status-indicator" :class="getStatusClass(order.status)"></div>
+            <div class="order-info">
+              <div class="order-title">{{ getStatusText(order.status, order.order_type) }}</div>
+              <div class="order-subtitle">Заказ #{{ order.order_number }} • {{ formatPrice(order.total) }} ₽</div>
+            </div>
+          </div>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="9 18 15 12 9 6"></polyline>
+          </svg>
+        </div>
+      </div>
+      <div v-if="activeOrders.length > 1" class="scroll-hint">← Пролистайте →</div>
+    </div>
+
     <div class="location-bar">
       <div class="location-tabs">
         <button @click="setDeliveryType('delivery')" class="pill-tab" :class="{ active: locationStore.isDelivery }">Доставка</button>
@@ -90,7 +129,7 @@ import { useAuthStore } from "../stores/auth";
 import { useLocationStore } from "../stores/location";
 import { useCartStore } from "../stores/cart";
 import { useMenuStore } from "../stores/menu";
-import { bonusesAPI, menuAPI } from "../api/endpoints";
+import { bonusesAPI, menuAPI, ordersAPI } from "../api/endpoints";
 import { hapticFeedback } from "../services/telegram";
 import AppHeader from "../components/AppHeader.vue";
 import { formatPrice, normalizeImageUrl } from "../utils/format";
@@ -107,6 +146,7 @@ const categoryRefs = ref({});
 const showMenu = ref(false);
 const activeCategory = ref(null);
 const isScrolling = ref(false);
+const activeOrders = ref([]);
 let observer = null;
 
 const cityName = computed(() => locationStore.selectedCity?.name || "Когалым");
@@ -139,6 +179,11 @@ onMounted(async () => {
   if (locationStore.selectedCity) {
     await loadMenu();
   }
+
+  // Загружаем активный заказ
+  if (authStore.isAuthenticated) {
+    await loadActiveOrder();
+  }
 });
 
 // Загружаем меню при изменении города
@@ -165,6 +210,53 @@ watch(
     scrollCategoryIntoView(categoryId);
   }
 );
+
+async function loadActiveOrder() {
+  try {
+    const response = await ordersAPI.getMyOrders();
+    const orders = response.data.orders || [];
+    // Ищем все активные заказы (не завершенные и не отмененные)
+    const active = orders.filter((order) => order.status !== "completed" && order.status !== "cancelled");
+    activeOrders.value = active;
+  } catch (error) {
+    console.error("Failed to load active order:", error);
+  }
+}
+
+function getStatusText(status, orderType) {
+  const isDelivery = orderType === "delivery";
+
+  const deliveryStatuses = {
+    pending: "Ожидает подтверждения",
+    confirmed: "Принят",
+    preparing: "Готовится",
+    ready: "Готов",
+    delivering: "В пути",
+    completed: "Доставлен",
+    cancelled: "Отменён",
+  };
+
+  const pickupStatuses = {
+    pending: "Ожидает подтверждения",
+    confirmed: "Принят",
+    preparing: "Готовится",
+    ready: "Готов к выдаче",
+    completed: "Выдан",
+    cancelled: "Отменён",
+  };
+
+  const statuses = isDelivery ? deliveryStatuses : pickupStatuses;
+  return statuses[status] || status;
+}
+
+function getStatusClass(status) {
+  if (["pending"].includes(status)) return "status-pending";
+  if (["confirmed", "preparing"].includes(status)) return "status-preparing";
+  if (["ready", "delivering"].includes(status)) return "status-ready";
+  if (["completed"].includes(status)) return "status-delivered";
+  if (["cancelled"].includes(status)) return "status-cancelled";
+  return "";
+}
 
 function openCitySelector() {
   window.dispatchEvent(new CustomEvent("open-city-popup"));
@@ -450,6 +542,140 @@ function goToCart() {
   min-height: 100vh;
   padding-bottom: 100px;
   background: var(--color-background);
+}
+
+.active-orders-container {
+  padding: 12px 0;
+}
+
+.active-orders {
+  display: flex;
+  gap: 12px;
+  padding: 0 12px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.active-orders::-webkit-scrollbar {
+  display: none;
+}
+
+.active-orders.has-scroll {
+  padding-right: 12px;
+}
+
+.active-order {
+  min-width: 320px;
+  padding: 16px;
+  background: var(--color-background-secondary);
+  border-radius: var(--border-radius-lg);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  transition: all var(--transition-duration) var(--transition-easing);
+  scroll-snap-align: start;
+  flex-shrink: 0;
+}
+
+.active-order:active {
+  opacity: 0.8;
+  transform: scale(0.98);
+}
+
+.scroll-hint {
+  text-align: center;
+  font-size: var(--font-size-small);
+  color: var(--color-text-secondary);
+  margin-top: 4px;
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.order-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.order-type-icon {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-primary);
+  border-radius: var(--border-radius-md);
+  flex-shrink: 0;
+}
+
+.order-type-icon svg {
+  color: var(--color-text-primary);
+}
+
+.status-indicator {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  animation: pulse 2s infinite;
+  flex-shrink: 0;
+}
+
+.status-pending {
+  background: #fbbf24;
+}
+
+.status-preparing {
+  background: #3b82f6;
+}
+
+.status-ready {
+  background: #10b981;
+}
+
+.status-delivered {
+  background: #6b7280;
+}
+
+.status-cancelled {
+  background: #ef4444;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.order-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.order-title {
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.order-subtitle {
+  font-size: var(--font-size-small);
+  color: var(--color-text-secondary);
 }
 
 .location-bar {

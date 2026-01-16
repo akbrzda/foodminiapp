@@ -51,7 +51,8 @@ router.get("/:id/branches", async (req, res, next) => {
 
     const [branches] = await db.query(
       `SELECT id, city_id, name, address, latitude, longitude, phone, 
-              working_hours, is_active, created_at, updated_at
+              working_hours, prep_time, assembly_time,
+              is_active, created_at, updated_at
        FROM branches
        WHERE city_id = ? AND is_active = TRUE
        ORDER BY name`,
@@ -71,7 +72,8 @@ router.get("/:cityId/branches/:branchId", async (req, res, next) => {
 
     const [branches] = await db.query(
       `SELECT id, city_id, name, address, latitude, longitude, phone, 
-              working_hours, is_active, created_at, updated_at
+              working_hours, prep_time, assembly_time,
+              is_active, created_at, updated_at
        FROM branches
        WHERE id = ? AND city_id = ? AND is_active = TRUE`,
       [branchId, cityId]
@@ -229,7 +231,8 @@ router.get("/admin/:cityId/branches", authenticateToken, requireRole("admin", "m
 
     const [branches] = await db.query(
       `SELECT id, city_id, name, address, latitude, longitude, phone, 
-              working_hours, is_active, created_at, updated_at
+              working_hours, prep_time, assembly_time,
+              is_active, created_at, updated_at
          FROM branches
          WHERE city_id = ?
          ORDER BY name`,
@@ -246,7 +249,7 @@ router.get("/admin/:cityId/branches", authenticateToken, requireRole("admin", "m
 router.post("/admin/:cityId/branches", authenticateToken, requireRole("admin", "manager", "ceo"), checkCityAccess, async (req, res, next) => {
   try {
     const cityId = req.params.cityId;
-    const { name, address, latitude, longitude, phone, working_hours } = req.body;
+    const { name, address, latitude, longitude, phone, working_hours, prep_time, assembly_time } = req.body;
 
     if (!name) {
       return res.status(400).json({ error: "Name is required" });
@@ -261,8 +264,8 @@ router.post("/admin/:cityId/branches", authenticateToken, requireRole("admin", "
 
     const [result] = await db.query(
       `INSERT INTO branches 
-         (city_id, name, address, latitude, longitude, phone, working_hours)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+         (city_id, name, address, latitude, longitude, phone, working_hours, prep_time, assembly_time)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         cityId,
         name,
@@ -271,12 +274,15 @@ router.post("/admin/:cityId/branches", authenticateToken, requireRole("admin", "
         longitude || null,
         phone || null,
         working_hours ? JSON.stringify(working_hours) : null,
+        prep_time || 0,
+        assembly_time || 0,
       ]
     );
 
     const [newBranch] = await db.query(
       `SELECT id, city_id, name, address, latitude, longitude, phone, 
-                working_hours, is_active, created_at, updated_at
+                working_hours, prep_time, assembly_time,
+                is_active, created_at, updated_at
          FROM branches WHERE id = ?`,
       [result.insertId]
     );
@@ -296,7 +302,7 @@ router.put(
   async (req, res, next) => {
     try {
       const { cityId, branchId } = req.params;
-    const { name, address, latitude, longitude, phone, working_hours, is_active } = req.body;
+      const { name, address, latitude, longitude, phone, working_hours, prep_time, assembly_time, is_active } = req.body;
 
       const [branches] = await db.query("SELECT id FROM branches WHERE id = ? AND city_id = ?", [branchId, cityId]);
 
@@ -331,6 +337,14 @@ router.put(
         updates.push("working_hours = ?");
         values.push(JSON.stringify(working_hours));
       }
+      if (prep_time !== undefined) {
+        updates.push("prep_time = ?");
+        values.push(prep_time);
+      }
+      if (assembly_time !== undefined) {
+        updates.push("assembly_time = ?");
+        values.push(assembly_time);
+      }
       if (is_active !== undefined) {
         updates.push("is_active = ?");
         values.push(is_active);
@@ -344,7 +358,8 @@ router.put(
 
     const [updatedBranch] = await db.query(
       `SELECT id, city_id, name, address, latitude, longitude, phone, 
-                working_hours, is_active, created_at, updated_at
+                working_hours, prep_time, assembly_time,
+                is_active, created_at, updated_at
          FROM branches WHERE id = ?`,
       [branchId]
     );

@@ -1,14 +1,16 @@
 <template>
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" @click.self="$emit('close')">
-    <div class="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white p-6 shadow-card">
-      <div class="flex items-start justify-between">
+  <div class="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 p-4" @click.self="$emit('close')">
+    <div class="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-xl border border-border bg-card p-6 shadow-soft">
+      <div class="flex items-start justify-between gap-4">
         <div>
-          <p class="panel-title text-lg font-semibold text-ink">{{ title }}</p>
-          <p v-if="subtitle" class="text-xs text-ink/60">{{ subtitle }}</p>
+          <p class="panel-title text-lg font-semibold text-foreground">{{ title }}</p>
+          <p v-if="subtitle" class="text-xs text-muted-foreground">{{ subtitle }}</p>
         </div>
-        <button class="rounded-full border border-ink/10 px-3 py-1 text-xs uppercase tracking-widest" @click="$emit('close')">Закрыть</button>
+        <button class="rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-muted-foreground" @click="$emit('close')">
+          <X :size="14" />
+        </button>
       </div>
-      <div class="mt-4">
+      <div class="mt-5">
         <slot />
       </div>
     </div>
@@ -16,6 +18,8 @@
 </template>
 
 <script setup>
+import { X } from "lucide-vue-next";
+
 defineProps({
   title: { type: String, default: "" },
   subtitle: { type: String, default: "" },

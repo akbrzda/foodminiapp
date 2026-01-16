@@ -52,11 +52,14 @@ export const useAuthStore = defineStore("auth", {
         this.loading = false;
       }
     },
-    logout() {
+    logout({ redirect = true } = {}) {
       this.token = "";
       this.user = null;
       localStorage.removeItem(STORAGE_TOKEN);
       localStorage.removeItem(STORAGE_USER);
+      if (redirect && window.location.pathname !== "/login") {
+        window.location.assign("/login");
+      }
     },
   },
 });

@@ -20,6 +20,7 @@ import polygonsRoutes from "./routes/polygons.js";
 import geocodeRoutes from "./routes/geocode.js";
 import bonusesRoutes from "./routes/bonuses.js";
 import logsRoutes from "./routes/logs.js";
+import analyticsRoutes from "./routes/analytics.js";
 
 // WebSocket
 import WSServer from "./websocket/server.js";
@@ -84,6 +85,7 @@ app.use("/api/polygons", polygonsRoutes);
 app.use("/api/geocode", geocodeRoutes);
 app.use("/api/bonuses", bonusesRoutes);
 app.use("/api/logs", logsRoutes);
+app.use("/api/analytics", analyticsRoutes);
 
 // 404 handler
 app.use(notFoundHandler);

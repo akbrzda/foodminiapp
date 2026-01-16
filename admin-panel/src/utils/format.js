@@ -3,6 +3,11 @@ export function formatCurrency(value) {
   return new Intl.NumberFormat("ru-RU", { style: "currency", currency: "RUB", maximumFractionDigits: 0 }).format(number);
 }
 
+export function formatNumber(value) {
+  const number = Number(value || 0);
+  return new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(number);
+}
+
 export function formatDateTime(value) {
   if (!value) return "";
   const date = new Date(value);

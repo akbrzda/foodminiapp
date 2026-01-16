@@ -25,6 +25,7 @@ import { reactive, ref, watch } from "vue";
 import PageHeader from "../components/PageHeader.vue";
 import { useRouter } from "vue-router";
 import { useLocationStore } from "../stores/location";
+import { addressesAPI, geocodeAPI } from "../api/endpoints";
 import { hapticFeedback } from "../services/telegram";
 
 const router = useRouter();
@@ -52,6 +53,29 @@ function save() {
 
   locationStore.setDeliveryAddress(address.value.trim());
   locationStore.setDeliveryDetails({ ...details });
+  if (locationStore.deliveryCoords && locationStore.selectedCity?.id) {
+    addressesAPI
+      .checkDeliveryZone(locationStore.deliveryCoords.lat, locationStore.deliveryCoords.lng, locationStore.selectedCity.id)
+      .then((response) => {
+        if (response.data?.available && response.data?.polygon) {
+          locationStore.setDeliveryZone(response.data.polygon);
+        }
+      })
+      .catch((error) => console.error("Failed to update delivery zone:", error));
+  } else if (locationStore.selectedCity?.id) {
+    geocodeAPI
+      .geocode(address.value.trim())
+      .then((geo) => {
+        locationStore.setDeliveryCoords({ lat: geo.data.lat, lng: geo.data.lng });
+        return addressesAPI.checkDeliveryZone(geo.data.lat, geo.data.lng, locationStore.selectedCity.id);
+      })
+      .then((response) => {
+        if (response?.data?.available && response?.data?.polygon) {
+          locationStore.setDeliveryZone(response.data.polygon);
+        }
+      })
+      .catch((error) => console.error("Failed to update delivery zone:", error));
+  }
   hapticFeedback("success");
   router.push("/");
 }

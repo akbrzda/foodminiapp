@@ -6,6 +6,19 @@ import axios from "axios";
 
 const router = express.Router();
 
+const parseGeoJson = (value) => {
+  if (!value) return null;
+  if (typeof value === "string") {
+    try {
+      return JSON.parse(value);
+    } catch (error) {
+      console.error("Failed to parse polygon GeoJSON:", error);
+      return null;
+    }
+  }
+  return value;
+};
+
 // ==================== Публичные эндпоинты ====================
 
 // Получить полигоны по городу
@@ -16,7 +29,7 @@ router.get("/city/:cityId", async (req, res, next) => {
     const [polygons] = await db.query(
       `SELECT dp.id, dp.branch_id, dp.name, 
               ST_AsGeoJSON(dp.polygon) as polygon,
-              dp.delivery_time_min, dp.delivery_time_max,
+              dp.delivery_time,
               dp.min_order_amount, dp.delivery_cost,
               b.name as branch_name
        FROM delivery_polygons dp
@@ -28,7 +41,7 @@ router.get("/city/:cityId", async (req, res, next) => {
     // Парсим GeoJSON для каждого полигона
     const parsedPolygons = polygons.map((p) => ({
       ...p,
-      polygon: p.polygon ? JSON.parse(p.polygon) : null,
+      polygon: parseGeoJson(p.polygon),
     }));
 
     res.json({ polygons: parsedPolygons });
@@ -45,7 +58,7 @@ router.get("/branch/:branchId", async (req, res, next) => {
     const [polygons] = await db.query(
       `SELECT id, branch_id, name, 
               ST_AsGeoJSON(polygon) as polygon,
-              delivery_time_min, delivery_time_max,
+              delivery_time,
               min_order_amount, delivery_cost
        FROM delivery_polygons
        WHERE branch_id = ? AND is_active = TRUE`,
@@ -55,7 +68,7 @@ router.get("/branch/:branchId", async (req, res, next) => {
     // Парсим GeoJSON для каждого полигона
     const parsedPolygons = polygons.map((p) => ({
       ...p,
-      polygon: p.polygon ? JSON.parse(p.polygon) : null,
+      polygon: parseGeoJson(p.polygon),
     }));
 
     res.json({ polygons: parsedPolygons });
@@ -77,23 +90,31 @@ router.post("/geocode", async (req, res, next) => {
 
     // Проверяем кеш Redis (TTL: 24 часа)
     const cacheKey = `geocode:${Buffer.from(address.trim().toLowerCase()).toString("base64")}`;
-    const cached = await redis.get(cacheKey);
+    let cached = null;
+    try {
+      cached = await redis.get(cacheKey);
+    } catch (redisError) {
+      console.error("Redis error on geocode cache get:", redisError);
+    }
 
     if (cached) {
       return res.json(JSON.parse(cached));
     }
 
     // Rate limiting: 1 запрос в секунду
-    // Используем простую задержку (в продакшене лучше использовать более сложную систему)
     const rateLimitKey = "geocode:ratelimit";
-    const lastRequest = await redis.get(rateLimitKey);
-    if (lastRequest) {
-      const timeSinceLastRequest = Date.now() - parseInt(lastRequest);
-      if (timeSinceLastRequest < 1000) {
-        await new Promise((resolve) => setTimeout(resolve, 1000 - timeSinceLastRequest));
+    try {
+      const lastRequest = await redis.get(rateLimitKey);
+      if (lastRequest) {
+        const timeSinceLastRequest = Date.now() - parseInt(lastRequest);
+        if (timeSinceLastRequest < 1000) {
+          await new Promise((resolve) => setTimeout(resolve, 1000 - timeSinceLastRequest));
+        }
       }
+      await redis.set(rateLimitKey, Date.now().toString(), "EX", 1);
+    } catch (redisError) {
+      console.error("Redis error on rate limiting:", redisError);
     }
-    await redis.set(rateLimitKey, Date.now().toString(), "EX", 1);
 
     // Запрос к Nominatim API
     const nominatimUrl = "https://nominatim.openstreetmap.org/search";
@@ -130,7 +151,11 @@ router.post("/geocode", async (req, res, next) => {
     };
 
     // Кешируем результат на 24 часа
-    await redis.set(cacheKey, JSON.stringify(geocodeResult), "EX", 86400);
+    try {
+      await redis.set(cacheKey, JSON.stringify(geocodeResult), "EX", 86400);
+    } catch (redisError) {
+      console.error("Redis error on geocode cache set:", redisError);
+    }
 
     res.json(geocodeResult);
   } catch (error) {
@@ -162,16 +187,17 @@ router.post("/check-delivery", async (req, res, next) => {
     // Ищем полигоны в которые попадает точка
     const [polygons] = await db.query(
       `SELECT dp.id, dp.branch_id, dp.name,
-              dp.delivery_time_min, dp.delivery_time_max,
+              dp.delivery_time,
               dp.min_order_amount, dp.delivery_cost,
-              b.name as branch_name, b.address as branch_address
+              b.name as branch_name, b.address as branch_address,
+              b.prep_time, b.assembly_time
        FROM delivery_polygons dp
        JOIN branches b ON dp.branch_id = b.id
        WHERE b.city_id = ? 
          AND dp.is_active = TRUE 
          AND b.is_active = TRUE
          AND ST_Contains(dp.polygon, ST_GeomFromText(?, 4326))
-       ORDER BY dp.delivery_cost, dp.delivery_time_min
+       ORDER BY dp.delivery_cost, dp.delivery_time
        LIMIT 1`,
       [city_id, point]
     );
@@ -216,7 +242,7 @@ router.get("/admin/branch/:branchId", authenticateToken, requireRole("admin", "m
     const [polygons] = await db.query(
       `SELECT id, branch_id, name, 
                 ST_AsGeoJSON(polygon) as polygon,
-                delivery_time_min, delivery_time_max,
+                delivery_time,
                 min_order_amount, delivery_cost, is_active,
                 created_at, updated_at
          FROM delivery_polygons
@@ -228,7 +254,7 @@ router.get("/admin/branch/:branchId", authenticateToken, requireRole("admin", "m
     // Парсим GeoJSON для каждого полигона
     const parsedPolygons = polygons.map((p) => ({
       ...p,
-      polygon: p.polygon ? JSON.parse(p.polygon) : null,
+      polygon: parseGeoJson(p.polygon),
     }));
 
     res.json({ polygons: parsedPolygons });
@@ -240,7 +266,7 @@ router.get("/admin/branch/:branchId", authenticateToken, requireRole("admin", "m
 // Создать полигон
 router.post("/admin", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
   try {
-    const { branch_id, name, polygon, delivery_time_min, delivery_time_max, min_order_amount, delivery_cost } = req.body;
+    const { branch_id, name, polygon, delivery_time, min_order_amount, delivery_cost } = req.body;
 
     if (!branch_id || !polygon) {
       return res.status(400).json({
@@ -274,18 +300,20 @@ router.post("/admin", authenticateToken, requireRole("admin", "manager", "ceo"),
     const coordinates = polygon.map((coord) => `${coord[0]} ${coord[1]}`).join(", ");
     const wkt = `POLYGON((${coordinates}))`;
 
+    console.log("Creating polygon with WKT:", wkt);
+
     const [result] = await db.query(
       `INSERT INTO delivery_polygons 
-         (branch_id, name, polygon, delivery_time_min, delivery_time_max, 
+         (branch_id, name, polygon, delivery_time, 
           min_order_amount, delivery_cost)
-         VALUES (?, ?, ST_GeomFromText(?, 4326), ?, ?, ?, ?)`,
-      [branch_id, name || null, wkt, delivery_time_min || 30, delivery_time_max || 60, min_order_amount || 0, delivery_cost || 0]
+         VALUES (?, ?, ST_GeomFromText(?, 4326), ?, ?, ?)`,
+      [branch_id, name || null, wkt, delivery_time || 30, min_order_amount || 0, delivery_cost || 0]
     );
 
     const [newPolygon] = await db.query(
       `SELECT id, branch_id, name, 
                 ST_AsGeoJSON(polygon) as polygon,
-                delivery_time_min, delivery_time_max,
+                delivery_time,
                 min_order_amount, delivery_cost, is_active,
                 created_at, updated_at
          FROM delivery_polygons WHERE id = ?`,
@@ -295,7 +323,7 @@ router.post("/admin", authenticateToken, requireRole("admin", "manager", "ceo"),
     res.status(201).json({
       polygon: {
         ...newPolygon[0],
-        polygon: newPolygon[0].polygon ? JSON.parse(newPolygon[0].polygon) : null,
+        polygon: parseGeoJson(newPolygon[0].polygon),
       },
     });
   } catch (error) {
@@ -307,7 +335,7 @@ router.post("/admin", authenticateToken, requireRole("admin", "manager", "ceo"),
 router.put("/admin/:id", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
   try {
     const polygonId = req.params.id;
-    const { name, polygon, delivery_time_min, delivery_time_max, min_order_amount, delivery_cost, is_active } = req.body;
+    const { name, polygon, delivery_time, min_order_amount, delivery_cost, is_active } = req.body;
 
     // Проверяем существование полигона и доступ
     const [polygons] = await db.query(
@@ -347,13 +375,9 @@ router.put("/admin/:id", authenticateToken, requireRole("admin", "manager", "ceo
       updates.push("polygon = ST_GeomFromText(?, 4326)");
       values.push(wkt);
     }
-    if (delivery_time_min !== undefined) {
-      updates.push("delivery_time_min = ?");
-      values.push(delivery_time_min);
-    }
-    if (delivery_time_max !== undefined) {
-      updates.push("delivery_time_max = ?");
-      values.push(delivery_time_max);
+    if (delivery_time !== undefined) {
+      updates.push("delivery_time = ?");
+      values.push(delivery_time);
     }
     if (min_order_amount !== undefined) {
       updates.push("min_order_amount = ?");
@@ -378,7 +402,7 @@ router.put("/admin/:id", authenticateToken, requireRole("admin", "manager", "ceo
     const [updatedPolygon] = await db.query(
       `SELECT id, branch_id, name, 
                 ST_AsGeoJSON(polygon) as polygon,
-                delivery_time_min, delivery_time_max,
+                delivery_time,
                 min_order_amount, delivery_cost, is_active,
                 created_at, updated_at
          FROM delivery_polygons WHERE id = ?`,
@@ -388,7 +412,7 @@ router.put("/admin/:id", authenticateToken, requireRole("admin", "manager", "ceo
     res.json({
       polygon: {
         ...updatedPolygon[0],
-        polygon: updatedPolygon[0].polygon ? JSON.parse(updatedPolygon[0].polygon) : null,
+        polygon: parseGeoJson(updatedPolygon[0].polygon),
       },
     });
   } catch (error) {

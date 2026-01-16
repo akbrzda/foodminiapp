@@ -21,7 +21,7 @@ api.interceptors.response.use(
   (error) => {
     const authStore = useAuthStore();
     if (error.response?.status === 401) {
-      authStore.logout();
+      authStore.logout({ redirect: true });
     }
     return Promise.reject(error);
   }

@@ -11,6 +11,8 @@ const dbConfig = {
   password: process.env.DB_PASSWORD || "miniapp_password_change_me",
   database: process.env.DB_NAME || "miniapp_panda",
   charset: "utf8_general_ci",
+  timezone: "Z", // UTC timezone
+  dateStrings: false,
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,

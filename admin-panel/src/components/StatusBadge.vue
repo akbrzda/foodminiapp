@@ -1,11 +1,10 @@
 <template>
-  <span :class="badgeClass" class="rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-widest">
-    {{ label }}
-  </span>
+  <Badge :class="badgeClass">{{ label }}</Badge>
 </template>
 
 <script setup>
 import { computed } from "vue";
+import Badge from "./ui/Badge.vue";
 
 const props = defineProps({
   status: { type: String, default: "" },
@@ -22,7 +21,7 @@ const labels = {
 };
 
 const colors = {
-  pending: "bg-accent text-ink",
+  pending: "bg-amber-100 text-amber-700",
   confirmed: "bg-blue-100 text-blue-700",
   preparing: "bg-orange-100 text-orange-700",
   ready: "bg-violet-100 text-violet-700",
@@ -32,5 +31,5 @@ const colors = {
 };
 
 const label = computed(() => labels[props.status] || props.status || "—");
-const badgeClass = computed(() => colors[props.status] || "bg-ink/10 text-ink");
+const badgeClass = computed(() => colors[props.status] || "bg-muted text-muted-foreground");
 </script>

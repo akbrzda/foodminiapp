@@ -52,7 +52,7 @@ async function calculateOrderCost(items, bonusToUse = 0) {
     }
 
     const menuItem = menuItems[0];
-    let itemPrice = 0;
+    let itemBasePrice = 0;
     let variantName = null;
 
     // Если указан вариант, используем его цену
@@ -64,18 +64,19 @@ async function calculateOrderCost(items, bonusToUse = 0) {
       }
 
       const variant = variants[0];
-      itemPrice = parseFloat(variant.price);
+      itemBasePrice = parseFloat(variant.price);
       variantName = variant.name;
     } else {
       // Используем базовую цену позиции
-      itemPrice = parseFloat(menuItem.price);
-      if (itemPrice <= 0) {
+      itemBasePrice = parseFloat(menuItem.price);
+      if (itemBasePrice <= 0) {
         throw new Error(`Item ${item_id} has no price and no variant specified`);
       }
     }
 
     // Валидируем и добавляем модификаторы (новая система - из групп модификаторов)
     const validatedModifiers = [];
+    let modifiersTotal = 0;
     if (modifiers && Array.isArray(modifiers) && modifiers.length > 0) {
       for (const modId of modifiers) {
         // Проверяем, это модификатор из новой системы (modifiers) или старой (menu_modifiers)
@@ -86,11 +87,12 @@ async function calculateOrderCost(items, bonusToUse = 0) {
 
         if (newModifiers.length > 0) {
           const modifier = newModifiers[0];
-          itemPrice += parseFloat(modifier.price);
+          const modifierPrice = parseFloat(modifier.price);
+          modifiersTotal += modifierPrice;
           validatedModifiers.push({
             id: modifier.id,
             name: modifier.name,
-            price: parseFloat(modifier.price),
+            price: modifierPrice,
             group_id: modifier.group_id,
             type: modifier.type,
             is_required: modifier.is_required,
@@ -107,18 +109,20 @@ async function calculateOrderCost(items, bonusToUse = 0) {
           }
 
           const modifier = oldModifiers[0];
-          itemPrice += parseFloat(modifier.price);
+          const modifierPrice = parseFloat(modifier.price);
+          modifiersTotal += modifierPrice;
           validatedModifiers.push({
             id: modifier.id,
             name: modifier.name,
-            price: parseFloat(modifier.price),
+            price: modifierPrice,
             old_system: true,
           });
         }
       }
     }
 
-    const itemSubtotal = itemPrice * quantity;
+    const unitPrice = itemBasePrice + modifiersTotal;
+    const itemSubtotal = unitPrice * quantity;
     subtotal += itemSubtotal;
 
     validatedItems.push({
@@ -126,7 +130,7 @@ async function calculateOrderCost(items, bonusToUse = 0) {
       item_name: menuItem.name,
       variant_id: variant_id || null,
       variant_name: variantName,
-      item_price: itemPrice,
+      item_price: itemBasePrice,
       quantity,
       modifiers: validatedModifiers,
       subtotal: itemSubtotal,
@@ -149,7 +153,7 @@ async function calculateOrderCost(items, bonusToUse = 0) {
 // Расчёт стоимости заказа
 router.post("/calculate", authenticateToken, async (req, res, next) => {
   try {
-    const { items, bonus_to_use = 0, delivery_cost = 0 } = req.body;
+    const { items, bonus_to_use = 0, delivery_cost = 0, order_type, delivery_polygon_id } = req.body;
 
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: "Items are required" });
@@ -157,6 +161,16 @@ router.post("/calculate", authenticateToken, async (req, res, next) => {
 
     // Валидация бонусов
     const { subtotal, bonusUsed, total, validatedItems } = await calculateOrderCost(items, bonus_to_use);
+
+    if (order_type === "delivery" && delivery_polygon_id) {
+      const [polygons] = await db.query("SELECT min_order_amount FROM delivery_polygons WHERE id = ?", [delivery_polygon_id]);
+      const minOrderAmount = parseFloat(polygons[0]?.min_order_amount) || 0;
+      if (minOrderAmount > 0 && subtotal < minOrderAmount) {
+        return res.status(400).json({
+          error: `Minimum order amount is ${minOrderAmount}`,
+        });
+      }
+    }
 
     const bonusValidation = await validateBonusUsage(req.user.id, bonus_to_use, subtotal);
 
@@ -206,6 +220,7 @@ router.post("/", authenticateToken, async (req, res, next) => {
       delivery_street,
       delivery_house,
       delivery_entrance,
+      delivery_floor,
       delivery_apartment,
       delivery_intercom,
       delivery_comment,
@@ -292,6 +307,16 @@ router.post("/", authenticateToken, async (req, res, next) => {
 
     const { subtotal, bonusUsed, total, validatedItems } = await calculateOrderCost(items, bonus_to_use);
 
+    if (order_type === "delivery" && deliveryPolygon) {
+      const minOrderAmount = parseFloat(deliveryPolygon.min_order_amount) || 0;
+      if (minOrderAmount > 0 && subtotal < minOrderAmount) {
+        await connection.rollback();
+        return res.status(400).json({
+          error: `Minimum order amount is ${minOrderAmount}`,
+        });
+      }
+    }
+
     // Валидация бонусов
     if (bonus_to_use > 0) {
       const bonusValidation = await validateBonusUsage(req.user.id, bonus_to_use, subtotal);
@@ -316,11 +341,11 @@ router.post("/", authenticateToken, async (req, res, next) => {
     const [orderResult] = await connection.query(
       `INSERT INTO orders 
        (order_number, user_id, city_id, branch_id, order_type, status, 
-        delivery_address_id, delivery_street, delivery_house, delivery_entrance, 
+        delivery_address_id, delivery_street, delivery_house, delivery_entrance, delivery_floor,
         delivery_apartment, delivery_intercom, delivery_comment, 
         payment_method, change_from, subtotal, delivery_cost, bonus_used, total, 
         comment, desired_time)
-       VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         orderNumber,
         req.user.id,
@@ -331,6 +356,7 @@ router.post("/", authenticateToken, async (req, res, next) => {
         delivery_street || null,
         delivery_house || null,
         delivery_entrance || null,
+        delivery_floor || null,
         delivery_apartment || null,
         delivery_intercom || null,
         delivery_comment || null,
@@ -483,7 +509,11 @@ router.get("/", authenticateToken, async (req, res, next) => {
     const { status, limit = 20, offset = 0 } = req.query;
 
     let query = `
-      SELECT o.*, c.name as city_name, b.name as branch_name
+      SELECT o.*, 
+             o.total as total_amount,
+             (SELECT COUNT(*) FROM order_items WHERE order_id = o.id) as items_count,
+             c.name as city_name, 
+             b.name as branch_name
       FROM orders o
       LEFT JOIN cities c ON o.city_id = c.id
       LEFT JOIN branches b ON o.branch_id = b.id
@@ -539,6 +569,9 @@ router.get("/:id", authenticateToken, async (req, res, next) => {
 
     order.items = items;
 
+    const [earnedRows] = await db.query("SELECT SUM(amount) as bonuses_earned FROM bonus_history WHERE order_id = ? AND type = 'earned'", [orderId]);
+    order.bonuses_earned = parseFloat(earnedRows[0]?.bonuses_earned) || 0;
+
     res.json({ order });
   } catch (error) {
     next(error);
@@ -585,6 +618,7 @@ router.post("/:id/repeat", authenticateToken, async (req, res, next) => {
         delivery_street: orders[0].delivery_street,
         delivery_house: orders[0].delivery_house,
         delivery_entrance: orders[0].delivery_entrance,
+        delivery_floor: orders[0].delivery_floor,
         delivery_apartment: orders[0].delivery_apartment,
         delivery_intercom: orders[0].delivery_intercom,
       },
@@ -661,6 +695,59 @@ router.get("/admin/all", authenticateToken, requireRole("admin", "manager", "ceo
   }
 });
 
+// Получить детали заказа для админа (с items)
+router.get("/admin/:id", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
+  try {
+    const orderId = req.params.id;
+
+    // Получаем заказ
+    const [orders] = await db.query(
+      `SELECT o.*, 
+             c.name as city_name, 
+             b.name as branch_name, 
+             b.address as branch_address,
+             u.phone as user_phone,
+             u.first_name as user_first_name,
+             u.last_name as user_last_name
+       FROM orders o
+       LEFT JOIN cities c ON o.city_id = c.id
+       LEFT JOIN branches b ON o.branch_id = b.id
+       LEFT JOIN users u ON o.user_id = u.id
+       WHERE o.id = ?`,
+      [orderId]
+    );
+
+    if (orders.length === 0) {
+      return res.status(404).json({ error: "Order not found" });
+    }
+
+    const order = orders[0];
+
+    // Проверка доступа для менеджеров
+    if (req.user.role === "manager" && !req.user.cities.includes(order.city_id)) {
+      return res.status(403).json({ error: "You do not have access to this city" });
+    }
+
+    // Получаем позиции заказа
+    const [items] = await db.query(`SELECT * FROM order_items WHERE order_id = ?`, [orderId]);
+
+    // Для каждой позиции получаем модификаторы
+    for (const item of items) {
+      const [modifiers] = await db.query(`SELECT * FROM order_item_modifiers WHERE order_item_id = ?`, [item.id]);
+      item.modifiers = modifiers;
+    }
+
+    order.items = items;
+
+    const [earnedRows] = await db.query("SELECT SUM(amount) as bonuses_earned FROM bonus_history WHERE order_id = ? AND type = 'earned'", [orderId]);
+    order.bonuses_earned = parseFloat(earnedRows[0]?.bonuses_earned) || 0;
+
+    res.json({ order });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // Изменить статус заказа
 router.put(
   "/admin/:id/status",
@@ -681,7 +768,7 @@ router.put(
       }
 
       // Проверяем существование заказа и доступ
-      const [orders] = await db.query("SELECT city_id FROM orders WHERE id = ?", [orderId]);
+      const [orders] = await db.query("SELECT city_id, order_type FROM orders WHERE id = ?", [orderId]);
 
       if (orders.length === 0) {
         return res.status(404).json({ error: "Order not found" });
@@ -695,10 +782,40 @@ router.put(
       }
 
       // Обновляем статус
-      const [oldOrderData] = await db.query("SELECT status, user_id, total FROM orders WHERE id = ?", [orderId]);
+      const [oldOrderData] = await db.query("SELECT status, user_id, total, bonus_used, order_number, order_type FROM orders WHERE id = ?", [
+        orderId,
+      ]);
       const oldStatus = oldOrderData[0]?.status;
       const userId = oldOrderData[0]?.user_id;
       const orderTotal = parseFloat(oldOrderData[0]?.total) || 0;
+      const bonusUsed = parseFloat(oldOrderData[0]?.bonus_used) || 0;
+      const orderNumber = oldOrderData[0]?.order_number;
+
+      // Валидация изменения статуса: нельзя вернуться на более низкий статус
+      // но можно вернуться на один статус назад если случайно перепрыгнули
+      const statusOrder = {
+        pending: 0,
+        confirmed: 1,
+        preparing: 2,
+        ready: 3,
+        delivering: 3, // on_the_way для доставки
+        completed: 4,
+        cancelled: -1,
+      };
+
+      const oldStatusIndex = statusOrder[oldStatus];
+      const newStatusIndex = statusOrder[status];
+
+      // Разрешаем отмену всегда
+      // Разрешаем любой переход к предыдущим статусам (не только на 1 назад)
+      // Но нельзя вернуться из completed
+      if (status !== "cancelled" && oldStatus !== status) {
+        if (oldStatus === "completed") {
+          return res.status(400).json({
+            error: "Cannot change status of a completed order",
+          });
+        }
+      }
 
       await db.query("UPDATE orders SET status = ?, completed_at = ? WHERE id = ?", [status, status === "completed" ? new Date() : null, orderId]);
 
@@ -710,6 +827,46 @@ router.put(
         } catch (bonusError) {
           console.error("Failed to earn bonuses:", bonusError);
           // Не прерываем выполнение, статус уже обновлен
+        }
+      }
+
+      // Если заказ отменен — возвращаем списанные бонусы и аннулируем начисленные
+      if (status === "cancelled" && oldStatus !== "cancelled") {
+        try {
+          const [users] = await db.query("SELECT bonus_balance, total_spent FROM users WHERE id = ?", [userId]);
+          const currentBalance = parseFloat(users[0]?.bonus_balance) || 0;
+          const currentTotalSpent = parseFloat(users[0]?.total_spent) || 0;
+
+          let balanceAfter = currentBalance;
+
+          if (bonusUsed > 0) {
+            balanceAfter = currentBalance + bonusUsed;
+            await db.query("UPDATE users SET bonus_balance = ? WHERE id = ?", [balanceAfter, userId]);
+            await db.query(
+              `INSERT INTO bonus_history (user_id, order_id, type, amount, balance_after, description)
+               VALUES (?, ?, 'manual', ?, ?, ?)`,
+              [userId, orderId, bonusUsed, balanceAfter, `Возврат бонусов за отмену заказа #${orderNumber}`]
+            );
+          }
+
+          const [earnedRows] = await db.query("SELECT SUM(amount) as earned_total FROM bonus_history WHERE order_id = ? AND type = 'earned'", [
+            orderId,
+          ]);
+          const earnedTotal = parseFloat(earnedRows[0]?.earned_total) || 0;
+
+          if (earnedTotal > 0) {
+            balanceAfter = Math.max(0, balanceAfter - earnedTotal);
+            const updatedTotalSpent = Math.max(0, currentTotalSpent - orderTotal);
+
+            await db.query("UPDATE users SET bonus_balance = ?, total_spent = ? WHERE id = ?", [balanceAfter, updatedTotalSpent, userId]);
+            await db.query(
+              `INSERT INTO bonus_history (user_id, order_id, type, amount, balance_after, description)
+               VALUES (?, ?, 'manual', ?, ?, ?)`,
+              [userId, orderId, earnedTotal, balanceAfter, `Аннулирование бонусов за отмену заказа #${orderNumber}`]
+            );
+          }
+        } catch (bonusError) {
+          console.error("Failed to rollback bonuses for cancelled order:", bonusError);
         }
       }
 
@@ -725,6 +882,21 @@ router.put(
         wsServer.notifyOrderStatusUpdate(orderId, userId, status, oldStatus);
       } catch (wsError) {
         console.error("Failed to send WebSocket notification:", wsError);
+      }
+
+      // Telegram уведомление пользователю
+      try {
+        const { sendTelegramNotification, formatOrderStatusMessage } = await import("../utils/telegram.js");
+        const [users] = await db.query("SELECT telegram_id FROM users WHERE id = ?", [userId]);
+
+        if (users.length > 0 && users[0].telegram_id) {
+          const orderNumber = updatedOrders[0].order_number;
+          const orderType = updatedOrders[0].order_type;
+          const message = formatOrderStatusMessage(orderNumber, status, orderType);
+          await sendTelegramNotification(users[0].telegram_id, message);
+        }
+      } catch (telegramError) {
+        console.error("Failed to send Telegram notification:", telegramError);
       }
 
       res.json({ order: updatedOrders[0] });

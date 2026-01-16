@@ -142,7 +142,7 @@ export async function earnBonuses(userId, orderId, orderTotal, description = nul
     `INSERT INTO bonus_history 
      (user_id, order_id, type, amount, balance_after, description)
      VALUES (?, ?, 'earned', ?, ?, ?)`,
-    [userId, orderId, amount, newBalance, description || `Bonus earned from order (${LOYALTY_LEVELS[loyaltyLevel].name} level)`]
+    [userId, orderId, amount, newBalance, description || `Начисление бонусов (уровень ${LOYALTY_LEVELS[loyaltyLevel].name})`]
   );
 
   // Проверяем повышение уровня
@@ -206,7 +206,7 @@ export async function useBonuses(userId, orderId, amount, description = null, co
         `INSERT INTO bonus_history 
          (user_id, order_id, type, amount, balance_after, description)
          VALUES (?, ?, 'used', ?, ?, ?)`,
-        [userId, orderId, amount, newBalance, description || "Bonus used for order"]
+        [userId, orderId, amount, newBalance, description || "Списание бонусов"]
       );
 
       // WebSocket: уведомление о списании бонусов
@@ -243,10 +243,19 @@ export async function useBonuses(userId, orderId, amount, description = null, co
  */
 export async function getBonusHistory(userId, limit = 50, offset = 0) {
   const [history] = await db.query(
-    `SELECT id, order_id, type, amount, balance_after, description, created_at
-     FROM bonus_history
-     WHERE user_id = ?
-     ORDER BY created_at DESC
+    `SELECT 
+      bh.id, 
+      bh.order_id, 
+      o.order_number,
+      bh.type, 
+      bh.amount, 
+      bh.balance_after, 
+      bh.description, 
+      bh.created_at
+     FROM bonus_history bh
+     LEFT JOIN orders o ON bh.order_id = o.id
+     WHERE bh.user_id = ?
+     ORDER BY bh.created_at DESC
      LIMIT ? OFFSET ?`,
     [userId, limit, offset]
   );

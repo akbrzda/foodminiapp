@@ -43,6 +43,7 @@ import { X } from "lucide-vue-next";
 import PageHeader from "../components/PageHeader.vue";
 import { useRouter } from "vue-router";
 import { useLocationStore } from "../stores/location";
+import { addressesAPI } from "../api/endpoints";
 import { hapticFeedback } from "../services/telegram";
 
 const router = useRouter();
@@ -141,7 +142,21 @@ async function confirmAddress() {
 
   locationStore.setDeliveryAddress(deliveryAddress.value);
   if (selectedLocation.value) {
-    locationStore.setDeliveryCoords(selectedLocation.value);
+    locationStore.setDeliveryCoords({
+      lat: selectedLocation.value.lat,
+      lng: selectedLocation.value.lng ?? selectedLocation.value.lon,
+    });
+    if (locationStore.selectedCity?.id) {
+      try {
+        const lngValue = selectedLocation.value.lng ?? selectedLocation.value.lon;
+        const response = await addressesAPI.checkDeliveryZone(selectedLocation.value.lat, lngValue, locationStore.selectedCity.id);
+        if (response.data?.available && response.data?.polygon) {
+          locationStore.setDeliveryZone(response.data.polygon);
+        }
+      } catch (error) {
+        console.error("Failed to update delivery zone:", error);
+      }
+    }
   }
   router.push("/delivery-address");
 }
@@ -154,7 +169,21 @@ function applyMapSuggestion() {
   mapSuggestion.value = null;
   showSuggestions.value = false;
   locationStore.setDeliveryAddress(deliveryAddress.value);
-  locationStore.setDeliveryCoords(selectedLocation.value);
+  locationStore.setDeliveryCoords({
+    lat: selectedLocation.value.lat,
+    lng: selectedLocation.value.lng ?? selectedLocation.value.lon,
+  });
+  if (locationStore.selectedCity?.id) {
+    const lngValue = selectedLocation.value.lng ?? selectedLocation.value.lon;
+    addressesAPI
+      .checkDeliveryZone(selectedLocation.value.lat, lngValue, locationStore.selectedCity.id)
+      .then((response) => {
+        if (response.data?.available && response.data?.polygon) {
+          locationStore.setDeliveryZone(response.data.polygon);
+        }
+      })
+      .catch((error) => console.error("Failed to update delivery zone:", error));
+  }
 }
 
 async function initMap() {
@@ -165,6 +194,9 @@ async function initMap() {
   const initial = selectedLocation.value || cityCenter.value || { lat: 0, lon: 0 };
   mapInstance = L.map(mapContainerRef.value, { zoomControl: false, attributionControl: false }).setView([initial.lat, initial.lon], 15);
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(mapInstance);
+
+  // Загружаем и отображаем полигоны доставки
+  await loadDeliveryPolygons(L);
 
   mapInstance.on("click", async (event) => {
     const { lat, lng } = event.latlng;
@@ -178,6 +210,37 @@ async function initMap() {
 
   if (selectedLocation.value) {
     setMapMarker(selectedLocation.value.lat, selectedLocation.value.lon);
+  }
+}
+
+async function loadDeliveryPolygons(L) {
+  if (!locationStore.selectedCity?.id) return;
+
+  try {
+    const response = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/polygons/city/${locationStore.selectedCity.id}`);
+    if (!response.ok) return;
+
+    const data = await response.json();
+    if (!data.polygons || !data.polygons.length) return;
+
+    data.polygons.forEach((polygon) => {
+      if (polygon.polygon && polygon.polygon.coordinates) {
+        // GeoJSON хранит [lng, lat], Leaflet ожидает [lat, lng]
+        const coords = polygon.polygon.coordinates[0].map((coord) => [coord[1], coord[0]]);
+        L.polygon(coords, {
+          color: "#10b981",
+          fillColor: "#10b981",
+          fillOpacity: 0.1,
+          weight: 2,
+        }).addTo(mapInstance).bindPopup(`
+          <b>${polygon.branch_name}</b><br>
+          Доставка: ${polygon.delivery_time} мин<br>
+          Стоимость: ${polygon.delivery_cost}₽
+        `);
+      }
+    });
+  } catch (error) {
+    console.error("Failed to load delivery polygons:", error);
   }
 }
 

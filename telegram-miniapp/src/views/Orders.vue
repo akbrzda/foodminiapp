@@ -46,6 +46,8 @@ import { ordersAPI } from "../api/endpoints";
 import { hapticFeedback } from "../services/telegram";
 import { formatPrice } from "../utils/format";
 
+import { formatRelativeTime, isToday, isYesterday, formatTime, formatDateOnly } from "../utils/date";
+
 const router = useRouter();
 const orders = ref([]);
 const loading = ref(false);
@@ -86,21 +88,13 @@ function getStatusText(status) {
 
 function formatDate(dateString) {
   const date = new Date(dateString);
-  const now = new Date();
-  const diff = now - date;
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
 
-  if (days === 0) {
-    return `Сегодня, ${date.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}`;
-  } else if (days === 1) {
-    return `Вчера, ${date.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}`;
+  if (isToday(date)) {
+    return `Сегодня, ${formatTime(date)}`;
+  } else if (isYesterday(date)) {
+    return `Вчера, ${formatTime(date)}`;
   } else {
-    return date.toLocaleDateString("ru-RU", {
-      day: "numeric",
-      month: "short",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    return formatDateOnly(date);
   }
 }
 </script>

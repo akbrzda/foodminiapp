@@ -49,9 +49,7 @@
         </div>
         <div class="bonus-hint" v-if="maxBonusToUse === 0">Добавьте товары, чтобы использовать бонусы</div>
 
-        <button class="bonus-action" type="button" @click="enableBonusUsage" :disabled="maxBonusToUse === 0">
-          Списать частично
-        </button>
+        <button class="bonus-action" type="button" @click="enableBonusUsage" :disabled="maxBonusToUse === 0">Списать частично</button>
       </div>
 
       <div class="summary">
@@ -59,9 +57,9 @@
           <span>Товары ({{ cartStore.itemsCount }})</span>
           <span>{{ formatPrice(cartStore.totalPrice) }} ₽</span>
         </div>
-        <div class="summary-row">
+        <div class="summary-row" v-if="isDelivery">
           <span>Доставка</span>
-          <span>0 ₽</span>
+          <span>{{ formatPrice(deliveryCost) }} ₽</span>
         </div>
         <div class="summary-row bonus-discount" v-if="appliedBonusToUse > 0">
           <span>Бонусы</span>
@@ -71,9 +69,10 @@
           <span>Итого</span>
           <span>{{ formatPrice(finalCartTotal) }} ₽</span>
         </div>
+        <div class="summary-warning" v-if="isDelivery && !isMinOrderReached">Минимальная сумма заказа: {{ formatPrice(minOrderAmount) }} ₽</div>
       </div>
 
-      <button class="checkout-btn" @click="checkout">Оформить заказ</button>
+      <button class="checkout-btn" @click="checkout" :disabled="isDelivery && !isMinOrderReached">Оформить заказ</button>
     </div>
 
     <div v-if="showPartialModal" class="bonus-modal-overlay" @click.self="closePartialModal">
@@ -84,33 +83,15 @@
             <X :size="18" />
           </button>
         </div>
-        <div class="bonus-modal-subtitle">
-          Доступно к списанию до {{ maxRedeemPercentLabel }}% от {{ formatPrice(cartStore.totalPrice) }} ₽.
-        </div>
-        <input
-          v-model="partialBonusInput"
-          type="number"
-          min="0"
-          :max="maxBonusToUse"
-          class="bonus-modal-input"
-          placeholder="Введите сумму"
-        />
+        <div class="bonus-modal-subtitle">Доступно к списанию до {{ maxRedeemPercentLabel }}% от {{ formatPrice(cartStore.totalPrice) }} ₽.</div>
+        <input v-model="partialBonusInput" type="number" min="0" :max="maxBonusToUse" class="bonus-modal-input" placeholder="Введите сумму" />
         <div class="bonus-modal-actions">
           <button class="bonus-preset" type="button" @click="applyPreset(0.25)">25%</button>
           <button class="bonus-preset" type="button" @click="applyPreset(0.5)">50%</button>
           <button class="bonus-preset active" type="button" @click="applyPreset(1)">Максимум</button>
         </div>
-        <input
-          type="range"
-          :min="0"
-          :max="maxBonusToUse"
-          v-model="partialBonusInput"
-          class="bonus-slider"
-          @input="hapticFeedback('selection')"
-        />
-        <button class="bonus-confirm" type="button" @click="confirmPartialBonus">
-          Списать
-        </button>
+        <input type="range" :min="0" :max="maxBonusToUse" v-model="partialBonusInput" class="bonus-slider" @input="hapticFeedback('selection')" />
+        <button class="bonus-confirm" type="button" @click="confirmPartialBonus">Списать</button>
       </div>
     </div>
   </div>
@@ -123,12 +104,14 @@ import { useRouter } from "vue-router";
 import PageHeader from "../components/PageHeader.vue";
 import { useCartStore } from "../stores/cart";
 import { useLoyaltyStore } from "../stores/loyalty";
+import { useLocationStore } from "../stores/location";
 import { hapticFeedback } from "../services/telegram";
-import { bonusesAPI } from "../api/endpoints";
+import { bonusesAPI, addressesAPI } from "../api/endpoints";
 import { formatPrice } from "../utils/format";
 
 const router = useRouter();
 const cartStore = useCartStore();
+const locationStore = useLocationStore();
 const loyaltyStore = useLoyaltyStore();
 const bonusBalance = ref(0);
 const showBonusInfo = ref(false);
@@ -163,13 +146,42 @@ const displayBonusToUse = computed(() => {
 });
 
 const finalCartTotal = computed(() => {
-  return Math.max(0, cartStore.totalPrice - appliedBonusToUse.value);
+  return Math.max(0, cartStore.totalPrice + deliveryCost.value - appliedBonusToUse.value);
 });
 
 const maxRedeemPercentLabel = computed(() => Math.round(loyaltyStore.maxRedeemPercent * 100));
 
+const isDelivery = computed(() => locationStore.deliveryType === "delivery");
+const deliveryCost = computed(() => {
+  if (!isDelivery.value) return 0;
+  return parseFloat(locationStore.deliveryZone?.delivery_cost || 0);
+});
+const minOrderAmount = computed(() => {
+  if (!isDelivery.value) return 0;
+  return parseFloat(locationStore.deliveryZone?.min_order_amount || 0);
+});
+const isMinOrderReached = computed(() => {
+  if (!isDelivery.value) return true;
+  if (!minOrderAmount.value) return true;
+  return cartStore.totalPrice >= minOrderAmount.value;
+});
+
 onMounted(async () => {
   await loadBonusBalance();
+  if (isDelivery.value && !locationStore.deliveryZone && locationStore.deliveryCoords && locationStore.selectedCity?.id) {
+    try {
+      const checkResponse = await addressesAPI.checkDeliveryZone(
+        locationStore.deliveryCoords.lat,
+        locationStore.deliveryCoords.lng,
+        locationStore.selectedCity.id
+      );
+      if (checkResponse.data?.available && checkResponse.data?.polygon) {
+        locationStore.setDeliveryZone(checkResponse.data.polygon);
+      }
+    } catch (error) {
+      console.error("Failed to load delivery zone in cart:", error);
+    }
+  }
 });
 
 function getItemTotalPrice(item) {
@@ -197,6 +209,10 @@ function decreaseQuantity(index) {
 }
 
 function checkout() {
+  if (isDelivery.value && !isMinOrderReached.value) {
+    hapticFeedback("error");
+    return;
+  }
   hapticFeedback("medium");
   router.push("/checkout");
 }
@@ -450,6 +466,12 @@ watch(
   padding-top: 12px;
   border-top: 1px solid var(--color-border);
   margin-bottom: 0;
+}
+
+.summary-warning {
+  font-size: var(--font-size-caption);
+  color: var(--color-error);
+  margin-top: 8px;
 }
 
 .bonus-section {

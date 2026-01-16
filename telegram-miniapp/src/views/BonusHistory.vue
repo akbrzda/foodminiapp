@@ -46,14 +46,12 @@
         <div class="transactions" v-else>
           <div v-for="transaction in transactions" :key="transaction.id" class="transaction-item">
             <div class="transaction-icon" :class="transaction.type === 'earned' ? 'earn' : 'spend'">
-              {{ transaction.type === "earned" ? "+" : "−" }}
+              <Plus v-if="transaction.type === 'earned'" :size="20" />
+              <Minus v-else :size="20" />
             </div>
             <div class="transaction-info">
               <div class="transaction-title">{{ getTransactionTitle(transaction) }}</div>
               <div class="transaction-date">{{ formatDate(transaction.created_at) }}</div>
-              <div class="transaction-details" v-if="transaction.description">
-                {{ transaction.description }}
-              </div>
             </div>
             <div class="transaction-amount" :class="transaction.type === 'earned' ? 'earn' : 'spend'">
               {{ transaction.type === "earned" ? "+" : "−" }}{{ formatPrice(transaction.amount) }} ₽
@@ -95,7 +93,7 @@
 
 <script setup>
 import { computed, ref, onMounted } from "vue";
-import { X } from "lucide-vue-next";
+import { X, Plus, Minus } from "lucide-vue-next";
 import { bonusesAPI } from "../api/endpoints";
 import PageHeader from "../components/PageHeader.vue";
 import { formatPrice } from "../utils/format";
@@ -145,9 +143,11 @@ async function loadData() {
 
 function getTransactionTitle(transaction) {
   if (transaction.type === "earned") {
-    return `Начислено за заказ #${transaction.order_id}`;
+    return `Начислено за заказ #${transaction.order_number || transaction.order_id}`;
   } else if (transaction.type === "used") {
-    return `Списано в заказе #${transaction.order_id}`;
+    return `Списано в заказе #${transaction.order_number || transaction.order_id}`;
+  } else if (transaction.type === "manual" && transaction.description) {
+    return transaction.description;
   } else if (transaction.type === "expired") {
     return "Бонусы сгорели";
   }
@@ -456,10 +456,22 @@ function formatDate(dateString) {
   margin-bottom: 4px;
 }
 
+.transaction-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  font-size: var(--font-size-caption);
+  color: var(--color-text-secondary);
+}
+
 .transaction-date {
   font-size: var(--font-size-caption);
   color: var(--color-text-secondary);
-  margin-bottom: 4px;
+}
+
+.transaction-order-info {
+  font-size: var(--font-size-caption);
+  color: var(--color-text-muted);
 }
 
 .transaction-details {

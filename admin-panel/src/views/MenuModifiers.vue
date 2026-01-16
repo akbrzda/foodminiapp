@@ -1,89 +1,103 @@
 <template>
   <div class="space-y-6">
-    <section class="rounded-3xl border border-white/70 bg-white/80 p-6 shadow-card">
-      <div class="flex items-center justify-between">
+    <Card>
+      <CardHeader class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div>
-          <p class="panel-title text-base font-semibold text-ink">Группы модификаторов</p>
-          <p class="text-xs text-ink/60">Одиночный и множественный выбор</p>
+          <CardTitle>Группы модификаторов</CardTitle>
+          <CardDescription>Одиночный и множественный выбор</CardDescription>
         </div>
-        <button class="rounded-full bg-ink px-4 py-2 text-xs font-semibold uppercase tracking-widest text-white" @click="openModal()">
-          + Добавить группу
-        </button>
-      </div>
-    </section>
+        <Button @click="openModal()">
+          <Plus :size="16" />
+          Добавить группу
+        </Button>
+      </CardHeader>
+    </Card>
 
-    <section class="space-y-4">
-      <div v-for="group in groups" :key="group.id" class="rounded-3xl border border-white/70 bg-white/85 p-4 shadow-sm">
-        <div class="flex items-center justify-between">
+    <div class="space-y-4">
+      <Card v-for="group in groups" :key="group.id">
+        <CardHeader class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div>
-            <p class="panel-title text-base font-semibold text-ink">{{ group.name }}</p>
-            <p class="text-xs text-ink/60">
-              {{ group.type === "single" ? "Одиночный" : "Множественный" }} · {{ group.is_required ? "Обязательный" : "Опциональный" }}
-            </p>
+            <CardTitle>{{ group.name }}</CardTitle>
+            <CardDescription>
+              {{ group.type === "single" ? "Одиночный" : "Множественный" }} ·
+              {{ group.is_required ? "Обязательный" : "Опциональный" }}
+            </CardDescription>
           </div>
           <div class="flex gap-2">
-            <button class="rounded-full border border-ink/10 px-3 py-1 text-xs uppercase" @click="openModal(group)">✏️</button>
-            <button class="rounded-full border border-red-200 px-3 py-1 text-xs uppercase text-red-600" @click="deleteGroup(group)">🗑️</button>
+            <Button variant="ghost" size="icon" @click="openModal(group)">
+              <Pencil :size="16" />
+            </Button>
+            <Button variant="ghost" size="icon" @click="deleteGroup(group)">
+              <Trash2 :size="16" class="text-red-600" />
+            </Button>
           </div>
-        </div>
-
-        <div class="mt-4 space-y-2">
+        </CardHeader>
+        <CardContent class="space-y-2">
           <div
             v-for="modifier in group.modifiers"
             :key="modifier.id"
-            class="flex items-center justify-between rounded-2xl border border-line bg-white px-4 py-2 text-sm"
+            class="flex items-center justify-between rounded-lg border border-border/60 bg-muted/40 px-4 py-2 text-sm"
           >
             <div>
-              <div class="font-medium">{{ modifier.name }}</div>
-              <div class="text-xs text-ink/60">{{ modifier.price }} ₽</div>
+              <div class="font-medium text-foreground">{{ modifier.name }}</div>
+              <div class="text-xs text-muted-foreground">{{ formatCurrency(modifier.price) }}</div>
             </div>
             <div class="flex gap-2">
-              <button class="rounded-full border border-ink/10 px-3 py-1 text-xs uppercase" @click="editModifier(group, modifier)">✏️</button>
-              <button class="rounded-full border border-red-200 px-3 py-1 text-xs uppercase text-red-600" @click="deleteModifier(modifier)">
-                🗑️
-              </button>
+              <Button variant="ghost" size="icon" @click="editModifier(group, modifier)">
+                <Pencil :size="16" />
+              </Button>
+              <Button variant="ghost" size="icon" @click="deleteModifier(modifier)">
+                <Trash2 :size="16" class="text-red-600" />
+              </Button>
             </div>
           </div>
-        </div>
 
-        <button class="mt-3 rounded-full border border-ink/10 px-3 py-1 text-xs uppercase" @click="openModifierModal(group)">
-          + Добавить модификатор
-        </button>
-      </div>
-    </section>
+          <Button variant="outline" size="sm" @click="openModifierModal(group)">
+            <Plus :size="16" />
+            Добавить модификатор
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
 
     <BaseModal v-if="showModal" :title="modalTitle" :subtitle="modalSubtitle" @close="closeModal">
       <form class="space-y-4" @submit.prevent="submitGroup">
-        <div>
-          <label class="text-xs uppercase tracking-widest text-ink/60">Название</label>
-          <input v-model="form.name" class="mt-2 w-full rounded-2xl border border-line bg-white px-3 py-2 text-sm" required />
+        <div class="space-y-2">
+          <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Название</label>
+          <Input v-model="form.name" required />
         </div>
-        <div>
-          <label class="text-xs uppercase tracking-widest text-ink/60">Тип</label>
-          <select v-model="form.type" class="mt-2 w-full rounded-2xl border border-line bg-white px-3 py-2 text-sm">
+        <div class="space-y-2">
+          <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Тип</label>
+          <Select v-model="form.type">
             <option value="single">Одиночный выбор</option>
             <option value="multiple">Множественный выбор</option>
-          </select>
+          </Select>
         </div>
-        <label class="flex items-center gap-2 text-sm">
-          <input v-model="form.is_required" type="checkbox" />
+        <label class="flex items-center gap-2 text-sm text-foreground">
+          <input v-model="form.is_required" type="checkbox" class="h-4 w-4 rounded border-border" />
           Обязательная группа
         </label>
-        <button class="w-full rounded-2xl bg-accent px-4 py-2 text-xs font-semibold uppercase tracking-widest text-ink">Сохранить</button>
+        <Button class="w-full" type="submit">
+          <Save :size="16" />
+          Сохранить
+        </Button>
       </form>
     </BaseModal>
 
     <BaseModal v-if="showModifierModal" title="Модификатор" subtitle="Добавьте параметр" @close="closeModifierModal">
       <form class="space-y-4" @submit.prevent="submitModifier">
-        <div>
-          <label class="text-xs uppercase tracking-widest text-ink/60">Название</label>
-          <input v-model="modifierForm.name" class="mt-2 w-full rounded-2xl border border-line bg-white px-3 py-2 text-sm" required />
+        <div class="space-y-2">
+          <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Название</label>
+          <Input v-model="modifierForm.name" required />
         </div>
-        <div>
-          <label class="text-xs uppercase tracking-widest text-ink/60">Цена</label>
-          <input v-model.number="modifierForm.price" type="number" class="mt-2 w-full rounded-2xl border border-line bg-white px-3 py-2 text-sm" />
+        <div class="space-y-2">
+          <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Цена</label>
+          <Input v-model.number="modifierForm.price" type="number" />
         </div>
-        <button class="w-full rounded-2xl bg-accent px-4 py-2 text-xs font-semibold uppercase tracking-widest text-ink">Сохранить</button>
+        <Button class="w-full" type="submit">
+          <Save :size="16" />
+          Сохранить
+        </Button>
       </form>
     </BaseModal>
   </div>
@@ -91,8 +105,18 @@
 
 <script setup>
 import { computed, onMounted, ref } from "vue";
+import { Pencil, Plus, Save, Trash2 } from "lucide-vue-next";
 import api from "../api/client.js";
 import BaseModal from "../components/BaseModal.vue";
+import Button from "../components/ui/Button.vue";
+import Card from "../components/ui/Card.vue";
+import CardContent from "../components/ui/CardContent.vue";
+import CardDescription from "../components/ui/CardDescription.vue";
+import CardHeader from "../components/ui/CardHeader.vue";
+import CardTitle from "../components/ui/CardTitle.vue";
+import Input from "../components/ui/Input.vue";
+import Select from "../components/ui/Select.vue";
+import { formatCurrency } from "../utils/format.js";
 
 const groups = ref([]);
 const showModal = ref(false);
@@ -188,19 +212,15 @@ const submitModifier = async () => {
 
   try {
     if (editingModifier.value) {
-      console.log("Updating modifier:", editingModifier.value.id, modifierForm.value);
       await api.put(`/api/menu/admin/modifiers/${editingModifier.value.id}`, modifierForm.value);
     } else {
       const url = `/api/menu/admin/modifier-groups/${activeGroup.value.id}/modifiers`;
-      console.log("Creating modifier:", url, modifierForm.value);
       await api.post(url, modifierForm.value);
     }
     showModifierModal.value = false;
     await loadGroups();
   } catch (error) {
     console.error("Failed to save modifier:", error);
-    console.error("Response data:", error.response?.data);
-    console.error("Status:", error.response?.status);
     alert("Ошибка при сохранении модификатора: " + (error.response?.data?.error || error.message));
   }
 };

@@ -49,3 +49,67 @@ export const parseTelegramUser = (telegramInitData) => {
     return null;
   }
 };
+
+// Отправка уведомления пользователю через Telegram Bot
+export const sendTelegramNotification = async (telegramId, message) => {
+  try {
+    const botToken = process.env.TELEGRAM_BOT_TOKEN;
+
+    if (!botToken) {
+      console.warn("TELEGRAM_BOT_TOKEN not configured");
+      return false;
+    }
+
+    const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        chat_id: telegramId,
+        text: message,
+        parse_mode: "HTML",
+      }),
+    });
+
+    const result = await response.json();
+
+    if (!result.ok) {
+      console.error("Telegram API error:", result);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error("Failed to send Telegram notification:", error);
+    return false;
+  }
+};
+
+// Форматирование уведомления о смене статуса заказа
+export const formatOrderStatusMessage = (orderNumber, status, orderType) => {
+  const statusMessages = {
+    delivery: {
+      pending: "⏳ Ваш заказ получен и ожидает подтверждения",
+      confirmed: "✅ Заказ подтвержден и принят в работу",
+      preparing: "👨‍🍳 Ваш заказ готовится",
+      ready: "📦 Заказ готов",
+      delivering: "🚚 Курьер везет ваш заказ",
+      completed: "✨ Заказ доставлен. Приятного аппетита!",
+      cancelled: "❌ Заказ отменен",
+    },
+    pickup: {
+      pending: "⏳ Ваш заказ получен и ожидает подтверждения",
+      confirmed: "✅ Заказ подтвержден и принят в работу",
+      preparing: "👨‍🍳 Ваш заказ готовится",
+      ready: "📦 Заказ готов к выдаче. Ждем вас!",
+      completed: "✨ Заказ выдан. Приятного аппетита!",
+      cancelled: "❌ Заказ отменен",
+    },
+  };
+
+  const messages = orderType === "delivery" ? statusMessages.delivery : statusMessages.pickup;
+  const statusText = messages[status] || "Статус заказа изменен";
+
+  return `<b>Заказ #${orderNumber}</b>\n\n${statusText}`;
+};
