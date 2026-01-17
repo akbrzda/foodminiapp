@@ -226,7 +226,7 @@ async function loadDeliveryPolygons(L) {
     data.polygons.forEach((polygon) => {
       if (polygon.polygon && polygon.polygon.coordinates) {
         // GeoJSON хранит [lng, lat], Leaflet ожидает [lat, lng]
-        const coords = polygon.polygon.coordinates[0].map((coord) => [coord[1], coord[0]]);
+        const coords = polygon.polygon.coordinates[0].map((coord) => [coord[0], coord[1]]);
         L.polygon(coords, {
           color: "#10b981",
           fillColor: "#10b981",
