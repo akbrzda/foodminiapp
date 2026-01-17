@@ -170,6 +170,105 @@ router.post("/geocode", async (req, res, next) => {
   }
 });
 
+// Обратное геокодирование (координаты -> адрес)
+router.post("/reverse", async (req, res, next) => {
+  try {
+    const { latitude, longitude } = req.body;
+
+    if (!latitude || !longitude) {
+      return res.status(400).json({
+        error: "latitude and longitude are required",
+      });
+    }
+
+    const lat = Number(latitude);
+    const lon = Number(longitude);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+      return res.status(400).json({
+        error: "latitude and longitude must be numbers",
+      });
+    }
+
+    const roundedLat = lat.toFixed(5);
+    const roundedLon = lon.toFixed(5);
+    const cacheKey = `reverse:${roundedLat},${roundedLon}`;
+    let cached = null;
+    try {
+      cached = await redis.get(cacheKey);
+    } catch (redisError) {
+      console.error("Redis error on reverse cache get:", redisError);
+    }
+
+    if (cached) {
+      return res.json(JSON.parse(cached));
+    }
+
+    // Rate limiting: 1 запрос в секунду
+    const rateLimitKey = "reverse:ratelimit";
+    try {
+      const lastRequest = await redis.get(rateLimitKey);
+      if (lastRequest) {
+        const timeSinceLastRequest = Date.now() - parseInt(lastRequest);
+        if (timeSinceLastRequest < 1000) {
+          await new Promise((resolve) => setTimeout(resolve, 1000 - timeSinceLastRequest));
+        }
+      }
+      await redis.set(rateLimitKey, Date.now().toString(), "EX", 1);
+    } catch (redisError) {
+      console.error("Redis error on reverse rate limiting:", redisError);
+    }
+
+    const nominatimUrl = "https://nominatim.openstreetmap.org/reverse";
+    const response = await axios.get(nominatimUrl, {
+      params: {
+        format: "json",
+        addressdetails: 1,
+        lat: roundedLat,
+        lon: roundedLon,
+      },
+      headers: {
+        "User-Agent": "MiniappPanda/1.0 (Food Delivery Service)",
+      },
+      timeout: 5000,
+    });
+
+    if (!response.data) {
+      return res.status(404).json({
+        error: "Address not found",
+      });
+    }
+
+    const result = response.data;
+    const address = result.address || {};
+    const street =
+      address.road || address.pedestrian || address.footway || address.residential || address.living_street || address.street || address.neighbourhood;
+    const house = address.house_number || address.building;
+    const label = street ? (house ? `${street}, ${house}` : street) : result.display_name || "";
+
+    const payload = {
+      lat: parseFloat(result.lat),
+      lon: parseFloat(result.lon),
+      label,
+    };
+
+    try {
+      await redis.set(cacheKey, JSON.stringify(payload), "EX", 86400);
+    } catch (redisError) {
+      console.error("Redis error on reverse cache set:", redisError);
+    }
+
+    res.json(payload);
+  } catch (error) {
+    if (error.response) {
+      return res.status(502).json({
+        error: "Reverse geocoding service unavailable",
+        details: error.message,
+      });
+    }
+    next(error);
+  }
+});
+
 // Проверить попадание точки в зону доставки
 router.post("/check-delivery", async (req, res, next) => {
   try {
@@ -219,6 +318,45 @@ router.post("/check-delivery", async (req, res, next) => {
 });
 
 // ==================== Админские эндпоинты ====================
+
+// Получить все полигоны (включая неактивные)
+router.get("/admin/all", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
+  try {
+    let cityFilter = "";
+    const values = [];
+
+    if (req.user.role === "manager") {
+      const cities = req.user.cities || [];
+      if (cities.length === 0) {
+        return res.json({ polygons: [] });
+      }
+      cityFilter = `WHERE b.city_id IN (${cities.map(() => "?").join(",")})`;
+      values.push(...cities);
+    }
+
+    const [polygons] = await db.query(
+      `SELECT dp.id, dp.branch_id, dp.name,
+              ST_AsGeoJSON(dp.polygon) as polygon,
+              dp.delivery_time,
+              dp.min_order_amount, dp.delivery_cost, dp.is_active,
+              b.city_id, b.name as branch_name
+       FROM delivery_polygons dp
+       JOIN branches b ON dp.branch_id = b.id
+       ${cityFilter}
+       ORDER BY b.city_id, dp.name`,
+      values
+    );
+
+    const parsedPolygons = polygons.map((p) => ({
+      ...p,
+      polygon: parseGeoJson(p.polygon),
+    }));
+
+    res.json({ polygons: parsedPolygons });
+  } catch (error) {
+    next(error);
+  }
+});
 
 // Получить все полигоны филиала (включая неактивные)
 router.get("/admin/branch/:branchId", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {

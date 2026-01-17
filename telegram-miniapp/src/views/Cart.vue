@@ -1,6 +1,5 @@
 <template>
   <div class="cart">
-    <PageHeader title="Корзина" />
 
     <div v-if="cartStore.items.length === 0" class="empty">
       <p>Корзина пуста</p>
@@ -101,7 +100,6 @@
 import { computed, onMounted, ref, watch } from "vue";
 import { X } from "lucide-vue-next";
 import { useRouter } from "vue-router";
-import PageHeader from "../components/PageHeader.vue";
 import { useCartStore } from "../stores/cart";
 import { useLoyaltyStore } from "../stores/loyalty";
 import { useLocationStore } from "../stores/location";

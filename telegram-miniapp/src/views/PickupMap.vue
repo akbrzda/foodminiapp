@@ -1,7 +1,5 @@
 <template>
   <div class="pickup-map">
-    <PageHeader title="Найти пиццерию" />
-
     <div ref="mapContainerRef" class="map"></div>
 
     <div class="search-bar">
@@ -37,7 +35,6 @@
 <script setup>
 import { ref, computed, onMounted } from "vue";
 import { X, MapPin } from "lucide-vue-next";
-import PageHeader from "../components/PageHeader.vue";
 import { useRouter } from "vue-router";
 import { useLocationStore } from "../stores/location";
 import { citiesAPI } from "../api/endpoints";

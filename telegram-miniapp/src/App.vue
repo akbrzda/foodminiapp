@@ -20,7 +20,6 @@ const isHydrated = ref(false);
 const lastSyncedPayload = ref("");
 let syncTimer = null;
 let blurListenersAttached = false;
-let blurTouchHandler = null;
 let blurScrollHandler = null;
 
 const stateToSync = computed(() => ({
@@ -168,6 +167,9 @@ function getStatusText(status) {
 function shouldBlurOnEvent(event) {
   const target = event?.target;
   if (!target) return true;
+  if (target.closest?.("[data-keep-focus='true']")) {
+    return false;
+  }
   const isEditable = target.closest?.("input, textarea, [contenteditable='true']");
   return !isEditable;
 }
@@ -182,27 +184,21 @@ function blurActiveElement() {
 
 function attachBlurListeners() {
   if (blurListenersAttached || typeof window === "undefined") return;
-  const handleTouch = (event) => {
-    if (shouldBlurOnEvent(event)) {
-      blurActiveElement();
-    }
-  };
   const handleScroll = () => {
+    const active = document.activeElement;
+    if (active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.isContentEditable)) {
+      return;
+    }
     blurActiveElement();
   };
 
-  window.addEventListener("touchstart", handleTouch, { passive: true, capture: true });
   window.addEventListener("scroll", handleScroll, { passive: true, capture: true });
-  blurTouchHandler = handleTouch;
   blurScrollHandler = handleScroll;
   blurListenersAttached = true;
 }
 
 function detachBlurListeners() {
   if (!blurListenersAttached || typeof window === "undefined") return;
-  if (blurTouchHandler) {
-    window.removeEventListener("touchstart", blurTouchHandler, { capture: true });
-  }
   if (blurScrollHandler) {
     window.removeEventListener("scroll", blurScrollHandler, { capture: true });
   }

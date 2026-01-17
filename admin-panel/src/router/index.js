@@ -9,10 +9,12 @@ import ClientDetail from "../views/ClientDetail.vue";
 import Cities from "../views/Cities.vue";
 import Branches from "../views/Branches.vue";
 import DeliveryZones from "../views/DeliveryZones.vue";
+import DeliveryZoneEditor from "../views/DeliveryZoneEditor.vue";
 import MenuCategories from "../views/MenuCategories.vue";
 import MenuItems from "../views/MenuItems.vue";
 import MenuModifiers from "../views/MenuModifiers.vue";
 import AdminUsers from "../views/AdminUsers.vue";
+import AdminLogs from "../views/AdminLogs.vue";
 import OrderDetail from "../views/OrderDetail.vue";
 import NotFound from "../views/NotFound.vue";
 
@@ -35,6 +37,12 @@ const router = createRouter({
         { path: "branches", name: "branches", component: Branches, meta: { title: "Филиалы", subtitle: "Рестораны и точки самовывоза" } },
         { path: "delivery-zones", name: "delivery-zones", component: DeliveryZones, meta: { title: "Зоны доставки", subtitle: "Полигоны на карте" } },
         {
+          path: "delivery-zones/:branchId/:polygonId",
+          name: "delivery-zone-editor",
+          component: DeliveryZoneEditor,
+          meta: { title: "Полигон доставки", subtitle: "Редактирование зоны" },
+        },
+        {
           path: "menu/categories",
           name: "menu-categories",
           component: MenuCategories,
@@ -47,6 +55,12 @@ const router = createRouter({
           name: "admin-users",
           component: AdminUsers,
           meta: { title: "Администраторы", subtitle: "Управление пользователями админ-панели" },
+        },
+        {
+          path: "logs",
+          name: "admin-logs",
+          component: AdminLogs,
+          meta: { title: "Логи", subtitle: "Журнал действий администраторов" },
         },
       ],
     },

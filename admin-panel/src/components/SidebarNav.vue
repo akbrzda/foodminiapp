@@ -53,6 +53,10 @@
         <UserCog :size="18" />
         Пользователи
       </RouterLink>
+      <RouterLink class="nav-link" to="/logs" @click="emit('navigate')">
+        <FileText :size="18" />
+        Логи
+      </RouterLink>
     </nav>
 
     <div class="rounded-xl border border-border/60 bg-muted/60 p-4 text-xs text-muted-foreground">
@@ -70,6 +74,7 @@ import { RouterLink } from "vue-router";
 import {
   Building2,
   ClipboardList,
+  FileText,
   LayoutDashboard,
   Layers,
   ListTree,

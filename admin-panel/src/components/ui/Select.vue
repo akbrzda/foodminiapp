@@ -13,7 +13,7 @@ const props = defineProps({
   class: { type: String, default: "" },
 });
 
-const emit = defineEmits(["update:modelValue"]);
+const emit = defineEmits(["update:modelValue", "change"]);
 const attrs = useAttrs();
 
 const classes = computed(() =>
@@ -27,5 +27,6 @@ const onChange = (event) => {
   const option = event.target.selectedOptions?.[0];
   const value = option && option._value !== undefined ? option._value : event.target.value;
   emit("update:modelValue", value);
+  emit("change", value);
 };
 </script>

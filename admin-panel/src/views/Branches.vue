@@ -58,12 +58,8 @@
                 </div>
               </TableCell>
               <TableCell>
-                <div class="text-xs text-muted-foreground">
-                  Приготовление: {{ formatTimeValue(branch.prep_time) }}
-                </div>
-                <div class="text-xs text-muted-foreground">
-                  Сборка: {{ formatTimeValue(branch.assembly_time) }}
-                </div>
+                <div class="text-xs text-muted-foreground">Приготовление: {{ formatTimeValue(branch.prep_time) }}</div>
+                <div class="text-xs text-muted-foreground">Сборка: {{ formatTimeValue(branch.assembly_time) }}</div>
               </TableCell>
               <TableCell>
                 <Badge :variant="branch.is_active ? 'success' : 'secondary'">{{ branch.is_active ? "Активен" : "Неактивен" }}</Badge>
@@ -128,17 +124,12 @@
           </div>
         </div>
 
+        <div class="space-y-2">
+          <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Часы работы</label>
           <div class="space-y-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Часы работы</label>
-            <div class="space-y-2">
-              <div v-for="(schedule, index) in form.working_hours" :key="index" class="flex flex-wrap items-center gap-2">
+            <div v-for="(schedule, index) in form.working_hours" :key="index" class="flex flex-wrap items-center gap-2">
               <Select v-model="schedule.day" class="w-36">
-                <option
-                  v-for="day in days"
-                  :key="day.value"
-                  :value="day.value"
-                  :disabled="isDayTaken(day.value, index)"
-                >
+                <option v-for="day in days" :key="day.value" :value="day.value" :disabled="isDayTaken(day.value, index)">
                   {{ day.label }}
                 </option>
               </Select>
@@ -228,7 +219,7 @@ const loadBranches = async () => {
   }
   const requestId = ++branchesRequestId;
   try {
-    const response = await api.get(`/api/cities/admin/${cityId.value}/branches`);
+    const response = await api.get(`/api/cities/${cityId.value}/branches`);
     if (requestId === branchesRequestId) {
       branches.value = response.data.branches || [];
     }
@@ -300,17 +291,31 @@ const initBranchMap = () => {
     }
   }
 
-  branchMap = L.map("branch-map", {
+  const container = document.getElementById("branch-map");
+  if (!container) return;
+
+  branchMap = L.map(container, {
     attributionControl: false,
+    zoomControl: true,
   }).setView(center, 13);
 
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: 19,
+    maxZoom: 20,
   }).addTo(branchMap);
 
   if (form.value.latitude && form.value.longitude) {
+    const branchIcon = L.divIcon({
+      className: "custom-branch-marker",
+      html: `<div style="background-color: #FFD200; border: 3px solid #fff; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(0,0,0,0.3);">
+        <span style="font-size: 18px;">🏪</span>
+      </div>`,
+      iconSize: [32, 32],
+      iconAnchor: [16, 16],
+    });
+
     branchMarker = L.marker([form.value.latitude, form.value.longitude], {
       draggable: true,
+      icon: branchIcon,
     }).addTo(branchMap);
 
     branchMarker.on("dragend", () => {
@@ -324,11 +329,21 @@ const initBranchMap = () => {
     form.value.latitude = e.latlng.lat;
     form.value.longitude = e.latlng.lng;
 
+    const branchIcon = L.divIcon({
+      className: "custom-branch-marker",
+      html: `<div style="background-color: #FFD200; border: 3px solid #fff; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(0,0,0,0.3);">
+        <span style="font-size: 18px;">🏪</span>
+      </div>`,
+      iconSize: [32, 32],
+      iconAnchor: [16, 16],
+    });
+
     if (branchMarker) {
       branchMarker.setLatLng(e.latlng);
     } else {
       branchMarker = L.marker(e.latlng, {
         draggable: true,
+        icon: branchIcon,
       }).addTo(branchMap);
 
       branchMarker.on("dragend", () => {
@@ -478,8 +493,7 @@ const days = [
   { value: "sunday", label: "Воскресенье" },
 ];
 
-const isDayTaken = (day, index) =>
-  form.value.working_hours.some((schedule, idx) => idx !== index && schedule.day === day);
+const isDayTaken = (day, index) => form.value.working_hours.some((schedule, idx) => idx !== index && schedule.day === day);
 
 const getNextAvailableDay = () => {
   const used = new Set(form.value.working_hours.map((schedule) => schedule.day));

@@ -39,7 +39,11 @@
             <Badge variant="secondary">{{ polygons.length }}/3</Badge>
           </CardHeader>
           <CardContent class="space-y-2">
-            <div v-for="polygon in polygons" :key="polygon.id" class="flex items-center justify-between rounded-lg border border-border/60 bg-muted/40 p-2">
+            <div
+              v-for="polygon in polygons"
+              :key="polygon.id"
+              class="flex items-center justify-between rounded-lg border border-border/60 bg-muted/40 p-2"
+            >
               <p class="text-sm font-medium text-foreground">{{ polygon.name || `Полигон #${polygon.id}` }}</p>
               <div class="flex gap-1">
                 <Button variant="ghost" size="icon" @click="editPolygon(polygon)">
@@ -60,12 +64,12 @@
         </Card>
       </div>
 
-        <Card>
+      <Card>
         <CardContent class="p-3">
-          <div v-if="!branchId" class="flex min-h-[520px] items-center justify-center text-sm text-muted-foreground lg:min-h-[70vh]">
-            Выберите город и филиал для отображения карты
+          <div v-if="!branchId" class="mb-3 rounded-lg border border-dashed border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+            {{ cityId ? "Показаны полигоны выбранного города. Выберите филиал для редактирования." : "Показаны все полигоны. Выберите город или филиал для редактирования." }}
           </div>
-          <div v-else id="map" class="min-h-[520px] w-full rounded-lg lg:min-h-[70vh]"></div>
+          <div id="map" class="min-h-[520px] w-full rounded-lg lg:min-h-[70vh]"></div>
         </CardContent>
       </Card>
     </div>
@@ -105,6 +109,7 @@ import { Pencil, Plus, Save, Trash2 } from "lucide-vue-next";
 import api from "../api/client.js";
 import BaseModal from "../components/BaseModal.vue";
 import { useReferenceStore } from "../stores/reference.js";
+import { useRoute, useRouter } from "vue-router";
 import Badge from "../components/ui/Badge.vue";
 import Button from "../components/ui/Button.vue";
 import Card from "../components/ui/Card.vue";
@@ -119,11 +124,19 @@ import "leaflet/dist/leaflet.css";
 import "leaflet-draw";
 import "leaflet-draw/dist/leaflet.draw.css";
 
+if (L?.GeometryUtil?.readableArea && !L.GeometryUtil.__patched) {
+  L.GeometryUtil.readableArea = () => "";
+  L.GeometryUtil.__patched = true;
+}
+
 const referenceStore = useReferenceStore();
+const route = useRoute();
+const router = useRouter();
 const cityId = ref("");
 const branchId = ref("");
 const branches = ref([]);
 const polygons = ref([]);
+const allPolygons = ref([]);
 const showModal = ref(false);
 const editing = ref(null);
 const form = ref({
@@ -137,6 +150,7 @@ let map = null;
 let drawnItems = null;
 let drawControl = null;
 let currentLayer = null;
+let editHandler = null;
 const polygonLayers = new Map();
 let branchesRequestId = 0;
 
@@ -175,16 +189,30 @@ const loadPolygons = async () => {
   }
 };
 
+const loadAllPolygons = async () => {
+  try {
+    const response = await api.get("/api/polygons/admin/all");
+    allPolygons.value = response.data.polygons || [];
+  } catch (error) {
+    console.error("Ошибка загрузки всех полигонов:", error);
+    allPolygons.value = [];
+  }
+};
+
 const onCityChange = () => {
   branchId.value = "";
   polygons.value = [];
   loadBranches();
+  loadAllPolygons();
   if (map) {
     map.remove();
     map = null;
   }
   drawnItems = null;
   currentLayer = null;
+  nextTick(() => {
+    initMap();
+  });
 };
 
 const onBranchChange = async () => {
@@ -199,11 +227,23 @@ const initMap = () => {
     map.remove();
   }
 
+  if (L?.GeometryUtil?.readableArea) {
+    L.GeometryUtil.readableArea = () => "";
+  }
+
   const container = document.getElementById("map");
   if (!container) return;
 
+  let center = [55.751244, 37.618423];
   const selectedBranch = branches.value.find((b) => b.id === parseInt(branchId.value));
-  const center = selectedBranch?.latitude && selectedBranch?.longitude ? [selectedBranch.latitude, selectedBranch.longitude] : [55.751244, 37.618423];
+  if (selectedBranch?.latitude && selectedBranch?.longitude) {
+    center = [selectedBranch.latitude, selectedBranch.longitude];
+  } else if (cityId.value) {
+    const selectedCity = referenceStore.cities.find((c) => c.id === parseInt(cityId.value));
+    if (selectedCity?.latitude && selectedCity?.longitude) {
+      center = [selectedCity.latitude, selectedCity.longitude];
+    }
+  }
 
   map = L.map("map", {
     zoomControl: true,
@@ -211,41 +251,80 @@ const initMap = () => {
   }).setView(center, 13);
 
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: 19,
+    maxZoom: 20,
   }).addTo(map);
+
+  // Добавляем маркер филиала
+  if (selectedBranch) {
+    const branchIcon = L.divIcon({
+      className: "custom-branch-marker",
+      html: `<div style="background-color: #FFD200; border: 3px solid #fff; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(0,0,0,0.3);">
+        <span style="font-size: 18px;">🏪</span>
+      </div>`,
+      iconSize: [32, 32],
+      iconAnchor: [16, 16],
+    });
+    L.marker(center, { icon: branchIcon })
+      .addTo(map)
+      .bindPopup(`<strong>${selectedBranch.name}</strong><br>${selectedBranch.address || ""}`, { autoPan: false });
+  }
 
   drawnItems = new L.FeatureGroup();
   map.addLayer(drawnItems);
 
-  drawControl = new L.Control.Draw({
-    edit: {
-      featureGroup: drawnItems,
-      remove: false,
-    },
-    draw: {
-      polygon: true,
-      polyline: false,
-      rectangle: false,
-      circle: false,
-      circlemarker: false,
-      marker: false,
-    },
-  });
+  if (branchId.value) {
+    drawControl = new L.Control.Draw({
+      edit: {
+        featureGroup: drawnItems,
+        remove: false,
+      },
+      draw: {
+        polygon: {
+          allowIntersection: false,
+          showArea: false,
+          shapeOptions: {
+            color: "#FFD200",
+            fillColor: "#FFD200",
+            fillOpacity: 0.25,
+            weight: 3,
+            opacity: 0.9,
+          },
+        },
+        polyline: false,
+        rectangle: false,
+        circle: false,
+        circlemarker: false,
+        marker: false,
+      },
+    });
 
-  map.addControl(drawControl);
+    map.addControl(drawControl);
 
-  map.on(L.Draw.Event.CREATED, (event) => {
-    const layer = event.layer;
-    if (currentLayer) {
-      drawnItems.removeLayer(currentLayer);
-    }
-    currentLayer = layer;
-    drawnItems.addLayer(layer);
-    showModal.value = true;
-    editing.value = null;
-  });
+    map.on(L.Draw.Event.CREATED, (event) => {
+      const layer = event.layer;
+      if (currentLayer) {
+        drawnItems.removeLayer(currentLayer);
+      }
+      currentLayer = layer;
+      drawnItems.addLayer(layer);
+      showModal.value = true;
+      editing.value = null;
+    });
+  }
 
   renderPolygonsOnMap();
+  if (branchId.value) {
+    editHandler = new L.EditToolbar.Edit(map, {
+      featureGroup: drawnItems,
+      selectedPathOptions: {
+        color: "#f97316",
+        fillColor: "#f97316",
+        fillOpacity: 0.2,
+      },
+    });
+  } else {
+    editHandler = null;
+  }
 };
 
 const renderPolygonsOnMap = () => {
@@ -253,43 +332,65 @@ const renderPolygonsOnMap = () => {
   drawnItems.clearLayers();
   polygonLayers.clear();
 
-  polygons.value.forEach((polygon) => {
-    if (polygon.polygon && polygon.polygon.coordinates) {
-      const coords = polygon.polygon.coordinates[0].map((coord) => [coord[1], coord[0]]);
-      const layer = L.polygon(coords);
-      layer.polygonId = polygon.id;
-      drawnItems.addLayer(layer);
+  // Цветовая палитра для разных полигонов
+  const colors = ["#FFD200", "#9333EA", "#06B6D4"];
+
+  const visiblePolygons = branchId.value
+    ? polygons.value
+    : cityId.value
+      ? allPolygons.value.filter((polygon) => polygon.city_id === parseInt(cityId.value))
+      : allPolygons.value;
+
+  visiblePolygons.forEach((polygon, index) => {
+    if (!polygon.polygon) return;
+    const color = colors[index % colors.length];
+    const style = {
+      color: color,
+      fillColor: color,
+      fillOpacity: 0.25,
+      weight: 3,
+      opacity: 0.9,
+    };
+
+    const rawCoords = polygon.polygon?.coordinates?.[0];
+    if (!rawCoords?.length) return;
+    const coords = rawCoords.map((coord) => [coord[0], coord[1]]);
+
+    const layer = L.polygon(coords, style);
+    layer.polygonId = polygon.id;
+
+    const popupContent = `
+      <div style="font-family: system-ui, -apple-system, sans-serif;">
+        <strong style="font-size: 14px;">${polygon.name || `Полигон #${polygon.id}`}</strong><br>
+        <span style="font-size: 12px; color: #666;">⏱️ ${polygon.delivery_time || 30} мин</span><br>
+        <span style="font-size: 12px; color: #666;">💰 Мин. заказ: ${polygon.min_order_amount || 0}₽</span><br>
+        <span style="font-size: 12px; color: #666;">🚚 Доставка: ${polygon.delivery_cost || 0}₽</span>
+      </div>
+    `;
+    layer.bindPopup(popupContent, { autoPan: false });
+
+    drawnItems.addLayer(layer);
+    if (branchId.value) {
       polygonLayers.set(polygon.id, layer);
     }
   });
 };
 
 const startDrawing = () => {
-  if (drawControl) {
-    new L.Draw.Polygon(map, drawControl.options.draw.polygon).enable();
-  }
+  if (!branchId.value) return;
+  router.push({
+    name: "delivery-zone-editor",
+    params: { branchId: branchId.value, polygonId: "new" },
+    query: { cityId: cityId.value },
+  });
 };
 
 const editPolygon = (polygon) => {
-  if (currentLayer?.editing?.disable) {
-    currentLayer.editing.disable();
-  }
-  editing.value = polygon;
-  form.value = {
-    name: polygon.name || "",
-    delivery_time: polygon.delivery_time || 30,
-    min_order_amount: polygon.min_order_amount || 0,
-    delivery_cost: polygon.delivery_cost || 0,
-  };
-  const layer = polygonLayers.get(polygon.id);
-  if (layer) {
-    currentLayer = layer;
-    if (currentLayer.editing?.enable) {
-      currentLayer.editing.enable();
-    }
-    map?.fitBounds(currentLayer.getBounds(), { padding: [24, 24] });
-  }
-  showModal.value = true;
+  router.push({
+    name: "delivery-zone-editor",
+    params: { branchId: branchId.value, polygonId: polygon.id },
+    query: { cityId: cityId.value },
+  });
 };
 
 const deletePolygon = async (polygon) => {
@@ -306,6 +407,9 @@ const deletePolygon = async (polygon) => {
 const closeModal = () => {
   showModal.value = false;
   editing.value = null;
+  if (editHandler?.disable) {
+    editHandler.disable();
+  }
   if (currentLayer?.editing?.disable) {
     currentLayer.editing.disable();
   }
@@ -350,11 +454,36 @@ watch(
       drawnItems.removeLayer(currentLayer);
       currentLayer = null;
     }
-  }
+  },
+);
+
+watch(
+  () => [allPolygons.value, polygons.value, cityId.value, branchId.value],
+  () => {
+    if (map && drawnItems) {
+      renderPolygonsOnMap();
+    }
+  },
+  { deep: true },
 );
 
 onMounted(() => {
   referenceStore.loadCities();
+  loadAllPolygons();
+  const initialCity = route.query.cityId;
+  const initialBranch = route.query.branchId;
+  if (initialCity) {
+    cityId.value = String(initialCity);
+    loadBranches().then(() => {
+      if (initialBranch) {
+        branchId.value = String(initialBranch);
+        loadPolygons().then(() => nextTick(() => initMap()));
+      }
+    });
+  }
+  nextTick(() => {
+    initMap();
+  });
 });
 
 onUnmounted(() => {

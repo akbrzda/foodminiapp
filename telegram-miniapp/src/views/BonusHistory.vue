@@ -1,6 +1,5 @@
 <template>
   <div class="bonus-history">
-    <PageHeader title="Бонусная карта" />
 
     <div class="content">
       <div class="loyalty-card">
@@ -95,7 +94,6 @@
 import { computed, ref, onMounted } from "vue";
 import { X, Plus, Minus } from "lucide-vue-next";
 import { bonusesAPI } from "../api/endpoints";
-import PageHeader from "../components/PageHeader.vue";
 import { formatPrice } from "../utils/format";
 import { useLoyaltyStore } from "../stores/loyalty";
 

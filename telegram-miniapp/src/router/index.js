@@ -65,12 +65,6 @@ const routes = [
     meta: { requiresAuth: false, showBackButton: true },
   },
   {
-    path: "/delivery-address",
-    name: "DeliveryAddressDetails",
-    component: () => import("../views/DeliveryAddressDetails.vue"),
-    meta: { requiresAuth: false, showBackButton: true },
-  },
-  {
     path: "/pickup-map",
     name: "PickupMap",
     component: () => import("../views/PickupMap.vue"),

@@ -1,46 +1,80 @@
 <template>
   <div class="delivery-map">
-    <PageHeader title="Выберите адрес" />
+    <div class="map-section" :class="{ 'map-disabled': isAddressFocused }">
+      <div ref="mapContainerRef" class="map"></div>
+      <div class="center-marker" aria-hidden="true">
+        <MapPin class="center-marker-icon" />
+        <div class="center-marker-pulse"></div>
+      </div>
 
-    <div ref="mapContainerRef" class="map"></div>
+      <div class="map-overlay">
+        <div v-if="cityName" class="map-info">
+          <div class="map-info-title">{{ cityName }}</div>
+          <div class="map-info-subtitle">
+            Время доставки до:
+            <span class="map-info-time">{{ deliveryTimeLabel }}</span>
+          </div>
+        </div>
+        <div class="map-controls">
+          <button class="map-btn" type="button" @click="zoomIn">
+            <Plus :size="18" />
+          </button>
+          <button class="map-btn" type="button" @click="zoomOut">
+            <Minus :size="18" />
+          </button>
+          <button class="map-btn map-btn-primary" type="button" @click="locateUser">
+            <LocateFixed :size="18" />
+          </button>
+        </div>
+      </div>
+    </div>
 
-    <div class="bottom-sheet">
+    <div class="form-section" data-keep-focus="true" @touchstart.stop @mousedown.stop @pointerdown.stop>
       <div class="sheet-handle"></div>
-      <div class="input-wrapper">
+      <div class="input-wrapper" @pointerdown.stop>
         <input
           ref="addressInputRef"
           v-model="deliveryAddress"
           class="address-input"
           placeholder="улица, дом"
           @input="onAddressInput"
-          @focus="showSuggestions = true"
+          @focus="onAddressFocus"
+          @blur="onAddressBlur"
+          @pointerdown.stop
         />
-        <button v-if="deliveryAddress" class="clear-btn" @click="clearAddress">
+        <button v-if="deliveryAddress" class="clear-btn" type="button" @pointerdown.stop @touchstart.stop @click="clearAddress">
           <X :size="16" />
         </button>
+        <div v-if="showSuggestions && addressSuggestions.length" class="suggestions-dropdown">
+          <button
+            v-for="(suggestion, index) in addressSuggestions"
+            :key="index"
+            class="suggestion"
+            @pointerdown.stop
+            @touchstart.stop
+            @click="selectAddress(suggestion)"
+          >
+            {{ suggestion.label }}
+          </button>
+        </div>
       </div>
 
-      <div v-if="showSuggestions && addressSuggestions.length" class="suggestions">
-        <button v-for="(suggestion, index) in addressSuggestions" :key="index" class="suggestion" @click="selectAddress(suggestion)">
-          {{ suggestion.label }}
-        </button>
+      <div class="details-grid">
+        <input v-model="deliveryDetails.apartment" class="detail-input" placeholder="Квартира" />
+        <input v-model="deliveryDetails.entrance" class="detail-input" placeholder="Подъезд" />
+        <input v-model="deliveryDetails.floor" class="detail-input" placeholder="Этаж" />
+        <input v-model="deliveryDetails.doorCode" class="detail-input" placeholder="Домофон" />
       </div>
+      <textarea v-model="deliveryDetails.comment" class="detail-textarea" placeholder="Комментарий курьеру"></textarea>
 
-      <button class="primary-btn" @click="confirmAddress">Доставить сюда</button>
-    </div>
-
-    <div v-if="mapSuggestion" class="map-suggestion">
-      <div class="map-suggestion-title">Предложенный адрес</div>
-      <div class="map-suggestion-text">{{ mapSuggestion.label }}</div>
-      <button class="primary-btn" @click="applyMapSuggestion">Использовать адрес</button>
+      <button class="primary-btn" @click="confirmAddress">Сохранить адрес</button>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from "vue";
-import { X } from "lucide-vue-next";
-import PageHeader from "../components/PageHeader.vue";
+import { ref, computed, onMounted, reactive, watch } from "vue";
+import { LocateFixed, MapPin, Minus, Plus, X } from "lucide-vue-next";
 import { useRouter } from "vue-router";
 import { useLocationStore } from "../stores/location";
 import { addressesAPI } from "../api/endpoints";
@@ -55,15 +89,35 @@ const deliveryAddress = ref(locationStore.deliveryAddress || "");
 const addressSuggestions = ref([]);
 const showSuggestions = ref(false);
 const selectedLocation = ref(locationStore.deliveryCoords || null);
-const mapSuggestion = ref(null);
+const deliveryDetails = reactive({
+  apartment: locationStore.deliveryDetails?.apartment || "",
+  entrance: locationStore.deliveryDetails?.entrance || "",
+  floor: locationStore.deliveryDetails?.floor || "",
+  doorCode: locationStore.deliveryDetails?.doorCode || "",
+  comment: locationStore.deliveryDetails?.comment || "",
+});
+const lastAddress = ref(deliveryAddress.value);
+const isAddressFocused = ref(false);
+const lastManualInputAt = ref(0);
+const suppressReverseUntil = ref(0);
 
 let searchTimeout = null;
 let lastSearchId = 0;
 let leafletLoading = null;
 let mapInstance = null;
-let mapMarker = null;
+let reverseTimeout = null;
+let lastReverseId = 0;
+const searchCache = new Map();
+const reverseCache = new Map();
+let reverseController = null;
+let lastReverseRequestAt = 0;
+let lastReverseCenter = null;
 
 const cityName = computed(() => locationStore.selectedCity?.name || "");
+const deliveryTimeLabel = computed(() => {
+  const time = locationStore.deliveryZone?.delivery_time;
+  return time ? `${time} мин` : "—";
+});
 const cityCenter = computed(() => {
   const lat = Number(locationStore.selectedCity?.latitude);
   const lon = Number(locationStore.selectedCity?.longitude);
@@ -78,8 +132,10 @@ onMounted(async () => {
     const resolved = await geocodeAddress(deliveryAddress.value.trim());
     if (resolved) {
       selectedLocation.value = { lat: resolved.lat, lon: resolved.lon };
-      setMapMarker(resolved.lat, resolved.lon);
+      setMapCenter(resolved.lat, resolved.lon);
     }
+  } else if (!deliveryAddress.value && mapInstance) {
+    queueReverseGeocode();
   }
 });
 
@@ -88,29 +144,68 @@ function goBack() {
 }
 
 function onAddressInput() {
-  mapSuggestion.value = null;
   selectedLocation.value = null;
   showSuggestions.value = true;
+  lastManualInputAt.value = Date.now();
+  if (reverseTimeout) {
+    clearTimeout(reverseTimeout);
+  }
+  lastReverseId += 1;
 
   if (searchTimeout) {
     clearTimeout(searchTimeout);
   }
 
-  if (deliveryAddress.value.trim().length < 3) {
+  if (deliveryAddress.value.trim().length < 2) {
     addressSuggestions.value = [];
     return;
   }
 
   searchTimeout = setTimeout(() => {
     fetchAddressSuggestions(deliveryAddress.value.trim());
-  }, 150);
+  }, 80);
+}
+
+function onAddressFocus() {
+  isAddressFocused.value = true;
+  showSuggestions.value = true;
+  lastManualInputAt.value = Date.now();
+  suppressReverseUntil.value = Date.now() + 1500;
+  if (reverseTimeout) {
+    clearTimeout(reverseTimeout);
+  }
+  lastReverseId += 1;
+  if (mapContainerRef.value) {
+    mapContainerRef.value.style.pointerEvents = "none";
+  }
+  if (mapInstance?.dragging) {
+    mapInstance.dragging.disable();
+  }
+  if (mapInstance?.touchZoom) {
+    mapInstance.touchZoom.disable();
+  }
+}
+
+function onAddressBlur() {
+  isAddressFocused.value = false;
+  if (mapContainerRef.value) {
+    mapContainerRef.value.style.pointerEvents = "";
+  }
+  if (mapInstance?.dragging) {
+    mapInstance.dragging.enable();
+  }
+  if (mapInstance?.touchZoom) {
+    mapInstance.touchZoom.enable();
+  }
 }
 
 function selectAddress(address) {
   hapticFeedback("light");
   deliveryAddress.value = address.label;
   selectedLocation.value = { lat: address.lat, lon: address.lon };
-  setMapMarker(address.lat, address.lon);
+  lastManualInputAt.value = Date.now();
+  suppressReverseUntil.value = Date.now() + 800;
+  setMapCenter(address.lat, address.lon);
   showSuggestions.value = false;
 }
 
@@ -118,8 +213,8 @@ function clearAddress() {
   deliveryAddress.value = "";
   addressSuggestions.value = [];
   selectedLocation.value = null;
-  mapSuggestion.value = null;
-  clearMapMarker();
+  lastManualInputAt.value = Date.now();
+  suppressReverseUntil.value = Date.now() + 800;
 }
 
 async function confirmAddress() {
@@ -137,10 +232,11 @@ async function confirmAddress() {
     }
     deliveryAddress.value = resolved.label;
     selectedLocation.value = { lat: resolved.lat, lon: resolved.lon };
-    setMapMarker(resolved.lat, resolved.lon);
+    setMapCenter(resolved.lat, resolved.lon);
   }
 
   locationStore.setDeliveryAddress(deliveryAddress.value);
+  locationStore.setDeliveryDetails({ ...deliveryDetails });
   if (selectedLocation.value) {
     locationStore.setDeliveryCoords({
       lat: selectedLocation.value.lat,
@@ -158,31 +254,10 @@ async function confirmAddress() {
       }
     }
   }
-  router.push("/delivery-address");
-}
-
-function applyMapSuggestion() {
-  if (!mapSuggestion.value) return;
-  deliveryAddress.value = mapSuggestion.value.label;
-  selectedLocation.value = { lat: mapSuggestion.value.lat, lon: mapSuggestion.value.lon };
-  setMapMarker(mapSuggestion.value.lat, mapSuggestion.value.lon);
-  mapSuggestion.value = null;
-  showSuggestions.value = false;
-  locationStore.setDeliveryAddress(deliveryAddress.value);
-  locationStore.setDeliveryCoords({
-    lat: selectedLocation.value.lat,
-    lng: selectedLocation.value.lng ?? selectedLocation.value.lon,
-  });
-  if (locationStore.selectedCity?.id) {
-    const lngValue = selectedLocation.value.lng ?? selectedLocation.value.lon;
-    addressesAPI
-      .checkDeliveryZone(selectedLocation.value.lat, lngValue, locationStore.selectedCity.id)
-      .then((response) => {
-        if (response.data?.available && response.data?.polygon) {
-          locationStore.setDeliveryZone(response.data.polygon);
-        }
-      })
-      .catch((error) => console.error("Failed to update delivery zone:", error));
+  if (window.history.length > 1) {
+    router.back();
+  } else {
+    router.push("/");
   }
 }
 
@@ -198,18 +273,17 @@ async function initMap() {
   // Загружаем и отображаем полигоны доставки
   await loadDeliveryPolygons(L);
 
-  mapInstance.on("click", async (event) => {
-    const { lat, lng } = event.latlng;
-    setMapMarker(lat, lng);
-    mapSuggestion.value = null;
-    const suggestion = await reverseGeocode(lat, lng);
-    if (suggestion) {
-      mapSuggestion.value = suggestion;
+  mapInstance.on("movestart", () => {
+    if (!isAddressFocused.value) {
+      showSuggestions.value = false;
     }
+  });
+  mapInstance.on("moveend", () => {
+    queueReverseGeocode();
   });
 
   if (selectedLocation.value) {
-    setMapMarker(selectedLocation.value.lat, selectedLocation.value.lon);
+    setMapCenter(selectedLocation.value.lat, selectedLocation.value.lon);
   }
 }
 
@@ -225,18 +299,22 @@ async function loadDeliveryPolygons(L) {
 
     data.polygons.forEach((polygon) => {
       if (polygon.polygon && polygon.polygon.coordinates) {
-        // GeoJSON хранит [lng, lat], Leaflet ожидает [lat, lng]
         const coords = polygon.polygon.coordinates[0].map((coord) => [coord[0], coord[1]]);
         L.polygon(coords, {
           color: "#10b981",
           fillColor: "#10b981",
           fillOpacity: 0.1,
           weight: 2,
-        }).addTo(mapInstance).bindPopup(`
+        })
+          .addTo(mapInstance)
+          .bindPopup(
+            `
           <b>${polygon.branch_name}</b><br>
           Доставка: ${polygon.delivery_time} мин<br>
           Стоимость: ${polygon.delivery_cost}₽
-        `);
+        `,
+            { autoPan: false },
+          );
       }
     });
   } catch (error) {
@@ -244,36 +322,88 @@ async function loadDeliveryPolygons(L) {
   }
 }
 
-function setMapMarker(lat, lon) {
-  const L = window.L;
-  if (!mapInstance || !L) return;
-  if (mapMarker) {
-    mapMarker.setLatLng([lat, lon]);
-    return;
-  }
-  mapMarker = L.marker([lat, lon]).addTo(mapInstance);
+function setMapCenter(lat, lon) {
+  if (!mapInstance) return;
+  mapInstance.setView([lat, lon], mapInstance.getZoom(), { animate: true });
 }
 
-function clearMapMarker() {
-  if (mapInstance && mapMarker) {
-    mapInstance.removeLayer(mapMarker);
-    mapMarker = null;
+function queueReverseGeocode() {
+  if (!mapInstance) return;
+  if (isAddressFocused.value) return;
+  if (Date.now() - lastManualInputAt.value < 1500) return;
+  if (Date.now() < suppressReverseUntil.value) return;
+  const center = mapInstance.getCenter();
+  if (lastReverseCenter) {
+    const dLat = Math.abs(lastReverseCenter.lat - center.lat);
+    const dLng = Math.abs(lastReverseCenter.lng - center.lng);
+    if (dLat < 0.0002 && dLng < 0.0002) {
+      return;
+    }
+  }
+  selectedLocation.value = { lat: center.lat, lon: center.lng };
+  if (reverseTimeout) {
+    clearTimeout(reverseTimeout);
+  }
+  const requestId = ++lastReverseId;
+  reverseTimeout = setTimeout(async () => {
+    if (Date.now() - lastReverseRequestAt < 1000) return;
+    const suggestion = await reverseGeocode(center.lat, center.lng);
+    if (requestId !== lastReverseId) return;
+    if (suggestion) {
+      deliveryAddress.value = suggestion.label;
+      const deltaLat = Math.abs(suggestion.lat - center.lat);
+      const deltaLng = Math.abs(suggestion.lon - center.lng);
+      if (deltaLat > 0.00005 || deltaLng > 0.00005) {
+        suppressReverseUntil.value = Date.now() + 800;
+        setMapCenter(suggestion.lat, suggestion.lon);
+      }
+      lastReverseCenter = { lat: center.lat, lng: center.lng };
+    }
+  }, 100);
+}
+
+function zoomIn() {
+  mapInstance?.zoomIn();
+}
+
+function zoomOut() {
+  mapInstance?.zoomOut();
+}
+
+async function locateUser() {
+  try {
+    const location = await locationStore.detectUserLocation();
+    if (!location) return;
+    setMapCenter(location.lat, location.lon);
+    queueReverseGeocode();
+  } catch (error) {
+    console.error("Failed to detect user location:", error);
   }
 }
 
 async function fetchAddressSuggestions(query) {
+  const normalized = query.trim().toLowerCase();
+  if (searchCache.has(normalized)) {
+    addressSuggestions.value = searchCache.get(normalized) || [];
+    return;
+  }
   const searchId = ++lastSearchId;
   try {
+    const start = performance.now();
     const response = await fetch(buildNominatimUrl(query));
     if (!response.ok) {
       throw new Error("Address search failed");
     }
     const data = await response.json();
+    const elapsed = Math.round(performance.now() - start);
     if (searchId !== lastSearchId) return;
 
-    addressSuggestions.value = data
+    const suggestions = data
       .map((item) => formatAddressSuggestion(item))
       .filter((item) => item && Number.isFinite(item.lat) && Number.isFinite(item.lon));
+    addressSuggestions.value = suggestions;
+    searchCache.set(normalized, suggestions);
+    console.debug(`Address suggestions: ${elapsed}ms`, { query: normalized, count: suggestions.length });
   } catch (error) {
     if (searchId === lastSearchId) {
       addressSuggestions.value = [];
@@ -299,19 +429,38 @@ async function geocodeAddress(query) {
 
 async function reverseGeocode(lat, lon) {
   try {
-    const url = new URL("https://nominatim.openstreetmap.org/reverse");
-    url.searchParams.set("format", "json");
-    url.searchParams.set("addressdetails", "1");
-    url.searchParams.set("lat", String(lat));
-    url.searchParams.set("lon", String(lon));
-    const response = await fetch(url.toString());
+    const key = `${lat.toFixed(4)},${lon.toFixed(4)}`;
+    if (reverseCache.has(key)) {
+      return reverseCache.get(key);
+    }
+    if (reverseController) {
+      reverseController.abort();
+    }
+    reverseController = new AbortController();
+    const start = performance.now();
+    const response = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/polygons/reverse`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ latitude: lat, longitude: lon }),
+      signal: reverseController.signal,
+    });
     if (!response.ok) {
       throw new Error("Reverse geocode failed");
     }
     const data = await response.json();
-    return formatAddressSuggestion(data);
+    const suggestion =
+      data && data.label && Number.isFinite(Number(data.lat)) && Number.isFinite(Number(data.lon))
+        ? { label: data.label, lat: Number(data.lat), lon: Number(data.lon) }
+        : formatAddressSuggestion(data);
+    reverseCache.set(key, suggestion);
+    const elapsed = Math.round(performance.now() - start);
+    console.debug(`Reverse geocode: ${elapsed}ms`, { key, hasSuggestion: !!suggestion });
+    lastReverseRequestAt = Date.now();
+    return suggestion;
   } catch (error) {
-    console.error("Failed to reverse geocode:", error);
+    if (error?.name !== "AbortError") {
+      console.error("Failed to reverse geocode:", error);
+    }
     return null;
   }
 }
@@ -339,12 +488,12 @@ function formatAddressSuggestion(item) {
     address.road || address.pedestrian || address.footway || address.residential || address.living_street || address.street || address.neighbourhood;
   const house = address.house_number || address.building;
 
-  if (!street || !house) {
+  if (!street) {
     return null;
   }
 
   return {
-    label: `${street}, ${house}`,
+    label: house ? `${street}, ${house}` : street,
     lat: Number(item.lat),
     lon: Number(item.lon),
   };
@@ -372,37 +521,134 @@ async function loadLeaflet() {
   });
   return leafletLoading;
 }
+
+watch(deliveryAddress, (value) => {
+  if (value !== lastAddress.value) {
+    deliveryDetails.apartment = "";
+    deliveryDetails.entrance = "";
+    deliveryDetails.floor = "";
+    deliveryDetails.doorCode = "";
+    deliveryDetails.comment = "";
+    lastAddress.value = value;
+  }
+});
 </script>
 
 <style scoped>
 .delivery-map {
-  position: relative;
   min-height: 100vh;
   background: var(--color-background);
-  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+}
+
+.map-section {
+  position: relative;
+  overflow: hidden;
+  height: 52vh;
+  background: var(--color-background-secondary);
+}
+
+.map-disabled .map,
+.map-disabled .map-overlay,
+.map-disabled .center-marker {
+  pointer-events: none;
 }
 
 .map {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  inset: 0;
   z-index: 0;
 }
 
-.bottom-sheet {
-  position: fixed;
+.center-marker {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -100%);
+  z-index: 15;
+  pointer-events: none;
+}
+
+.center-marker-icon {
+  width: 34px;
+  height: 34px;
+  color: #ef4444;
+  filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.25));
+}
+
+.map-overlay {
+  position: absolute;
+  top: 12px;
   left: 12px;
   right: 12px;
-  bottom: 20px;
+  z-index: 16;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.map-info {
+  background: rgba(255, 255, 255, 0.92);
+  border-radius: 16px;
+  padding: 10px 14px;
+  box-shadow: var(--shadow-md);
+  max-width: 70%;
+}
+
+.map-info-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin-bottom: 4px;
+}
+
+.map-info-subtitle {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+}
+
+.map-info-time {
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.map-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.map-btn {
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  border: none;
+  background: rgba(255, 255, 255, 0.95);
+  color: var(--color-text-primary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--shadow-md);
+  cursor: pointer;
+}
+
+.map-btn-primary {
+  background: var(--color-primary);
+  color: var(--color-text-primary);
+}
+
+.form-section {
+  margin-top: -16px;
   background: var(--color-background);
-  border-radius: var(--border-radius-xl) var(--border-radius-xl) 0 0;
+  border-radius: var(--border-radius-xl);
   padding: 12px;
   z-index: 20;
   box-shadow: var(--shadow-md);
-  /* Учитываем safe area для нижних элементов */
-  bottom: calc(20px + var(--tg-content-safe-area-inset-bottom, 0px));
 }
 
 .sheet-handle {
@@ -459,13 +705,22 @@ async function loadLeaflet() {
   background: var(--color-border);
 }
 
-.suggestions {
+.suggestions-dropdown {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 6px);
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin-bottom: 12px;
-  max-height: 160px;
+  max-height: 200px;
   overflow-y: auto;
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  padding: 8px;
+  box-shadow: var(--shadow-md);
+  z-index: 40;
 }
 
 .suggestion {
@@ -498,6 +753,49 @@ async function loadLeaflet() {
   transition: background-color var(--transition-duration) var(--transition-easing);
 }
 
+.details-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.detail-input {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: var(--border-radius-md);
+  border: none;
+  background: var(--color-background-secondary);
+  font-size: var(--font-size-body);
+  color: var(--color-text-primary);
+}
+
+.detail-input:focus {
+  outline: none;
+  border: 1px solid var(--color-primary);
+  background: var(--color-background);
+}
+
+.detail-textarea {
+  width: 100%;
+  min-height: 90px;
+  padding: 12px 14px;
+  border-radius: var(--border-radius-md);
+  border: none;
+  background: var(--color-background-secondary);
+  font-size: var(--font-size-body);
+  color: var(--color-text-primary);
+  resize: none;
+  margin-bottom: 10px;
+  font-family: inherit;
+}
+
+.detail-textarea:focus {
+  outline: none;
+  border: 1px solid var(--color-primary);
+  background: var(--color-background);
+}
+
 .primary-btn:hover {
   background: var(--color-primary-hover);
 }
@@ -506,34 +804,4 @@ async function loadLeaflet() {
   transform: scale(0.98);
 }
 
-.map-suggestion {
-  position: fixed;
-  left: 16px;
-  right: 16px;
-  bottom: calc(190px + var(--tg-content-safe-area-inset-bottom, 0px));
-  background: var(--color-background);
-  border-radius: var(--border-radius-lg);
-  padding: 12px 14px;
-  z-index: 20;
-  box-shadow: var(--shadow-md);
-}
-
-.bottom-sheet .suggestions {
-  max-height: 120px;
-}
-
-.map-suggestion-title {
-  font-size: var(--font-size-small);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--color-text-muted);
-  margin-bottom: 6px;
-}
-
-.map-suggestion-text {
-  font-size: var(--font-size-body);
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-text-primary);
-  margin-bottom: 10px;
-}
 </style>

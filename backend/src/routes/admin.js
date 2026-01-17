@@ -16,6 +16,23 @@ const router = express.Router();
 // Применить аутентификацию и проверку роли ко всем роутам админ-панели
 router.use(authenticateToken);
 
+// Получить список администраторов для фильтра (упрощенный) - ВАЖНО: должно быть перед /users/:id
+router.get("/users/admins", requireRole("admin", "ceo"), async (req, res, next) => {
+  try {
+    const [admins] = await db.query(
+      `SELECT id, email, first_name, last_name, role
+       FROM admin_users
+       WHERE is_active = true
+       ORDER BY first_name, last_name`,
+    );
+
+    res.json({ admins });
+  } catch (error) {
+    console.error("Ошибка получения списка администраторов:", error);
+    next(error);
+  }
+});
+
 // Получить список администраторов (только для admin и ceo)
 router.get("/users", requireRole("admin", "ceo"), async (req, res, next) => {
   try {
@@ -51,7 +68,7 @@ router.get("/users", requireRole("admin", "ceo"), async (req, res, next) => {
            FROM admin_user_cities auc
            JOIN cities c ON auc.city_id = c.id
            WHERE auc.admin_user_id = ?`,
-          [user.id]
+          [user.id],
         );
         user.cities = cities;
       } else {
@@ -74,7 +91,7 @@ router.get("/users/:id", requireRole("admin", "ceo"), async (req, res, next) => 
       `SELECT id, email, first_name, last_name, role, is_active, 
               telegram_id, created_at, updated_at
        FROM admin_users WHERE id = ?`,
-      [userId]
+      [userId],
     );
 
     if (users.length === 0) {
@@ -90,7 +107,7 @@ router.get("/users/:id", requireRole("admin", "ceo"), async (req, res, next) => 
          FROM admin_user_cities auc
          JOIN cities c ON auc.city_id = c.id
          WHERE auc.admin_user_id = ?`,
-        [userId]
+        [userId],
       );
       user.cities = cities;
     } else {
@@ -174,7 +191,7 @@ router.get("/clients/:id", requireRole("admin", "manager", "ceo"), async (req, r
        )
        LEFT JOIN cities c ON c.id = o.city_id
        WHERE u.id = ?`,
-      [userId]
+      [userId],
     );
 
     if (users.length === 0) {
@@ -219,7 +236,7 @@ router.put("/clients/:id", requireRole("admin", "manager", "ceo"), async (req, r
        )
        LEFT JOIN cities c ON c.id = o.city_id
        WHERE u.id = ?`,
-      [userId]
+      [userId],
     );
 
     res.json({ user: updated[0] });
@@ -296,7 +313,7 @@ router.get("/clients/:id/orders", requireRole("admin", "manager", "ceo"), async 
       ORDER BY o.created_at DESC
       LIMIT 20
       `,
-      params
+      params,
     );
 
     res.json({ orders });
@@ -322,7 +339,7 @@ router.get("/clients/:id/bonuses", requireRole("admin", "manager", "ceo"), async
        WHERE user_id = ?
        ORDER BY created_at DESC
        LIMIT 50`,
-      [userId]
+      [userId],
     );
 
     res.json({ transactions });
@@ -409,7 +426,7 @@ router.post("/users", requireRole("admin", "ceo"), async (req, res, next) => {
     const [result] = await db.query(
       `INSERT INTO admin_users (email, password_hash, first_name, last_name, role, telegram_id)
        VALUES (?, ?, ?, ?, ?, ?)`,
-      [email, passwordHash, first_name, last_name, role, telegram_id || null]
+      [email, passwordHash, first_name, last_name, role, telegram_id || null],
     );
 
     const newUserId = result.insertId;
@@ -426,7 +443,7 @@ router.post("/users", requireRole("admin", "ceo"), async (req, res, next) => {
       `SELECT id, email, first_name, last_name, role, is_active, 
               telegram_id, created_at, updated_at
        FROM admin_users WHERE id = ?`,
-      [newUserId]
+      [newUserId],
     );
 
     res.status(201).json({ user: newUser[0] });
@@ -523,7 +540,7 @@ router.put("/users/:id", requireRole("admin", "ceo"), async (req, res, next) => 
       `SELECT id, email, first_name, last_name, role, is_active, 
               telegram_id, created_at, updated_at
        FROM admin_users WHERE id = ?`,
-      [userId]
+      [userId],
     );
 
     const user = updatedUser[0];
@@ -535,7 +552,7 @@ router.put("/users/:id", requireRole("admin", "ceo"), async (req, res, next) => 
          FROM admin_user_cities auc
          JOIN cities c ON auc.city_id = c.id
          WHERE auc.admin_user_id = ?`,
-        [userId]
+        [userId],
       );
       user.cities = userCities;
     } else {
@@ -688,6 +705,87 @@ router.post("/queues/:queueType/clean", requireRole("admin", "ceo"), async (req,
       message: `Successfully cleaned ${cleaned.length} completed jobs`,
     });
   } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * Получить логи действий администраторов
+ * GET /api/admin/logs
+ * Доступ: только admin и ceo
+ * Query params:
+ *   - admin_id: фильтр по конкретному администратору
+ *   - action_type: фильтр по действию (create, update, delete)
+ *   - object_type: фильтр по типу объекта
+ *   - date_from, date_to: фильтр по дате
+ *   - page, limit: пагинация
+ */
+router.get("/logs", requireRole("admin", "ceo"), async (req, res, next) => {
+  try {
+    const { admin_id, action_type, object_type, date_from, date_to, page = 1, limit = 50 } = req.query;
+
+    let whereClause = "WHERE 1=1";
+    const params = [];
+
+    if (admin_id) {
+      whereClause += " AND al.admin_user_id = ?";
+      params.push(admin_id);
+    }
+
+    if (action_type) {
+      whereClause += " AND al.action = ?";
+      params.push(action_type);
+    }
+
+    if (object_type) {
+      whereClause += " AND al.entity_type = ?";
+      params.push(object_type);
+    }
+
+    if (date_from) {
+      whereClause += " AND al.created_at >= ?";
+      params.push(date_from);
+    }
+
+    if (date_to) {
+      whereClause += " AND al.created_at <= ?";
+      params.push(`${date_to} 23:59:59`);
+    }
+
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+
+    // Получаем логи с информацией об администраторе
+    const [logs] = await db.query(
+      `SELECT 
+         al.id,
+         al.action,
+         al.entity_type as object_type,
+         al.entity_id as object_id,
+         al.description as details,
+         al.ip_address,
+         al.created_at,
+         au.id as admin_id,
+         CONCAT(au.first_name, ' ', au.last_name) as admin_name,
+         au.email as admin_email
+       FROM admin_action_logs al
+       LEFT JOIN admin_users au ON al.admin_user_id = au.id
+       ${whereClause}
+       ORDER BY al.created_at DESC
+       LIMIT ? OFFSET ?`,
+      [...params, parseInt(limit), parseInt(offset)],
+    );
+
+    // Получаем общее количество
+    const [countResult] = await db.query(`SELECT COUNT(*) as total FROM admin_action_logs al ${whereClause}`, params);
+
+    res.json({
+      logs,
+      total: countResult[0].total,
+      page: parseInt(page),
+      limit: parseInt(limit),
+    });
+  } catch (error) {
+    console.error("Ошибка получения логов:", error);
     next(error);
   }
 });

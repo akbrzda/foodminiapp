@@ -11,12 +11,7 @@
             <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Поиск</label>
             <div class="relative">
               <Search class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" :size="16" />
-              <Input
-                v-model="filters.search"
-                class="pl-9"
-                placeholder="Номер заказа или телефон"
-                @keyup.enter="loadOrders"
-              />
+              <Input v-model="filters.search" class="pl-9" placeholder="Номер заказа или телефон" @keyup.enter="loadOrders" />
             </div>
           </div>
           <div class="space-y-2">
@@ -87,13 +82,7 @@
             </TableRow>
           </TableHeader>
           <TableBody>
-            <TableRow
-              v-for="order in orders"
-              :key="order.id"
-              class="cursor-pointer"
-              :class="orderRowClass(order)"
-              @click="selectOrder(order)"
-            >
+            <TableRow v-for="order in orders" :key="order.id" class="cursor-pointer" :class="orderRowClass(order)" @click="selectOrder(order)">
               <TableCell>
                 <div class="font-medium text-foreground">#{{ order.order_number }}</div>
                 <div class="text-xs text-muted-foreground">{{ formatDateTime(order.created_at) }}</div>
@@ -127,6 +116,7 @@ import { useRouter } from "vue-router";
 import { RefreshCcw, RotateCcw, Search } from "lucide-vue-next";
 import api from "../api/client.js";
 import { useReferenceStore } from "../stores/reference.js";
+import { useNotifications } from "../composables/useNotifications.js";
 import StatusBadge from "../components/StatusBadge.vue";
 import { formatCurrency, formatDateTime, formatNumber, formatPhone } from "../utils/format.js";
 import Badge from "../components/ui/Badge.vue";
@@ -147,6 +137,7 @@ import TableRow from "../components/ui/TableRow.vue";
 
 const router = useRouter();
 const referenceStore = useReferenceStore();
+const { showNewOrderNotification } = useNotifications();
 
 const orders = ref([]);
 const recentOrderIds = ref(new Set());
@@ -188,23 +179,6 @@ const orderRowClass = (order) => {
   return isRecent ? "bg-primary/10" : "";
 };
 
-const playNotification = () => {
-  try {
-    const context = new (window.AudioContext || window.webkitAudioContext)();
-    const oscillator = context.createOscillator();
-    const gainNode = context.createGain();
-    oscillator.type = "sine";
-    oscillator.frequency.value = 880;
-    gainNode.gain.value = 0.06;
-    oscillator.connect(gainNode);
-    gainNode.connect(context.destination);
-    oscillator.start();
-    oscillator.stop(context.currentTime + 0.2);
-  } catch (error) {
-    console.warn("Sound notification failed", error);
-  }
-};
-
 const connectWebSocket = () => {
   const apiBase = api.defaults.baseURL || "http://localhost:3000";
   const wsBase = import.meta.env.VITE_WS_URL || apiBase;
@@ -223,7 +197,10 @@ const connectWebSocket = () => {
         const next = new Set(recentOrderIds.value);
         next.add(payload.data.id);
         recentOrderIds.value = next;
-        playNotification();
+
+        // Показываем браузерное уведомление (со звуком)
+        showNewOrderNotification(payload.data);
+
         setTimeout(() => {
           const updated = new Set(recentOrderIds.value);
           updated.delete(payload.data.id);

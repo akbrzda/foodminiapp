@@ -187,7 +187,6 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .app-header {
-  position: sticky;
   top: 0;
   z-index: 100;
   display: flex;
@@ -195,9 +194,7 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   gap: 12px;
   padding: 12px;
-  padding-top: calc(12px + var(--tg-content-safe-area-inset-top, 0px));
   background: var(--color-background);
-  border-bottom: 1px solid var(--color-border);
 }
 
 .menu-button {
@@ -255,12 +252,14 @@ onBeforeUnmount(() => {
   padding: 8px;
   border: none;
   border-radius: var(--border-radius-md);
-  background: rgba(252, 219, 4, 0.50);
+  background: rgba(252, 219, 4, 0.5);
   color: var(--color-text-primary);
   font-size: var(--font-size-body);
   font-weight: var(--font-weight-semibold);
   cursor: pointer;
-  transition: transform 0.15s, opacity var(--transition-duration);
+  transition:
+    transform 0.15s,
+    opacity var(--transition-duration);
 }
 
 .bonus-button:active {

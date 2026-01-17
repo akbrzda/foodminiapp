@@ -1,6 +1,5 @@
 <template>
   <div class="checkout">
-    <PageHeader title="Оформление заказа" />
 
     <div class="content">
       <div class="order-type-tabs">
@@ -173,7 +172,6 @@ import { useLoyaltyStore } from "../stores/loyalty";
 import { useLocationStore } from "../stores/location";
 import { citiesAPI, addressesAPI, ordersAPI, geocodeAPI } from "../api/endpoints";
 import { hapticFeedback } from "../services/telegram";
-import PageHeader from "../components/PageHeader.vue";
 import { formatPrice } from "../utils/format";
 
 const router = useRouter();

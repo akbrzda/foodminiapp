@@ -1,6 +1,5 @@
 <template>
   <div class="orders">
-    <PageHeader title="Мои заказы" />
 
     <div v-if="loading" class="loading">Загрузка...</div>
 
@@ -40,7 +39,6 @@
 <script setup>
 import { ref, onMounted } from "vue";
 import { Truck, Store } from "lucide-vue-next";
-import PageHeader from "../components/PageHeader.vue";
 import { useRouter } from "vue-router";
 import { ordersAPI } from "../api/endpoints";
 import { hapticFeedback } from "../services/telegram";

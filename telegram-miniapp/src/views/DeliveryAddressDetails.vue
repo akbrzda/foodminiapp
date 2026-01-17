@@ -1,6 +1,5 @@
 <template>
   <div class="address-details">
-    <PageHeader title="Адрес доставки" />
 
     <div class="content">
       <label class="label">улица, дом</label>
@@ -22,7 +21,6 @@
 
 <script setup>
 import { reactive, ref, watch } from "vue";
-import PageHeader from "../components/PageHeader.vue";
 import { useRouter } from "vue-router";
 import { useLocationStore } from "../stores/location";
 import { addressesAPI, geocodeAPI } from "../api/endpoints";

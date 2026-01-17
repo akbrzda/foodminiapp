@@ -1,6 +1,5 @@
 <template>
   <div class="profile">
-    <PageHeader title="Профиль" />
 
     <div class="profile-content">
       <div class="form-card phone-card">
@@ -41,7 +40,6 @@
 
 <script setup>
 import { ref, onMounted } from "vue";
-import PageHeader from "../components/PageHeader.vue";
 import { useRouter } from "vue-router";
 import { useAuthStore } from "../stores/auth";
 import { authAPI } from "../api/endpoints";

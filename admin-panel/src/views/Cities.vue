@@ -185,17 +185,31 @@ const initCityMap = () => {
 
   const center = form.value.latitude && form.value.longitude ? [form.value.latitude, form.value.longitude] : [55.751244, 37.618423];
 
-  cityMap = L.map("city-map", {
+  const container = document.getElementById("city-map");
+  if (!container) return;
+
+  cityMap = L.map(container, {
     attributionControl: false,
+    zoomControl: true,
   }).setView(center, form.value.latitude ? 11 : 5);
 
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: 19,
+    maxZoom: 20,
   }).addTo(cityMap);
 
   if (form.value.latitude && form.value.longitude) {
+    const cityIcon = L.divIcon({
+      className: "custom-city-marker",
+      html: `<div style="background-color: #9333EA; border: 3px solid #fff; border-radius: 50%; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(0,0,0,0.3);">
+        <span style="font-size: 20px;">🏙️</span>
+      </div>`,
+      iconSize: [36, 36],
+      iconAnchor: [18, 18],
+    });
+
     cityMarker = L.marker([form.value.latitude, form.value.longitude], {
       draggable: true,
+      icon: cityIcon,
     }).addTo(cityMap);
 
     cityMarker.on("dragend", () => {
@@ -209,11 +223,21 @@ const initCityMap = () => {
     form.value.latitude = e.latlng.lat;
     form.value.longitude = e.latlng.lng;
 
+    const cityIcon = L.divIcon({
+      className: "custom-city-marker",
+      html: `<div style="background-color: #9333EA; border: 3px solid #fff; border-radius: 50%; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(0,0,0,0.3);">
+        <span style="font-size: 20px;">🏙️</span>
+      </div>`,
+      iconSize: [36, 36],
+      iconAnchor: [18, 18],
+    });
+
     if (cityMarker) {
       cityMarker.setLatLng(e.latlng);
     } else {
       cityMarker = L.marker(e.latlng, {
         draggable: true,
+        icon: cityIcon,
       }).addTo(cityMap);
 
       cityMarker.on("dragend", () => {

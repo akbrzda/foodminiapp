@@ -12,71 +12,78 @@ const router = express.Router();
 
 /**
  * Получить логи действий администраторов
- * GET /api/logs/admin
+ * GET /api/admin/logs
  * Доступ: только admin и ceo
  * Query params:
- *   - admin_user_id: фильтр по конкретному администратору
- *   - action: фильтр по действию
- *   - entity_type: фильтр по типу сущности
+ *   - admin_id: фильтр по конкретному администратору
+ *   - action_type: фильтр по действию (create, update, delete)
+ *   - object_type: фильтр по типу объекта
  *   - date_from, date_to: фильтр по дате
- *   - limit, offset: пагинация
+ *   - page, limit: пагинация
  */
 router.get("/admin", authenticateToken, requireRole("admin", "ceo"), async (req, res, next) => {
   try {
-    const { admin_user_id, action, entity_type, date_from, date_to, limit = 100, offset = 0 } = req.query;
+    const { admin_id, action_type, object_type, date_from, date_to, page = 1, limit = 50 } = req.query;
 
     let whereClause = "WHERE 1=1";
     const params = [];
 
-    if (admin_user_id) {
-      whereClause += " AND admin_user_id = ?";
-      params.push(admin_user_id);
+    if (admin_id) {
+      whereClause += " AND al.admin_user_id = ?";
+      params.push(admin_id);
     }
 
-    if (action) {
-      whereClause += " AND action = ?";
-      params.push(action);
+    if (action_type) {
+      whereClause += " AND al.action = ?";
+      params.push(action_type);
     }
 
-    if (entity_type) {
-      whereClause += " AND entity_type = ?";
-      params.push(entity_type);
+    if (object_type) {
+      whereClause += " AND al.entity_type = ?";
+      params.push(object_type);
     }
 
     if (date_from) {
-      whereClause += " AND created_at >= ?";
+      whereClause += " AND al.created_at >= ?";
       params.push(date_from);
     }
 
     if (date_to) {
-      whereClause += " AND created_at <= ?";
-      params.push(date_to);
+      whereClause += " AND al.created_at <= ?";
+      params.push(`${date_to} 23:59:59`);
     }
+
+    const offset = (parseInt(page) - 1) * parseInt(limit);
 
     // Получаем логи с информацией об администраторе
     const [logs] = await db.query(
       `SELECT 
-         al.*,
-         au.username as admin_username,
-         au.role as admin_role
+         al.id,
+         al.action,
+         al.entity_type as object_type,
+         al.entity_id as object_id,
+         al.description as details,
+         al.ip_address,
+         al.created_at,
+         au.id as admin_id,
+         CONCAT(au.first_name, ' ', au.last_name) as admin_name,
+         au.email as admin_email
        FROM admin_action_logs al
        LEFT JOIN admin_users au ON al.admin_user_id = au.id
        ${whereClause}
        ORDER BY al.created_at DESC
        LIMIT ? OFFSET ?`,
-      [...params, parseInt(limit), parseInt(offset)]
+      [...params, parseInt(limit), parseInt(offset)],
     );
 
     // Получаем общее количество
-    const [countResult] = await db.query(`SELECT COUNT(*) as total FROM admin_action_logs ${whereClause}`, params);
+    const [countResult] = await db.query(`SELECT COUNT(*) as total FROM admin_action_logs al ${whereClause}`, params);
 
     res.json({
       logs,
-      pagination: {
-        total: countResult[0].total,
-        limit: parseInt(limit),
-        offset: parseInt(offset),
-      },
+      total: countResult[0].total,
+      page: parseInt(page),
+      limit: parseInt(limit),
     });
   } catch (error) {
     next(error);
@@ -179,7 +186,7 @@ router.get("/stats", authenticateToken, requireRole("admin", "ceo"), async (req,
        GROUP BY action
        ORDER BY count DESC
        LIMIT 10`,
-      params
+      params,
     );
 
     // Самые активные администраторы
@@ -195,7 +202,7 @@ router.get("/stats", authenticateToken, requireRole("admin", "ceo"), async (req,
        GROUP BY au.id, au.username, au.role
        ORDER BY action_count DESC
        LIMIT 10`,
-      params
+      params,
     );
 
     // Статистика по типам сущностей
@@ -205,7 +212,7 @@ router.get("/stats", authenticateToken, requireRole("admin", "ceo"), async (req,
        WHERE entity_type IS NOT NULL ${dateFilter}
        GROUP BY entity_type
        ORDER BY count DESC`,
-      params
+      params,
     );
 
     res.json({
