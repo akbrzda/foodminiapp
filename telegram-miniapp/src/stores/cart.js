@@ -18,6 +18,53 @@ export const useCartStore = defineStore("cart", {
   },
 
   actions: {
+    refreshPricesFromMenu(menuItems) {
+      if (!Array.isArray(menuItems) || menuItems.length === 0) return;
+      const itemsById = new Map(menuItems.map((item) => [item.id, item]));
+
+      this.items = this.items.map((cartItem) => {
+        const menuItem = itemsById.get(cartItem.id);
+        if (!menuItem) return cartItem;
+
+        const variant = cartItem.variant_id ? menuItem.variants?.find((v) => v.id === cartItem.variant_id) : null;
+        let basePrice = variant ? parseFloat(variant.price) : parseFloat(menuItem.price);
+        if (!Number.isFinite(basePrice)) {
+          basePrice = parseFloat(cartItem.price) || 0;
+        }
+
+        let modifiersTotal = 0;
+        const updatedModifiers = Array.isArray(cartItem.modifiers)
+          ? cartItem.modifiers.map((mod) => {
+              const modifierId = typeof mod === "number" ? mod : mod?.id;
+              if (!modifierId) return mod;
+              const group = menuItem.modifier_groups?.find((g) => g.modifiers?.some((m) => m.id === modifierId));
+              const modifier = group?.modifiers?.find((m) => m.id === modifierId);
+              if (!modifier) return mod;
+
+              let price = parseFloat(modifier.price) || 0;
+              if (variant && Array.isArray(modifier.variant_prices)) {
+                const match = modifier.variant_prices.find((p) => p.variant_id === variant.id);
+                if (match && match.price !== undefined && match.price !== null) {
+                  price = parseFloat(match.price) || 0;
+                }
+              }
+              modifiersTotal += price;
+
+              if (typeof mod === "number") return mod;
+              return { ...mod, price };
+            })
+          : cartItem.modifiers;
+
+        const updatedPrice = basePrice + modifiersTotal;
+        return {
+          ...cartItem,
+          price: updatedPrice,
+          modifiers: updatedModifiers,
+        };
+      });
+
+      this.saveToLocalStorage();
+    },
     replaceItems(items) {
       this.items = Array.isArray(items) ? items : [];
       this.saveToLocalStorage();

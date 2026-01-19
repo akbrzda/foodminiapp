@@ -169,8 +169,9 @@ import { Banknote, CreditCard, Phone, Store, Truck, Clock } from "lucide-vue-nex
 import { useCartStore } from "../stores/cart";
 import { useLoyaltyStore } from "../stores/loyalty";
 import { useLocationStore } from "../stores/location";
+import { useMenuStore } from "../stores/menu";
 import { useKeyboardHandler } from "../composables/useKeyboardHandler";
-import { citiesAPI, addressesAPI, ordersAPI, geocodeAPI } from "../api/endpoints";
+import { citiesAPI, addressesAPI, ordersAPI, geocodeAPI, menuAPI } from "../api/endpoints";
 import { hapticFeedback } from "../services/telegram";
 import { formatPrice } from "../utils/format";
 
@@ -178,6 +179,7 @@ const router = useRouter();
 const cartStore = useCartStore();
 const locationStore = useLocationStore();
 const loyaltyStore = useLoyaltyStore();
+const menuStore = useMenuStore();
 const { isKeyboardOpen } = useKeyboardHandler();
 
 const orderType = ref(locationStore.deliveryType || null);
@@ -329,8 +331,31 @@ watch(
         applyDeliveryZone(locationStore.deliveryZone);
       }
     }
+
+    await refreshCartPricesForOrderType();
   },
 );
+
+async function refreshCartPricesForOrderType() {
+  if (!locationStore.selectedCity) return;
+  const fulfillmentType = orderType.value === "pickup" ? "pickup" : "delivery";
+  const branchId = locationStore.selectedBranch?.id || null;
+  try {
+    const response = await menuAPI.getMenu(locationStore.selectedCity.id, { fulfillmentType, branchId });
+    const categories = response.data.categories || [];
+    const allItems = categories.flatMap((category) => category.items || []);
+    menuStore.setMenuData({
+      cityId: locationStore.selectedCity.id,
+      fulfillmentType,
+      branchId,
+      categories,
+      items: allItems,
+    });
+    cartStore.refreshPricesFromMenu(allItems);
+  } catch (error) {
+    console.error("Failed to refresh cart prices:", error);
+  }
+}
 
 watch(
   () => cartStore.totalPrice,

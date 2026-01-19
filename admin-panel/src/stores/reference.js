@@ -10,6 +10,12 @@ export const useReferenceStore = defineStore("reference", {
     branchesLoading: {},
     branchesPromise: {},
   }),
+  getters: {
+    branches: (state) => {
+      // Возвращаем все филиалы из всех городов
+      return Object.values(state.branchesByCity).flat();
+    },
+  },
   actions: {
     async loadCities({ force = false } = {}) {
       if (this.loading && this.citiesPromise) return this.citiesPromise;
@@ -52,6 +58,12 @@ export const useReferenceStore = defineStore("reference", {
           this.branchesPromise[cityId] = null;
         });
       return this.branchesPromise[cityId];
+    },
+    async fetchCitiesAndBranches() {
+      await this.loadCities();
+      // Загружаем филиалы для всех городов
+      const branchPromises = this.cities.map((city) => this.loadBranches(city.id));
+      await Promise.all(branchPromises);
     },
   },
 });

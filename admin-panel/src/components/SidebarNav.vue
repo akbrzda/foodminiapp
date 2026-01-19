@@ -47,6 +47,18 @@
         <Layers :size="18" />
         Модификаторы
       </RouterLink>
+      <RouterLink class="nav-link" to="/menu/tags" @click="emit('navigate')">
+        <Tag :size="18" />
+        Теги
+      </RouterLink>
+      <RouterLink class="nav-link" to="/menu/stop-list" @click="emit('navigate')">
+        <ListChecks :size="18" />
+        Стоп-лист
+      </RouterLink>
+      <RouterLink class="nav-link" to="/menu/settings" @click="emit('navigate')">
+        <Settings :size="18" />
+        Настройки меню
+      </RouterLink>
 
       <div class="mt-4 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Система</div>
       <RouterLink class="nav-link" to="/admin-users" @click="emit('navigate')">
@@ -78,9 +90,12 @@ import {
   LayoutDashboard,
   Layers,
   ListTree,
+  ListChecks,
   Map,
   MapPinned,
   Radio,
+  Settings,
+  Tag,
   UserCog,
   Users,
   UtensilsCrossed,

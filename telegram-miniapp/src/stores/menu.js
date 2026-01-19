@@ -7,6 +7,8 @@ export const useMenuStore = defineStore("menu", {
     loading: false,
     error: null,
     cityId: null,
+    fulfillmentType: null,
+    branchId: null,
     loadedAt: null,
   }),
 
@@ -16,6 +18,8 @@ export const useMenuStore = defineStore("menu", {
     },
 
     getItemsByCategory: (state) => (categoryId) => {
+      const category = state.categories.find((cat) => cat.id === categoryId);
+      if (category?.items) return category.items;
       return state.items.filter((item) => item.category_id === categoryId);
     },
 
@@ -33,8 +37,10 @@ export const useMenuStore = defineStore("menu", {
       this.items = items;
     },
 
-    setMenuData({ cityId, categories, items }) {
+    setMenuData({ cityId, fulfillmentType, branchId, categories, items }) {
       this.cityId = cityId;
+      this.fulfillmentType = fulfillmentType || null;
+      this.branchId = branchId || null;
       this.categories = categories;
       this.items = items;
       this.loadedAt = Date.now();
@@ -53,6 +59,8 @@ export const useMenuStore = defineStore("menu", {
       this.items = [];
       this.error = null;
       this.cityId = null;
+      this.fulfillmentType = null;
+      this.branchId = null;
       this.loadedAt = null;
     },
   },

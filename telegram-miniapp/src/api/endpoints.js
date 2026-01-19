@@ -41,8 +41,11 @@ export const citiesAPI = {
 
 export const menuAPI = {
   // Получить полное меню города
-  getMenu(cityId) {
-    return api.get(`/menu`, { params: { city_id: cityId } });
+  getMenu(cityId, { branchId, fulfillmentType } = {}) {
+    const params = { city_id: cityId };
+    if (branchId) params.branch_id = branchId;
+    if (fulfillmentType) params.fulfillment_type = fulfillmentType;
+    return api.get(`/menu`, { params });
   },
 
   // Получить категории меню

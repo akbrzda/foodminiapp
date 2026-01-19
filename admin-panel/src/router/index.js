@@ -12,7 +12,11 @@ import DeliveryZones from "../views/DeliveryZones.vue";
 import DeliveryZoneEditor from "../views/DeliveryZoneEditor.vue";
 import MenuCategories from "../views/MenuCategories.vue";
 import MenuItems from "../views/MenuItems.vue";
+import MenuItemForm from "../views/MenuItemForm.vue";
 import MenuModifiers from "../views/MenuModifiers.vue";
+import MenuTags from "../views/MenuTags.vue";
+import MenuStopList from "../views/MenuStopList.vue";
+import MenuSettings from "../views/MenuSettings.vue";
 import AdminUsers from "../views/AdminUsers.vue";
 import AdminLogs from "../views/AdminLogs.vue";
 import OrderDetail from "../views/OrderDetail.vue";
@@ -49,7 +53,16 @@ const router = createRouter({
           meta: { title: "Категории", subtitle: "Структура меню по городам" },
         },
         { path: "menu/items", name: "menu-items", component: MenuItems, meta: { title: "Позиции", subtitle: "Карточки блюд и варианты" } },
+        {
+          path: "menu/items/:id",
+          name: "menu-item-form",
+          component: MenuItemForm,
+          meta: { title: "Позиция меню", subtitle: "Создание и редактирование" },
+        },
         { path: "menu/modifiers", name: "menu-modifiers", component: MenuModifiers, meta: { title: "Модификаторы", subtitle: "Группы и допы" } },
+        { path: "menu/tags", name: "menu-tags", component: MenuTags, meta: { title: "Теги", subtitle: "Метки для фильтрации блюд" } },
+        { path: "menu/stop-list", name: "menu-stop-list", component: MenuStopList, meta: { title: "Стоп-лист", subtitle: "Недоступные позиции" } },
+        { path: "menu/settings", name: "menu-settings", component: MenuSettings, meta: { title: "Настройки меню", subtitle: "Причины стоп-листа" } },
         {
           path: "admin-users",
           name: "admin-users",

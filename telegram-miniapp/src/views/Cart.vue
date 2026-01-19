@@ -1,6 +1,5 @@
 <template>
   <div class="cart">
-
     <div v-if="cartStore.items.length === 0" class="empty">
       <p>Корзина пуста</p>
       <button class="btn-primary" @click="$router.push('/')">Перейти в меню</button>
@@ -71,7 +70,9 @@
         <div class="summary-warning" v-if="isDelivery && !isMinOrderReached">Минимальная сумма заказа: {{ formatPrice(minOrderAmount) }} ₽</div>
       </div>
 
-      <button class="checkout-btn" :class="{ 'hidden-on-keyboard': isKeyboardOpen }" @click="checkout" :disabled="isDelivery && !isMinOrderReached">Оформить заказ</button>
+      <button class="checkout-btn" :class="{ 'hidden-on-keyboard': isKeyboardOpen }" @click="checkout" :disabled="isDelivery && !isMinOrderReached">
+        Оформить заказ за {{ formatPrice(finalCartTotal) }} ₽
+      </button>
     </div>
 
     <div v-if="showPartialModal" class="bonus-modal-overlay" @click.self="closePartialModal">
@@ -173,7 +174,7 @@ onMounted(async () => {
       const checkResponse = await addressesAPI.checkDeliveryZone(
         locationStore.deliveryCoords.lat,
         locationStore.deliveryCoords.lng,
-        locationStore.selectedCity.id
+        locationStore.selectedCity.id,
       );
       if (checkResponse.data?.available && checkResponse.data?.polygon) {
         locationStore.setDeliveryZone(checkResponse.data.polygon);
@@ -310,7 +311,7 @@ watch(
     if (!newValue) {
       bonusToUse.value = 0;
     }
-  }
+  },
 );
 
 watch(
@@ -319,7 +320,7 @@ watch(
     if (bonusToUse.value > newMax) {
       bonusToUse.value = newMax;
     }
-  }
+  },
 );
 </script>
 

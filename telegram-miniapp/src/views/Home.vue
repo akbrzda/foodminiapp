@@ -74,11 +74,24 @@
         </div>
       </div>
 
+      <div v-if="availableTags.length > 0" class="tags-filter">
+        <button :class="['tag-pill', { active: selectedTagId === null }]" @click="selectTag(null)">Все</button>
+        <button v-for="tag in availableTags" :key="tag.id" :class="['tag-pill', { active: selectedTagId === tag.id }]" @click="selectTag(tag.id)">
+          <span class="tag-icon" v-if="tag.icon">{{ tag.icon }}</span>
+          {{ tag.name }}
+        </button>
+      </div>
+
       <div class="menu-content" v-if="!menuStore.loading">
         <div v-for="category in menuStore.categories" :key="category.id" :id="`category-${category.id}`" class="category-section">
           <h2 class="category-title">{{ category.name }}</h2>
           <div class="items">
-            <div v-for="item in getItemsByCategory(category.id)" :key="item.id" class="item-card" @click="openItem(item)">
+            <div
+              v-for="item in getItemsByCategory(category.id)"
+              :key="item.id"
+              :class="['item-card', { disabled: isItemUnavailable(item) }]"
+              @click="handleItemCardClick(item)"
+            >
               <div class="item-image" v-if="item.image_url">
                 <img :src="normalizeImageUrl(item.image_url)" :alt="item.name" />
               </div>
@@ -87,10 +100,17 @@
                   <h3>{{ item.name }}</h3>
                   <p class="description">{{ item.description }}</p>
                   <p class="item-weight" v-if="getDisplayWeight(item)">{{ getDisplayWeight(item) }}</p>
+                  <div class="item-tags" v-if="item.tags && item.tags.length > 0">
+                    <span v-for="tag in item.tags" :key="tag.id" class="item-tag">
+                      <span v-if="tag.icon">{{ tag.icon }}</span>
+                      {{ tag.name }}
+                    </span>
+                  </div>
+                  <div v-if="isItemUnavailable(item)" class="item-unavailable">Временно недоступно</div>
                 </div>
                 <div class="item-footer">
-                  <button v-if="!getCartItem(item)" class="add-btn" @click.stop="handleItemAction(item)">
-                    {{ getItemPrice(item) }}
+                  <button v-if="!getCartItem(item)" class="add-btn" :disabled="isItemUnavailable(item)" @click.stop="handleItemAction(item)">
+                    {{ isItemUnavailable(item) ? "Недоступно" : getItemPrice(item) }}
                   </button>
                   <div v-else class="quantity-controls">
                     <button class="qty-btn" @click.stop="decreaseItemQuantity(item)">−</button>
@@ -116,7 +136,7 @@
         </span>
         <span class="cart-text">В корзину</span>
       </span>
-      <span class="cart-total">{{ formatPrice(cartStore.totalPrice) }} ₽</span>
+      <span class="cart-total">{{ formatPrice(cartTotalWithDelivery) }} ₽</span>
     </button>
   </div>
 </template>
@@ -149,6 +169,7 @@ const showMenu = ref(false);
 const activeCategory = ref(null);
 const isScrolling = ref(false);
 const activeOrders = ref([]);
+const selectedTagId = ref(null);
 let observer = null;
 
 const cityName = computed(() => locationStore.selectedCity?.name || "Когалым");
@@ -193,6 +214,15 @@ watch(
   () => locationStore.selectedCity,
   async (newCity) => {
     if (newCity) {
+      await loadMenu();
+    }
+  },
+);
+
+watch(
+  () => [locationStore.deliveryType, locationStore.selectedBranch?.id],
+  async () => {
+    if (locationStore.selectedCity) {
       await loadMenu();
     }
   },
@@ -280,6 +310,15 @@ function setDeliveryType(type) {
   locationStore.setDeliveryType(type);
 }
 
+const deliveryCost = computed(() => {
+  if (locationStore.deliveryType !== "delivery") return 0;
+  return parseFloat(locationStore.deliveryZone?.delivery_cost || 0);
+});
+
+const cartTotalWithDelivery = computed(() => {
+  return cartStore.totalPrice + deliveryCost.value;
+});
+
 function truncateText(text, maxLength) {
   if (!text) return "";
   if (text.length <= maxLength) return text;
@@ -289,7 +328,16 @@ function truncateText(text, maxLength) {
 async function loadMenu() {
   if (!locationStore.selectedCity) return;
 
-  if (menuStore.cityId === locationStore.selectedCity.id && menuStore.categories.length > 0 && menuStore.items.length > 0) {
+  const fulfillmentType = locationStore.isPickup ? "pickup" : "delivery";
+  const branchId = locationStore.selectedBranch?.id || null;
+
+  if (
+    menuStore.cityId === locationStore.selectedCity.id &&
+    menuStore.fulfillmentType === fulfillmentType &&
+    menuStore.branchId === branchId &&
+    menuStore.categories.length > 0 &&
+    menuStore.items.length > 0
+  ) {
     await nextTick();
     setupIntersectionObserver();
     return;
@@ -298,16 +346,20 @@ async function loadMenu() {
   try {
     menuStore.setLoading(true);
 
-    const menuResponse = await menuAPI.getMenu(locationStore.selectedCity.id);
+    const menuResponse = await menuAPI.getMenu(locationStore.selectedCity.id, { fulfillmentType, branchId });
     const categories = menuResponse.data.categories || [];
     menuStore.setCategories(categories);
     const allItems = categories.flatMap((category) => category.items || []);
 
     menuStore.setMenuData({
       cityId: locationStore.selectedCity.id,
+      fulfillmentType,
+      branchId,
       categories,
       items: allItems,
     });
+    selectedTagId.value = null;
+    cartStore.refreshPricesFromMenu(allItems);
 
     // Устанавливаем первую категорию как активную
     if (categories.length > 0) {
@@ -326,7 +378,9 @@ async function loadMenu() {
 }
 
 function getItemsByCategory(categoryId) {
-  return menuStore.getItemsByCategory(categoryId);
+  const items = menuStore.getItemsByCategory(categoryId);
+  if (selectedTagId.value === null) return items;
+  return items.filter((item) => item.tags && item.tags.some((tag) => tag.id === selectedTagId.value));
 }
 
 function hasRequiredOptions(item) {
@@ -344,6 +398,8 @@ function getCartItem(item) {
 
 function handleItemAction(item) {
   hapticFeedback("light");
+
+  if (isItemUnavailable(item)) return;
 
   if (hasRequiredOptions(item)) {
     openItem(item);
@@ -485,7 +541,12 @@ function scrollToCategory(categoryId) {
 
 function getItemPrice(item) {
   if (item.variants && item.variants.length > 0) {
-    const prices = item.variants.map((v) => v.price);
+    const prices = item.variants
+      .filter((variant) => !variant.in_stop_list && variant.price !== null && variant.price !== undefined)
+      .map((variant) => parseFloat(variant.price) || 0);
+    if (prices.length === 0) {
+      return `${formatPrice(item.price || 0)} ₽`;
+    }
     const minPrice = Math.min(...prices);
     const maxPrice = Math.max(...prices);
     if (minPrice === maxPrice) {
@@ -499,9 +560,40 @@ function getItemPrice(item) {
   return `${formatPrice(item.price || 0)} ₽`;
 }
 
+function handleItemCardClick(item) {
+  if (isItemUnavailable(item)) return;
+  openItem(item);
+}
+
 function openItem(item) {
   hapticFeedback("light");
   router.push(`/item/${item.id}`);
+}
+
+const availableTags = computed(() => {
+  const tagsMap = new Map();
+  menuStore.items.forEach((item) => {
+    if (Array.isArray(item.tags)) {
+      item.tags.forEach((tag) => {
+        if (!tagsMap.has(tag.id)) {
+          tagsMap.set(tag.id, tag);
+        }
+      });
+    }
+  });
+  return Array.from(tagsMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+});
+
+function selectTag(tagId) {
+  selectedTagId.value = tagId;
+}
+
+function isItemUnavailable(item) {
+  if (item.in_stop_list) return true;
+  if (item.variants && item.variants.length > 0) {
+    return item.variants.every((variant) => variant.in_stop_list || variant.price === null || variant.price === undefined);
+  }
+  return false;
 }
 
 function scrollCategoryIntoView(categoryId) {
@@ -861,6 +953,40 @@ function goToCart() {
   padding: 0 12px 12px;
 }
 
+.tags-filter {
+  display: flex;
+  gap: 8px;
+  padding: 8px 12px 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tags-filter::-webkit-scrollbar {
+  display: none;
+}
+
+.tag-pill {
+  background: #f0f3f7;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: var(--font-size-caption);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.tag-pill.active {
+  background: var(--color-primary);
+  color: var(--color-text-primary);
+  border-color: var(--color-primary);
+}
+
+.tag-icon {
+  margin-right: 4px;
+}
+
 .category-section {
   scroll-margin-top: 80px;
 }
@@ -887,6 +1013,11 @@ function goToCart() {
   border-radius: var(--border-radius-lg);
   cursor: pointer;
   transition: box-shadow var(--transition-duration) var(--transition-easing);
+}
+
+.item-card.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .item-card:hover {
@@ -940,6 +1071,27 @@ function goToCart() {
   margin: 0;
 }
 
+.item-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0;
+}
+
+.item-tag {
+  background: #eef2f6;
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 11px;
+  color: var(--color-text-secondary);
+}
+
+.item-unavailable {
+  margin-top: 6px;
+  font-size: 11px;
+  color: #c0392b;
+}
+
 .item-footer {
   display: flex;
   justify-content: flex-end;
@@ -957,6 +1109,11 @@ function goToCart() {
   cursor: pointer;
   transition: background-color var(--transition-duration) var(--transition-easing);
   white-space: nowrap;
+}
+
+.add-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .add-btn:hover {

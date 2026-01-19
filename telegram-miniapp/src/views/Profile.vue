@@ -1,6 +1,5 @@
 <template>
   <div class="profile">
-
     <div class="profile-content">
       <div class="form-card phone-card">
         <label class="field-label">Телефон</label>
@@ -92,10 +91,20 @@ async function saveProfile() {
     }
     hapticFeedback("success");
     saveMessage.value = "Профиль обновлен";
+
+    // Автоматически скрываем сообщение через 3 секунды
+    setTimeout(() => {
+      saveMessage.value = "";
+    }, 3000);
   } catch (error) {
     console.error("Failed to update profile:", error);
     hapticFeedback("error");
     saveError.value = error.response?.data?.error || "Не удалось сохранить профиль";
+
+    // Автоматически скрываем ошибку через 5 секунд
+    setTimeout(() => {
+      saveError.value = "";
+    }, 5000);
   } finally {
     saving.value = false;
   }
@@ -135,8 +144,11 @@ function normalizeDateForInput(value) {
   background: var(--color-background);
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius-lg);
-  padding: 14px 16px;
+  padding: 8px 12px;
   margin-bottom: 14px;
+}
+#birthdate {
+  text-align: left;
 }
 
 .phone-card {
@@ -148,7 +160,7 @@ function normalizeDateForInput(value) {
   display: block;
   font-size: var(--font-size-caption);
   color: var(--color-text-secondary);
-  margin-bottom: 8px;
+  margin-bottom: 4px;
 }
 
 .field-value {
@@ -200,13 +212,13 @@ function normalizeDateForInput(value) {
 
 .save-message {
   margin: 8px 4px 0;
-  font-size: var(--font-size-caption);
+  font-size: var(--font-size-h3);
   color: var(--color-success);
 }
 
 .save-error {
   margin: 8px 4px 0;
-  font-size: var(--font-size-caption);
+  font-size: var(--font-size-h3);
   color: var(--color-error);
 }
 </style>

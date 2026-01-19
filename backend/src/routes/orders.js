@@ -33,7 +33,7 @@ async function generateOrderNumber() {
 /**
  * Рассчитать стоимость заказа
  */
-async function calculateOrderCost(items, bonusToUse = 0) {
+async function calculateOrderCost(items, { cityId, fulfillmentType, bonusToUse = 0 } = {}) {
   let subtotal = 0;
   const validatedItems = [];
 
@@ -57,18 +57,55 @@ async function calculateOrderCost(items, bonusToUse = 0) {
 
     // Если указан вариант, используем его цену
     if (variant_id) {
-      const [variants] = await db.query("SELECT id, name, price, is_active FROM item_variants WHERE id = ? AND item_id = ?", [variant_id, item_id]);
+      const [variants] = await db.query("SELECT id, name, price, is_active FROM item_variants WHERE id = ? AND item_id = ?", [
+        variant_id,
+        item_id,
+      ]);
 
       if (variants.length === 0 || !variants[0].is_active) {
         throw new Error(`Variant ${variant_id} not found or inactive`);
       }
 
       const variant = variants[0];
-      itemBasePrice = parseFloat(variant.price);
+      if (fulfillmentType) {
+        const [variantPrices] = await db.query(
+          `SELECT price FROM menu_variant_prices
+           WHERE variant_id = ?
+             AND (city_id = ? OR city_id IS NULL)
+             AND fulfillment_type = ?
+           ORDER BY city_id DESC
+           LIMIT 1`,
+          [variant_id, cityId || null, fulfillmentType],
+        );
+        itemBasePrice = variantPrices.length > 0 ? parseFloat(variantPrices[0].price) : NaN;
+      } else {
+        itemBasePrice = parseFloat(variant.price);
+      }
+
+      if (!Number.isFinite(itemBasePrice)) {
+        itemBasePrice = parseFloat(variant.price);
+      }
       variantName = variant.name;
     } else {
       // Используем базовую цену позиции
-      itemBasePrice = parseFloat(menuItem.price);
+      if (fulfillmentType) {
+        const [itemPrices] = await db.query(
+          `SELECT price FROM menu_item_prices
+           WHERE item_id = ?
+             AND (city_id = ? OR city_id IS NULL)
+             AND fulfillment_type = ?
+           ORDER BY city_id DESC
+           LIMIT 1`,
+          [item_id, cityId || null, fulfillmentType],
+        );
+        itemBasePrice = itemPrices.length > 0 ? parseFloat(itemPrices[0].price) : NaN;
+      } else {
+        itemBasePrice = parseFloat(menuItem.price);
+      }
+
+      if (!Number.isFinite(itemBasePrice)) {
+        itemBasePrice = parseFloat(menuItem.price);
+      }
       if (itemBasePrice <= 0) {
         throw new Error(`Item ${item_id} has no price and no variant specified`);
       }
@@ -82,12 +119,25 @@ async function calculateOrderCost(items, bonusToUse = 0) {
         // Проверяем, это модификатор из новой системы (modifiers) или старой (menu_modifiers)
         const [newModifiers] = await db.query(
           "SELECT m.id, m.name, m.price, m.is_active, m.group_id, mg.type, mg.is_required FROM modifiers m JOIN modifier_groups mg ON m.group_id = mg.id WHERE m.id = ? AND m.is_active = TRUE",
-          [modId]
+          [modId],
         );
 
         if (newModifiers.length > 0) {
           const modifier = newModifiers[0];
-          const modifierPrice = parseFloat(modifier.price);
+          let modifierPrice = parseFloat(modifier.price);
+
+          if (variant_id) {
+            const [variantModifierPrices] = await db.query(
+              `SELECT price FROM menu_modifier_variant_prices
+               WHERE modifier_id = ? AND variant_id = ?
+               LIMIT 1`,
+              [modifier.id, variant_id],
+            );
+            if (variantModifierPrices.length > 0) {
+              modifierPrice = parseFloat(variantModifierPrices[0].price);
+            }
+          }
+
           modifiersTotal += modifierPrice;
           validatedModifiers.push({
             id: modifier.id,
@@ -153,14 +203,19 @@ async function calculateOrderCost(items, bonusToUse = 0) {
 // Расчёт стоимости заказа
 router.post("/calculate", authenticateToken, async (req, res, next) => {
   try {
-    const { items, bonus_to_use = 0, delivery_cost = 0, order_type, delivery_polygon_id } = req.body;
+    const { items, bonus_to_use = 0, delivery_cost = 0, order_type, delivery_polygon_id, city_id } = req.body;
 
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: "Items are required" });
     }
 
     // Валидация бонусов
-    const { subtotal, bonusUsed, total, validatedItems } = await calculateOrderCost(items, bonus_to_use);
+    const fulfillmentType = order_type === "pickup" ? "pickup" : "delivery";
+    const { subtotal, bonusUsed, total, validatedItems } = await calculateOrderCost(items, {
+      cityId: city_id,
+      fulfillmentType,
+      bonusToUse: bonus_to_use,
+    });
 
     if (order_type === "delivery" && delivery_polygon_id) {
       const [polygons] = await db.query("SELECT min_order_amount FROM delivery_polygons WHERE id = ?", [delivery_polygon_id]);
@@ -305,7 +360,12 @@ router.post("/", authenticateToken, async (req, res, next) => {
       }
     }
 
-    const { subtotal, bonusUsed, total, validatedItems } = await calculateOrderCost(items, bonus_to_use);
+      const fulfillmentType = order_type === "pickup" ? "pickup" : "delivery";
+      const { subtotal, bonusUsed, total, validatedItems } = await calculateOrderCost(items, {
+        cityId: city_id,
+        fulfillmentType,
+        bonusToUse: bonus_to_use,
+      });
 
     if (order_type === "delivery" && deliveryPolygon) {
       const minOrderAmount = parseFloat(deliveryPolygon.min_order_amount) || 0;
