@@ -71,17 +71,45 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  min-height: 100dvh; /* Dynamic viewport height - учитывает клавиатуру */
   touch-action: manipulation;
-  overscroll-behavior: none;
+  overscroll-behavior-y: none;
   background: var(--color-background);
 }
 
 #app {
   width: 100%;
   min-height: 100vh;
+  min-height: 100dvh;
   background: var(--color-background);
   /* Контент начинается под нативным header Telegram */
   /* Safe area insets учитываются автоматически через CSS переменные Telegram */
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Скроллируемые контейнеры */
+.scrollable-content {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Стили для состояния открытой клавиатуры */
+.keyboard-open {
+  transition: padding-bottom 0.3s ease;
+}
+
+/* Скрываем fixed/sticky элементы при открытой клавиатуре */
+.hidden-on-keyboard {
+  transform: translateY(200%);
+  transition: transform 0.3s ease;
+}
+
+/* Для sticky категорий */
+.categories-sticky.hidden-on-keyboard {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
 }
 
 /* Утилиты для типографики */

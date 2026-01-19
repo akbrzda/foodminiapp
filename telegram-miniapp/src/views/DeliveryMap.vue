@@ -184,6 +184,17 @@ function onAddressFocus() {
   if (mapInstance?.touchZoom) {
     mapInstance.touchZoom.disable();
   }
+
+  // Скроллим к input при открытии клавиатуры
+  setTimeout(() => {
+    const inputElement = document.querySelector(".address-input");
+    if (inputElement) {
+      inputElement.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    }
+  }, 300);
 }
 
 function onAddressBlur() {
@@ -803,5 +814,4 @@ watch(deliveryAddress, (value) => {
 .primary-btn:active {
   transform: scale(0.98);
 }
-
 </style>

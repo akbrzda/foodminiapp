@@ -1,18 +1,17 @@
 <template>
   <div class="address-details">
-
     <div class="content">
       <label class="label">улица, дом</label>
-      <input v-model="address" class="input" placeholder="улица, дом" />
+      <input v-model="address" class="input" placeholder="улица, дом" @focus="onInputFocus" />
 
       <div class="grid">
-        <input v-model="details.entrance" class="input" placeholder="Подъезд" />
-        <input v-model="details.doorCode" class="input" placeholder="Код на двери" />
-        <input v-model="details.floor" class="input" placeholder="Этаж" />
-        <input v-model="details.apartment" class="input" placeholder="Квартира" />
+        <input v-model="details.entrance" class="input" placeholder="Подъезд" @focus="onInputFocus" />
+        <input v-model="details.doorCode" class="input" placeholder="Код на двери" @focus="onInputFocus" />
+        <input v-model="details.floor" class="input" placeholder="Этаж" @focus="onInputFocus" />
+        <input v-model="details.apartment" class="input" placeholder="Квартира" @focus="onInputFocus" />
       </div>
 
-      <textarea v-model="details.comment" class="textarea" placeholder="Комментарий к адресу"></textarea>
+      <textarea v-model="details.comment" class="textarea" placeholder="Комментарий к адресу" @focus="onInputFocus"></textarea>
 
       <button class="primary-btn" @click="save">Сохранить</button>
     </div>
@@ -41,6 +40,16 @@ const details = reactive({
 
 function goBack() {
   router.back();
+}
+
+function onInputFocus(event) {
+  // Скроллим к input при открытии клавиатуры
+  setTimeout(() => {
+    event.target?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+  }, 300);
 }
 
 function save() {

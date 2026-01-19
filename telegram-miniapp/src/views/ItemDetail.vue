@@ -79,7 +79,7 @@
     </div>
 
     <!-- Кнопка добавления в корзину -->
-    <div class="footer" v-if="item">
+    <div class="footer" :class="{ 'hidden-on-keyboard': isKeyboardOpen }" v-if="item">
       <div class="footer-content">
         <div v-if="!cartItem" class="add-button-wrapper">
           <button class="add-to-cart-btn" :disabled="!canAddToCart" @click="addToCart">
@@ -108,6 +108,7 @@ import { useRoute, useRouter } from "vue-router";
 import { ShoppingCart } from "lucide-vue-next";
 import { useCartStore } from "../stores/cart";
 import { useMenuStore } from "../stores/menu";
+import { useKeyboardHandler } from "../composables/useKeyboardHandler";
 import { menuAPI } from "../api/endpoints";
 import { hapticFeedback } from "../services/telegram";
 import { formatPrice, normalizeImageUrl } from "../utils/format";
@@ -116,6 +117,7 @@ const route = useRoute();
 const router = useRouter();
 const cartStore = useCartStore();
 const menuStore = useMenuStore();
+const { isKeyboardOpen } = useKeyboardHandler();
 
 const item = ref(null);
 const loading = ref(true);
@@ -216,7 +218,7 @@ watch(
       isAdded.value = false;
     }
   },
-  { deep: true }
+  { deep: true },
 );
 
 watch(
@@ -230,7 +232,7 @@ watch(
       isAdded.value = false;
     }
   },
-  { deep: true }
+  { deep: true },
 );
 
 async function loadItem() {
@@ -469,7 +471,7 @@ function formatWeightValue(value, unit) {
 .item-detail {
   min-height: 100vh;
   background: var(--color-background);
-  padding-bottom: 140px;
+  padding-bottom: 96px;
 }
 
 .loading,
@@ -681,7 +683,9 @@ function formatWeightValue(value, unit) {
   font-size: var(--font-size-h3);
   font-weight: var(--font-weight-semibold);
   cursor: pointer;
-  transition: background-color var(--transition-duration) var(--transition-easing), transform 0.15s ease;
+  transition:
+    background-color var(--transition-duration) var(--transition-easing),
+    transform 0.15s ease;
   min-height: 56px;
 }
 
@@ -767,7 +771,9 @@ function formatWeightValue(value, unit) {
   align-items: center;
   justify-content: center;
   position: relative;
-  transition: background-color var(--transition-duration) var(--transition-easing), transform 0.15s ease;
+  transition:
+    background-color var(--transition-duration) var(--transition-easing),
+    transform 0.15s ease;
   flex-shrink: 0;
 }
 

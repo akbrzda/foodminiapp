@@ -71,7 +71,7 @@
         <div class="summary-warning" v-if="isDelivery && !isMinOrderReached">Минимальная сумма заказа: {{ formatPrice(minOrderAmount) }} ₽</div>
       </div>
 
-      <button class="checkout-btn" @click="checkout" :disabled="isDelivery && !isMinOrderReached">Оформить заказ</button>
+      <button class="checkout-btn" :class="{ 'hidden-on-keyboard': isKeyboardOpen }" @click="checkout" :disabled="isDelivery && !isMinOrderReached">Оформить заказ</button>
     </div>
 
     <div v-if="showPartialModal" class="bonus-modal-overlay" @click.self="closePartialModal">
@@ -103,6 +103,7 @@ import { useRouter } from "vue-router";
 import { useCartStore } from "../stores/cart";
 import { useLoyaltyStore } from "../stores/loyalty";
 import { useLocationStore } from "../stores/location";
+import { useKeyboardHandler } from "../composables/useKeyboardHandler";
 import { hapticFeedback } from "../services/telegram";
 import { bonusesAPI, addressesAPI } from "../api/endpoints";
 import { formatPrice } from "../utils/format";
@@ -111,6 +112,7 @@ const router = useRouter();
 const cartStore = useCartStore();
 const locationStore = useLocationStore();
 const loyaltyStore = useLoyaltyStore();
+const { isKeyboardOpen } = useKeyboardHandler();
 const bonusBalance = ref(0);
 const showBonusInfo = ref(false);
 const showPartialModal = ref(false);

@@ -1,6 +1,5 @@
 <template>
   <div class="checkout">
-
     <div class="content">
       <div class="order-type-tabs">
         <button class="order-tab" :class="{ active: orderType === 'delivery' }" @click="selectOrderType('delivery')">
@@ -15,7 +14,7 @@
 
       <div v-if="orderType" class="time-panel">
         <div v-if="estimatedFulfillmentTime" class="time-info">
-          <span class="delivery-time">{{ estimatedFulfillmentTime }}</span>
+          <Clock size="24" /> <span class="delivery-time">{{ estimatedFulfillmentTime }}</span>
         </div>
       </div>
     </div>
@@ -27,7 +26,7 @@
 
         <div class="form-group">
           <label class="label">Улица, дом</label>
-          <input v-model="deliveryAddress" class="input" placeholder="Введите адрес" @input="onAddressInput" @focus="showAddressSuggestions = true" />
+          <input v-model="deliveryAddress" class="input" placeholder="Введите адрес" @input="onAddressInput" @focus="onAddressFocus" />
 
           <div v-if="showAddressSuggestions && addressSuggestions.length" class="suggestions">
             <button v-for="(suggestion, index) in addressSuggestions" :key="index" class="suggestion-item" @click="selectAddress(suggestion)">
@@ -155,7 +154,7 @@
     </div>
 
     <!-- Кнопка подтверждения -->
-    <div class="footer" v-if="orderType">
+    <div class="footer" :class="{ 'hidden-on-keyboard': isKeyboardOpen }" v-if="orderType">
       <button class="submit-btn" @click="submitOrder" :disabled="submitting || !canSubmitOrder">
         {{ submitting ? "Оформление..." : `Оформить заказ • ${formatPrice(finalTotalPrice)} ₽` }}
       </button>
@@ -166,10 +165,11 @@
 <script setup>
 import { ref, computed, onMounted, watch } from "vue";
 import { useRouter } from "vue-router";
-import { Banknote, CreditCard, Phone, Store, Truck } from "lucide-vue-next";
+import { Banknote, CreditCard, Phone, Store, Truck, Clock } from "lucide-vue-next";
 import { useCartStore } from "../stores/cart";
 import { useLoyaltyStore } from "../stores/loyalty";
 import { useLocationStore } from "../stores/location";
+import { useKeyboardHandler } from "../composables/useKeyboardHandler";
 import { citiesAPI, addressesAPI, ordersAPI, geocodeAPI } from "../api/endpoints";
 import { hapticFeedback } from "../services/telegram";
 import { formatPrice } from "../utils/format";
@@ -178,6 +178,7 @@ const router = useRouter();
 const cartStore = useCartStore();
 const locationStore = useLocationStore();
 const loyaltyStore = useLoyaltyStore();
+const { isKeyboardOpen } = useKeyboardHandler();
 
 const orderType = ref(locationStore.deliveryType || null);
 const deliveryAddress = ref(locationStore.deliveryAddress || "");
@@ -294,7 +295,7 @@ onMounted(async () => {
       const checkResponse = await addressesAPI.checkDeliveryZone(
         locationStore.deliveryCoords.lat,
         locationStore.deliveryCoords.lng,
-        locationStore.selectedCity.id
+        locationStore.selectedCity.id,
       );
       if (checkResponse.data?.available && checkResponse.data?.polygon) {
         applyDeliveryZone(checkResponse.data.polygon);
@@ -328,7 +329,7 @@ watch(
         applyDeliveryZone(locationStore.deliveryZone);
       }
     }
-  }
+  },
 );
 
 watch(
@@ -337,7 +338,7 @@ watch(
     if (cartStore.bonusUsage.bonusToUse > appliedBonusToUse.value) {
       cartStore.setBonusToUse(appliedBonusToUse.value);
     }
-  }
+  },
 );
 
 function selectOrderType(type) {
@@ -381,6 +382,18 @@ async function onAddressInput() {
       console.error("Address search error:", error);
     }
   }, 500);
+}
+
+function onAddressFocus(event) {
+  showAddressSuggestions.value = true;
+
+  // Скроллим к input при открытии клавиатуры
+  setTimeout(() => {
+    event.target?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+  }, 300);
 }
 
 async function selectAddress(suggestion) {
@@ -584,25 +597,21 @@ async function submitOrder() {
 .checkout {
   min-height: 100vh;
   background: var(--color-background);
-  padding-bottom: 100px;
-}
-
-.content {
-  padding: 16px 12px;
+  padding: 12px;
+  padding-bottom: 108px;
 }
 
 .time-panel {
   margin-top: 12px;
   padding: 12px;
-  border-radius: var(--border-radius-md);
-  background: var(--color-background-secondary);
-  border: 1px solid var(--color-border);
 }
 
 .time-info {
-  margin-bottom: 10px;
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-small);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-h3);
 }
 
 .order-type-tabs {
@@ -644,7 +653,7 @@ async function submitOrder() {
   font-size: var(--font-size-h2);
   font-weight: var(--font-weight-bold);
   color: var(--color-text-primary);
-  margin: 0 0 16px 0;
+  margin: 0 0 8px 0;
 }
 
 .order-type-selection {
@@ -851,16 +860,14 @@ async function submitOrder() {
 }
 
 .order-summary {
-  margin-top: 16px;
-  padding: 8px 4px;
+  padding-bottom: 12px;
 }
 
 .summary-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 14px;
-  font-size: var(--font-size-h3);
+  font-size: var(--font-size-body);
   color: var(--color-text-primary);
 }
 
@@ -868,7 +875,9 @@ async function submitOrder() {
   color: var(--color-text-primary);
   font-weight: var(--font-weight-semibold);
 }
-
+.summary-row.bonus-discount {
+  margin-bottom: 12px;
+}
 .summary-row.bonus-earn .earn {
   color: var(--color-text-primary);
   font-weight: var(--font-weight-semibold);
@@ -876,8 +885,8 @@ async function submitOrder() {
 
 .summary-row.total {
   font-weight: var(--font-weight-bold);
-  font-size: var(--font-size-h1);
-  padding-top: 16px;
+  font-size: var(--font-size-h3);
+  padding-top: 12px;
   border-top: 1px solid var(--color-border);
   margin-bottom: 0;
 }
@@ -893,12 +902,11 @@ async function submitOrder() {
 
 .delivery-time {
   display: block;
-  margin-bottom: 8px;
 }
 
 .footer {
   position: fixed;
-  bottom: 0;
+  bottom: 40px;
   left: 0;
   right: 0;
   padding: 12px;

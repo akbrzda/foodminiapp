@@ -108,7 +108,7 @@
       <div class="empty" v-if="!menuStore.loading && menuStore.categories.length === 0">Меню загружается...</div>
     </div>
 
-    <button v-if="cartStore.itemsCount > 0" class="floating-cart" @click="goToCart">
+    <button v-if="cartStore.itemsCount > 0" class="floating-cart" :class="{ 'hidden-on-keyboard': isKeyboardOpen }" @click="goToCart">
       <span class="cart-left">
         <span class="cart-icon">
           <ShoppingCart :size="20" />
@@ -129,6 +129,7 @@ import { useAuthStore } from "../stores/auth";
 import { useLocationStore } from "../stores/location";
 import { useCartStore } from "../stores/cart";
 import { useMenuStore } from "../stores/menu";
+import { useKeyboardHandler } from "../composables/useKeyboardHandler";
 import { bonusesAPI, menuAPI, ordersAPI } from "../api/endpoints";
 import { hapticFeedback } from "../services/telegram";
 import AppHeader from "../components/AppHeader.vue";
@@ -140,6 +141,7 @@ const authStore = useAuthStore();
 const locationStore = useLocationStore();
 const cartStore = useCartStore();
 const menuStore = useMenuStore();
+const { isKeyboardOpen } = useKeyboardHandler();
 
 const categoriesRef = ref(null);
 const categoryRefs = ref({});
@@ -193,7 +195,7 @@ watch(
     if (newCity) {
       await loadMenu();
     }
-  }
+  },
 );
 
 onUnmounted(() => {
@@ -208,7 +210,7 @@ watch(
     if (!categoryId) return;
     await nextTick();
     scrollCategoryIntoView(categoryId);
-  }
+  },
 );
 
 async function loadActiveOrder() {
@@ -540,7 +542,7 @@ function goToCart() {
 <style scoped>
 .home {
   min-height: 100vh;
-  padding-bottom: 100px;
+  padding-bottom: 96px;
   background: var(--color-background);
 }
 
@@ -1022,7 +1024,9 @@ function goToCart() {
   background: var(--color-primary);
   color: var(--color-text-primary);
   cursor: pointer;
-  transition: background-color var(--transition-duration) var(--transition-easing), transform 0.15s ease;
+  transition:
+    background-color var(--transition-duration) var(--transition-easing),
+    transform 0.15s ease;
 }
 
 .floating-cart:active {

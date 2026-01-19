@@ -134,12 +134,33 @@ export const useTelegramStore = defineStore("telegram", () => {
       }
     }
 
+    // Отслеживаем изменения viewport (критично для работы с клавиатурой)
+    webApp.onEvent("viewportChanged", () => {
+      const viewportInfo = {
+        height: webApp.viewportHeight,
+        stableHeight: webApp.viewportStableHeight,
+        isExpanded: webApp.isExpanded,
+      };
+      console.log("📱 Viewport changed:", viewportInfo);
+
+      // Диспатчим событие для других частей приложения
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("telegram-viewport-changed", {
+            detail: viewportInfo,
+          }),
+        );
+      }
+    });
+
     console.log("✅ Telegram WebApp инициализирован", {
       platform: webApp.platform,
       version: webApp.version,
       initDataLength: currentInitData.length,
       supportsBackButton: isVersionAtLeast("6.1") && !!webApp.BackButton,
       supportsHeaderColor: isVersionAtLeast("6.1") && typeof webApp.setHeaderColor === "function",
+      viewportHeight: webApp.viewportHeight,
+      viewportStableHeight: webApp.viewportStableHeight,
     });
   }
 
