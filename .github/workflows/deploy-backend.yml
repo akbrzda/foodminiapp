@@ -49,7 +49,7 @@ jobs:
           TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID=${{ secrets.TELEGRAM_CHAT_ID }}
 
-          CORS_ORIGIN=${{ secrets.CORS_ORIGIN }}
+          CORS_ORIGINS=${{ secrets.CORS_ORIGINS }}
 
           CDN_BASE_URL=${{ secrets.CDN_BASE_URL }}
           CDN_IMAGES_PATH=${{ secrets.CDN_IMAGES_PATH }}
