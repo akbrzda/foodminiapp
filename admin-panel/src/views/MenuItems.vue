@@ -78,10 +78,12 @@ import TableCell from "../components/ui/TableCell.vue";
 import TableHead from "../components/ui/TableHead.vue";
 import TableHeader from "../components/ui/TableHeader.vue";
 import TableRow from "../components/ui/TableRow.vue";
+import { useNotifications } from "../composables/useNotifications.js";
 import { formatCurrency } from "../utils/format.js";
 
 const router = useRouter();
 const items = ref([]);
+const { showErrorNotification } = useNotifications();
 
 const normalizeImageUrl = (url) => {
   if (!url) return "";
@@ -96,7 +98,7 @@ const loadItems = async () => {
     items.value = response.data.items || [];
   } catch (error) {
     console.error("Failed to load items:", error);
-    alert("Ошибка при загрузке позиций: " + (error.response?.data?.error || error.message));
+    showErrorNotification(`Ошибка при загрузке позиций: ${error.response?.data?.error || error.message}`);
   }
 };
 
@@ -115,7 +117,7 @@ const deleteItem = async (item) => {
     await loadItems();
   } catch (error) {
     console.error("Failed to delete item:", error);
-    alert("Ошибка: " + (error.response?.data?.error || error.message));
+    showErrorNotification(`Ошибка: ${error.response?.data?.error || error.message}`);
   }
 };
 

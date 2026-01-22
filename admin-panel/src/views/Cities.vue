@@ -122,10 +122,12 @@ import TableCell from "../components/ui/TableCell.vue";
 import TableHead from "../components/ui/TableHead.vue";
 import TableHeader from "../components/ui/TableHeader.vue";
 import TableRow from "../components/ui/TableRow.vue";
+import { useNotifications } from "../composables/useNotifications.js";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
 const referenceStore = useReferenceStore();
+const { showErrorNotification } = useNotifications();
 const cities = ref([]);
 const showModal = ref(false);
 const editing = ref(null);
@@ -281,7 +283,7 @@ const geocodeCity = async () => {
     }
   } catch (error) {
     console.error("Ошибка геокодирования:", error);
-    alert("Не удалось найти город на карте");
+    showErrorNotification("Не удалось найти город на карте");
   }
 };
 
@@ -308,7 +310,7 @@ const submitCity = async () => {
     closeModal();
   } catch (error) {
     console.error("Ошибка сохранения города:", error);
-    alert(error.response?.data?.error || "Ошибка сохранения города");
+    showErrorNotification(error.response?.data?.error || "Ошибка сохранения города");
   }
 };
 
@@ -320,7 +322,7 @@ const deleteCity = async (city) => {
     await referenceStore.loadCities();
   } catch (error) {
     console.error("Ошибка удаления города:", error);
-    alert(error.response?.data?.error || "Ошибка удаления города");
+    showErrorNotification(error.response?.data?.error || "Ошибка удаления города");
   }
 };
 

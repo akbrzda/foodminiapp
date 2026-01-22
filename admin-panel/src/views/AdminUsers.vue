@@ -197,9 +197,11 @@ import TableCell from "../components/ui/TableCell.vue";
 import TableHead from "../components/ui/TableHead.vue";
 import TableHeader from "../components/ui/TableHeader.vue";
 import TableRow from "../components/ui/TableRow.vue";
+import { useNotifications } from "../composables/useNotifications.js";
 
 const referenceStore = useReferenceStore();
 const authStore = useAuthStore();
+const { showErrorNotification } = useNotifications();
 
 const users = ref([]);
 const showModal = ref(false);
@@ -328,7 +330,7 @@ const submitUser = async () => {
     await loadUsers();
   } catch (error) {
     console.error("Ошибка сохранения пользователя:", error);
-    alert(error.response?.data?.error || "Ошибка сохранения пользователя");
+    showErrorNotification(error.response?.data?.error || "Ошибка сохранения пользователя");
   }
 };
 
@@ -339,7 +341,7 @@ const deleteUser = async (user) => {
     await loadUsers();
   } catch (error) {
     console.error("Ошибка удаления пользователя:", error);
-    alert(error.response?.data?.error || "Ошибка удаления пользователя");
+    showErrorNotification(error.response?.data?.error || "Ошибка удаления пользователя");
   }
 };
 

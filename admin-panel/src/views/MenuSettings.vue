@@ -99,9 +99,11 @@ import TableCell from "../components/ui/TableCell.vue";
 import TableHead from "../components/ui/TableHead.vue";
 import TableHeader from "../components/ui/TableHeader.vue";
 import TableRow from "../components/ui/TableRow.vue";
+import { useNotifications } from "../composables/useNotifications.js";
 import { formatNumber } from "../utils/format.js";
 
 const reasons = ref([]);
+const { showErrorNotification } = useNotifications();
 const showModal = ref(false);
 const editing = ref(null);
 const saving = ref(false);
@@ -121,7 +123,7 @@ const loadReasons = async () => {
     reasons.value = response.data.reasons || [];
   } catch (error) {
     console.error("Failed to load reasons:", error);
-    alert("Ошибка при загрузке причин");
+    showErrorNotification("Ошибка при загрузке причин");
   }
 };
 
@@ -157,7 +159,7 @@ const submitReason = async () => {
     await loadReasons();
   } catch (error) {
     console.error("Failed to save reason:", error);
-    alert("Ошибка при сохранении причины: " + (error.response?.data?.error || error.message));
+    showErrorNotification(`Ошибка при сохранении причины: ${error.response?.data?.error || error.message}`);
   } finally {
     saving.value = false;
   }
@@ -170,7 +172,7 @@ const deleteReason = async (reason) => {
     await loadReasons();
   } catch (error) {
     console.error("Failed to delete reason:", error);
-    alert("Ошибка при удалении причины: " + (error.response?.data?.error || error.message));
+    showErrorNotification(`Ошибка при удалении причины: ${error.response?.data?.error || error.message}`);
   }
 };
 

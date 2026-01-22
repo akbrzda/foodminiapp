@@ -184,10 +184,12 @@ import TableCell from "../components/ui/TableCell.vue";
 import TableHead from "../components/ui/TableHead.vue";
 import TableHeader from "../components/ui/TableHeader.vue";
 import TableRow from "../components/ui/TableRow.vue";
+import { useNotifications } from "../composables/useNotifications.js";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
 const referenceStore = useReferenceStore();
+const { showErrorNotification } = useNotifications();
 const cityId = ref("");
 const branches = ref([]);
 const showModal = ref(false);
@@ -391,14 +393,14 @@ const geocodeAddress = async () => {
     }
   } catch (error) {
     console.error("Ошибка геокодирования:", error);
-    alert("Не удалось найти адрес на карте");
+    showErrorNotification("Не удалось найти адрес на карте");
   }
 };
 
 const addWorkingDay = () => {
   const nextDay = getNextAvailableDay();
   if (!nextDay) {
-    alert("Все дни недели уже добавлены");
+    showErrorNotification("Все дни недели уже добавлены");
     return;
   }
   form.value.working_hours.push({
@@ -431,7 +433,7 @@ const formatTimeValue = (value) => {
 const submitBranch = async () => {
   try {
     if (!areWorkingDaysUnique()) {
-      alert("Дни недели в графике должны быть уникальными");
+      showErrorNotification("Дни недели в графике должны быть уникальными");
       return;
     }
 
@@ -464,7 +466,7 @@ const submitBranch = async () => {
     closeModal();
   } catch (error) {
     console.error("Ошибка сохранения филиала:", error);
-    alert(error.response?.data?.error || "Ошибка сохранения филиала");
+    showErrorNotification(error.response?.data?.error || "Ошибка сохранения филиала");
   }
 };
 
@@ -475,7 +477,7 @@ const deleteBranch = async (branch) => {
     await loadBranches();
   } catch (error) {
     console.error("Ошибка удаления филиала:", error);
-    alert(error.response?.data?.error || "Ошибка удаления филиала");
+    showErrorNotification(error.response?.data?.error || "Ошибка удаления филиала");
   }
 };
 

@@ -120,10 +120,12 @@ import TableCell from "../components/ui/TableCell.vue";
 import TableHead from "../components/ui/TableHead.vue";
 import TableHeader from "../components/ui/TableHeader.vue";
 import TableRow from "../components/ui/TableRow.vue";
+import { useNotifications } from "../composables/useNotifications.js";
 import { formatDate } from "../utils/date.js";
 import { useReferenceStore } from "../stores/reference.js";
 
 const referenceStore = useReferenceStore();
+const { showErrorNotification } = useNotifications();
 
 const stopList = ref([]);
 const entities = ref([]);
@@ -148,7 +150,7 @@ const loadStopList = async () => {
     stopList.value = response.data.items || [];
   } catch (error) {
     console.error("Failed to load stop list:", error);
-    alert("Ошибка при загрузке стоп-листа");
+    showErrorNotification("Ошибка при загрузке стоп-листа");
   }
 };
 
@@ -199,7 +201,7 @@ const submitStopList = async () => {
     await loadStopList();
   } catch (error) {
     console.error("Failed to add to stop list:", error);
-    alert("Ошибка: " + (error.response?.data?.error || error.message));
+    showErrorNotification(`Ошибка: ${error.response?.data?.error || error.message}`);
   } finally {
     saving.value = false;
   }
@@ -212,7 +214,7 @@ const removeFromStopList = async (item) => {
     await loadStopList();
   } catch (error) {
     console.error("Failed to remove from stop list:", error);
-    alert("Ошибка: " + (error.response?.data?.error || error.message));
+    showErrorNotification(`Ошибка: ${error.response?.data?.error || error.message}`);
   }
 };
 

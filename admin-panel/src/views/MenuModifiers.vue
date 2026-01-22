@@ -220,9 +220,11 @@ import CardHeader from "../components/ui/CardHeader.vue";
 import CardTitle from "../components/ui/CardTitle.vue";
 import Input from "../components/ui/Input.vue";
 import Select from "../components/ui/Select.vue";
+import { useNotifications } from "../composables/useNotifications.js";
 import { formatCurrency } from "../utils/format.js";
 
 const groups = ref([]);
+const { showErrorNotification } = useNotifications();
 const showModal = ref(false);
 const showModifierModal = ref(false);
 const showVariantPricesModal = ref(false);
@@ -273,7 +275,7 @@ const loadGroups = async () => {
     groups.value = response.data.modifier_groups || [];
   } catch (error) {
     console.error("Failed to load groups:", error);
-    alert("Ошибка при загрузке групп: " + (error.response?.data?.error || error.message));
+    showErrorNotification(`Ошибка при загрузке групп: ${error.response?.data?.error || error.message}`);
   }
 };
 
@@ -313,7 +315,7 @@ const submitGroup = async () => {
     await loadGroups();
   } catch (error) {
     console.error("Failed to save group:", error);
-    alert("Ошибка при сохранении группы: " + (error.response?.data?.error || error.message));
+    showErrorNotification(`Ошибка при сохранении группы: ${error.response?.data?.error || error.message}`);
   }
 };
 
@@ -324,7 +326,7 @@ const deleteGroup = async (group) => {
     await loadGroups();
   } catch (error) {
     console.error("Failed to delete group:", error);
-    alert("Ошибка при удалении группы: " + (error.response?.data?.error || error.message));
+    showErrorNotification(`Ошибка при удалении группы: ${error.response?.data?.error || error.message}`);
   }
 };
 
@@ -377,7 +379,7 @@ const openVariantPricesModal = async (modifier) => {
     showVariantPricesModal.value = true;
   } catch (error) {
     console.error("Failed to load variant prices:", error);
-    alert("Ошибка при загрузке цен вариаций");
+    showErrorNotification("Ошибка при загрузке цен вариаций");
   } finally {
     saving.value = false;
   }
@@ -449,7 +451,7 @@ const handleFile = async (file) => {
 const submitModifier = async () => {
   if (!activeGroup.value) {
     console.error("activeGroup is not set");
-    alert("Ошибка: не выбрана группа модификаторов");
+    showErrorNotification("Ошибка: не выбрана группа модификаторов");
     return;
   }
 
@@ -464,7 +466,7 @@ const submitModifier = async () => {
     await loadGroups();
   } catch (error) {
     console.error("Failed to save modifier:", error);
-    alert("Ошибка при сохранении модификатора: " + (error.response?.data?.error || error.message));
+    showErrorNotification(`Ошибка при сохранении модификатора: ${error.response?.data?.error || error.message}`);
   }
 };
 
@@ -484,7 +486,7 @@ const submitVariantPrices = async () => {
     closeVariantPricesModal();
   } catch (error) {
     console.error("Failed to save variant prices:", error);
-    alert("Ошибка при сохранении цен вариаций");
+    showErrorNotification("Ошибка при сохранении цен вариаций");
   } finally {
     saving.value = false;
   }
@@ -497,7 +499,7 @@ const deleteModifier = async (modifier) => {
     await loadGroups();
   } catch (error) {
     console.error("Failed to delete modifier:", error);
-    alert("Ошибка при удалении модификатора: " + (error.response?.data?.error || error.message));
+    showErrorNotification(`Ошибка при удалении модификатора: ${error.response?.data?.error || error.message}`);
   }
 };
 

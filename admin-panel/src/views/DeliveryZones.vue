@@ -119,6 +119,7 @@ import CardHeader from "../components/ui/CardHeader.vue";
 import CardTitle from "../components/ui/CardTitle.vue";
 import Input from "../components/ui/Input.vue";
 import Select from "../components/ui/Select.vue";
+import { useNotifications } from "../composables/useNotifications.js";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "leaflet-draw";
@@ -132,6 +133,7 @@ if (L?.GeometryUtil?.readableArea && !L.GeometryUtil.__patched) {
 const referenceStore = useReferenceStore();
 const route = useRoute();
 const router = useRouter();
+const { showErrorNotification } = useNotifications();
 const cityId = ref("");
 const branchId = ref("");
 const branches = ref([]);
@@ -400,7 +402,7 @@ const deletePolygon = async (polygon) => {
     await loadPolygons();
   } catch (error) {
     console.error("Ошибка удаления полигона:", error);
-    alert("Не удалось удалить полигон");
+    showErrorNotification("Не удалось удалить полигон");
   }
 };
 
@@ -443,7 +445,7 @@ const submitPolygon = async () => {
     closeModal();
   } catch (error) {
     console.error("Ошибка сохранения полигона:", error);
-    alert("Ошибка сохранения полигона");
+    showErrorNotification("Ошибка сохранения полигона");
   }
 };
 

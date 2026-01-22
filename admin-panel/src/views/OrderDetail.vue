@@ -227,9 +227,11 @@ import TableCell from "../components/ui/TableCell.vue";
 import TableHead from "../components/ui/TableHead.vue";
 import TableHeader from "../components/ui/TableHeader.vue";
 import TableRow from "../components/ui/TableRow.vue";
+import { useNotifications } from "../composables/useNotifications.js";
 
 const route = useRoute();
 const router = useRouter();
+const { showErrorNotification } = useNotifications();
 const order = ref(null);
 const statusUpdate = ref("");
 
@@ -301,7 +303,7 @@ const updateStatus = async () => {
     statusUpdate.value = "";
   } catch (error) {
     console.error("Failed to update status:", error);
-    alert("Ошибка при обновлении статуса");
+    showErrorNotification("Ошибка при обновлении статуса");
   }
 };
 

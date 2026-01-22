@@ -126,10 +126,12 @@ import TableHead from "../components/ui/TableHead.vue";
 import TableHeader from "../components/ui/TableHeader.vue";
 import TableRow from "../components/ui/TableRow.vue";
 import Textarea from "../components/ui/Textarea.vue";
+import { useNotifications } from "../composables/useNotifications.js";
 import { formatNumber } from "../utils/format.js";
 import { useReferenceStore } from "../stores/reference.js";
 
 const referenceStore = useReferenceStore();
+const { showErrorNotification } = useNotifications();
 
 const categories = ref([]);
 const showModal = ref(false);
@@ -154,7 +156,7 @@ const loadCategories = async () => {
     categories.value = response.data.categories || [];
   } catch (error) {
     console.error("Failed to load categories:", error);
-    alert("Ошибка при загрузке категорий");
+    showErrorNotification("Ошибка при загрузке категорий");
   }
 };
 
@@ -185,7 +187,7 @@ const openModal = async (category = null) => {
       form.value.city_ids = activeCityIds;
     } catch (error) {
       console.error("Failed to load category cities:", error);
-      alert("Ошибка при загрузке доступности по городам");
+      showErrorNotification("Ошибка при загрузке доступности по городам");
     }
   }
   showModal.value = true;
@@ -208,7 +210,7 @@ const submitCategory = async () => {
     await loadCategories();
   } catch (error) {
     console.error("Failed to save category:", error);
-    alert("Ошибка при сохранении категории: " + (error.response?.data?.error || error.message));
+    showErrorNotification(`Ошибка при сохранении категории: ${error.response?.data?.error || error.message}`);
   } finally {
     saving.value = false;
   }
@@ -221,7 +223,7 @@ const deleteCategory = async (category) => {
     await loadCategories();
   } catch (error) {
     console.error("Failed to delete category:", error);
-    alert("Ошибка при удалении категории: " + (error.response?.data?.error || error.message));
+    showErrorNotification(`Ошибка при удалении категории: ${error.response?.data?.error || error.message}`);
   }
 };
 

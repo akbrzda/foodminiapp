@@ -1,8 +1,10 @@
-import { ref, onMounted } from "vue";
+import { ref } from "vue";
+import { useToast } from "./useToast.js";
 
 export function useNotifications() {
   const permission = ref(Notification.permission);
   const isSupported = "Notification" in window;
+  const { toast } = useToast();
 
   const playSound = () => {
     try {
@@ -40,11 +42,6 @@ export function useNotifications() {
       return false;
     }
   };
-
-  // Автоматически запрашиваем разрешение при первом использовании
-  if (isSupported && permission.value === "default") {
-    requestPermission();
-  }
 
   const showNotification = async (title, options = {}) => {
     if (!isSupported) {
@@ -93,18 +90,18 @@ export function useNotifications() {
   };
 
   const showErrorNotification = (message) => {
-    return showNotification("⚠️ Ошибка", {
-      body: message,
-      tag: "error",
-      requireInteraction: false,
+    return toast({
+      title: "Ошибка",
+      description: message,
+      variant: "error",
     });
   };
 
   const showSuccessNotification = (message) => {
-    return showNotification("✅ Успешно", {
-      body: message,
-      tag: "success",
-      requireInteraction: false,
+    return toast({
+      title: "Успешно",
+      description: message,
+      variant: "success",
     });
   };
 

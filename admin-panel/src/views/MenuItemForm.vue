@@ -473,11 +473,13 @@ import TableHeader from "../components/ui/TableHeader.vue";
 import TableRow from "../components/ui/TableRow.vue";
 import Textarea from "../components/ui/Textarea.vue";
 import Tabs from "../components/ui/Tabs.vue";
+import { useNotifications } from "../composables/useNotifications.js";
 import { useReferenceStore } from "../stores/reference.js";
 
 const router = useRouter();
 const route = useRoute();
 const referenceStore = useReferenceStore();
+const { showErrorNotification, showSuccessNotification } = useNotifications();
 
 const allCategories = ref([]);
 const modifierGroups = ref([]);
@@ -621,7 +623,7 @@ const loadItem = async () => {
     };
   } catch (error) {
     console.error("Failed to load item:", error);
-    alert("Ошибка при загрузке позиции");
+    showErrorNotification("Ошибка при загрузке позиции");
     goBack();
   }
 };
@@ -660,10 +662,10 @@ const saveItem = async () => {
     }
 
     await api.put(`/api/menu/admin/items/${savedItemId}/categories`, { category_ids: form.value.category_ids });
-    alert("Основная информация сохранена");
+    showSuccessNotification("Основная информация сохранена");
   } catch (error) {
     console.error("Failed to save item:", error);
-    alert("Ошибка: " + (error.response?.data?.error || error.message));
+    showErrorNotification(`Ошибка: ${error.response?.data?.error || error.message}`);
   } finally {
     saving.value = false;
   }
@@ -671,16 +673,16 @@ const saveItem = async () => {
 
 const saveVariants = async () => {
   if (!isEditing.value) {
-    alert("Сначала сохраните основную информацию (Таб 1)");
+    showErrorNotification("Сначала сохраните основную информацию (Таб 1)");
     return;
   }
   saving.value = true;
   try {
     await api.put(`/api/menu/admin/items/${itemId.value}/variants`, { variants: form.value.variants });
-    alert("Вариации сохранены");
+    showSuccessNotification("Вариации сохранены");
   } catch (error) {
     console.error("Failed to save variants:", error);
-    alert("Ошибка: " + (error.response?.data?.error || error.message));
+    showErrorNotification(`Ошибка: ${error.response?.data?.error || error.message}`);
   } finally {
     saving.value = false;
   }
@@ -688,17 +690,17 @@ const saveVariants = async () => {
 
 const saveModifiers = async () => {
   if (!isEditing.value) {
-    alert("Сначала сохраните основную информацию");
+    showErrorNotification("Сначала сохраните основную информацию");
     return;
   }
   saving.value = true;
   try {
     await api.put(`/api/menu/admin/items/${itemId.value}/modifiers`, { modifier_group_ids: form.value.modifier_group_ids });
     await saveDisabledModifiers();
-    alert("Модификаторы сохранены");
+    showSuccessNotification("Модификаторы сохранены");
   } catch (error) {
     console.error("Failed to save modifiers:", error);
-    alert("Ошибка: " + (error.response?.data?.error || error.message));
+    showErrorNotification(`Ошибка: ${error.response?.data?.error || error.message}`);
   } finally {
     saving.value = false;
   }
@@ -720,16 +722,16 @@ const saveDisabledModifiers = async () => {
 
 const saveCities = async () => {
   if (!isEditing.value) {
-    alert("Сначала сохраните основную информацию");
+    showErrorNotification("Сначала сохраните основную информацию");
     return;
   }
   saving.value = true;
   try {
     await api.put(`/api/menu/admin/items/${itemId.value}/cities`, { city_ids: form.value.city_ids });
-    alert("Доступность сохранена");
+    showSuccessNotification("Доступность сохранена");
   } catch (error) {
     console.error("Failed to save cities:", error);
-    alert("Ошибка: " + (error.response?.data?.error || error.message));
+    showErrorNotification(`Ошибка: ${error.response?.data?.error || error.message}`);
   } finally {
     saving.value = false;
   }
@@ -737,16 +739,16 @@ const saveCities = async () => {
 
 const saveTags = async () => {
   if (!isEditing.value) {
-    alert("Сначала сохраните основную информацию");
+    showErrorNotification("Сначала сохраните основную информацию");
     return;
   }
   saving.value = true;
   try {
     await api.put(`/api/menu/admin/items/${itemId.value}/tags`, { tag_ids: form.value.tag_ids });
-    alert("Теги сохранены");
+    showSuccessNotification("Теги сохранены");
   } catch (error) {
     console.error("Failed to save tags:", error);
-    alert("Ошибка: " + (error.response?.data?.error || error.message));
+    showErrorNotification(`Ошибка: ${error.response?.data?.error || error.message}`);
   } finally {
     saving.value = false;
   }
@@ -754,7 +756,7 @@ const saveTags = async () => {
 
 const savePrices = async () => {
   if (!isEditing.value) {
-    alert("Сначала сохраните основную информацию");
+    showErrorNotification("Сначала сохраните основную информацию");
     return;
   }
   saving.value = true;
@@ -767,10 +769,10 @@ const savePrices = async () => {
         price: priceItem.price,
       });
     }
-    alert("Цены сохранены");
+    showSuccessNotification("Цены сохранены");
   } catch (error) {
     console.error("Failed to save prices:", error);
-    alert("Ошибка: " + (error.response?.data?.error || error.message));
+    showErrorNotification(`Ошибка: ${error.response?.data?.error || error.message}`);
   } finally {
     saving.value = false;
   }
@@ -778,7 +780,7 @@ const savePrices = async () => {
 
 const saveVariantPrices = async () => {
   if (!isEditing.value) {
-    alert("Сначала сохраните основную информацию");
+    showErrorNotification("Сначала сохраните основную информацию");
     return;
   }
   saving.value = true;
@@ -794,10 +796,10 @@ const saveVariantPrices = async () => {
         });
       }
     }
-    alert("Цены вариаций сохранены");
+    showSuccessNotification("Цены вариаций сохранены");
   } catch (error) {
     console.error("Failed to save variant prices:", error);
-    alert("Ошибка: " + (error.response?.data?.error || error.message));
+    showErrorNotification(`Ошибка: ${error.response?.data?.error || error.message}`);
   } finally {
     saving.value = false;
   }
