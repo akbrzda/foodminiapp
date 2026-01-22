@@ -13,7 +13,7 @@
       <div class="flex items-center gap-3">
         <div class="hidden text-right text-sm sm:block">
           <div class="font-medium text-foreground">{{ authStore.user?.first_name }} {{ authStore.user?.last_name }}</div>
-          <div class="text-xs uppercase tracking-[0.2em] text-muted-foreground">{{ authStore.role || "admin" }}</div>
+          <div class="text-xs uppercase text-muted-foreground">{{ authStore.role || "admin" }}</div>
         </div>
         <div class="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
           {{ initials }}

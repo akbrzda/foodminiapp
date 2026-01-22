@@ -1,12 +1,11 @@
 <template>
-  <aside class="flex h-full flex-col gap-6">
-    <div class="rounded-xl bg-primary/10 p-4">
-      <p class="panel-title text-xl font-semibold text-foreground">Panda Admin</p>
-      <p class="text-xs uppercase tracking-[0.2em] text-muted-foreground">Control Room</p>
+  <aside class="flex h-full flex-col gap-4">
+    <div class="bg-primary/10 p-4">
+      <p class="panel-title text-xl font-semibold text-foreground">Панель управления</p>
     </div>
 
-    <nav class="flex flex-1 flex-col gap-1 text-sm">
-      <div class="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Операции</div>
+    <nav class="flex flex-1 flex-col gap-1 text-sm p-3">
+      <div class="text-xs font-semibold uppercase text-muted-foreground">Операции</div>
       <RouterLink class="nav-link" to="/dashboard" @click="emit('navigate')">
         <LayoutDashboard :size="18" />
         Аналитика
@@ -20,21 +19,7 @@
         Клиенты
       </RouterLink>
 
-      <div class="mt-4 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Справочники</div>
-      <RouterLink class="nav-link" to="/cities" @click="emit('navigate')">
-        <MapPinned :size="18" />
-        Города
-      </RouterLink>
-      <RouterLink class="nav-link" to="/branches" @click="emit('navigate')">
-        <Building2 :size="18" />
-        Филиалы
-      </RouterLink>
-      <RouterLink class="nav-link" to="/delivery-zones" @click="emit('navigate')">
-        <Map :size="18" />
-        Зоны доставки
-      </RouterLink>
-
-      <div class="mt-4 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Меню</div>
+      <div class="mt-4 text-xs font-semibold uppercase text-muted-foreground">Меню</div>
       <RouterLink class="nav-link" to="/menu/categories" @click="emit('navigate')">
         <ListTree :size="18" />
         Категории
@@ -55,12 +40,22 @@
         <ListChecks :size="18" />
         Стоп-лист
       </RouterLink>
-      <RouterLink class="nav-link" to="/menu/settings" @click="emit('navigate')">
-        <Settings :size="18" />
-        Настройки меню
+
+      <div class="mt-4 text-xs font-semibold uppercase text-muted-foreground">Справочники</div>
+      <RouterLink class="nav-link" to="/cities" @click="emit('navigate')">
+        <MapPinned :size="18" />
+        Города
+      </RouterLink>
+      <RouterLink class="nav-link" to="/branches" @click="emit('navigate')">
+        <Building2 :size="18" />
+        Филиалы
+      </RouterLink>
+      <RouterLink class="nav-link" to="/delivery-zones" @click="emit('navigate')">
+        <Map :size="18" />
+        Зоны доставки
       </RouterLink>
 
-      <div class="mt-4 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Система</div>
+      <div class="mt-4 text-xs font-semibold uppercase text-muted-foreground">Система</div>
       <RouterLink class="nav-link" to="/admin-users" @click="emit('navigate')">
         <UserCog :size="18" />
         Пользователи
@@ -69,9 +64,13 @@
         <FileText :size="18" />
         Логи
       </RouterLink>
+      <RouterLink class="nav-link" to="/menu/settings" @click="emit('navigate')">
+        <Settings :size="18" />
+        Настройки меню
+      </RouterLink>
     </nav>
 
-    <div class="rounded-xl border border-border/60 bg-muted/60 p-4 text-xs text-muted-foreground">
+    <div class="border border-border/60 bg-muted/60 p-4 text-xs text-muted-foreground">
       <div class="mb-1 flex items-center gap-2 text-sm font-semibold text-foreground">
         <Radio :size="16" />
         Live Ops

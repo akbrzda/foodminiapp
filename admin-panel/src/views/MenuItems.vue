@@ -86,7 +86,8 @@ const items = ref([]);
 const normalizeImageUrl = (url) => {
   if (!url) return "";
   if (url.startsWith("http://") || url.startsWith("https://")) return url;
-  return `${window.location.origin}/${url.replace(/^\//, "")}`;
+  const base = (import.meta.env.VITE_UPLOADS_URL || import.meta.env.VITE_API_URL || window.location.origin).replace(/\/$/, "");
+  return url.startsWith("/") ? `${base}${url}` : `${base}/${url}`;
 };
 
 const loadItems = async () => {

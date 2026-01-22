@@ -12,5 +12,5 @@ const props = defineProps({
   class: { type: String, default: "" },
 });
 
-const classes = computed(() => cn("flex flex-col gap-1.5 p-5", props.class));
+const classes = computed(() => cn("flex flex-col gap-1.5 p-4", props.class));
 </script>

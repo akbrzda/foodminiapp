@@ -103,6 +103,7 @@ router.get("/", async (req, res, next) => {
       const [items] = await db.query(
         `SELECT DISTINCT mi.id, mi.name, mi.description, mi.composition, mi.image_url, 
                 mi.weight_value, mi.weight_unit, mi.calories, mi.sort_order, mi.is_active,
+                mic.sort_order AS category_sort_order,
                 mi.calories_per_100g, mi.proteins_per_100g, mi.fats_per_100g, mi.carbs_per_100g,
                 mi.calories_per_serving, mi.proteins_per_serving, mi.fats_per_serving, mi.carbs_per_serving,
                 mi.created_at, mi.updated_at

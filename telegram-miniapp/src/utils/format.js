@@ -18,7 +18,7 @@ export function normalizeImageUrl(url) {
   if (!url) return null;
   if (/^data:/i.test(url)) return url;
   if (/^https?:\/\//i.test(url)) return url;
-  const base = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
+  const base = (import.meta.env.VITE_UPLOADS_URL || import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
   if (!base) return url.startsWith("/") ? url : `/${url}`;
   return url.startsWith("/") ? `${base}${url}` : `${base}/${url}`;
 }

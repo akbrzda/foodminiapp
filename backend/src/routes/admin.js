@@ -7,6 +7,7 @@ import { fileURLToPath } from "url";
 import db from "../config/database.js";
 import { authenticateToken, requireRole } from "../middleware/auth.js";
 import { telegramQueue, imageQueue, getQueueStats, getFailedJobs, retryFailedJobs, cleanQueue, addImageProcessing } from "../queues/config.js";
+import { uploadsDir } from "../config/uploads.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -370,9 +371,8 @@ router.post("/uploads/images", requireRole("admin", "manager", "ceo"), async (re
     const safeExtension = extensionFromMime.replace(/[^a-z0-9]/gi, "").slice(0, 6) || "png";
     const safeName = `${Date.now()}_${crypto.randomBytes(4).toString("hex")}.${safeExtension}`;
 
-    const uploadDir = path.join(__dirname, "../../../uploads");
-    await fs.mkdir(uploadDir, { recursive: true });
-    const filePath = path.join(uploadDir, safeName);
+    await fs.mkdir(uploadsDir, { recursive: true });
+    const filePath = path.join(uploadsDir, safeName);
     await fs.writeFile(filePath, buffer);
 
     const job = await addImageProcessing({

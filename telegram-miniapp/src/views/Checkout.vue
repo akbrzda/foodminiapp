@@ -894,6 +894,7 @@ async function submitOrder() {
   align-items: center;
   font-size: var(--font-size-body);
   color: var(--color-text-primary);
+  padding-bottom: 4px;
 }
 
 .summary-row.bonus-discount .discount {

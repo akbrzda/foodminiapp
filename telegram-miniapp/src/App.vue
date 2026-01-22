@@ -121,15 +121,11 @@ function setupWebSocket() {
   // Подключаемся только если пользователь авторизован
   if (!authStore.isAuthenticated) return;
 
-  wsService.connect(authStore.user?.id);
+  wsService.connect(authStore.token);
 
   // Обрабатываем обновление статуса заказа
   wsService.on("order-status-updated", (data) => {
     console.log("Order status updated:", data);
-    // Можно добавить уведомление через Telegram Mini App API
-    if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.showAlert(`Статус заказа изменён: ${getStatusText(data.newStatus)}`);
-    }
   });
 
   // Обрабатываем обновление бонусов
@@ -143,7 +139,7 @@ function setupWebSocket() {
     () => authStore.isAuthenticated,
     (isAuth) => {
       if (isAuth) {
-        wsService.connect(authStore.user?.id);
+        wsService.connect(authStore.token);
       } else {
         wsService.disconnect();
       }

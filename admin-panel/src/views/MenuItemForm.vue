@@ -436,7 +436,7 @@
             <div class="grid gap-2 md:grid-cols-2">
               <label v-for="tag in tags" :key="tag.id" class="flex items-center gap-2 text-sm text-foreground">
                 <input v-model="form.tag_ids" type="checkbox" :value="tag.id" class="h-4 w-4 rounded border-border text-primary focus:ring-primary" />
-                <Badge :style="`background-color: ${tag.color_hex}`" class="text-white">{{ tag.name }}</Badge>
+                <Badge :style="`background-color: ${tag.color_hex}`">{{ tag.name }}</Badge>
               </label>
             </div>
           </CardContent>
@@ -525,7 +525,8 @@ const modalSubtitle = computed(() => (isEditing.value ? "Измените пар
 const normalizeImageUrl = (url) => {
   if (!url) return "";
   if (url.startsWith("http://") || url.startsWith("https://")) return url;
-  return `${window.location.origin}/${url.replace(/^\//, "")}`;
+  const base = (import.meta.env.VITE_UPLOADS_URL || import.meta.env.VITE_API_URL || window.location.origin).replace(/\/$/, "");
+  return url.startsWith("/") ? `${base}${url}` : `${base}/${url}`;
 };
 
 const goBack = () => {
@@ -819,9 +820,7 @@ const addVariantPrice = (variant) => {
   });
 };
 
-const selectedModifierGroups = computed(() =>
-  modifierGroups.value.filter((group) => form.value.modifier_group_ids.includes(group.id)),
-);
+const selectedModifierGroups = computed(() => modifierGroups.value.filter((group) => form.value.modifier_group_ids.includes(group.id)));
 
 const addVariant = () => {
   form.value.variants.push({
@@ -859,18 +858,26 @@ const onDrop = (e) => {
   if (file) handleFile(file);
 };
 
+const readFileAsDataUrl = (file) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+
 const handleFile = async (file) => {
   if (file.size > 500 * 1024) {
     uploadState.value.error = "Файл больше 500KB";
     return;
   }
   uploadState.value = { loading: true, error: null, preview: URL.createObjectURL(file) };
-  const formData = new FormData();
-  formData.append("image", file);
   try {
-    const res = await api.post("/api/menu/admin/upload", formData, { headers: { "Content-Type": "multipart/form-data" } });
-    form.value.image_url = res.data.url;
-    uploadState.value = { loading: false, error: null, preview: res.data.url };
+    const dataUrl = await readFileAsDataUrl(file);
+    const res = await api.post("/api/admin/uploads/images", { data: dataUrl, filename: file.name });
+    const uploadedUrl = res.data?.file?.url || "";
+    form.value.image_url = uploadedUrl;
+    uploadState.value = { loading: false, error: null, preview: uploadedUrl || dataUrl };
   } catch (error) {
     console.error("Failed to upload:", error);
     uploadState.value = { loading: false, error: "Ошибка загрузки", preview: null };

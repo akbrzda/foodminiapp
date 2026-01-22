@@ -8,8 +8,12 @@ class WebSocketService {
     this.isConnecting = false;
   }
 
-  connect(userId) {
+  connect(token) {
     if (this.ws?.readyState === WebSocket.OPEN || this.isConnecting) {
+      return;
+    }
+
+    if (!token) {
       return;
     }
 
@@ -24,7 +28,7 @@ class WebSocketService {
     }
 
     try {
-      this.ws = new WebSocket(`${wsUrl}?userId=${userId}`);
+      this.ws = new WebSocket(`${wsUrl}?token=${encodeURIComponent(token)}`);
 
       this.ws.onopen = () => {
         console.log("WebSocket connected");
@@ -39,7 +43,7 @@ class WebSocketService {
           console.log("WebSocket message:", data);
 
           if (data.type) {
-            this.emit(data.type, data.payload);
+            this.emit(data.type, data.data);
           }
         } catch (error) {
           console.error("Failed to parse WebSocket message:", error);
@@ -56,16 +60,16 @@ class WebSocketService {
         console.log("WebSocket disconnected");
         this.isConnecting = false;
         this.emit("disconnected");
-        this.scheduleReconnect(userId);
+        this.scheduleReconnect(token);
       };
     } catch (error) {
       console.error("Failed to create WebSocket:", error);
       this.isConnecting = false;
-      this.scheduleReconnect(userId);
+      this.scheduleReconnect(token);
     }
   }
 
-  scheduleReconnect(userId) {
+  scheduleReconnect(token) {
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
       console.error("Max reconnect attempts reached");
       this.emit("max-reconnect-attempts");
@@ -76,7 +80,7 @@ class WebSocketService {
     console.log(`Reconnecting in ${this.reconnectDelay}ms (attempt ${this.reconnectAttempts})`);
 
     setTimeout(() => {
-      this.connect(userId);
+      this.connect(token);
     }, this.reconnectDelay);
   }
 

@@ -260,7 +260,8 @@ const modifierForm = ref({
 const normalizeImageUrl = (url) => {
   if (!url) return "";
   if (url.startsWith("http://") || url.startsWith("https://")) return url;
-  return `${import.meta.env.VITE_API_URL || "http://localhost:3000"}${url}`;
+  const base = (import.meta.env.VITE_UPLOADS_URL || import.meta.env.VITE_API_URL || "http://localhost:3000").replace(/\/$/, "");
+  return url.startsWith("/") ? `${base}${url}` : `${base}/${url}`;
 };
 
 const modalTitle = computed(() => (editing.value ? "Редактировать группу" : "Новая группа"));
@@ -402,6 +403,14 @@ const onDrop = (event) => {
   if (file) handleFile(file);
 };
 
+const readFileAsDataUrl = (file) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+
 const handleFile = async (file) => {
   if (!file.type.startsWith("image/")) {
     uploadState.value.error = "Только изображения";
@@ -416,15 +425,11 @@ const handleFile = async (file) => {
   uploadState.value.error = null;
 
   try {
-    const formData = new FormData();
-    formData.append("image", file);
-
-    const response = await api.post("/api/upload/menu-item", formData, {
-      headers: { "Content-Type": "multipart/form-data" },
-    });
-
-    modifierForm.value.image_url = response.data.url;
-    uploadState.value.preview = response.data.url;
+    const dataUrl = await readFileAsDataUrl(file);
+    const response = await api.post("/api/admin/uploads/images", { data: dataUrl, filename: file.name });
+    const uploadedUrl = response.data?.file?.url || "";
+    modifierForm.value.image_url = uploadedUrl;
+    uploadState.value.preview = uploadedUrl || dataUrl;
   } catch (error) {
     console.error("Upload failed:", error);
     uploadState.value.error = "Ошибка загрузки";

@@ -6,6 +6,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { testConnection } from "./config/database.js";
 import { testRedisConnection } from "./config/redis.js";
+import { uploadsDir } from "./config/uploads.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
 import { authenticateToken } from "./middleware/auth.js";
 
@@ -41,15 +42,38 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Middleware
-app.use(cors());
+const rawCorsOrigins = process.env.CORS_ORIGINS || "";
+const corsOrigins = rawCorsOrigins
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    if (!origin) {
+      return callback(null, true);
+    }
+    if (corsOrigins.length === 0 || corsOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error(`Not allowed by CORS: ${origin}`));
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+};
+console.log("CORS_ORIGINS:", process.env.CORS_ORIGINS);
+console.log("Parsed corsOrigins:", corsOrigins);
+
+app.use(cors(corsOptions));
+app.options(/.*/, cors(corsOptions));
 app.use(express.json({ charset: "utf-8", limit: "2mb" }));
 app.use(express.urlencoded({ extended: true, charset: "utf-8", limit: "2mb" }));
 
 // Static files for uploaded images
-app.use("/uploads", express.static(path.join(__dirname, "../../uploads")));
+app.use("/uploads", express.static(uploadsDir));
 // Backward compatibility for old storage and URLs
 app.use("/uploads", express.static(path.join(__dirname, "../../upload")));
-app.use("/upload", express.static(path.join(__dirname, "../../uploads")));
+app.use("/upload", express.static(uploadsDir));
 
 // Set charset for all responses
 app.use((req, res, next) => {

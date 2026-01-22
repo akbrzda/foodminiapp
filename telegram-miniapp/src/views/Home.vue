@@ -2,6 +2,17 @@
   <div class="home">
     <AppHeader @toggleMenu="showMenu = true" />
 
+    <div class="location-bar">
+      <div class="location-tabs">
+        <button @click="setDeliveryType('delivery')" class="pill-tab" :class="{ active: locationStore.isDelivery }">Доставка</button>
+        <button @click="setDeliveryType('pickup')" class="pill-tab" :class="{ active: locationStore.isPickup }">Самовывоз</button>
+      </div>
+      <div class="location-actions">
+        <button @click="openDeliverySelector" class="action-pill">
+          <span class="action-text">{{ actionButtonText }}</span>
+        </button>
+      </div>
+    </div>
     <!-- Активные заказы -->
     <div v-if="activeOrders.length > 0" class="active-orders-container">
       <div class="active-orders" :class="{ 'has-scroll': activeOrders.length > 1 }">
@@ -40,20 +51,6 @@
       </div>
       <div v-if="activeOrders.length > 1" class="scroll-hint">← Пролистайте →</div>
     </div>
-
-    <div class="location-bar">
-      <div class="location-tabs">
-        <button @click="setDeliveryType('delivery')" class="pill-tab" :class="{ active: locationStore.isDelivery }">Доставка</button>
-        <button @click="setDeliveryType('pickup')" class="pill-tab" :class="{ active: locationStore.isPickup }">Самовывоз</button>
-      </div>
-
-      <div class="location-actions">
-        <button @click="openDeliverySelector" class="action-pill">
-          <span class="action-text">{{ actionButtonText }}</span>
-        </button>
-      </div>
-    </div>
-
     <!-- Меню с категориями -->
     <div class="menu-section" v-if="locationStore.selectedCity">
       <div class="categories-sticky" v-if="menuStore.categories.length">
@@ -152,6 +149,7 @@ import { useMenuStore } from "../stores/menu";
 import { useKeyboardHandler } from "../composables/useKeyboardHandler";
 import { bonusesAPI, menuAPI, ordersAPI } from "../api/endpoints";
 import { hapticFeedback } from "../services/telegram";
+import { wsService } from "../services/websocket";
 import AppHeader from "../components/AppHeader.vue";
 import { formatPrice, normalizeImageUrl } from "../utils/format";
 
@@ -171,6 +169,7 @@ const isScrolling = ref(false);
 const activeOrders = ref([]);
 const selectedTagId = ref(null);
 let observer = null;
+let orderStatusHandler = null;
 
 const cityName = computed(() => locationStore.selectedCity?.name || "Когалым");
 const actionButtonText = computed(() => {
@@ -206,6 +205,7 @@ onMounted(async () => {
   // Загружаем активный заказ
   if (authStore.isAuthenticated) {
     await loadActiveOrder();
+    setupOrderStatusListener();
   }
 });
 
@@ -216,6 +216,18 @@ watch(
     if (newCity) {
       await loadMenu();
     }
+  },
+);
+
+watch(
+  () => authStore.isAuthenticated,
+  async (isAuth) => {
+    if (!isAuth) {
+      activeOrders.value = [];
+      return;
+    }
+    await loadActiveOrder();
+    setupOrderStatusListener();
   },
 );
 
@@ -231,6 +243,9 @@ watch(
 onUnmounted(() => {
   if (observer) {
     observer.disconnect();
+  }
+  if (orderStatusHandler) {
+    wsService.off("order-status-updated", orderStatusHandler);
   }
 });
 
@@ -253,6 +268,25 @@ async function loadActiveOrder() {
   } catch (error) {
     console.error("Failed to load active order:", error);
   }
+}
+
+function setupOrderStatusListener() {
+  if (orderStatusHandler) return;
+  orderStatusHandler = (data) => {
+    if (!data?.orderId || !data?.newStatus) return;
+    const orderId = String(data.orderId);
+    const index = activeOrders.value.findIndex((order) => String(order.id) === orderId);
+    if (index === -1) return;
+
+    if (["completed", "cancelled"].includes(data.newStatus)) {
+      activeOrders.value = activeOrders.value.filter((order) => order.id !== data.orderId);
+      return;
+    }
+
+    const updated = { ...activeOrders.value[index], status: data.newStatus };
+    activeOrders.value = [...activeOrders.value.slice(0, index), updated, ...activeOrders.value.slice(index + 1)];
+  };
+  wsService.on("order-status-updated", orderStatusHandler);
 }
 
 function getStatusText(status, orderType) {

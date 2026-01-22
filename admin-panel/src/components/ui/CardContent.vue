@@ -12,5 +12,5 @@ const props = defineProps({
   class: { type: String, default: "" },
 });
 
-const classes = computed(() => cn("p-5 pt-0", props.class));
+const classes = computed(() => cn("p-3", props.class));
 </script>

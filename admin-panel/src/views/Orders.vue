@@ -115,6 +115,7 @@ import { onMounted, onBeforeUnmount, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
 import { RefreshCcw, RotateCcw, Search } from "lucide-vue-next";
 import api from "../api/client.js";
+import { useAuthStore } from "../stores/auth.js";
 import { useReferenceStore } from "../stores/reference.js";
 import { useNotifications } from "../composables/useNotifications.js";
 import StatusBadge from "../components/StatusBadge.vue";
@@ -136,6 +137,7 @@ import TableHeader from "../components/ui/TableHeader.vue";
 import TableRow from "../components/ui/TableRow.vue";
 
 const router = useRouter();
+const authStore = useAuthStore();
 const referenceStore = useReferenceStore();
 const { showNewOrderNotification } = useNotifications();
 
@@ -182,12 +184,18 @@ const orderRowClass = (order) => {
 const connectWebSocket = () => {
   const apiBase = api.defaults.baseURL || "http://localhost:3000";
   const wsBase = import.meta.env.VITE_WS_URL || apiBase;
+  const token = authStore.token;
+
+  if (!token) {
+    return;
+  }
 
   let wsUrl;
   try {
     wsUrl = new URL(wsBase);
     const isSecure = window.location.protocol === "https:" || wsUrl.protocol === "https:";
     wsUrl.protocol = isSecure ? "wss:" : "ws:";
+    wsUrl.searchParams.set("token", token);
     ws = new WebSocket(wsUrl.toString());
 
     ws.onmessage = (event) => {
