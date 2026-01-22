@@ -60,6 +60,9 @@ const corsOptions = {
   },
   credentials: true,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+  exposedHeaders: ["Content-Range", "X-Content-Range"],
+  maxAge: 86400, // 24 hours
 };
 console.log("CORS_ORIGINS:", process.env.CORS_ORIGINS);
 console.log("Parsed corsOrigins:", corsOrigins);
