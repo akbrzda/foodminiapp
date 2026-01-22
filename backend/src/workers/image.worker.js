@@ -4,13 +4,13 @@ import fs from "fs/promises";
 import path from "path";
 import { fileURLToPath } from "url";
 import { logger } from "../utils/logger.js";
-import { uploadsDir } from "../config/uploads.js";
+import { CDN_IMAGES_PATH } from "../config/uploads.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Директория для загрузки изображений
-const UPLOAD_DIR = uploadsDir;
+// Директория для изображений на CDN
+const UPLOAD_DIR = CDN_IMAGES_PATH;
 const OPTIMIZED_DIR = path.join(UPLOAD_DIR, "optimized");
 const THUMBNAILS_DIR = path.join(UPLOAD_DIR, "thumbnails");
 

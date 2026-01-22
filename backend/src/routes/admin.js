@@ -1,16 +1,8 @@
 import express from "express";
 import bcrypt from "bcrypt";
-import crypto from "crypto";
-import fs from "fs/promises";
-import path from "path";
-import { fileURLToPath } from "url";
 import db from "../config/database.js";
 import { authenticateToken, requireRole } from "../middleware/auth.js";
-import { telegramQueue, imageQueue, getQueueStats, getFailedJobs, retryFailedJobs, cleanQueue, addImageProcessing } from "../queues/config.js";
-import { uploadsDir } from "../config/uploads.js";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import { telegramQueue, imageQueue, getQueueStats, getFailedJobs, retryFailedJobs, cleanQueue } from "../queues/config.js";
 
 const router = express.Router();
 
@@ -344,50 +336,6 @@ router.get("/clients/:id/bonuses", requireRole("admin", "manager", "ceo"), async
     );
 
     res.json({ transactions });
-  } catch (error) {
-    next(error);
-  }
-});
-
-// ===== Загрузка изображений =====
-router.post("/uploads/images", requireRole("admin", "manager", "ceo"), async (req, res, next) => {
-  try {
-    const { data, filename } = req.body || {};
-
-    if (!data) {
-      return res.status(400).json({ error: "data is required" });
-    }
-
-    const matches = data.match(/^data:(.+);base64,(.*)$/);
-    const base64 = matches ? matches[2] : data;
-    const mime = matches ? matches[1] : null;
-
-    const buffer = Buffer.from(base64, "base64");
-    if (buffer.length > 500 * 1024) {
-      return res.status(400).json({ error: "File exceeds 500KB limit" });
-    }
-
-    const extensionFromMime = mime?.split("/")[1] || "png";
-    const safeExtension = extensionFromMime.replace(/[^a-z0-9]/gi, "").slice(0, 6) || "png";
-    const safeName = `${Date.now()}_${crypto.randomBytes(4).toString("hex")}.${safeExtension}`;
-
-    await fs.mkdir(uploadsDir, { recursive: true });
-    const filePath = path.join(uploadsDir, safeName);
-    await fs.writeFile(filePath, buffer);
-
-    const job = await addImageProcessing({
-      inputPath: filePath,
-      filename: filename || safeName,
-      options: { format: "webp" },
-    });
-
-    res.json({
-      file: {
-        filename: safeName,
-        url: `/uploads/${safeName}`,
-      },
-      jobId: job.id,
-    });
   } catch (error) {
     next(error);
   }

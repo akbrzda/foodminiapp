@@ -6,7 +6,6 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { testConnection } from "./config/database.js";
 import { testRedisConnection } from "./config/redis.js";
-import { uploadsDir } from "./config/uploads.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
 import { authenticateToken } from "./middleware/auth.js";
 
@@ -22,6 +21,7 @@ import geocodeRoutes from "./routes/geocode.js";
 import bonusesRoutes from "./routes/bonuses.js";
 import logsRoutes from "./routes/logs.js";
 import analyticsRoutes from "./routes/analytics.js";
+import uploadsRoutes from "./routes/uploads.js";
 
 // WebSocket
 import WSServer from "./websocket/server.js";
@@ -69,12 +69,6 @@ app.options(/.*/, cors(corsOptions));
 app.use(express.json({ charset: "utf-8", limit: "2mb" }));
 app.use(express.urlencoded({ extended: true, charset: "utf-8", limit: "2mb" }));
 
-// Static files for uploaded images
-app.use("/uploads", express.static(uploadsDir));
-// Backward compatibility for old storage and URLs
-app.use("/uploads", express.static(path.join(__dirname, "../../upload")));
-app.use("/upload", express.static(uploadsDir));
-
 // Set charset for all responses
 app.use((req, res, next) => {
   res.setHeader("Content-Type", "application/json; charset=utf-8");
@@ -110,6 +104,7 @@ app.use("/api/geocode", geocodeRoutes);
 app.use("/api/bonuses", bonusesRoutes);
 app.use("/api/logs", logsRoutes);
 app.use("/api/analytics", analyticsRoutes);
+app.use("/api/uploads", uploadsRoutes);
 
 // 404 handler
 app.use(notFoundHandler);

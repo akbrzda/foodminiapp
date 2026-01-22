@@ -49,8 +49,10 @@ jobs:
           TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID=${{ secrets.TELEGRAM_CHAT_ID }}
 
-          UPLOAD_DIR=${{ secrets.UPLOAD_DIR }}
           CORS_ORIGIN=${{ secrets.CORS_ORIGIN }}
+
+          CDN_BASE_URL=${{ secrets.CDN_BASE_URL }}
+          CDN_IMAGES_PATH=${{ secrets.CDN_IMAGES_PATH }}
           EOF
 
       - name: Setup SSH
