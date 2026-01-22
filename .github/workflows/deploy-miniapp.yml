@@ -1,0 +1,78 @@
+name: Deploy MiniApp
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "telegram-miniapp/**"
+      - ".github/workflows/deploy-miniapp.yml"
+
+jobs:
+  deploy:
+    name: Deploy MiniApp to Server
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: telegram-miniapp/package-lock.json
+
+      - name: Install dependencies
+        working-directory: telegram-miniapp
+        run: npm ci
+
+      - name: Create .env file
+        working-directory: telegram-miniapp
+        run: |
+          cat << EOF > .env
+          VITE_API_URL=${{ secrets.VITE_API_URL }}
+          VITE_UPLOADS_URL=${{ secrets.VITE_UPLOADS_URL }}
+
+          EOF
+
+      - name: Build application
+        working-directory: telegram-miniapp
+        run: npm run build
+
+      - name: Setup SSH
+        run: |
+          if [ -z "${{ secrets.SSH_HOST }}" ]; then
+            echo "ERROR: SSH_HOST secret is not set"
+            exit 1
+          fi
+          if [ -z "${{ secrets.SSH_USER }}" ]; then
+            echo "ERROR: SSH_USER secret is not set"
+            exit 1
+          fi
+          if [ -z "${{ secrets.SSH_PRIVATE_KEY }}" ]; then
+            echo "ERROR: SSH_PRIVATE_KEY secret is not set"
+            exit 1
+          fi
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+          echo "SSH setup completed successfully"
+
+      - name: Deploy to server
+        run: |
+          rsync -avz --delete \
+            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no" \
+            telegram-miniapp/dist/ ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/var/www/app.panda.akbrzda.ru/
+
+      - name: Verify deployment
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            ls -la /var/www/app.panda.akbrzda.ru
+            echo "Deployment completed successfully"

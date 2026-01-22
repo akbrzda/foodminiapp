@@ -64,7 +64,10 @@
               @change="toggleModifier(group, modifier)"
             />
             <img v-if="modifier.image_url" :src="normalizeImageUrl(modifier.image_url)" :alt="modifier.name" class="modifier-image" />
-            <span class="modifier-name">{{ modifier.name }}</span>
+            <span class="modifier-name">
+              {{ modifier.name }}
+              <span v-if="getModifierWeight(modifier)" class="modifier-weight">· {{ getModifierWeight(modifier) }}</span>
+            </span>
             <span class="modifier-price" v-if="getModifierPrice(modifier) > 0">+{{ formatPrice(getModifierPrice(modifier)) }} ₽</span>
             <span v-if="isModifierUnavailable(modifier)" class="modifier-stop">Недоступно</span>
           </label>
@@ -89,7 +92,10 @@
               @change="toggleModifier(group, modifier)"
             />
             <img v-if="modifier.image_url" :src="normalizeImageUrl(modifier.image_url)" :alt="modifier.name" class="modifier-image" />
-            <span class="modifier-name">{{ modifier.name }}</span>
+            <span class="modifier-name">
+              {{ modifier.name }}
+              <span v-if="getModifierWeight(modifier)" class="modifier-weight">· {{ getModifierWeight(modifier) }}</span>
+            </span>
             <span class="modifier-price" v-if="getModifierPrice(modifier) > 0">+{{ formatPrice(getModifierPrice(modifier)) }} ₽</span>
             <span v-if="isModifierUnavailable(modifier)" class="modifier-stop">Недоступно</span>
           </label>
@@ -402,6 +408,16 @@ function getModifierPrice(modifier) {
   return parseFloat(modifier.price) || 0;
 }
 
+function getModifierWeight(modifier) {
+  if (!modifier) return "";
+  if (selectedVariant.value && Array.isArray(modifier.variant_prices)) {
+    const match = modifier.variant_prices.find((price) => price.variant_id === selectedVariant.value.id);
+    const variantWeight = formatModifierWeight(match?.weight, match?.weight_unit);
+    if (variantWeight) return variantWeight;
+  }
+  return formatModifierWeight(modifier.weight, modifier.weight_unit);
+}
+
 function increaseQuantity() {
   hapticFeedback("light");
   if (!item.value) return;
@@ -584,6 +600,22 @@ function formatWeightValue(value, unit) {
   const unitLabel = getUnitLabel(unit);
   if (!unitLabel) return "";
   return `${formatPrice(parsedValue)} ${unitLabel}`;
+}
+
+function formatModifierWeight(value, unit) {
+  const parsedValue = Number(value);
+  if (!Number.isFinite(parsedValue) || parsedValue <= 0) {
+    return "";
+  }
+  const normalizedUnit = unit || "g";
+  const unitLabel = getUnitLabel(normalizedUnit);
+  if (unitLabel) {
+    return `${formatPrice(parsedValue)} ${unitLabel}`;
+  }
+  if (unit) {
+    return `${formatPrice(parsedValue)} ${unit}`;
+  }
+  return `${formatPrice(parsedValue)} г`;
 }
 </script>
 
@@ -825,6 +857,12 @@ function formatWeightValue(value, unit) {
   flex: 1;
   font-size: var(--font-size-body);
   color: var(--color-text-primary);
+}
+
+.modifier-weight {
+  font-size: var(--font-size-caption);
+  color: var(--color-text-secondary);
+  margin-left: 6px;
 }
 
 .modifier-price {
