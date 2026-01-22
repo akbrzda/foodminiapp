@@ -49,13 +49,9 @@
           </div>
         </div>
         <div v-if="isCustomPeriod" class="mt-4 grid gap-4 sm:grid-cols-2">
-          <div class="space-y-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Дата с</label>
-            <Input v-model="filters.date_from" type="date" />
-          </div>
-          <div class="space-y-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Дата по</label>
-            <Input v-model="filters.date_to" type="date" />
+          <div class="space-y-2 sm:col-span-2">
+            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Период</label>
+            <RangeCalendar v-model:from="filters.date_from" v-model:to="filters.date_to" />
           </div>
         </div>
       </CardContent>
@@ -284,7 +280,7 @@ import CardHeader from "../components/ui/CardHeader.vue";
 import CardTitle from "../components/ui/CardTitle.vue";
 import Select from "../components/ui/Select.vue";
 import Tabs from "../components/ui/Tabs.vue";
-import Input from "../components/ui/Input.vue";
+import RangeCalendar from "../components/ui/RangeCalendar.vue";
 
 const referenceStore = useReferenceStore();
 const authStore = useAuthStore();

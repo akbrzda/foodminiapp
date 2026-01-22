@@ -1,9 +1,12 @@
 <template>
   <div class="min-h-screen bg-background text-foreground">
-    <div class="flex">
-      <aside class="sticky top-0 hidden h-screen w-72 border-r border-border/60 bg-card/80 backdrop-blur lg:flex">
-        <SidebarNav />
-      </aside>
+    <div class="flex min-h-screen">
+      <SidebarNav
+        class="hidden lg:flex"
+        :is-open="true"
+        :is-collapsed="sidebarCollapsed"
+        @toggle-collapse="sidebarCollapsed = !sidebarCollapsed"
+      />
 
       <div class="flex min-h-screen flex-1 flex-col">
         <TopBar :title="pageTitle" :subtitle="pageSubtitle" @toggle-menu="mobileMenuOpen = true" />
@@ -18,12 +21,14 @@
       <div v-if="mobileMenuOpen" class="fixed inset-0 z-40 bg-black/40" @click="mobileMenuOpen = false"></div>
     </Transition>
     <Transition name="slide">
-      <aside
+      <SidebarNav
         v-if="mobileMenuOpen"
-        class="fixed inset-y-0 left-0 z-50 w-72 border-r border-border bg-card/95 p-6 shadow-soft backdrop-blur lg:hidden"
-      >
-        <SidebarNav @navigate="mobileMenuOpen = false" />
-      </aside>
+        class="lg:hidden"
+        :is-open="mobileMenuOpen"
+        :is-collapsed="false"
+        @close="mobileMenuOpen = false"
+        @navigate="mobileMenuOpen = false"
+      />
     </Transition>
   </div>
 </template>
@@ -36,6 +41,7 @@ import TopBar from "../components/TopBar.vue";
 
 const route = useRoute();
 const mobileMenuOpen = ref(false);
+const sidebarCollapsed = ref(false);
 
 const pageTitle = computed(() => route.meta.title || "Админ-панель");
 const pageSubtitle = computed(() => route.meta.subtitle || "Операционная панель");

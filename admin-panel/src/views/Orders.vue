@@ -6,8 +6,8 @@
         <CardDescription>Фильтры и список заказов</CardDescription>
       </CardHeader>
       <CardContent class="space-y-4">
-        <div class="grid gap-4 lg:grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr]">
-          <div class="space-y-2 lg:col-span-2">
+        <div class="grid gap-4 lg:grid-cols-[2fr_1fr_1fr_1fr_2fr]">
+          <div class="space-y-2">
             <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Поиск</label>
             <div class="relative">
               <Search class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" :size="16" />
@@ -43,12 +43,8 @@
             </Select>
           </div>
           <div class="space-y-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Дата от</label>
-            <Input v-model="filters.date_from" type="date" />
-          </div>
-          <div class="space-y-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Дата до</label>
-            <Input v-model="filters.date_to" type="date" />
+            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Период</label>
+            <RangeCalendar v-model:from="filters.date_from" v-model:to="filters.date_to" />
           </div>
         </div>
         <div class="flex flex-wrap items-center gap-3">
@@ -124,6 +120,7 @@ import CardDescription from "../components/ui/CardDescription.vue";
 import CardHeader from "../components/ui/CardHeader.vue";
 import CardTitle from "../components/ui/CardTitle.vue";
 import Input from "../components/ui/Input.vue";
+import RangeCalendar from "../components/ui/RangeCalendar.vue";
 import Select from "../components/ui/Select.vue";
 import Table from "../components/ui/Table.vue";
 import TableBody from "../components/ui/TableBody.vue";

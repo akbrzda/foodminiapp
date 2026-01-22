@@ -38,13 +38,9 @@
               <option value="branch">Филиал</option>
             </Select>
           </div>
-          <div class="space-y-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Дата от</label>
-            <Input v-model="filters.date_from" type="date" />
-          </div>
-          <div class="space-y-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Дата до</label>
-            <Input v-model="filters.date_to" type="date" />
+          <div class="space-y-2 lg:col-span-2">
+            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Период</label>
+            <RangeCalendar v-model:from="filters.date_from" v-model:to="filters.date_to" />
           </div>
         </div>
         <div class="flex flex-wrap items-center gap-3">
@@ -184,7 +180,7 @@ import CardContent from "../components/ui/CardContent.vue";
 import CardDescription from "../components/ui/CardDescription.vue";
 import CardHeader from "../components/ui/CardHeader.vue";
 import CardTitle from "../components/ui/CardTitle.vue";
-import Input from "../components/ui/Input.vue";
+import RangeCalendar from "../components/ui/RangeCalendar.vue";
 import Select from "../components/ui/Select.vue";
 import Table from "../components/ui/Table.vue";
 import TableBody from "../components/ui/TableBody.vue";
