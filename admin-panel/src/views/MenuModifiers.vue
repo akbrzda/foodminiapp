@@ -416,20 +416,28 @@ const handleFile = async (file) => {
     uploadState.value.error = "Только изображения";
     return;
   }
-  if (file.size > 500 * 1024) {
-    uploadState.value.error = "Файл слишком большой (макс 500KB)";
+  if (file.size > 10 * 1024 * 1024) {
+    uploadState.value.error = "Файл слишком большой (макс 10MB)";
     return;
   }
 
   uploadState.value.loading = true;
   uploadState.value.error = null;
+  uploadState.value.preview = URL.createObjectURL(file);
 
   try {
-    const dataUrl = await readFileAsDataUrl(file);
-    const response = await api.post("/api/admin/uploads/images", { data: dataUrl, filename: file.name });
-    const uploadedUrl = response.data?.file?.url || "";
+    const formData = new FormData();
+    formData.append("image", file);
+
+    // Используем ID модификатора если редактируем, иначе 'temp' для временной загрузки
+    const modifierId = editingModifier.value?.id || "temp";
+    const response = await api.post(`/api/uploads/modifiers/${modifierId}`, formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+
+    const uploadedUrl = response.data?.data?.url || "";
     modifierForm.value.image_url = uploadedUrl;
-    uploadState.value.preview = uploadedUrl || dataUrl;
+    uploadState.value.preview = uploadedUrl;
   } catch (error) {
     console.error("Upload failed:", error);
     uploadState.value.error = "Ошибка загрузки";

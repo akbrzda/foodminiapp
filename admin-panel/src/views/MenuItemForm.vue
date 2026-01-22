@@ -867,17 +867,30 @@ const readFileAsDataUrl = (file) =>
   });
 
 const handleFile = async (file) => {
-  if (file.size > 500 * 1024) {
-    uploadState.value.error = "Файл больше 500KB";
+  if (file.size > 10 * 1024 * 1024) {
+    uploadState.value.error = "Файл больше 10MB";
     return;
   }
+  if (!file.type.startsWith("image/")) {
+    uploadState.value.error = "Только изображения";
+    return;
+  }
+
   uploadState.value = { loading: true, error: null, preview: URL.createObjectURL(file) };
+
   try {
-    const dataUrl = await readFileAsDataUrl(file);
-    const res = await api.post("/api/admin/uploads/images", { data: dataUrl, filename: file.name });
-    const uploadedUrl = res.data?.file?.url || "";
+    const formData = new FormData();
+    formData.append("image", file);
+
+    // Используем ID позиции если редактируем, иначе 'temp' для временной загрузки
+    const itemId = route.params.id || "temp";
+    const res = await api.post(`/api/uploads/menu-items/${itemId}`, formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+
+    const uploadedUrl = res.data?.data?.url || "";
     form.value.image_url = uploadedUrl;
-    uploadState.value = { loading: false, error: null, preview: uploadedUrl || dataUrl };
+    uploadState.value = { loading: false, error: null, preview: uploadedUrl };
   } catch (error) {
     console.error("Failed to upload:", error);
     uploadState.value = { loading: false, error: "Ошибка загрузки", preview: null };

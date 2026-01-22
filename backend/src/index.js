@@ -64,8 +64,6 @@ const corsOptions = {
   exposedHeaders: ["Content-Range", "X-Content-Range"],
   maxAge: 86400, // 24 hours
 };
-console.log("CORS_ORIGINS:", process.env.CORS_ORIGINS);
-console.log("Parsed corsOrigins:", corsOrigins);
 
 app.use(cors(corsOptions));
 app.options(/.*/, cors(corsOptions));
@@ -126,10 +124,6 @@ wsServer.startHeartbeat();
 export { wsServer };
 
 server.listen(PORT, async () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📍 Health check: http://localhost:${PORT}/health`);
-  console.log(`🔌 WebSocket server ready on ws://localhost:${PORT}`);
-
   // Логирование старта сервера
   await logger.system.startup(PORT);
 
@@ -151,30 +145,24 @@ server.listen(PORT, async () => {
   // Запуск воркеров для фоновой обработки задач
   try {
     await startWorkers();
-    console.log("✅ Background workers started");
   } catch (error) {
-    console.error("❌ Failed to start workers:", error);
     await logger.system.dbError(`Failed to start workers: ${error.message}`);
   }
 });
 
 // Graceful shutdown
 process.on("SIGTERM", async () => {
-  console.log("📥 SIGTERM received, shutting down gracefully...");
   await logger.system.shutdown("SIGTERM received");
   await stopWorkers();
   server.close(() => {
-    console.log("✅ Server closed");
     process.exit(0);
   });
 });
 
 process.on("SIGINT", async () => {
-  console.log("📥 SIGINT received, shutting down gracefully...");
   await logger.system.shutdown("SIGINT received");
   await stopWorkers();
   server.close(() => {
-    console.log("✅ Server closed");
     process.exit(0);
   });
 });
