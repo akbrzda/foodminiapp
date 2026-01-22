@@ -88,7 +88,7 @@ const addressInputRef = ref(null);
 const deliveryAddress = ref(locationStore.deliveryAddress || "");
 const addressSuggestions = ref([]);
 const showSuggestions = ref(false);
-const selectedLocation = ref(locationStore.deliveryCoords || null);
+const selectedLocation = ref(normalizeCoords(locationStore.deliveryCoords));
 const deliveryDetails = reactive({
   apartment: locationStore.deliveryDetails?.apartment || "",
   entrance: locationStore.deliveryDetails?.entrance || "",
@@ -100,6 +100,8 @@ const lastAddress = ref(deliveryAddress.value);
 const isAddressFocused = ref(false);
 const lastManualInputAt = ref(0);
 const suppressReverseUntil = ref(0);
+
+const GEO_PERMISSION_KEY = "geoPermission";
 
 let searchTimeout = null;
 let lastSearchId = 0;
@@ -125,9 +127,23 @@ const cityCenter = computed(() => {
   return { lat, lon };
 });
 
+function hasHouseNumber(value) {
+  if (!value) return false;
+  return /\d/.test(String(value));
+}
+
+function normalizeCoords(coords) {
+  if (!coords) return null;
+  const lat = Number(coords.lat);
+  const lon = Number(coords.lon ?? coords.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  return { lat, lon, lng: lon };
+}
+
 onMounted(async () => {
   locationStore.setDeliveryType("delivery");
   await initMap();
+  await requestInitialLocation();
   if (deliveryAddress.value && !selectedLocation.value) {
     const resolved = await geocodeAddress(deliveryAddress.value.trim());
     if (resolved) {
@@ -210,6 +226,45 @@ function onAddressBlur() {
   }
 }
 
+function getStoredGeoPermission() {
+  try {
+    return localStorage.getItem(GEO_PERMISSION_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+
+function setStoredGeoPermission(value) {
+  try {
+    if (value) {
+      localStorage.setItem(GEO_PERMISSION_KEY, value);
+    } else {
+      localStorage.removeItem(GEO_PERMISSION_KEY);
+    }
+  } catch {
+    // noop
+  }
+}
+
+async function requestInitialLocation() {
+  const storedPermission = getStoredGeoPermission();
+  if (storedPermission === "granted" || storedPermission === "denied") {
+    return;
+  }
+  if (!navigator.geolocation) return;
+  try {
+    const location = await locationStore.detectUserLocation();
+    if (location) {
+      setStoredGeoPermission("granted");
+      setMapCenter(location.lat, location.lon);
+    }
+  } catch (error) {
+    if (error?.code === 1) {
+      setStoredGeoPermission("denied");
+    }
+  }
+}
+
 function selectAddress(address) {
   hapticFeedback("light");
   deliveryAddress.value = address.label;
@@ -233,10 +288,20 @@ async function confirmAddress() {
     hapticFeedback("error");
     return;
   }
+  if (!hasHouseNumber(deliveryAddress.value)) {
+    hapticFeedback("error");
+    showSuggestions.value = true;
+    return;
+  }
 
   if (!selectedLocation.value) {
     const resolved = await geocodeAddress(deliveryAddress.value.trim());
     if (!resolved) {
+      hapticFeedback("error");
+      showSuggestions.value = true;
+      return;
+    }
+    if (!hasHouseNumber(resolved.label)) {
       hapticFeedback("error");
       showSuggestions.value = true;
       return;
@@ -252,6 +317,7 @@ async function confirmAddress() {
     locationStore.setDeliveryCoords({
       lat: selectedLocation.value.lat,
       lng: selectedLocation.value.lng ?? selectedLocation.value.lon,
+      lon: selectedLocation.value.lng ?? selectedLocation.value.lon,
     });
     if (locationStore.selectedCity?.id) {
       try {
@@ -278,7 +344,7 @@ async function initMap() {
   if (!L) return;
 
   const initial = selectedLocation.value || cityCenter.value || { lat: 0, lon: 0 };
-  mapInstance = L.map(mapContainerRef.value, { zoomControl: false, attributionControl: false }).setView([initial.lat, initial.lon], 15);
+  mapInstance = L.map(mapContainerRef.value, { zoomControl: false, attributionControl: false }).setView([initial.lat, initial.lon ?? initial.lng], 15);
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(mapInstance);
 
   // Загружаем и отображаем полигоны доставки
@@ -294,7 +360,7 @@ async function initMap() {
   });
 
   if (selectedLocation.value) {
-    setMapCenter(selectedLocation.value.lat, selectedLocation.value.lon);
+    setMapCenter(selectedLocation.value.lat, selectedLocation.value.lon ?? selectedLocation.value.lng);
   }
 }
 
@@ -335,7 +401,10 @@ async function loadDeliveryPolygons(L) {
 
 function setMapCenter(lat, lon) {
   if (!mapInstance) return;
-  mapInstance.setView([lat, lon], mapInstance.getZoom(), { animate: true });
+  const nextLat = Number(lat);
+  const nextLon = Number(lon);
+  if (!Number.isFinite(nextLat) || !Number.isFinite(nextLon)) return;
+  mapInstance.setView([nextLat, nextLon], mapInstance.getZoom(), { animate: true });
 }
 
 function queueReverseGeocode() {
@@ -360,7 +429,7 @@ function queueReverseGeocode() {
     if (Date.now() - lastReverseRequestAt < 1000) return;
     const suggestion = await reverseGeocode(center.lat, center.lng);
     if (requestId !== lastReverseId) return;
-    if (suggestion) {
+    if (suggestion && hasHouseNumber(suggestion.label)) {
       deliveryAddress.value = suggestion.label;
       const deltaLat = Math.abs(suggestion.lat - center.lat);
       const deltaLng = Math.abs(suggestion.lon - center.lng);
@@ -385,9 +454,13 @@ async function locateUser() {
   try {
     const location = await locationStore.detectUserLocation();
     if (!location) return;
+    setStoredGeoPermission("granted");
     setMapCenter(location.lat, location.lon);
     queueReverseGeocode();
   } catch (error) {
+    if (error?.code === 1) {
+      setStoredGeoPermission("denied");
+    }
     console.error("Failed to detect user location:", error);
   }
 }
@@ -499,7 +572,7 @@ function formatAddressSuggestion(item) {
     address.road || address.pedestrian || address.footway || address.residential || address.living_street || address.street || address.neighbourhood;
   const house = address.house_number || address.building;
 
-  if (!street) {
+  if (!street || !house) {
     return null;
   }
 

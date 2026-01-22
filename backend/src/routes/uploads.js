@@ -19,7 +19,7 @@ router.post("/menu-items/:id", authenticateToken, upload.single("image"), async 
     }
 
     // Allow 'temp' as temporary ID, use timestamp
-    const entityId = id === 'temp' ? `temp-${Date.now()}` : parseInt(id);
+    const entityId = id === "temp" ? `temp-${Date.now()}` : parseInt(id);
 
     const result = await processAndSaveImage(req.file.buffer, IMAGE_CATEGORIES.MENU_ITEMS, entityId);
 
@@ -46,7 +46,7 @@ router.post("/menu-categories/:id", authenticateToken, upload.single("image"), a
       return res.status(400).json({ error: "No image file provided" });
     }
 
-    const entityId = id === 'temp' ? `temp-${Date.now()}` : parseInt(id);
+    const entityId = id === "temp" ? `temp-${Date.now()}` : parseInt(id);
 
     const result = await processAndSaveImage(req.file.buffer, IMAGE_CATEGORIES.MENU_CATEGORIES, entityId);
 
@@ -70,12 +70,9 @@ router.post("/modifiers/:id", authenticateToken, upload.single("image"), async (
       return res.status(400).json({ error: "No image file provided" });
     }
 
-    const entityId = id === 'temp' ? `temp-${Date.now()}` : parseInt(id);
+    const entityId = id === "temp" ? `temp-${Date.now()}` : parseInt(id);
 
-    const result = await processAndSaveImage(req.file.buffer, IMAGE_CATEGORIES.MODIFIERS, entityId
-    }
-
-    const result = await processAndSaveImage(req.file.buffer, IMAGE_CATEGORIES.MODIFIERS, parseInt(id));
+    const result = await processAndSaveImage(req.file.buffer, IMAGE_CATEGORIES.MODIFIERS, entityId);
 
     res.json({
       success: true,

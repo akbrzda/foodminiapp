@@ -185,13 +185,6 @@ const actionButtonText = computed(() => {
 });
 
 onMounted(async () => {
-  // Попытка определить местоположение
-  try {
-    await locationStore.detectUserLocation();
-  } catch (error) {
-    console.log("Location detection failed:", error);
-  }
-
   if (route.query.openCity === "1") {
     window.dispatchEvent(new CustomEvent("open-city-popup"));
     router.replace({ query: {} });

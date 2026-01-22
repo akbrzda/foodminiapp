@@ -72,6 +72,7 @@ const loading = ref(false);
 const searchQuery = ref("");
 const userLocation = ref(null);
 const recommendedCity = ref(null);
+const hasRequestedLocation = ref(false);
 
 watch(
   () => props.open,
@@ -79,6 +80,10 @@ watch(
     isOpen.value = value;
     if (value) {
       loadCities();
+      if (!hasRequestedLocation.value && !locationStore.selectedCity) {
+        hasRequestedLocation.value = true;
+        getUserLocation();
+      }
     }
   }
 );
@@ -104,7 +109,6 @@ const filteredCities = computed(() => {
 
 onMounted(() => {
   loadCities();
-  getUserLocation();
 });
 
 async function loadCities() {

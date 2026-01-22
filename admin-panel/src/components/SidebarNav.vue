@@ -14,7 +14,7 @@
         <ClipboardList :size="18" />
         Заказы
       </RouterLink>
-      <RouterLink class="nav-link" to="/clients" @click="emit('navigate')">
+      <RouterLink v-if="!isManager" class="nav-link" to="/clients" @click="emit('navigate')">
         <Users :size="18" />
         Клиенты
       </RouterLink>
@@ -42,11 +42,11 @@
       </RouterLink>
 
       <div class="mt-4 text-xs font-semibold uppercase text-muted-foreground">Справочники</div>
-      <RouterLink class="nav-link" to="/cities" @click="emit('navigate')">
+      <RouterLink v-if="!isManager" class="nav-link" to="/cities" @click="emit('navigate')">
         <MapPinned :size="18" />
         Города
       </RouterLink>
-      <RouterLink class="nav-link" to="/branches" @click="emit('navigate')">
+      <RouterLink v-if="!isManager" class="nav-link" to="/branches" @click="emit('navigate')">
         <Building2 :size="18" />
         Филиалы
       </RouterLink>
@@ -56,11 +56,11 @@
       </RouterLink>
 
       <div class="mt-4 text-xs font-semibold uppercase text-muted-foreground">Система</div>
-      <RouterLink class="nav-link" to="/admin-users" @click="emit('navigate')">
+      <RouterLink v-if="!isManager" class="nav-link" to="/admin-users" @click="emit('navigate')">
         <UserCog :size="18" />
         Пользователи
       </RouterLink>
-      <RouterLink class="nav-link" to="/logs" @click="emit('navigate')">
+      <RouterLink v-if="!isManager" class="nav-link" to="/logs" @click="emit('navigate')">
         <FileText :size="18" />
         Логи
       </RouterLink>
@@ -81,7 +81,9 @@
 </template>
 
 <script setup>
+import { computed } from "vue";
 import { RouterLink } from "vue-router";
+import { useAuthStore } from "../stores/auth.js";
 import {
   Building2,
   ClipboardList,
@@ -101,6 +103,8 @@ import {
 } from "lucide-vue-next";
 
 const emit = defineEmits(["navigate"]);
+const authStore = useAuthStore();
+const isManager = computed(() => authStore.role === "manager");
 </script>
 
 <style scoped>

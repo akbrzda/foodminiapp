@@ -26,11 +26,12 @@
 
         <div class="form-group">
           <label class="label">Улица, дом</label>
-          <input v-model="deliveryAddress" class="input" placeholder="Введите адрес" @input="onAddressInput" @focus="onAddressFocus" />
-
-          <div v-if="showAddressSuggestions && addressSuggestions.length" class="suggestions">
-            <button v-for="(suggestion, index) in addressSuggestions" :key="index" class="suggestion-item" @click="selectAddress(suggestion)">
-              {{ suggestion.label }}
+          <div class="address-row">
+            <span class="address-text" :class="{ 'address-placeholder': !deliveryAddress }">
+              {{ deliveryAddress || "Укажите адрес" }}
+            </span>
+            <button class="edit-address-btn" type="button" @click="openDeliveryMap">
+              <Pencil :size="16" />
             </button>
           </div>
         </div>
@@ -66,7 +67,7 @@
 
         <div v-if="addressValidated && !inDeliveryZone" class="error-message">
           <p>Адрес не входит в зону доставки</p>
-          <button class="btn-secondary" @click="resetAddress">Выбрать другой адрес</button>
+          <button class="btn-secondary" @click="openDeliveryMap">Выбрать другой адрес</button>
         </div>
       </div>
     </div>
@@ -165,13 +166,13 @@
 <script setup>
 import { ref, computed, onMounted, watch } from "vue";
 import { useRouter } from "vue-router";
-import { Banknote, CreditCard, Phone, Store, Truck, Clock } from "lucide-vue-next";
+import { Banknote, CreditCard, Phone, Store, Truck, Clock, Pencil } from "lucide-vue-next";
 import { useCartStore } from "../stores/cart";
 import { useLoyaltyStore } from "../stores/loyalty";
 import { useLocationStore } from "../stores/location";
 import { useMenuStore } from "../stores/menu";
 import { useKeyboardHandler } from "../composables/useKeyboardHandler";
-import { citiesAPI, addressesAPI, ordersAPI, geocodeAPI, menuAPI } from "../api/endpoints";
+import { citiesAPI, addressesAPI, ordersAPI, menuAPI } from "../api/endpoints";
 import { hapticFeedback } from "../services/telegram";
 import { formatPrice } from "../utils/format";
 
@@ -184,8 +185,6 @@ const { isKeyboardOpen } = useKeyboardHandler();
 
 const orderType = ref(locationStore.deliveryType || null);
 const deliveryAddress = ref(locationStore.deliveryAddress || "");
-const addressSuggestions = ref([]);
-const showAddressSuggestions = ref(false);
 const addressValidated = ref(false);
 const inDeliveryZone = ref(false);
 const selectedBranch = ref(locationStore.selectedBranch || null);
@@ -209,7 +208,7 @@ const deliveryDetails = ref({
   comment: locationStore.deliveryDetails?.comment || "",
 });
 
-let addressSearchTimeout = null;
+const deliveryCoords = computed(() => locationStore.deliveryCoords);
 
 const canSubmitOrder = computed(() => {
   if (!orderType.value) return false;
@@ -336,6 +335,24 @@ watch(
   },
 );
 
+watch(
+  () => [locationStore.deliveryAddress, deliveryCoords.value, locationStore.deliveryZone],
+  () => {
+    deliveryAddress.value = locationStore.deliveryAddress || "";
+    if (deliveryAddress.value && deliveryCoords.value) {
+      addressValidated.value = true;
+      inDeliveryZone.value = Boolean(locationStore.deliveryZone);
+      if (locationStore.deliveryZone) {
+        applyDeliveryZone(locationStore.deliveryZone);
+      }
+    } else {
+      addressValidated.value = false;
+      inDeliveryZone.value = false;
+    }
+  },
+  { immediate: true },
+);
+
 async function refreshCartPricesForOrderType() {
   if (!locationStore.selectedCity) return;
   const fulfillmentType = orderType.value === "pickup" ? "pickup" : "delivery";
@@ -387,83 +404,9 @@ function selectOrderType(type) {
   }
 }
 
-async function onAddressInput() {
-  if (addressSearchTimeout) {
-    clearTimeout(addressSearchTimeout);
-  }
-
-  if (deliveryAddress.value.length < 3) {
-    addressSuggestions.value = [];
-    return;
-  }
-
-  addressSearchTimeout = setTimeout(async () => {
-    try {
-      // Здесь будет запрос к API для автоподсказок адресов
-      // Пока используем простую логику
-      const response = await addressesAPI.checkDeliveryZone(deliveryAddress.value, locationStore.selectedCity.id);
-      // TODO: Реализовать автоподсказки через Nominatim
-    } catch (error) {
-      console.error("Address search error:", error);
-    }
-  }, 500);
-}
-
-function onAddressFocus(event) {
-  showAddressSuggestions.value = true;
-
-  // Скроллим к input при открытии клавиатуры
-  setTimeout(() => {
-    event.target?.scrollIntoView({
-      behavior: "smooth",
-      block: "center",
-    });
-  }, 300);
-}
-
-async function selectAddress(suggestion) {
+function openDeliveryMap() {
   hapticFeedback("light");
-  deliveryAddress.value = suggestion.label;
-  showAddressSuggestions.value = false;
-
-  // Геокодируем адрес
-  try {
-    const geocodeResponse = await geocodeAPI.geocode(deliveryAddress.value);
-    const geocodeData = geocodeResponse.data;
-
-    // Проверяем зону доставки
-    const checkResponse = await addressesAPI.checkDeliveryZone(geocodeData.lat, geocodeData.lng, locationStore.selectedCity.id);
-
-    if (checkResponse.data.available) {
-      inDeliveryZone.value = true;
-      addressValidated.value = true;
-      locationStore.setDeliveryAddress(deliveryAddress.value);
-      locationStore.setDeliveryCoords({ lat: geocodeData.lat, lng: geocodeData.lng });
-      if (checkResponse.data.polygon) {
-        applyDeliveryZone(checkResponse.data.polygon);
-        locationStore.setDeliveryZone(checkResponse.data.polygon);
-      }
-    } else {
-      inDeliveryZone.value = false;
-      addressValidated.value = true;
-    }
-  } catch (error) {
-    console.error("Address validation error:", error);
-    hapticFeedback("error");
-  }
-}
-
-function resetAddress() {
-  deliveryAddress.value = "";
-  addressValidated.value = false;
-  inDeliveryZone.value = false;
-  showAddressSuggestions.value = false;
-  deliveryCost.value = 0;
-  deliveryTime.value = 0;
-  minOrderAmount.value = 0;
-  prepTime.value = 0;
-  assemblyTime.value = 0;
-  locationStore.setDeliveryZone(null);
+  router.push("/delivery-map");
 }
 
 async function loadBranches() {
@@ -744,10 +687,52 @@ async function submitOrder() {
   margin-bottom: 8px;
 }
 
+.address-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  background: var(--color-background);
+}
+
+.address-text {
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  line-height: 1.3;
+  flex: 1;
+}
+
+.address-placeholder {
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-regular);
+}
+
+.edit-address-btn {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 14px;
+  background: var(--color-background-secondary);
+  color: var(--color-text-primary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.edit-address-btn:hover {
+  background: var(--color-border);
+}
+
 .input,
 .textarea {
   width: 100%;
-  padding: 12px 16px;
+  padding: 8px 12px;
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius-md);
   background: var(--color-background);

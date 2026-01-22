@@ -219,18 +219,42 @@ router.post("/reverse", async (req, res, next) => {
     }
 
     const nominatimUrl = "https://nominatim.openstreetmap.org/reverse";
-    const response = await axios.get(nominatimUrl, {
-      params: {
-        format: "json",
-        addressdetails: 1,
-        lat: roundedLat,
-        lon: roundedLon,
-      },
-      headers: {
-        "User-Agent": "MiniappPanda/1.0 (Food Delivery Service)",
-      },
-      timeout: 5000,
-    });
+    let response = null;
+    let lastError = null;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        response = await axios.get(nominatimUrl, {
+          params: {
+            format: "json",
+            addressdetails: 1,
+            lat: roundedLat,
+            lon: roundedLon,
+          },
+          headers: {
+            "User-Agent": "MiniappPanda/1.0 (Food Delivery Service)",
+          },
+          timeout: 8000,
+        });
+        lastError = null;
+        break;
+      } catch (error) {
+        lastError = error;
+        if (error?.code === "ECONNABORTED" && attempt === 0) {
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+          continue;
+        }
+        break;
+      }
+    }
+    if (lastError) {
+      console.error("Reverse geocode request failed:", lastError?.code || lastError?.message || lastError);
+      try {
+        await redis.set(cacheKey, JSON.stringify({}), "EX", 60);
+      } catch (redisError) {
+        console.error("Redis error on reverse cache set (empty):", redisError);
+      }
+      return res.json({ label: "", lat, lon, error: "reverse_unavailable" });
+    }
 
     if (!response.data) {
       return res.status(404).json({
