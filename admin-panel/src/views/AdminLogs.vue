@@ -48,10 +48,6 @@
           </div>
         </div>
         <div class="flex flex-wrap items-center gap-3">
-          <Button @click="loadLogs">
-            <RefreshCcw :size="16" />
-            Обновить
-          </Button>
           <Button variant="outline" @click="resetFilters">
             <RotateCcw :size="16" />
             Сбросить
@@ -175,8 +171,8 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from "vue";
-import { Eye, RefreshCcw, RotateCcw } from "lucide-vue-next";
+import { onMounted, reactive, ref, watch } from "vue";
+import { Eye, RotateCcw } from "lucide-vue-next";
 import api from "../api/client.js";
 import BaseModal from "../components/BaseModal.vue";
 import { useNotifications } from "../composables/useNotifications.js";
@@ -201,6 +197,7 @@ const logs = ref([]);
 const admins = ref([]);
 const loading = ref(false);
 const { showErrorNotification } = useNotifications();
+const loadTimer = ref(null);
 
 const filters = reactive({
   admin_id: "",
@@ -241,6 +238,13 @@ const loadLogs = async () => {
   }
 };
 
+const scheduleLoad = () => {
+  if (loadTimer.value) {
+    clearTimeout(loadTimer.value);
+  }
+  loadTimer.value = setTimeout(loadLogs, 300);
+};
+
 const loadAdmins = async () => {
   try {
     const response = await api.get("/api/admin/users/admins");
@@ -261,7 +265,7 @@ const resetFilters = () => {
     date_to: "",
   });
   pagination.page = 1;
-  loadLogs();
+  scheduleLoad();
 };
 
 const prevPage = () => {
@@ -330,4 +334,13 @@ const formatJSON = (json) => {
 onMounted(async () => {
   await Promise.all([loadAdmins(), loadLogs()]);
 });
+
+watch(
+  filters,
+  () => {
+    pagination.page = 1;
+    scheduleLoad();
+  },
+  { deep: true }
+);
 </script>

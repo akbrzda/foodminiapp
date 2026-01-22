@@ -6,7 +6,7 @@
         <CardDescription>Поиск по клиентам и фильтр по городу</CardDescription>
       </CardHeader>
       <CardContent>
-        <div class="grid gap-4 lg:grid-cols-[2fr_1fr_auto]">
+        <div class="grid gap-4 lg:grid-cols-[2fr_1fr]">
           <div class="space-y-2">
             <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Поиск</label>
             <div class="relative">
@@ -25,12 +25,6 @@
               <option value="">Все</option>
               <option v-for="city in referenceStore.cities" :key="city.id" :value="city.id">{{ city.name }}</option>
             </Select>
-          </div>
-          <div class="flex items-end">
-            <Button class="w-full lg:w-auto" @click="loadClients">
-              <RefreshCcw :size="16" />
-              Обновить
-            </Button>
           </div>
         </div>
       </CardContent>
@@ -78,9 +72,9 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from "vue";
+import { onMounted, reactive, ref, watch } from "vue";
 import { useRouter } from "vue-router";
-import { ChevronRight, RefreshCcw, Search } from "lucide-vue-next";
+import { ChevronRight, Search } from "lucide-vue-next";
 import api from "../api/client.js";
 import { useReferenceStore } from "../stores/reference.js";
 import { formatNumber, formatPhone } from "../utils/format.js";
@@ -103,6 +97,7 @@ import TableRow from "../components/ui/TableRow.vue";
 const referenceStore = useReferenceStore();
 const router = useRouter();
 const clients = ref([]);
+const loadTimer = ref(null);
 
 const filters = reactive({
   search: "",
@@ -115,6 +110,13 @@ const loadClients = async () => {
   clients.value = response.data.clients || [];
 };
 
+const scheduleLoad = () => {
+  if (loadTimer.value) {
+    clearTimeout(loadTimer.value);
+  }
+  loadTimer.value = setTimeout(loadClients, 300);
+};
+
 const openClient = (clientId) => {
   router.push(`/clients/${clientId}`);
 };
@@ -123,4 +125,12 @@ onMounted(async () => {
   await referenceStore.loadCities();
   await loadClients();
 });
+
+watch(
+  filters,
+  () => {
+    scheduleLoad();
+  },
+  { deep: true }
+);
 </script>

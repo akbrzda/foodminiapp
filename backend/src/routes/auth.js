@@ -165,7 +165,7 @@ router.post("/admin/login", async (req, res, next) => {
 
     // Ищем администратора
     const [users] = await db.query(
-      `SELECT id, email, password_hash, first_name, last_name, role, is_active
+      `SELECT id, email, password_hash, first_name, last_name, role, is_active, branch_id
        FROM admin_users WHERE email = ?`,
       [email]
     );
@@ -193,6 +193,19 @@ router.post("/admin/login", async (req, res, next) => {
       cities = userCities.map((c) => c.city_id);
     }
 
+    // Получаем филиалы для менеджера
+    let branches = [];
+    if (user.role === "manager") {
+      const [userBranches] = await db.query(
+        `SELECT b.id, b.name, b.city_id
+         FROM admin_user_branches aub
+         JOIN branches b ON aub.branch_id = b.id
+         WHERE aub.admin_user_id = ?`,
+        [user.id]
+      );
+      branches = userBranches || [];
+    }
+
     // Генерируем JWT токен
     const token = jwt.sign(
       {
@@ -201,6 +214,8 @@ router.post("/admin/login", async (req, res, next) => {
         role: user.role,
         cities: cities,
         type: "admin",
+        branch_ids: branches.map((branch) => branch.id),
+        branch_city_ids: branches.map((branch) => branch.city_id),
       },
       process.env.JWT_SECRET,
       { expiresIn: "7d" }
@@ -214,6 +229,9 @@ router.post("/admin/login", async (req, res, next) => {
       user: {
         ...user,
         cities: cities,
+        branch_ids: branches.map((branch) => branch.id),
+        branch_city_ids: branches.map((branch) => branch.city_id),
+        branches: branches,
       },
     });
   } catch (error) {

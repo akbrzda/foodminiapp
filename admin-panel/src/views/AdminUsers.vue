@@ -66,8 +66,14 @@
                 <Badge :variant="user.is_active ? 'success' : 'secondary'">{{ user.is_active ? "Активен" : "Неактивен" }}</Badge>
               </TableCell>
               <TableCell>
-                <div v-if="user.role === 'manager' && user.cities?.length" class="flex flex-wrap gap-1">
-                  <Badge v-for="city in user.cities" :key="city.id" variant="outline">{{ city.name }}</Badge>
+                <div v-if="user.role === 'manager'" class="space-y-2">
+                  <div v-if="user.branches?.length" class="flex flex-wrap gap-1">
+                    <Badge v-for="branch in user.branches" :key="branch.id" variant="secondary">{{ branch.name }}</Badge>
+                  </div>
+                  <div v-if="user.cities?.length" class="flex flex-wrap gap-1">
+                    <Badge v-for="city in user.cities" :key="city.id" variant="outline">{{ city.name }}</Badge>
+                  </div>
+                  <span v-else class="text-xs text-muted-foreground">—</span>
                 </div>
                 <span v-else class="text-xs text-muted-foreground">—</span>
               </TableCell>
@@ -149,6 +155,17 @@
           </div>
         </div>
 
+        <div v-if="form.role === 'manager'" class="space-y-2">
+          <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground\">Филиалы доступа</label>
+          <div class="mt-2 grid gap-2 md:grid-cols-2">
+            <label v-for="branch in availableBranches" :key="branch.id" class="flex items-center gap-2 text-sm text-foreground">
+              <input type="checkbox" :value="branch.id" v-model="form.branch_ids" class="h-4 w-4 rounded border-border" />
+              <span>{{ branch.name }}{{ branch.city_name ? ` · ${branch.city_name}` : "" }}</span>
+            </label>
+          </div>
+          <p class="text-xs text-muted-foreground">Филиалы ограничены выбранными городами.</p>
+        </div>
+
         <Button class="w-full" type="submit">
           <Save :size="16" />
           Сохранить
@@ -159,7 +176,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { Pencil, Plus, Save, Trash2 } from "lucide-vue-next";
 import api from "../api/client.js";
 import BaseModal from "../components/BaseModal.vue";
@@ -201,10 +218,24 @@ const form = ref({
   is_active: true,
   telegram_id: "",
   city_ids: [],
+  branch_ids: [],
 });
 
 const modalTitle = computed(() => (editing.value ? "Редактировать пользователя" : "Новый пользователь"));
 const modalSubtitle = computed(() => (editing.value ? "Измените данные пользователя" : "Добавьте нового администратора или менеджера"));
+
+const availableBranches = computed(() => {
+  const cityIds = form.value.city_ids || [];
+  if (cityIds.length === 0) return [];
+  const cityNames = new Map(referenceStore.cities.map((city) => [city.id, city.name]));
+  return cityIds.flatMap((cityId) => {
+    const branches = referenceStore.branchesByCity?.[cityId] || [];
+    return branches.map((branch) => ({
+      ...branch,
+      city_name: cityNames.get(branch.city_id) || "",
+    }));
+  });
+});
 
 const getRoleLabel = (role) => {
   const labels = {
@@ -246,6 +277,7 @@ const openModal = (user = null) => {
       is_active: user.is_active,
       telegram_id: user.telegram_id || "",
       city_ids: user.cities?.map((c) => c.id) || [],
+      branch_ids: user.branches?.map((branch) => branch.id) || [],
     };
   } else {
     form.value = {
@@ -257,6 +289,7 @@ const openModal = (user = null) => {
       is_active: true,
       telegram_id: "",
       city_ids: [],
+      branch_ids: [],
     };
   }
   showModal.value = true;
@@ -277,6 +310,7 @@ const submitUser = async () => {
       is_active: form.value.is_active,
       telegram_id: form.value.telegram_id ? Number(form.value.telegram_id) : null,
       cities: form.value.city_ids,
+      branch_ids: form.value.branch_ids || [],
     };
 
     if (!editing.value) {
@@ -313,4 +347,25 @@ onMounted(async () => {
   await referenceStore.loadCities();
   await loadUsers();
 });
+
+watch(
+  () => [...(form.value.city_ids || [])],
+  async (cityIds) => {
+    if (form.value.role !== "manager") return;
+    await Promise.all(cityIds.map((cityId) => referenceStore.loadBranches(cityId)));
+    if (form.value.branch_ids?.length) {
+      form.value.branch_ids = form.value.branch_ids.filter((branchId) => availableBranches.value.some((branch) => branch.id === branchId));
+    }
+  }
+);
+
+watch(
+  () => form.value.role,
+  (role) => {
+    if (role !== "manager") {
+      form.value.city_ids = [];
+      form.value.branch_ids = [];
+    }
+  }
+);
 </script>

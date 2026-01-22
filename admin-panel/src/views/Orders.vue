@@ -52,10 +52,6 @@
           </div>
         </div>
         <div class="flex flex-wrap items-center gap-3">
-          <Button @click="loadOrders">
-            <RefreshCcw :size="16" />
-            Обновить
-          </Button>
           <Button variant="outline" @click="resetFilters">
             <RotateCcw :size="16" />
             Сбросить
@@ -111,9 +107,9 @@
 </template>
 
 <script setup>
-import { onMounted, onBeforeUnmount, reactive, ref } from "vue";
+import { onMounted, onBeforeUnmount, reactive, ref, watch } from "vue";
 import { useRouter } from "vue-router";
-import { RefreshCcw, RotateCcw, Search } from "lucide-vue-next";
+import { RotateCcw, Search } from "lucide-vue-next";
 import api from "../api/client.js";
 import { useAuthStore } from "../stores/auth.js";
 import { useReferenceStore } from "../stores/reference.js";
@@ -144,6 +140,7 @@ const { showNewOrderNotification } = useNotifications();
 const orders = ref([]);
 const recentOrderIds = ref(new Set());
 let ws = null;
+const loadTimer = ref(null);
 
 const filters = reactive({
   city_id: "",
@@ -160,6 +157,13 @@ const loadOrders = async () => {
   orders.value = response.data.orders || [];
 };
 
+const scheduleLoad = () => {
+  if (loadTimer.value) {
+    clearTimeout(loadTimer.value);
+  }
+  loadTimer.value = setTimeout(loadOrders, 300);
+};
+
 const resetFilters = () => {
   Object.assign(filters, {
     city_id: "",
@@ -169,7 +173,7 @@ const resetFilters = () => {
     date_to: "",
     search: "",
   });
-  loadOrders();
+  scheduleLoad();
 };
 
 const selectOrder = (order) => {
@@ -234,6 +238,14 @@ onMounted(async () => {
   await loadOrders();
   connectWebSocket();
 });
+
+watch(
+  filters,
+  () => {
+    scheduleLoad();
+  },
+  { deep: true }
+);
 
 onBeforeUnmount(() => {
   if (ws) ws.close();

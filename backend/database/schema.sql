@@ -340,10 +340,13 @@ CREATE TABLE IF NOT EXISTS admin_users (
     role ENUM('admin', 'manager', 'seo') NOT NULL,
     is_active BOOLEAN DEFAULT TRUE,
     telegram_id BIGINT,
+    branch_id INT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_email (email),
-    INDEX idx_role (role)
+    INDEX idx_role (role),
+    INDEX idx_branch_id (branch_id),
+    FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
 
 -- Таблица связи менеджеров с городами
@@ -355,6 +358,17 @@ CREATE TABLE IF NOT EXISTS admin_user_cities (
     FOREIGN KEY (admin_user_id) REFERENCES admin_users(id) ON DELETE CASCADE,
     FOREIGN KEY (city_id) REFERENCES cities(id) ON DELETE CASCADE,
     UNIQUE KEY unique_admin_city (admin_user_id, city_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
+
+-- Таблица связи менеджеров с филиалами
+CREATE TABLE IF NOT EXISTS admin_user_branches (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    admin_user_id INT NOT NULL,
+    branch_id INT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (admin_user_id) REFERENCES admin_users(id) ON DELETE CASCADE,
+    FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE CASCADE,
+    UNIQUE KEY unique_admin_branch (admin_user_id, branch_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
 
 -- Таблица очереди синхронизации

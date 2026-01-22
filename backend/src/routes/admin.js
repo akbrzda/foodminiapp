@@ -33,7 +33,7 @@ router.get("/users", requireRole("admin", "ceo"), async (req, res, next) => {
 
     let query = `
       SELECT au.id, au.email, au.first_name, au.last_name, au.role, 
-             au.is_active, au.telegram_id, au.created_at, au.updated_at
+             au.is_active, au.telegram_id, au.branch_id, au.created_at, au.updated_at
       FROM admin_users au
       WHERE 1=1
     `;
@@ -64,8 +64,18 @@ router.get("/users", requireRole("admin", "ceo"), async (req, res, next) => {
           [user.id],
         );
         user.cities = cities;
+
+        const [branches] = await db.query(
+          `SELECT b.id, b.name, b.city_id
+           FROM admin_user_branches aub
+           JOIN branches b ON aub.branch_id = b.id
+           WHERE aub.admin_user_id = ?`,
+          [user.id],
+        );
+        user.branches = branches || [];
       } else {
         user.cities = [];
+        user.branches = [];
       }
     }
 
@@ -82,7 +92,7 @@ router.get("/users/:id", requireRole("admin", "ceo"), async (req, res, next) => 
 
     const [users] = await db.query(
       `SELECT id, email, first_name, last_name, role, is_active, 
-              telegram_id, created_at, updated_at
+              telegram_id, branch_id, created_at, updated_at
        FROM admin_users WHERE id = ?`,
       [userId],
     );
@@ -103,8 +113,17 @@ router.get("/users/:id", requireRole("admin", "ceo"), async (req, res, next) => 
         [userId],
       );
       user.cities = cities;
+      const [branches] = await db.query(
+        `SELECT b.id, b.name, b.city_id
+         FROM admin_user_branches aub
+         JOIN branches b ON aub.branch_id = b.id
+         WHERE aub.admin_user_id = ?`,
+        [userId],
+      );
+      user.branches = branches || [];
     } else {
       user.cities = [];
+      user.branches = [];
     }
 
     res.json({ user });
@@ -136,17 +155,26 @@ router.get("/clients", requireRole("admin", "manager", "ceo"), async (req, res, 
 
     const query = `
       SELECT u.id, u.phone, u.first_name, u.last_name, u.email, u.bonus_balance,
-             COUNT(o.id) as orders_count,
-             last_order.created_at as last_order_at,
+             COALESCE(oc.orders_count, 0) as orders_count,
+             lo.created_at as last_order_at,
              c.name as city_name
       FROM users u
-      LEFT JOIN orders o ON o.user_id = u.id
-      LEFT JOIN orders last_order ON last_order.id = (
-        SELECT id FROM orders WHERE user_id = u.id ORDER BY created_at DESC LIMIT 1
-      )
-      LEFT JOIN cities c ON c.id = last_order.city_id
+      LEFT JOIN (
+        SELECT user_id, COUNT(*) as orders_count
+        FROM orders
+        GROUP BY user_id
+      ) oc ON oc.user_id = u.id
+      LEFT JOIN (
+        SELECT o1.user_id, o1.created_at, o1.city_id
+        FROM orders o1
+        JOIN (
+          SELECT user_id, MAX(created_at) as max_created_at
+          FROM orders
+          GROUP BY user_id
+        ) o2 ON o2.user_id = o1.user_id AND o2.max_created_at = o1.created_at
+      ) lo ON lo.user_id = u.id
+      LEFT JOIN cities c ON c.id = lo.city_id
       ${whereClause}
-      GROUP BY u.id
       ORDER BY last_order_at DESC, u.created_at DESC
       LIMIT ? OFFSET ?
     `;
@@ -344,7 +372,7 @@ router.get("/clients/:id/bonuses", requireRole("admin", "manager", "ceo"), async
 // Создать администратора (только для admin и ceo)
 router.post("/users", requireRole("admin", "ceo"), async (req, res, next) => {
   try {
-    const { email, password, first_name, last_name, role, telegram_id, cities } = req.body;
+    const { email, password, first_name, last_name, role, telegram_id, cities, branch_ids } = req.body;
 
     if (!email || !password || !first_name || !last_name || !role) {
       return res.status(400).json({
@@ -367,14 +395,31 @@ router.post("/users", requireRole("admin", "ceo"), async (req, res, next) => {
       return res.status(400).json({ error: "Email already exists" });
     }
 
+    // Проверяем филиалы для менеджера
+    let managerBranchIds = [];
+    if (role === "manager" && Array.isArray(branch_ids) && branch_ids.length > 0) {
+      const [branches] = await db.query("SELECT id, city_id FROM branches WHERE id IN (?)", [branch_ids]);
+      if (branches.length !== branch_ids.length) {
+        return res.status(400).json({ error: "One or more branches not found" });
+      }
+      if (Array.isArray(cities) && cities.length > 0) {
+        const citySet = new Set(cities);
+        const invalidBranch = branches.find((branch) => !citySet.has(branch.city_id));
+        if (invalidBranch) {
+          return res.status(400).json({ error: "Branch city must be included in manager cities" });
+        }
+      }
+      managerBranchIds = branch_ids;
+    }
+
     // Хешируем пароль
     const passwordHash = await bcrypt.hash(password, 10);
 
     // Создаем пользователя
     const [result] = await db.query(
-      `INSERT INTO admin_users (email, password_hash, first_name, last_name, role, telegram_id)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [email, passwordHash, first_name, last_name, role, telegram_id || null],
+      `INSERT INTO admin_users (email, password_hash, first_name, last_name, role, telegram_id, branch_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [email, passwordHash, first_name, last_name, role, telegram_id || null, null],
     );
 
     const newUserId = result.insertId;
@@ -386,10 +431,17 @@ router.post("/users", requireRole("admin", "ceo"), async (req, res, next) => {
       }
     }
 
+    // Если это менеджер, привязываем филиалы
+    if (role === "manager" && managerBranchIds.length > 0) {
+      for (let branchId of managerBranchIds) {
+        await db.query("INSERT INTO admin_user_branches (admin_user_id, branch_id) VALUES (?, ?)", [newUserId, branchId]);
+      }
+    }
+
     // Получаем созданного пользователя
     const [newUser] = await db.query(
       `SELECT id, email, first_name, last_name, role, is_active, 
-              telegram_id, created_at, updated_at
+              telegram_id, branch_id, created_at, updated_at
        FROM admin_users WHERE id = ?`,
       [newUserId],
     );
@@ -404,10 +456,10 @@ router.post("/users", requireRole("admin", "ceo"), async (req, res, next) => {
 router.put("/users/:id", requireRole("admin", "ceo"), async (req, res, next) => {
   try {
     const userId = req.params.id;
-    const { email, password, first_name, last_name, role, telegram_id, is_active, cities } = req.body;
+    const { email, password, first_name, last_name, role, telegram_id, is_active, cities, branch_ids } = req.body;
 
     // Проверяем существование пользователя
-    const [existingUsers] = await db.query("SELECT id, role FROM admin_users WHERE id = ?", [userId]);
+    const [existingUsers] = await db.query("SELECT id, role, branch_id FROM admin_users WHERE id = ?", [userId]);
 
     if (existingUsers.length === 0) {
       return res.status(404).json({ error: "User not found" });
@@ -464,13 +516,18 @@ router.put("/users/:id", requireRole("admin", "ceo"), async (req, res, next) => 
       values.push(is_active);
     }
 
+    const finalRole = role || existingUsers[0].role;
+    if (finalRole !== "manager") {
+      updates.push("branch_id = ?");
+      values.push(null);
+    }
+
     if (updates.length > 0) {
       values.push(userId);
       await db.query(`UPDATE admin_users SET ${updates.join(", ")} WHERE id = ?`, values);
     }
 
     // Обновляем привязку городов для менеджера
-    const finalRole = role || existingUsers[0].role;
     if (finalRole === "manager" && cities !== undefined) {
       // Удаляем все существующие привязки
       await db.query("DELETE FROM admin_user_cities WHERE admin_user_id = ?", [userId]);
@@ -483,10 +540,40 @@ router.put("/users/:id", requireRole("admin", "ceo"), async (req, res, next) => 
       }
     }
 
+    // Обновляем привязку филиалов для менеджера
+    if (finalRole === "manager" && branch_ids !== undefined) {
+      const branchList = Array.isArray(branch_ids) ? branch_ids : [];
+      if (branchList.length > 0) {
+        const [branches] = await db.query("SELECT id, city_id FROM branches WHERE id IN (?)", [branchList]);
+        if (branches.length !== branchList.length) {
+          return res.status(400).json({ error: "One or more branches not found" });
+        }
+        let cityIdsToCheck = cities;
+        if (cityIdsToCheck === undefined) {
+          const [currentCities] = await db.query("SELECT city_id FROM admin_user_cities WHERE admin_user_id = ?", [userId]);
+          cityIdsToCheck = currentCities.map((city) => city.city_id);
+        }
+        if (Array.isArray(cityIdsToCheck) && cityIdsToCheck.length > 0) {
+          const citySet = new Set(cityIdsToCheck);
+          const invalidBranch = branches.find((branch) => !citySet.has(branch.city_id));
+          if (invalidBranch) {
+            return res.status(400).json({ error: "Branch city must be included in manager cities" });
+          }
+        }
+      }
+
+      await db.query("DELETE FROM admin_user_branches WHERE admin_user_id = ?", [userId]);
+      for (let branchId of branchList) {
+        await db.query("INSERT INTO admin_user_branches (admin_user_id, branch_id) VALUES (?, ?)", [userId, branchId]);
+      }
+    } else if (finalRole !== "manager") {
+      await db.query("DELETE FROM admin_user_branches WHERE admin_user_id = ?", [userId]);
+    }
+
     // Получаем обновленного пользователя
     const [updatedUser] = await db.query(
       `SELECT id, email, first_name, last_name, role, is_active, 
-              telegram_id, created_at, updated_at
+              telegram_id, branch_id, created_at, updated_at
        FROM admin_users WHERE id = ?`,
       [userId],
     );
@@ -503,8 +590,17 @@ router.put("/users/:id", requireRole("admin", "ceo"), async (req, res, next) => 
         [userId],
       );
       user.cities = userCities;
+      const [branches] = await db.query(
+        `SELECT b.id, b.name, b.city_id
+         FROM admin_user_branches aub
+         JOIN branches b ON aub.branch_id = b.id
+         WHERE aub.admin_user_id = ?`,
+        [userId],
+      );
+      user.branches = branches || [];
     } else {
       user.cities = [];
+      user.branches = [];
     }
 
     res.json({ user });
