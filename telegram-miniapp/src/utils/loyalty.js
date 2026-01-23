@@ -5,6 +5,7 @@ export const LOYALTY_LEVELS = [
     id: "starter",
     name: "Бронза",
     rate: 0.03,
+    redeemPercent: 0.2,
     min: 0,
     max: 9999,
   },
@@ -12,13 +13,15 @@ export const LOYALTY_LEVELS = [
     id: "growth",
     name: "Серебро",
     rate: 0.05,
+    redeemPercent: 0.25,
     min: 10000,
     max: 19999,
   },
   {
     id: "prime",
     name: "Золото",
-    rate: 0.07,
+    rate: 0.07  ,
+    redeemPercent: 0.3,
     min: 20000,
     max: Number.POSITIVE_INFINITY,
   },
@@ -30,29 +33,29 @@ export function normalizeSpend(value) {
   }
   return Math.max(0, parsedValue);
 }
-export function getLoyaltyLevel(spend) {
+export function getLoyaltyLevel(spend, levels = LOYALTY_LEVELS) {
   const value = normalizeSpend(spend);
-  return LOYALTY_LEVELS.find((level) => value >= level.min && value <= level.max) || LOYALTY_LEVELS[0];
+  return levels.find((level) => value >= level.min && value <= level.max) || levels[0];
 }
-export function getNextLoyaltyLevel(spend) {
-  const current = getLoyaltyLevel(spend);
-  const currentIndex = LOYALTY_LEVELS.findIndex((level) => level.id === current.id);
-  if (currentIndex < 0 || currentIndex >= LOYALTY_LEVELS.length - 1) {
+export function getNextLoyaltyLevel(spend, levels = LOYALTY_LEVELS) {
+  const current = getLoyaltyLevel(spend, levels);
+  const currentIndex = levels.findIndex((level) => level.id === current.id);
+  if (currentIndex < 0 || currentIndex >= levels.length - 1) {
     return null;
   }
-  return LOYALTY_LEVELS[currentIndex + 1];
+  return levels[currentIndex + 1];
 }
-export function getAmountToNextLevel(spend) {
-  const next = getNextLoyaltyLevel(spend);
+export function getAmountToNextLevel(spend, levels = LOYALTY_LEVELS) {
+  const next = getNextLoyaltyLevel(spend, levels);
   if (!next) {
     return 0;
   }
   const value = normalizeSpend(spend);
   return Math.max(0, next.min - value);
 }
-export function getProgressToNextLevel(spend) {
-  const current = getLoyaltyLevel(spend);
-  const next = getNextLoyaltyLevel(spend);
+export function getProgressToNextLevel(spend, levels = LOYALTY_LEVELS) {
+  const current = getLoyaltyLevel(spend, levels);
+  const next = getNextLoyaltyLevel(spend, levels);
   if (!next) {
     return 1;
   }

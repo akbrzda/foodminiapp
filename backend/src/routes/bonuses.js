@@ -1,7 +1,7 @@
 import express from "express";
 import db from "../config/database.js";
 import { authenticateToken } from "../middleware/auth.js";
-import { getBonusHistory, calculateMaxUsableBonuses } from "../utils/bonuses.js";
+import { getBonusHistory, calculateMaxUsableBonuses, getLoyaltyLevelsFromSettings, getMaxUsePercentFromSettings, getRedeemPercentForLevel } from "../utils/bonuses.js";
 import { getSystemSettings } from "../utils/settings.js";
 const router = express.Router();
 const ensureBonusesEnabled = async (res) => {
@@ -48,12 +48,16 @@ router.post("/calculate-usable", authenticateToken, async (req, res, next) => {
         error: "order_subtotal is required and must be greater than 0",
       });
     }
-    const [users] = await db.query("SELECT bonus_balance FROM users WHERE id = ?", [userId]);
+    const [users] = await db.query("SELECT bonus_balance, loyalty_level FROM users WHERE id = ?", [userId]);
     if (users.length === 0) {
       return res.status(404).json({ error: "User not found" });
     }
     const userBalance = parseFloat(users[0].bonus_balance);
-    const maxUsable = calculateMaxUsableBonuses(order_subtotal);
+    const loyaltyLevel = users[0]?.loyalty_level || 1;
+    const settings = await getSystemSettings();
+    const loyaltyLevels = getLoyaltyLevelsFromSettings(settings);
+    const maxUsePercent = getRedeemPercentForLevel(loyaltyLevel, loyaltyLevels, getMaxUsePercentFromSettings(settings));
+    const maxUsable = calculateMaxUsableBonuses(order_subtotal, maxUsePercent);
     const available = Math.min(userBalance, maxUsable);
     res.json({
       user_balance: userBalance,

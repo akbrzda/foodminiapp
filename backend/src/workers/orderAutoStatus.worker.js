@@ -1,5 +1,5 @@
 import db from "../config/database.js";
-import { earnBonuses } from "../utils/bonuses.js";
+import { earnBonuses, refundBonuses, cancelEarnedBonuses, getLoyaltyLevelsFromSettings } from "../utils/bonuses.js";
 import { getSystemSettings } from "../utils/settings.js";
 import { logger } from "../utils/logger.js";
 
@@ -26,39 +26,9 @@ const buildLocalDateString = ({ year, month, day }) => `${year}-${pad2(month)}-$
 const getUtcMidnightForLocalDate = ({ year, month, day }, offsetMinutes) =>
   new Date(Date.UTC(year, month - 1, day, 0, 0, 0) + offsetMinutes * 60 * 1000);
 
-async function rollbackBonuses(order) {
-  const userId = order.user_id;
-  const orderId = order.id;
-  const bonusUsed = parseFloat(order.bonus_used) || 0;
-  const orderTotal = parseFloat(order.total) || 0;
-  const orderNumber = order.order_number;
-  const [users] = await db.query("SELECT bonus_balance, total_spent FROM users WHERE id = ?", [userId]);
-  const currentBalance = parseFloat(users[0]?.bonus_balance) || 0;
-  const currentTotalSpent = parseFloat(users[0]?.total_spent) || 0;
-  let balanceAfter = currentBalance;
-  if (bonusUsed > 0) {
-    balanceAfter = currentBalance + bonusUsed;
-    await db.query("UPDATE users SET bonus_balance = ? WHERE id = ?", [balanceAfter, userId]);
-    await db.query(
-      `INSERT INTO bonus_history (user_id, order_id, type, amount, balance_after, description)
-       VALUES (?, ?, 'manual', ?, ?, ?)`,
-      [userId, orderId, bonusUsed, balanceAfter, `Возврат бонусов за отмену заказа #${orderNumber}`],
-    );
-  }
-  const [earnedRows] = await db.query("SELECT SUM(amount) as earned_total FROM bonus_history WHERE order_id = ? AND type = 'earned'", [
-    orderId,
-  ]);
-  const earnedTotal = parseFloat(earnedRows[0]?.earned_total) || 0;
-  if (earnedTotal > 0) {
-    balanceAfter = Math.max(0, balanceAfter - earnedTotal);
-    const updatedTotalSpent = Math.max(0, currentTotalSpent - orderTotal);
-    await db.query("UPDATE users SET bonus_balance = ?, total_spent = ? WHERE id = ?", [balanceAfter, updatedTotalSpent, userId]);
-    await db.query(
-      `INSERT INTO bonus_history (user_id, order_id, type, amount, balance_after, description)
-       VALUES (?, ?, 'manual', ?, ?, ?)`,
-      [userId, orderId, earnedTotal, balanceAfter, `Аннулирование бонусов за отмену заказа #${orderNumber}`],
-    );
-  }
+async function rollbackBonuses(order, loyaltyLevels) {
+  await cancelEarnedBonuses(order, null, loyaltyLevels);
+  await refundBonuses(order);
 }
 
 async function notifyStatusChange(orderId, userId, oldStatus, newStatus, orderType, orderNumber) {
@@ -92,16 +62,19 @@ async function updateOrderStatus(order, localDate) {
   if (newStatus === "completed") {
     const orderTotal = parseFloat(order.total) || 0;
     const settings = await getSystemSettings();
+    const loyaltyLevels = getLoyaltyLevelsFromSettings(settings);
     if (settings.bonuses_enabled && orderTotal > 0) {
       try {
-        await earnBonuses(order.user_id, order.id, orderTotal, "Bonus earned from completed order");
+        await earnBonuses(order, null, loyaltyLevels);
       } catch (bonusError) {
         console.error("Failed to earn bonuses:", bonusError);
       }
     }
   } else if (newStatus === "cancelled") {
     try {
-      await rollbackBonuses(order);
+      const settings = await getSystemSettings();
+      const loyaltyLevels = getLoyaltyLevelsFromSettings(settings);
+      await rollbackBonuses(order, loyaltyLevels);
     } catch (bonusError) {
       console.error("Failed to rollback bonuses for cancelled order:", bonusError);
     }
@@ -118,7 +91,7 @@ async function processOffset(offsetMinutes, nowUtc) {
   const localDate = buildLocalDateString(localParts);
   const utcMidnight = getUtcMidnightForLocalDate(localParts, offsetMinutes);
   const [orders] = await db.query(
-    `SELECT id, status, user_id, total, bonus_used, order_number, order_type
+    `SELECT id, status, user_id, total, subtotal, delivery_cost, bonus_used, bonus_earned, order_number, order_type
      FROM orders
      WHERE status IN (?)
        AND user_timezone_offset = ?

@@ -126,7 +126,7 @@
           <span>{{ formatPrice(order.total) }} ₽</span>
         </div>
       </div>
-      <div class="actions" v-if="order.status === 'completed' || order.status === 'cancelled'">
+      <div class="actions" v-if="canRepeatOrder">
         <button class="repeat-btn" @click="repeatOrder">
           <span>🔄</span>
           Повторить заказ
@@ -136,10 +136,11 @@
   </div>
 </template>
 <script setup>
-import { ref, onMounted, onUnmounted } from "vue";
+import { computed, ref, onMounted, onUnmounted } from "vue";
 import PageHeader from "../components/PageHeader.vue";
 import { useRoute, useRouter } from "vue-router";
 import { useCartStore } from "../stores/cart";
+import { useSettingsStore } from "../stores/settings";
 import { ordersAPI } from "../api/endpoints";
 import { formatPrice } from "../utils/format";
 import { hapticFeedback } from "../services/telegram";
@@ -147,9 +148,18 @@ import { wsService } from "../services/websocket";
 const route = useRoute();
 const router = useRouter();
 const cartStore = useCartStore();
+const settingsStore = useSettingsStore();
 const order = ref(null);
 const loading = ref(false);
 let statusUpdateHandler = null;
+const canRepeatOrder = computed(() => {
+  if (!order.value) return false;
+  if (!settingsStore.ordersEnabled) return false;
+  if (order.value.status !== "completed" && order.value.status !== "cancelled") return false;
+  if (order.value.order_type === "delivery") return settingsStore.deliveryEnabled;
+  if (order.value.order_type === "pickup") return settingsStore.pickupEnabled;
+  return false;
+});
 onMounted(async () => {
   await loadOrder();
   setupWebSocketListeners();
@@ -181,6 +191,10 @@ async function loadOrder() {
 }
 async function repeatOrder() {
   if (!order.value) return;
+  if (!canRepeatOrder.value) {
+    hapticFeedback("error");
+    return;
+  }
   hapticFeedback("medium");
   cartStore.clearCart();
   order.value.items.forEach((item) => {

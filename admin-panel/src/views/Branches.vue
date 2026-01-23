@@ -61,7 +61,12 @@
                 <div class="text-xs text-muted-foreground">Сборка: {{ formatTimeValue(branch.assembly_time) }}</div>
               </TableCell>
               <TableCell>
-                <Badge :variant="branch.is_active ? 'success' : 'secondary'">{{ branch.is_active ? "Активен" : "Неактивен" }}</Badge>
+              <Badge
+                variant="secondary"
+                :class="branch.is_active ? 'bg-emerald-100 text-emerald-700 border-transparent' : 'bg-muted text-muted-foreground border-transparent'"
+              >
+                {{ branch.is_active ? "Активен" : "Неактивен" }}
+              </Badge>
               </TableCell>
               <TableCell class="text-right">
                 <div class="flex justify-end gap-2">

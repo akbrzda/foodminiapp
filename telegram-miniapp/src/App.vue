@@ -7,12 +7,14 @@
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useAuthStore } from "./stores/auth";
 import { useCartStore } from "./stores/cart";
+import { useLoyaltyStore } from "./stores/loyalty";
 import { useLocationStore } from "./stores/location";
 import { useSettingsStore } from "./stores/settings";
 import { citiesAPI, userStateAPI } from "./api/endpoints";
 import { wsService } from "./services/websocket";
 const authStore = useAuthStore();
 const cartStore = useCartStore();
+const loyaltyStore = useLoyaltyStore();
 const locationStore = useLocationStore();
 const settingsStore = useSettingsStore();
 const isHydrated = ref(false);
@@ -94,11 +96,14 @@ function scheduleSync() {
 }
 onMounted(async () => {
   await settingsStore.loadSettings();
+  loyaltyStore.applySettings(settingsStore.$state);
+  applyDeliveryTypeSettings();
   try {
     await loadRemoteState();
   } catch (error) {
     console.error("Failed to initialize app state:", error);
   }
+  applyDeliveryTypeSettings();
   setupWebSocket();
   attachBlurListeners();
 });
@@ -176,6 +181,19 @@ function detachBlurListeners() {
   blurScrollHandler = null;
   blurListenersAttached = false;
 }
+function applyDeliveryTypeSettings() {
+  if (!settingsStore.ordersEnabled) return;
+  if (settingsStore.deliveryEnabled && settingsStore.pickupEnabled) return;
+  if (!settingsStore.deliveryEnabled && settingsStore.pickupEnabled) {
+    if (locationStore.deliveryType === "delivery") {
+      locationStore.setDeliveryType("pickup");
+    }
+  } else if (settingsStore.deliveryEnabled && !settingsStore.pickupEnabled) {
+    if (locationStore.deliveryType === "pickup") {
+      locationStore.setDeliveryType("delivery");
+    }
+  }
+}
 watch(
   stateToSync,
   () => {
@@ -183,6 +201,12 @@ watch(
     scheduleSync();
   },
   { deep: true },
+);
+watch(
+  () => [settingsStore.ordersEnabled, settingsStore.deliveryEnabled, settingsStore.pickupEnabled],
+  () => {
+    applyDeliveryTypeSettings();
+  },
 );
 watch(
   () => authStore.isAuthenticated,

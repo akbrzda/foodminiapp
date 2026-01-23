@@ -58,10 +58,15 @@
                 <div v-if="user.telegram_id" class="text-xs text-muted-foreground">Telegram ID: {{ user.telegram_id }}</div>
               </TableCell>
               <TableCell>
-                <Badge :variant="roleVariant(user.role)">{{ getRoleLabel(user.role) }}</Badge>
+                <Badge :variant="roleVariant(user.role)" :class="roleClass(user.role)">{{ getRoleLabel(user.role) }}</Badge>
               </TableCell>
               <TableCell>
-                <Badge :variant="user.is_active ? 'success' : 'secondary'">{{ user.is_active ? "Активен" : "Неактивен" }}</Badge>
+                <Badge
+                  variant="secondary"
+                  :class="user.is_active ? 'bg-emerald-100 text-emerald-700 border-transparent' : 'bg-muted text-muted-foreground border-transparent'"
+                >
+                  {{ user.is_active ? "Активен" : "Неактивен" }}
+                </Badge>
               </TableCell>
               <TableCell>
                 <div v-if="user.role === 'manager'" class="space-y-2">
@@ -226,9 +231,12 @@ const getRoleLabel = (role) => {
   return labels[role] || role;
 };
 const roleVariant = (role) => {
-  if (role === "admin") return "warning";
   if (role === "ceo") return "secondary";
   return "default";
+};
+const roleClass = (role) => {
+  if (role === "admin") return "bg-amber-100 text-amber-700 border-transparent";
+  return "";
 };
 const loadUsers = async () => {
   try {

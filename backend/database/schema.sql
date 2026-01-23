@@ -38,6 +38,18 @@ CREATE TABLE IF NOT EXISTS system_settings (
 INSERT INTO system_settings (`key`, value, description)
 VALUES
     ('bonuses_enabled', CAST('true' AS JSON), 'Бонусная система'),
+    ('loyalty_level_1_name', CAST('"Бронза"' AS JSON), 'Название первого уровня лояльности'),
+    ('loyalty_level_2_name', CAST('"Серебро"' AS JSON), 'Название второго уровня лояльности'),
+    ('loyalty_level_3_name', CAST('"Золото"' AS JSON), 'Название третьего уровня лояльности'),
+    ('bonus_max_redeem_percent', CAST('0.2' AS JSON), 'Доля от суммы заказа, доступная к списанию бонусами'),
+    ('loyalty_level_1_redeem_percent', CAST('0.2' AS JSON), 'Максимальная доля списания бонусами для уровня 1'),
+    ('loyalty_level_2_redeem_percent', CAST('0.25' AS JSON), 'Максимальная доля списания бонусами для уровня 2'),
+    ('loyalty_level_3_redeem_percent', CAST('0.3' AS JSON), 'Максимальная доля списания бонусами для уровня 3'),
+    ('loyalty_level_1_rate', CAST('0.03' AS JSON), 'Начисление бонусов для уровня 1'),
+    ('loyalty_level_2_rate', CAST('0.05' AS JSON), 'Начисление бонусов для уровня 2'),
+    ('loyalty_level_3_rate', CAST('0.07' AS JSON), 'Начисление бонусов для уровня 3'),
+    ('loyalty_level_2_threshold', CAST('10000' AS JSON), 'Сумма заказов для перехода на уровень 2'),
+    ('loyalty_level_3_threshold', CAST('20000' AS JSON), 'Сумма заказов для перехода на уровень 3'),
     ('orders_enabled', CAST('true' AS JSON), 'Прием заказов'),
     ('delivery_enabled', CAST('true' AS JSON), 'Оформление заказов с доставкой'),
     ('pickup_enabled', CAST('true' AS JSON), 'Оформление заказов на самовывоз')
@@ -248,6 +260,9 @@ CREATE TABLE IF NOT EXISTS orders (
     subtotal DECIMAL(10, 2) NOT NULL,
     delivery_cost DECIMAL(10, 2) DEFAULT 0.00,
     bonus_used DECIMAL(10, 2) DEFAULT 0.00,
+    bonus_earned DECIMAL(10, 2) DEFAULT 0.00,
+    bonus_earn_transaction_id INT NULL,
+    bonus_spend_transaction_id INT NULL,
     total DECIMAL(10, 2) NOT NULL,
     -- Комментарий
     comment TEXT,
@@ -323,6 +338,22 @@ CREATE TABLE IF NOT EXISTS bonus_history (
     INDEX idx_user_id (user_id),
     INDEX idx_sync_status (sync_status),
     INDEX idx_created_at (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
+CREATE TABLE IF NOT EXISTS loyalty_transactions (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    order_id INT NULL,
+    type ENUM('earn', 'spend', 'refund', 'cancel_earn') NOT NULL,
+    amount DECIMAL(10, 2) NOT NULL,
+    balance_before DECIMAL(10, 2) NOT NULL,
+    balance_after DECIMAL(10, 2) NOT NULL,
+    description VARCHAR(255),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_loyalty_user (user_id),
+    INDEX idx_loyalty_order (order_id),
+    INDEX idx_loyalty_type (type),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
 -- Таблица администраторов/менеджеров
 CREATE TABLE IF NOT EXISTS admin_users (

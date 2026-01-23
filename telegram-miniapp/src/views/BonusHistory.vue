@@ -39,16 +39,16 @@
           </div>
           <div class="transactions" v-else>
             <div v-for="transaction in transactions" :key="transaction.id" class="transaction-item">
-              <div class="transaction-icon" :class="transaction.type === 'earned' ? 'earn' : 'spend'">
-                <Plus v-if="transaction.type === 'earned'" :size="20" />
+              <div class="transaction-icon" :class="isEarnType(transaction.type) ? 'earn' : 'spend'">
+                <Plus v-if="isEarnType(transaction.type)" :size="20" />
                 <Minus v-else :size="20" />
               </div>
               <div class="transaction-info">
                 <div class="transaction-title">{{ getTransactionTitle(transaction) }}</div>
                 <div class="transaction-date">{{ formatDate(transaction.created_at) }}</div>
               </div>
-              <div class="transaction-amount" :class="transaction.type === 'earned' ? 'earn' : 'spend'">
-                {{ transaction.type === "earned" ? "+" : "−" }}{{ formatPrice(transaction.amount) }} ₽
+              <div class="transaction-amount" :class="isEarnType(transaction.type) ? 'earn' : 'spend'">
+                {{ isEarnType(transaction.type) ? "+" : "−" }}{{ formatPrice(Math.abs(transaction.amount)) }} ₽
               </div>
             </div>
           </div>
@@ -70,12 +70,16 @@
           </p>
           <p>Бонусы начисляются через 24 часа после оформления заказа и доступны в течение {{ bonusLifetimeDays }} дней.</p>
           <div class="levels-table-header">
-            <span>Процент накоплений</span>
+            <span>Уровень</span>
+            <span>Начисление</span>
+            <span>Списание</span>
             <span>Диапазон сумм</span>
           </div>
           <div class="levels-list">
             <div v-for="level in formattedLevels" :key="level.id" class="level-row">
+              <span class="level-name">{{ level.name }}</span>
               <span class="level-rate">{{ level.rateLabel }}%</span>
+              <span class="level-redeem">{{ level.redeemLabel }}%</span>
               <span class="level-range">{{ level.rangeLabel }}</span>
             </div>
           </div>
@@ -111,6 +115,7 @@ const formattedLevels = computed(() =>
   loyaltyStore.levels.map((level) => ({
     ...level,
     rateLabel: Math.round(level.rate * 100),
+    redeemLabel: Math.round((level.redeemPercent ?? loyaltyStore.fallbackRedeemPercent) * 100),
     rangeLabel: Number.isFinite(level.max) ? `${formatPrice(level.min)} ₽ – ${formatPrice(level.max)} ₽` : `от ${formatPrice(level.min)} ₽`,
   })),
 );
@@ -133,11 +138,16 @@ async function loadData() {
     loading.value = false;
   }
 }
+const isEarnType = (type) => type === "earn" || type === "refund" || type === "earned";
 function getTransactionTitle(transaction) {
-  if (transaction.type === "earned") {
+  if (transaction.type === "earn" || transaction.type === "earned") {
     return `Начислено за заказ #${transaction.order_number || transaction.order_id}`;
-  } else if (transaction.type === "used") {
+  } else if (transaction.type === "spend" || transaction.type === "used") {
     return `Списано в заказе #${transaction.order_number || transaction.order_id}`;
+  } else if (transaction.type === "refund") {
+    return `Возврат бонусов за заказ #${transaction.order_number || transaction.order_id}`;
+  } else if (transaction.type === "cancel_earn") {
+    return `Отмена начисления за заказ #${transaction.order_number || transaction.order_id}`;
   } else if (transaction.type === "manual" && transaction.description) {
     return transaction.description;
   } else if (transaction.type === "expired") {
@@ -283,8 +293,9 @@ function formatDate(dateString) {
   margin-bottom: 12px;
 }
 .levels-table-header {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 1.1fr 0.7fr 0.7fr 1.2fr;
+  gap: 8px;
   font-size: var(--font-size-caption);
   color: var(--color-text-muted);
   margin-bottom: 12px;
@@ -296,16 +307,25 @@ function formatDate(dateString) {
   margin-bottom: 12px;
 }
 .level-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+  display: grid;
+  grid-template-columns: 1.1fr 0.7fr 0.7fr 1.2fr;
+  gap: 8px;
   padding: 12px 16px;
   background: var(--color-background-secondary);
   border-radius: var(--border-radius-md);
 }
+.level-name {
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
 .level-rate {
   font-size: var(--font-size-h3);
   font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+.level-redeem {
+  font-size: var(--font-size-body);
   color: var(--color-text-primary);
 }
 .level-range {

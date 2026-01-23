@@ -93,7 +93,7 @@
             <div
               v-for="item in getItemsByCategory(category.id)"
               :key="item.id"
-              :class="['item-card', { disabled: isItemUnavailable(item) }]"
+              :class="['item-card', { disabled: isItemUnavailable(item) || !canOrder }]"
               @click="handleItemCardClick(item)"
             >
               <div class="item-image" v-if="item.image_url">
@@ -113,13 +113,13 @@
                   <div v-if="isItemUnavailable(item)" class="item-unavailable">Временно недоступно</div>
                 </div>
                 <div class="item-footer">
-                  <button v-if="!getCartItem(item)" class="add-btn" :disabled="isItemUnavailable(item)" @click.stop="handleItemAction(item)">
-                    {{ isItemUnavailable(item) ? "Недоступно" : getItemPrice(item) }}
+                  <button v-if="!getCartItem(item)" class="add-btn" :disabled="isItemUnavailable(item) || !canOrder" @click.stop="handleItemAction(item)">
+                    {{ getAddButtonLabel(item) }}
                   </button>
                   <div v-else class="quantity-controls">
-                    <button class="qty-btn" @click.stop="decreaseItemQuantity(item)">−</button>
+                    <button class="qty-btn" :disabled="!canOrder" @click.stop="decreaseItemQuantity(item)">−</button>
                     <span class="qty-value">{{ getCartItem(item).quantity }}</span>
-                    <button class="qty-btn" @click.stop="increaseItemQuantity(item)">+</button>
+                    <button class="qty-btn" :disabled="!canOrder" @click.stop="increaseItemQuantity(item)">+</button>
                   </div>
                 </div>
               </div>
@@ -130,7 +130,12 @@
       <div class="loading" v-if="menuStore.loading">Меню загружается...</div>
       <div class="empty" v-if="!menuStore.loading && menuStore.categories.length === 0">Меню загружается...</div>
     </div>
-    <button v-if="cartStore.itemsCount > 0" class="floating-cart" :class="{ 'hidden-on-keyboard': isKeyboardOpen }" @click="goToCart">
+    <button
+      v-if="ordersEnabled && cartStore.itemsCount > 0"
+      class="floating-cart"
+      :class="{ 'hidden-on-keyboard': isKeyboardOpen }"
+      @click="goToCart"
+    >
       <span class="cart-left">
         <span class="cart-icon">
           <ShoppingCart :size="20" />
@@ -178,6 +183,12 @@ const cityName = computed(() => locationStore.selectedCity?.name || "Когал�
 const ordersEnabled = computed(() => settingsStore.ordersEnabled);
 const deliveryEnabled = computed(() => settingsStore.deliveryEnabled);
 const pickupEnabled = computed(() => settingsStore.pickupEnabled);
+const canOrder = computed(() => {
+  if (!ordersEnabled.value) return false;
+  if (locationStore.isDelivery) return deliveryEnabled.value;
+  if (locationStore.isPickup) return pickupEnabled.value;
+  return false;
+});
 const actionButtonText = computed(() => {
   if (!ordersEnabled.value) return "Заказы недоступны";
   if (!deliveryEnabled.value && !pickupEnabled.value) return "Нет доступных способов";
@@ -417,6 +428,7 @@ function handleItemAction(item) {
     openItem(item);
     return;
   }
+  if (!canOrder.value) return;
   cartStore.addItem({
     id: item.id,
     name: item.name,
@@ -431,6 +443,11 @@ function handleItemAction(item) {
     image_url: item.image_url,
   });
   hapticFeedback("success");
+}
+function getAddButtonLabel(item) {
+  if (!canOrder.value) return "Заказы недоступны";
+  if (isItemUnavailable(item)) return "Недоступно";
+  return getItemPrice(item);
 }
 function formatWeight(value) {
   if (!value) return "";
@@ -468,6 +485,7 @@ function getDisplayWeight(item) {
   return formatWeight(item.weight);
 }
 function increaseItemQuantity(item) {
+  if (!canOrder.value) return;
   hapticFeedback("light");
   const cartItem = getCartItem(item);
   if (cartItem) {
@@ -475,6 +493,7 @@ function increaseItemQuantity(item) {
   }
 }
 function decreaseItemQuantity(item) {
+  if (!canOrder.value) return;
   hapticFeedback("light");
   const cartItem = getCartItem(item);
   if (cartItem) {

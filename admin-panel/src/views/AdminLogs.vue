@@ -88,9 +88,9 @@
                 <div class="text-xs text-muted-foreground">{{ log.admin_email }}</div>
               </TableCell>
               <TableCell>
-                <Badge :variant="getActionVariant(log.action)">
-                  {{ getActionLabel(log.action) }}
-                </Badge>
+              <Badge :variant="getActionVariant(log.action)" :class="getActionClass(log.action)">
+                {{ getActionLabel(log.action) }}
+              </Badge>
               </TableCell>
               <TableCell>
                 <div class="text-sm">{{ getObjectLabel(log.object_type) }}</div>
@@ -274,11 +274,16 @@ const getActionLabel = (action) => {
 };
 const getActionVariant = (action) => {
   const variants = {
-    create: "success",
     update: "default",
     delete: "destructive",
   };
   return variants[action] || "default";
+};
+const getActionClass = (action) => {
+  const classes = {
+    create: "bg-emerald-100 text-emerald-700 border-transparent",
+  };
+  return classes[action] || "";
 };
 const getObjectLabel = (objectType) => {
   const labels = {

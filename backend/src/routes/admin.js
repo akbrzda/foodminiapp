@@ -4,6 +4,7 @@ import db from "../config/database.js";
 import { authenticateToken, requireRole } from "../middleware/auth.js";
 import { telegramQueue, imageQueue, getQueueStats, getFailedJobs, retryFailedJobs, cleanQueue } from "../queues/config.js";
 import { getSystemSettings } from "../utils/settings.js";
+import { getBonusHistory } from "../utils/bonuses.js";
 const router = express.Router();
 router.use(authenticateToken);
 router.get("/users/admins", requireRole("admin", "ceo"), async (req, res, next) => {
@@ -248,13 +249,22 @@ router.post("/clients/:id/bonuses", requireRole("admin", "manager", "ceo"), asyn
     } else {
       newBalance = Math.max(0, currentBalance + parsedAmount);
     }
+    const delta = newBalance - currentBalance;
     await db.query("UPDATE users SET bonus_balance = ? WHERE id = ?", [newBalance, userId]);
-    await db.query("INSERT INTO bonus_history (user_id, order_id, type, amount, balance_after, description) VALUES (?, NULL, 'manual', ?, ?, ?)", [
-      userId,
-      parsedAmount,
-      newBalance,
-      description || (mode === "set" ? "Ручная установка бонусов" : "Ручное изменение бонусов"),
-    ]);
+    if (delta !== 0) {
+      const type = delta > 0 ? "earn" : "spend";
+      await db.query(
+        "INSERT INTO loyalty_transactions (user_id, order_id, type, amount, balance_before, balance_after, description) VALUES (?, NULL, ?, ?, ?, ?, ?)",
+        [
+          userId,
+          type,
+          delta,
+          currentBalance,
+          newBalance,
+          description || (mode === "set" ? "Ручная установка бонусов" : "Ручное изменение бонусов"),
+        ],
+      );
+    }
     res.json({ balance: newBalance });
   } catch (error) {
     next(error);
@@ -297,14 +307,7 @@ router.get("/clients/:id/bonuses", requireRole("admin", "manager", "ceo"), async
         return res.status(403).json({ error: "You do not have access to this user" });
       }
     }
-    const [transactions] = await db.query(
-      `SELECT id, order_id, type, amount, balance_after, description, created_at
-       FROM bonus_history
-       WHERE user_id = ?
-       ORDER BY created_at DESC
-       LIMIT 50`,
-      [userId],
-    );
+    const transactions = await getBonusHistory(userId, 50, 0);
     res.json({ transactions });
   } catch (error) {
     next(error);

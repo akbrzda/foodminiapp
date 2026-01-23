@@ -40,7 +40,12 @@
               </TableCell>
               <TableCell>{{ formatCurrency(item.base_price || 0) }}</TableCell>
               <TableCell>
-                <Badge :variant="item.is_active ? 'success' : 'secondary'">{{ item.is_active ? "Активна" : "Скрыта" }}</Badge>
+                <Badge
+                  variant="secondary"
+                  :class="item.is_active ? 'bg-emerald-100 text-emerald-700 border-transparent' : 'bg-muted text-muted-foreground border-transparent'"
+                >
+                  {{ item.is_active ? "Активна" : "Скрыта" }}
+                </Badge>
               </TableCell>
               <TableCell class="text-right">
                 <div class="flex justify-end gap-2">

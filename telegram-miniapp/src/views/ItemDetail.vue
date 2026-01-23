@@ -101,13 +101,13 @@
           </button>
         </div>
         <div v-else class="quantity-button-wrapper">
-          <button class="qty-btn" @click="decreaseQuantity">−</button>
+          <button class="qty-btn" :disabled="!canOrder" @click="decreaseQuantity">−</button>
           <div class="qty-info">
             <span class="qty-price"> {{ formatPrice(cartItem.totalPrice) }} ₽ × {{ cartItem.quantity }} </span>
           </div>
-          <button class="qty-btn" @click="increaseQuantity">+</button>
+          <button class="qty-btn" :disabled="!canOrder" @click="increaseQuantity">+</button>
         </div>
-        <button v-if="cartStore.itemsCount > 0" class="cart-btn" @click="goToCart">
+        <button v-if="ordersEnabled && cartStore.itemsCount > 0" class="cart-btn" @click="goToCart">
           <ShoppingCart :size="24" />
           <span v-if="cartStore.itemsCount > 0" class="cart-badge">{{ cartStore.itemsCount }}</span>
         </button>
@@ -122,6 +122,7 @@ import { ShoppingCart } from "lucide-vue-next";
 import { useCartStore } from "../stores/cart";
 import { useMenuStore } from "../stores/menu";
 import { useLocationStore } from "../stores/location";
+import { useSettingsStore } from "../stores/settings";
 import { useKeyboardHandler } from "../composables/useKeyboardHandler";
 import { menuAPI } from "../api/endpoints";
 import { hapticFeedback } from "../services/telegram";
@@ -131,6 +132,7 @@ const router = useRouter();
 const cartStore = useCartStore();
 const menuStore = useMenuStore();
 const locationStore = useLocationStore();
+const settingsStore = useSettingsStore();
 const { isKeyboardOpen } = useKeyboardHandler();
 const item = ref(null);
 const loading = ref(true);
@@ -139,6 +141,13 @@ const selectedVariant = ref(null);
 const selectedModifiers = ref({});
 const quantity = ref(1);
 const isAdded = ref(false);
+const ordersEnabled = computed(() => settingsStore.ordersEnabled);
+const canOrder = computed(() => {
+  if (!settingsStore.ordersEnabled) return false;
+  if (locationStore.isDelivery) return settingsStore.deliveryEnabled;
+  if (locationStore.isPickup) return settingsStore.pickupEnabled;
+  return false;
+});
 const requiredModifierGroups = computed(() => {
   if (!item.value?.modifier_groups) return [];
   return item.value.modifier_groups.filter((g) => g.is_required);
@@ -363,6 +372,7 @@ function getModifierWeight(modifier) {
   return formatModifierWeight(modifier.weight, modifier.weight_unit);
 }
 function increaseQuantity() {
+  if (!canOrder.value) return;
   hapticFeedback("light");
   if (!item.value) return;
   const modifiers = getSelectedModifiersArray();
@@ -390,6 +400,7 @@ function getMatchingCartItems() {
   });
 }
 function decreaseQuantity() {
+  if (!canOrder.value) return;
   hapticFeedback("light");
   if (!item.value) return;
   const matchingItems = getMatchingCartItems();
@@ -415,6 +426,7 @@ function goToCart() {
 }
 const canAddToCart = computed(() => {
   if (!item.value) return false;
+  if (!canOrder.value) return false;
   if (item.value.variants && item.value.variants.length > 0) {
     if (!selectedVariant.value) return false;
     if (selectedVariant.value.in_stop_list) return false;
@@ -432,6 +444,7 @@ const canAddToCart = computed(() => {
 });
 const addDisabledReason = computed(() => {
   if (!item.value) return "Недоступно";
+  if (!canOrder.value) return "Заказы недоступны";
   if (item.value.in_stop_list) return "Недоступно";
   if (selectedVariant.value?.in_stop_list) return "Недоступно";
   return "Выберите обязательные параметры";

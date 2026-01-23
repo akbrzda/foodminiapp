@@ -39,7 +39,12 @@
                 </div>
               </TableCell>
               <TableCell>
-                <Badge :variant="city.is_active ? 'success' : 'secondary'">{{ city.is_active ? "Активен" : "Неактивен" }}</Badge>
+              <Badge
+                variant="secondary"
+                :class="city.is_active ? 'bg-emerald-100 text-emerald-700 border-transparent' : 'bg-muted text-muted-foreground border-transparent'"
+              >
+                {{ city.is_active ? "Активен" : "Неактивен" }}
+              </Badge>
               </TableCell>
               <TableCell class="text-right">
                 <div class="flex justify-end gap-2">

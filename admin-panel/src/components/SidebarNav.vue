@@ -92,10 +92,6 @@
             <FileText :size="18" />
             <span v-if="!isCollapsed">Логи</span>
           </RouterLink>
-          <RouterLink class="nav-link" to="/menu/settings" @click="emit('navigate')">
-            <Settings :size="18" />
-            <span v-if="!isCollapsed">Настройки меню</span>
-          </RouterLink>
         </nav>
       </div>
       <div v-if="!isCollapsed" class="border-t border-border/60 px-4 py-3 text-xs text-muted-foreground">
@@ -125,7 +121,6 @@ import {
   Map,
   MapPinned,
   Radio,
-  Settings,
   SlidersHorizontal,
   Tag,
   UserCog,

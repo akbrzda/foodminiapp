@@ -20,7 +20,9 @@
           </div>
           <div class="flex flex-wrap items-center gap-3">
             <Badge variant="outline">{{ order.order_type === "delivery" ? "Доставка" : "Самовывоз" }}</Badge>
-            <StatusBadge :status="order.status" />
+            <Badge variant="secondary" :class="getStatusBadge(order.status).class">
+              {{ getStatusBadge(order.status).label }}
+            </Badge>
           </div>
         </CardContent>
       </Card>
@@ -199,7 +201,6 @@ import { ref, computed, onMounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ArrowLeft, CircleCheck } from "lucide-vue-next";
 import api from "../api/client.js";
-import StatusBadge from "../components/StatusBadge.vue";
 import { formatCurrency, formatDateTime, formatNumber, formatPhone } from "../utils/format.js";
 import Badge from "../components/ui/Badge.vue";
 import Button from "../components/ui/Button.vue";
@@ -230,6 +231,30 @@ const statusOrder = {
   delivering: 4,
   completed: 5,
   cancelled: -1,
+};
+const getStatusBadge = (status) => {
+  const labels = {
+    pending: "Новый",
+    confirmed: "Принят",
+    preparing: "Готовится",
+    ready: "Готов",
+    delivering: "В пути",
+    completed: "Завершен",
+    cancelled: "Отменен",
+  };
+  const classes = {
+    pending: "bg-amber-100 text-amber-700 border-transparent",
+    confirmed: "bg-blue-100 text-blue-700 border-transparent",
+    preparing: "bg-orange-100 text-orange-700 border-transparent",
+    ready: "bg-violet-100 text-violet-700 border-transparent",
+    delivering: "bg-indigo-100 text-indigo-700 border-transparent",
+    completed: "bg-emerald-100 text-emerald-700 border-transparent",
+    cancelled: "bg-red-100 text-red-700 border-transparent",
+  };
+  return {
+    label: labels[status] || status || "—",
+    class: classes[status] || "bg-muted text-muted-foreground border-transparent",
+  };
 };
 const availableStatuses = computed(() => {
   if (!order.value) return [];
@@ -271,6 +296,7 @@ const loadOrder = async () => {
     order.value = response.data.order;
   } catch (error) {
     console.error("Failed to load order:", error);
+    showErrorNotification("Ошибка при загрузке заказа");
   }
 };
 const updateStatus = async () => {

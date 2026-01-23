@@ -2,7 +2,17 @@ import express from "express";
 import axios from "axios";
 import db from "../config/database.js";
 import { authenticateToken, requireRole, checkCityAccess } from "../middleware/auth.js";
-import { calculateEarnedBonuses, validateBonusUsage, earnBonuses, useBonuses } from "../utils/bonuses.js";
+import {
+  calculateEarnedBonuses,
+  validateBonusUsage,
+  earnBonuses,
+  spendBonuses,
+  refundBonuses,
+  cancelEarnedBonuses,
+  getLoyaltyLevelsFromSettings,
+  getMaxUsePercentFromSettings,
+  getRedeemPercentForLevel,
+} from "../utils/bonuses.js";
 import { logger, adminActionLogger } from "../utils/logger.js";
 import { addTelegramNotification } from "../queues/config.js";
 import { getSystemSettings } from "../utils/settings.js";
@@ -180,6 +190,13 @@ router.post("/calculate", authenticateToken, async (req, res, next) => {
       return res.status(400).json({ error: "order_type must be 'delivery' or 'pickup'" });
     }
     const settings = await getSystemSettings();
+    const loyaltyLevels = getLoyaltyLevelsFromSettings(settings);
+    let loyaltyLevel = 1;
+    if (settings.bonuses_enabled) {
+      const [userData] = await db.query("SELECT loyalty_level FROM users WHERE id = ?", [req.user.id]);
+      loyaltyLevel = userData[0]?.loyalty_level || 1;
+    }
+    const maxUsePercent = getRedeemPercentForLevel(loyaltyLevel, loyaltyLevels, getMaxUsePercentFromSettings(settings));
     const orderType = order_type === "pickup" ? "pickup" : "delivery";
     if (!ensureOrderAccess(settings, orderType, res)) return;
     const effectiveBonusToUse = settings.bonuses_enabled ? bonus_to_use : 0;
@@ -199,7 +216,7 @@ router.post("/calculate", authenticateToken, async (req, res, next) => {
       }
     }
     if (settings.bonuses_enabled && effectiveBonusToUse > 0) {
-      const bonusValidation = await validateBonusUsage(req.user.id, effectiveBonusToUse, subtotal);
+      const bonusValidation = await validateBonusUsage(req.user.id, effectiveBonusToUse, subtotal, maxUsePercent);
       if (!bonusValidation.valid) {
         return res.status(400).json({ error: bonusValidation.error });
       }
@@ -207,9 +224,8 @@ router.post("/calculate", authenticateToken, async (req, res, next) => {
     const finalTotal = total + parseFloat(delivery_cost);
     let earnedBonuses = 0;
     if (settings.bonuses_enabled) {
-      const [userData] = await db.query("SELECT loyalty_level FROM users WHERE id = ?", [req.user.id]);
-      const loyaltyLevel = userData[0]?.loyalty_level || 1;
-      earnedBonuses = calculateEarnedBonuses(finalTotal, loyaltyLevel);
+      const amountForBonus = Math.max(0, subtotal - bonusUsed);
+      earnedBonuses = calculateEarnedBonuses(amountForBonus, loyaltyLevel, loyaltyLevels);
     }
     res.json({
       subtotal,
@@ -259,6 +275,13 @@ router.post("/", authenticateToken, async (req, res, next) => {
       });
     }
     const settings = await getSystemSettings();
+    const loyaltyLevels = getLoyaltyLevelsFromSettings(settings);
+    let loyaltyLevel = 1;
+    if (settings.bonuses_enabled) {
+      const [userData] = await db.query("SELECT loyalty_level FROM users WHERE id = ?", [req.user.id]);
+      loyaltyLevel = userData[0]?.loyalty_level || 1;
+    }
+    const maxUsePercent = getRedeemPercentForLevel(loyaltyLevel, loyaltyLevels, getMaxUsePercentFromSettings(settings));
     if (!ensureOrderAccess(settings, order_type, res)) {
       await connection.rollback();
       return;
@@ -331,7 +354,7 @@ router.post("/", authenticateToken, async (req, res, next) => {
       }
     }
     if (settings.bonuses_enabled && effectiveBonusToUse > 0) {
-      const bonusValidation = await validateBonusUsage(req.user.id, effectiveBonusToUse, subtotal);
+      const bonusValidation = await validateBonusUsage(req.user.id, effectiveBonusToUse, subtotal, maxUsePercent);
       if (!bonusValidation.valid) {
         await connection.rollback();
         return res.status(400).json({ error: bonusValidation.error });
@@ -340,9 +363,8 @@ router.post("/", authenticateToken, async (req, res, next) => {
     const finalTotal = total + deliveryCost;
     let earnedBonuses = 0;
     if (settings.bonuses_enabled) {
-      const [userData] = await db.query("SELECT loyalty_level FROM users WHERE id = ?", [req.user.id]);
-      const loyaltyLevel = userData[0]?.loyalty_level || 1;
-      earnedBonuses = calculateEarnedBonuses(finalTotal, loyaltyLevel);
+      const amountForBonus = Math.max(0, subtotal - bonusUsed);
+      earnedBonuses = calculateEarnedBonuses(amountForBonus, loyaltyLevel, loyaltyLevels);
     }
     const orderNumber = await generateOrderNumber();
     const timezoneOffset = Number.isFinite(Number(timezone_offset)) ? Number(timezone_offset) : 0;
@@ -406,9 +428,6 @@ router.post("/", authenticateToken, async (req, res, next) => {
           );
         }
       }
-    }
-    if (settings.bonuses_enabled && bonusUsed > 0) {
-      await useBonuses(req.user.id, orderId, bonusUsed, "Used for order", connection);
     }
     await connection.commit();
     const [orders] = await db.query(`SELECT * FROM orders WHERE id = ?`, [orderId]);
@@ -532,8 +551,7 @@ router.get("/:id", authenticateToken, async (req, res, next) => {
       item.modifiers = modifiers;
     }
     order.items = items;
-    const [earnedRows] = await db.query("SELECT SUM(amount) as bonuses_earned FROM bonus_history WHERE order_id = ? AND type = 'earned'", [orderId]);
-    order.bonuses_earned = parseFloat(earnedRows[0]?.bonuses_earned) || 0;
+    order.bonuses_earned = Math.max(0, parseFloat(order.bonus_earned) || 0);
     res.json({ order });
   } catch (error) {
     next(error);
@@ -659,8 +677,7 @@ router.get("/admin/:id", authenticateToken, requireRole("admin", "manager", "ceo
       item.modifiers = modifiers;
     }
     order.items = items;
-    const [earnedRows] = await db.query("SELECT SUM(amount) as bonuses_earned FROM bonus_history WHERE order_id = ? AND type = 'earned'", [orderId]);
-    order.bonuses_earned = parseFloat(earnedRows[0]?.bonuses_earned) || 0;
+    order.bonuses_earned = Math.max(0, parseFloat(order.bonus_earned) || 0);
     res.json({ order });
   } catch (error) {
     next(error);
@@ -672,31 +689,40 @@ router.put(
   requireRole("admin", "manager", "ceo"),
   adminActionLogger("update_order_status", "order"),
   async (req, res, next) => {
+    const connection = await db.getConnection();
     try {
+      await connection.beginTransaction();
       const orderId = req.params.id;
       const { status } = req.body;
       const validStatuses = ["pending", "confirmed", "preparing", "ready", "delivering", "completed", "cancelled"];
       if (!status || !validStatuses.includes(status)) {
+        await connection.rollback();
         return res.status(400).json({
           error: `Status must be one of: ${validStatuses.join(", ")}`,
         });
       }
-      const [orders] = await db.query("SELECT city_id, order_type FROM orders WHERE id = ?", [orderId]);
+      const [orders] = await connection.query("SELECT city_id, order_type FROM orders WHERE id = ?", [orderId]);
       if (orders.length === 0) {
+        await connection.rollback();
         return res.status(404).json({ error: "Order not found" });
       }
       if (req.user.role === "manager" && !req.user.cities.includes(orders[0].city_id)) {
+        await connection.rollback();
         return res.status(403).json({
           error: "You do not have access to this city",
         });
       }
-      const [oldOrderData] = await db.query("SELECT status, user_id, total, bonus_used, order_number, order_type FROM orders WHERE id = ?", [
-        orderId,
-      ]);
+      const [oldOrderData] = await connection.query(
+        "SELECT status, user_id, total, subtotal, delivery_cost, bonus_used, bonus_earned, order_number, order_type FROM orders WHERE id = ?",
+        [orderId],
+      );
       const oldStatus = oldOrderData[0]?.status;
       const userId = oldOrderData[0]?.user_id;
       const orderTotal = parseFloat(oldOrderData[0]?.total) || 0;
+      const subtotal = parseFloat(oldOrderData[0]?.subtotal) || 0;
+      const deliveryCost = parseFloat(oldOrderData[0]?.delivery_cost) || 0;
       const bonusUsed = parseFloat(oldOrderData[0]?.bonus_used) || 0;
+      const bonusEarned = parseFloat(oldOrderData[0]?.bonus_earned) || 0;
       const orderNumber = oldOrderData[0]?.order_number;
       const statusOrder = {
         pending: 0,
@@ -709,55 +735,64 @@ router.put(
       };
       const oldStatusIndex = statusOrder[oldStatus];
       const newStatusIndex = statusOrder[status];
+      if (oldStatusIndex === undefined || newStatusIndex === undefined) {
+        await connection.rollback();
+        return res.status(400).json({
+          error: "Invalid status transition",
+        });
+      }
       if (status !== "cancelled" && oldStatus !== status) {
         if (oldStatus === "completed") {
+          await connection.rollback();
           return res.status(400).json({
             error: "Cannot change status of a completed order",
           });
         }
       }
-      await db.query("UPDATE orders SET status = ?, completed_at = ? WHERE id = ?", [status, status === "completed" ? new Date() : null, orderId]);
       const settings = await getSystemSettings();
+      const loyaltyLevels = getLoyaltyLevelsFromSettings(settings);
+      const orderData = {
+        id: orderId,
+        user_id: userId,
+        order_number: orderNumber,
+        total: orderTotal,
+        subtotal,
+        delivery_cost: deliveryCost,
+        bonus_used: bonusUsed,
+        bonus_earned: bonusEarned,
+      };
+      await connection.query("UPDATE orders SET status = ?, completed_at = ? WHERE id = ?", [status, status === "completed" ? new Date() : null, orderId]);
+      if (settings.bonuses_enabled && status !== "pending" && status !== "cancelled") {
+        try {
+          await spendBonuses(orderData, connection);
+        } catch (bonusError) {
+          await connection.rollback();
+          return res.status(400).json({ error: bonusError.message });
+        }
+      }
+      if (settings.bonuses_enabled && oldStatus === "completed" && status !== "completed") {
+        try {
+          await cancelEarnedBonuses(orderData, connection, loyaltyLevels);
+        } catch (bonusError) {
+          await connection.rollback();
+          return res.status(400).json({ error: bonusError.message });
+        }
+      }
       if (settings.bonuses_enabled && status === "completed" && oldStatus !== "completed" && orderTotal > 0) {
         try {
-          await earnBonuses(userId, orderId, orderTotal, "Bonus earned from completed order");
+          await earnBonuses(orderData, connection, loyaltyLevels);
         } catch (bonusError) {
           console.error("Failed to earn bonuses:", bonusError);
         }
       }
-      if (status === "cancelled" && oldStatus !== "cancelled") {
+      if (settings.bonuses_enabled && status === "cancelled" && oldStatus !== "cancelled") {
         try {
-          const [users] = await db.query("SELECT bonus_balance, total_spent FROM users WHERE id = ?", [userId]);
-          const currentBalance = parseFloat(users[0]?.bonus_balance) || 0;
-          const currentTotalSpent = parseFloat(users[0]?.total_spent) || 0;
-          let balanceAfter = currentBalance;
-          if (bonusUsed > 0) {
-            balanceAfter = currentBalance + bonusUsed;
-            await db.query("UPDATE users SET bonus_balance = ? WHERE id = ?", [balanceAfter, userId]);
-            await db.query(
-              `INSERT INTO bonus_history (user_id, order_id, type, amount, balance_after, description)
-               VALUES (?, ?, 'manual', ?, ?, ?)`,
-              [userId, orderId, bonusUsed, balanceAfter, `Возврат бонусов за отмену заказа #${orderNumber}`],
-            );
-          }
-          const [earnedRows] = await db.query("SELECT SUM(amount) as earned_total FROM bonus_history WHERE order_id = ? AND type = 'earned'", [
-            orderId,
-          ]);
-          const earnedTotal = parseFloat(earnedRows[0]?.earned_total) || 0;
-          if (earnedTotal > 0) {
-            balanceAfter = Math.max(0, balanceAfter - earnedTotal);
-            const updatedTotalSpent = Math.max(0, currentTotalSpent - orderTotal);
-            await db.query("UPDATE users SET bonus_balance = ?, total_spent = ? WHERE id = ?", [balanceAfter, updatedTotalSpent, userId]);
-            await db.query(
-              `INSERT INTO bonus_history (user_id, order_id, type, amount, balance_after, description)
-               VALUES (?, ?, 'manual', ?, ?, ?)`,
-              [userId, orderId, earnedTotal, balanceAfter, `Аннулирование бонусов за отмену заказа #${orderNumber}`],
-            );
-          }
+          await refundBonuses(orderData, connection);
         } catch (bonusError) {
-          console.error("Failed to rollback bonuses for cancelled order:", bonusError);
+          console.error("Failed to refund bonuses for cancelled order:", bonusError);
         }
       }
+      await connection.commit();
       const [updatedOrders] = await db.query("SELECT * FROM orders WHERE id = ?", [orderId]);
       await logger.order.statusChanged(orderId, oldStatus, status, req.user.id);
       try {
@@ -780,7 +815,10 @@ router.put(
       }
       res.json({ order: updatedOrders[0] });
     } catch (error) {
+      await connection.rollback();
       next(error);
+    } finally {
+      connection.release();
     }
   },
 );

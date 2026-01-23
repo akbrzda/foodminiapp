@@ -36,7 +36,12 @@
               </TableCell>
               <TableCell>{{ formatNumber(category.sort_order || 0) }}</TableCell>
               <TableCell>
-                <Badge :variant="category.is_active ? 'success' : 'secondary'">{{ category.is_active ? "Активна" : "Скрыта" }}</Badge>
+              <Badge
+                variant="secondary"
+                :class="category.is_active ? 'bg-emerald-100 text-emerald-700 border-transparent' : 'bg-muted text-muted-foreground border-transparent'"
+              >
+                {{ category.is_active ? "Активна" : "Скрыта" }}
+              </Badge>
               </TableCell>
               <TableCell class="text-right">
                 <div class="flex justify-end gap-2">

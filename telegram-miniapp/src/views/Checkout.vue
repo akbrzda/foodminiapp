@@ -213,8 +213,12 @@ const appliedBonusToUse = computed(() => {
   if (!cartStore.bonusUsage.useBonuses) return 0;
   return Math.min(cartStore.bonusUsage.bonusToUse, Math.floor(cartStore.totalPrice * loyaltyStore.maxRedeemPercent));
 });
+const deliveryCostForSummary = computed(() => (orderType.value === "delivery" ? deliveryCost.value : 0));
 const finalTotalPrice = computed(() => {
-  return cartStore.totalPrice + deliveryCost.value - appliedBonusToUse.value;
+  const subtotal = cartStore.totalPrice;
+  const bonus = appliedBonusToUse.value;
+  const payable = Math.max(0, subtotal - bonus);
+  return payable + deliveryCostForSummary.value;
 });
 const summarySubtotal = computed(() => {
   return cartStore.totalPrice;
@@ -276,7 +280,7 @@ onMounted(async () => {
     addressValidated.value = true;
     inDeliveryZone.value = true;
   }
-  if (locationStore.deliveryZone) {
+  if (locationStore.deliveryZone && orderType.value === "delivery") {
     applyDeliveryZone(locationStore.deliveryZone);
   } else if (orderType.value === "delivery" && locationStore.deliveryCoords && locationStore.selectedCity?.id) {
     try {
@@ -334,8 +338,14 @@ watch(
   },
 );
 watch(
-  () => [locationStore.deliveryAddress, deliveryCoords.value, locationStore.deliveryZone],
+  () => [locationStore.deliveryAddress, deliveryCoords.value, locationStore.deliveryZone, orderType.value],
   () => {
+    if (orderType.value !== "delivery") {
+      addressValidated.value = false;
+      inDeliveryZone.value = false;
+      deliveryCost.value = 0;
+      return;
+    }
     deliveryAddress.value = locationStore.deliveryAddress || "";
     if (deliveryAddress.value && deliveryCoords.value) {
       addressValidated.value = true;
@@ -428,6 +438,7 @@ function applyBranchTimes(branch) {
   prepTime.value = parseInt(branch?.prep_time || 0);
 }
 function applyDeliveryZone(zone) {
+  if (orderType.value !== "delivery") return;
   deliveryCost.value = parseFloat(zone?.delivery_cost || 0);
   deliveryTime.value = parseInt(zone?.delivery_time || 0);
   minOrderAmount.value = parseFloat(zone?.min_order_amount || 0);

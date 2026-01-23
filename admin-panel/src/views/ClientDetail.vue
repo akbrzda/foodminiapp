@@ -87,7 +87,7 @@
               <TableCell>{{ formatBonusStatus(bonus.type) }}</TableCell>
               <TableCell class="text-muted-foreground">{{ formatDateTime(bonus.created_at) }}</TableCell>
               <TableCell class="text-right">
-                <span :class="bonus.type === 'used' ? 'text-red-600' : 'text-emerald-600'">{{ formatNumber(bonus.amount) }}</span>
+                <span :class="isSpendType(bonus.type) ? 'text-red-600' : 'text-emerald-600'">{{ formatNumber(bonus.amount) }}</span>
               </TableCell>
             </TableRow>
           </TableBody>
@@ -132,11 +132,14 @@ const form = reactive({
   email: "",
 });
 const formatBonusStatus = (type) => {
-  if (type === "earned") return "Начислено";
-  if (type === "used") return "Списано";
+  if (type === "earn" || type === "earned") return "Начислено";
+  if (type === "spend" || type === "used") return "Списано";
+  if (type === "refund") return "Возврат";
+  if (type === "cancel_earn") return "Отмена начисления";
   if (type === "expired") return "Сгорело";
   return "Корректировка";
 };
+const isSpendType = (type) => type === "spend" || type === "used" || type === "cancel_earn";
 const loadClient = async () => {
   const response = await api.get(`/api/admin/clients/${clientId}`);
   client.value = response.data.user;
