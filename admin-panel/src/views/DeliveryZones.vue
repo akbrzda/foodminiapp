@@ -1,122 +1,216 @@
 <template>
-  <div class="space-y-6">
-    <Card>
-      <CardHeader>
-        <CardTitle>Зоны доставки</CardTitle>
-        <CardDescription>Управление полигонами доставки на карте</CardDescription>
-      </CardHeader>
-    </Card>
+  <div class="relative h-full min-h-[calc(100vh-80px)] bg-background">
+    <!-- Карта на весь экран -->
+    <div id="map" class="absolute inset-0 z-0"></div>
 
-    <div class="grid gap-6 lg:grid-cols-[320px_1fr]">
-      <div class="space-y-4">
-        <Card>
-          <CardContent class="space-y-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Город</label>
-            <Select v-model="cityId" @change="onCityChange">
-              <option value="">Выберите город</option>
-              <option v-for="city in referenceStore.cities" :key="city.id" :value="city.id">
-                {{ city.name }}
-              </option>
-            </Select>
-          </CardContent>
-        </Card>
+    <!-- Левая плавающая панель (фильтры) -->
+    <div class="absolute left-4 top-4 z-10 w-[320px] max-w-[calc(100%-2rem)] rounded-xl border border-border bg-background/95 shadow-xl backdrop-blur">
+      <div class="p-4 space-y-4">
+        <div class="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            class="rounded-lg border px-3 py-2 text-sm font-medium transition"
+            :class="leftTab === 'zones' ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:text-foreground'"
+            @click="leftTab = 'zones'"
+          >
+            Зоны доставки
+          </button>
+          <button
+            type="button"
+            class="rounded-lg border px-3 py-2 text-sm font-medium transition"
+            :class="leftTab === 'addresses' ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:text-foreground'"
+            @click="leftTab = 'addresses'"
+          >
+            Адреса
+          </button>
+        </div>
 
-        <Card v-if="cityId">
-          <CardContent class="space-y-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Филиал</label>
-            <Select v-model="branchId" @change="onBranchChange">
-              <option value="">Выберите филиал</option>
-              <option v-for="branch in branches" :key="branch.id" :value="branch.id">
-                {{ branch.name }}
-              </option>
-            </Select>
-          </CardContent>
-        </Card>
+        <div v-if="leftTab === 'zones'" class="space-y-4">
+          <!-- Заголовок -->
+          <div class="pb-3 border-b border-border">
+            <h2 class="text-lg font-semibold text-foreground">Зоны доставки</h2>
+            <p class="text-xs text-muted-foreground mt-1">Фильтры и управление</p>
+          </div>
 
-        <Card v-if="branchId">
-          <CardHeader class="flex items-center justify-between">
-            <CardTitle>Полигоны</CardTitle>
-            <Badge variant="secondary">{{ polygons.length }}/3</Badge>
-          </CardHeader>
-          <CardContent class="space-y-2">
-            <div
-              v-for="polygon in polygons"
-              :key="polygon.id"
-              class="flex items-center justify-between rounded-lg border border-border/60 bg-muted/40 p-2"
-            >
-              <p class="text-sm font-medium text-foreground">{{ polygon.name || `Полигон #${polygon.id}` }}</p>
-              <div class="flex gap-1">
-                <Button variant="ghost" size="icon" @click="editPolygon(polygon)">
-                  <Pencil :size="16" />
-                </Button>
-                <Button variant="ghost" size="icon" @click="deletePolygon(polygon)">
-                  <Trash2 :size="16" class="text-red-600" />
-                </Button>
-              </div>
+          <!-- Фильтры -->
+          <div class="space-y-3">
+            <div class="space-y-2">
+              <label class="text-xs font-medium text-muted-foreground">Город</label>
+              <Select v-model="cityId" @change="onCityChange">
+                <option value="">Все города</option>
+                <option v-for="city in referenceStore.cities" :key="city.id" :value="city.id">
+                  {{ city.name }}
+                </option>
+              </Select>
             </div>
 
-            <Button v-if="polygons.length < 3" class="w-full" @click="startDrawing">
+            <div v-if="cityId" class="space-y-2">
+              <label class="text-xs font-medium text-muted-foreground">Филиал</label>
+              <Select v-model="branchId" @change="onBranchChange">
+                <option value="">Все филиалы</option>
+                <option v-for="branch in branches" :key="branch.id" :value="branch.id">
+                  {{ branch.name }}
+                </option>
+              </Select>
+            </div>
+
+            <div class="space-y-2">
+              <label class="text-xs font-medium text-muted-foreground">Статус</label>
+              <Select v-model="statusFilter" @change="onFilterChange">
+                <option value="all">Все полигоны</option>
+                <option value="active">Активные</option>
+                <option value="inactive">Неактивные</option>
+                <option value="blocked">Заблокированные</option>
+              </Select>
+            </div>
+          </div>
+
+          <!-- Легенда -->
+          <div class="pt-3 border-t border-border">
+            <p class="text-xs font-medium text-muted-foreground mb-2">Легенда</p>
+            <div class="space-y-1.5">
+              <div class="flex items-center gap-2 text-xs">
+                <div class="h-3 w-3 rounded-sm border border-[#FFD200] bg-[#FFD200]/30"></div>
+                <span class="text-foreground">Активные</span>
+              </div>
+              <div class="flex items-center gap-2 text-xs">
+                <div class="h-3 w-3 rounded-sm border border-gray-400 bg-gray-400/30"></div>
+                <span class="text-foreground">Неактивные</span>
+              </div>
+              <div class="flex items-center gap-2 text-xs">
+                <div class="h-3 w-3 rounded-sm border border-red-500 bg-red-500/30"></div>
+                <span class="text-foreground">Заблокированные</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Кнопка добавления -->
+          <div v-if="branchId" class="pt-3 border-t border-border">
+            <Button v-if="polygons.length < 3" class="w-full" size="sm" @click="startDrawing">
               <Plus :size="16" />
               Добавить полигон
             </Button>
             <p v-else class="text-center text-xs text-muted-foreground">Максимум 3 полигона на филиал</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card>
-        <CardContent class="p-3">
-          <div v-if="!branchId" class="mb-3 rounded-lg border border-dashed border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-            {{ cityId ? "Показаны полигоны выбранного города. Выберите филиал для редактирования." : "Показаны все полигоны. Выберите город или филиал для редактирования." }}
           </div>
-          <div id="map" class="min-h-[520px] w-full rounded-lg lg:min-h-[70vh]"></div>
-        </CardContent>
-      </Card>
+
+          <!-- Информация -->
+          <div v-if="filteredPolygons.length > 0" class="pt-2 text-xs text-muted-foreground text-center">
+            {{ filteredPolygons.length }} {{ getPluralForm(filteredPolygons.length) }}
+          </div>
+        </div>
+
+        <div v-else class="space-y-2 text-sm text-muted-foreground">
+          <p>Раздел адресов появится в следующем обновлении.</p>
+        </div>
+      </div>
     </div>
 
-    <BaseModal v-if="showModal" :title="modalTitle" :subtitle="modalSubtitle" @close="closeModal">
-      <form class="space-y-4" @submit.prevent="submitPolygon">
-        <div class="space-y-2">
-          <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Название</label>
-          <Input v-model="form.name" placeholder="Центральная зона" required />
-        </div>
-        <div class="space-y-2">
-          <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Время доставки (мин)</label>
-          <Input v-model.number="form.delivery_time" type="number" min="0" required />
-        </div>
-        <div class="grid gap-4 md:grid-cols-2">
+      <BaseModal v-if="showModal" :title="modalTitle" :subtitle="modalSubtitle" @close="closeModal">
+        <form class="space-y-4" @submit.prevent="submitPolygon">
           <div class="space-y-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Мин. сумма заказа (₽)</label>
-            <Input v-model.number="form.min_order_amount" type="number" min="0" step="10" />
+            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Название</label>
+            <Input v-model="form.name" placeholder="Центральная зона" required />
           </div>
           <div class="space-y-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Стоимость доставки (₽)</label>
-            <Input v-model.number="form.delivery_cost" type="number" min="0" step="10" />
+            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Время доставки (мин)</label>
+            <Input v-model.number="form.delivery_time" type="number" min="0" required />
           </div>
-        </div>
-        <Button class="w-full" type="submit">
-          <Save :size="16" />
-          Сохранить
-        </Button>
-      </form>
-    </BaseModal>
+          <div class="grid gap-4 md:grid-cols-2">
+            <div class="space-y-2">
+              <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Мин. сумма заказа (₽)</label>
+              <Input v-model.number="form.min_order_amount" type="number" min="0" step="10" />
+            </div>
+            <div class="space-y-2">
+              <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Стоимость доставки (₽)</label>
+              <Input v-model.number="form.delivery_cost" type="number" min="0" step="10" />
+            </div>
+          </div>
+          <Button class="w-full" type="submit">
+            <Save :size="16" />
+            Сохранить
+          </Button>
+        </form>
+      </BaseModal>
+
+      <BaseModal
+        v-if="showBlockModalWindow"
+        :title="blockingPolygon?.id === 'bulk' ? `Блокировка полигонов (${blockingPolygon.ids.length})` : 'Блокировка полигона'"
+        :subtitle="blockingPolygon?.id === 'bulk' ? 'Укажите параметры для массовой блокировки' : 'Укажите параметры блокировки'"
+        @close="closeBlockModal"
+      >
+        <form class="space-y-4" @submit.prevent="submitBlock">
+          <div class="space-y-2">
+            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Тип блокировки</label>
+            <Select v-model="blockForm.blockType">
+              <option value="permanent">Постоянная</option>
+              <option value="temporary">Временная</option>
+            </Select>
+          </div>
+
+          <div v-if="blockForm.blockType === 'temporary'" class="grid gap-4 md:grid-cols-2">
+            <div class="space-y-2">
+              <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">С</label>
+              <Input v-model="blockForm.blocked_from" type="datetime-local" required />
+            </div>
+            <div class="space-y-2">
+              <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">До</label>
+              <Input v-model="blockForm.blocked_until" type="datetime-local" required />
+            </div>
+          </div>
+
+          <div class="space-y-2">
+            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Причина блокировки</label>
+            <Input v-model="blockForm.block_reason" placeholder="Укажите причину" />
+          </div>
+
+          <div class="flex gap-2">
+            <Button class="flex-1" type="submit" variant="default">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
+                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+              </svg>
+              Заблокировать
+            </Button>
+            <Button type="button" variant="outline" @click="closeBlockModal"> Отмена </Button>
+          </div>
+        </form>
+      </BaseModal>
+
+      <!-- Боковая панель с деталями полигона -->
+      <PolygonSidebar
+        :is-open="showSidebar"
+        :polygon="selectedPolygon"
+        :city-branches="branches"
+        @close="closeSidebar"
+        @save="savePolygonFromSidebar"
+        @block="showBlockModalFromSidebar"
+        @unblock="unblockPolygonFromSidebar"
+        @delete="deletePolygonFromSidebar"
+        @transfer="transferPolygon"
+        @redraw="startRedrawPolygon"
+      />
   </div>
 </template>
 
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
-import { Pencil, Plus, Save, Trash2 } from "lucide-vue-next";
+import { Plus, Save } from "lucide-vue-next";
 import api from "../api/client.js";
 import BaseModal from "../components/BaseModal.vue";
+import PolygonSidebar from "../components/PolygonSidebar.vue";
 import { useReferenceStore } from "../stores/reference.js";
 import { useRoute, useRouter } from "vue-router";
-import Badge from "../components/ui/Badge.vue";
 import Button from "../components/ui/Button.vue";
-import Card from "../components/ui/Card.vue";
-import CardContent from "../components/ui/CardContent.vue";
-import CardDescription from "../components/ui/CardDescription.vue";
-import CardHeader from "../components/ui/CardHeader.vue";
-import CardTitle from "../components/ui/CardTitle.vue";
 import Input from "../components/ui/Input.vue";
 import Select from "../components/ui/Select.vue";
 import { useNotifications } from "../composables/useNotifications.js";
@@ -133,20 +227,34 @@ if (L?.GeometryUtil?.readableArea && !L.GeometryUtil.__patched) {
 const referenceStore = useReferenceStore();
 const route = useRoute();
 const router = useRouter();
-const { showErrorNotification } = useNotifications();
+const { showErrorNotification, showSuccessNotification } = useNotifications();
 const cityId = ref("");
 const branchId = ref("");
 const branches = ref([]);
 const polygons = ref([]);
 const allPolygons = ref([]);
 const showModal = ref(false);
+const showBlockModalWindow = ref(false);
 const editing = ref(null);
+const blockingPolygon = ref(null);
+const leftTab = ref("zones");
 const form = ref({
   name: "",
   delivery_time: 30,
   min_order_amount: 0,
   delivery_cost: 0,
 });
+const blockForm = ref({
+  blockType: "permanent",
+  blocked_from: "",
+  blocked_until: "",
+  block_reason: "",
+});
+const statusFilter = ref("all");
+const selectedPolygons = ref([]);
+const showSidebar = ref(false);
+const selectedPolygon = ref(null);
+const editingPolygonId = ref(null);
 
 let map = null;
 let drawnItems = null;
@@ -155,9 +263,29 @@ let currentLayer = null;
 let editHandler = null;
 const polygonLayers = new Map();
 let branchesRequestId = 0;
+let drawControlVisible = true;
 
 const modalTitle = computed(() => (editing.value ? "Редактировать полигон" : "Новый полигон"));
 const modalSubtitle = computed(() => (editing.value ? "Измените параметры полигона" : "Добавьте зону доставки"));
+
+const filteredPolygons = computed(() => {
+  const polygonsList = branchId.value
+    ? polygons.value
+    : cityId.value
+      ? allPolygons.value.filter((polygon) => polygon.city_id === parseInt(cityId.value))
+      : allPolygons.value;
+
+  if (statusFilter.value === "all") {
+    return polygonsList;
+  } else if (statusFilter.value === "active") {
+    return polygonsList.filter((p) => p.is_active && !isPolygonBlocked(p));
+  } else if (statusFilter.value === "inactive") {
+    return polygonsList.filter((p) => !p.is_active);
+  } else if (statusFilter.value === "blocked") {
+    return polygonsList.filter((p) => isPolygonBlocked(p));
+  }
+  return polygonsList;
+});
 
 const loadBranches = async () => {
   if (!cityId.value) {
@@ -185,7 +313,11 @@ const loadPolygons = async () => {
   }
   try {
     const response = await api.get(`/api/polygons/admin/branch/${branchId.value}`);
-    polygons.value = response.data.polygons || [];
+    const branchName = branches.value.find((branch) => branch.id === parseInt(branchId.value))?.name || "";
+    polygons.value = (response.data.polygons || []).map((polygon) => ({
+      ...polygon,
+      branch_name: polygon.branch_name || branchName,
+    }));
   } catch (error) {
     console.error("Ошибка загрузки полигонов:", error);
   }
@@ -228,6 +360,7 @@ const initMap = () => {
   if (map) {
     map.remove();
   }
+  drawControlVisible = true;
 
   if (L?.GeometryUtil?.readableArea) {
     L.GeometryUtil.readableArea = () => "";
@@ -248,7 +381,7 @@ const initMap = () => {
   }
 
   map = L.map("map", {
-    zoomControl: true,
+    zoomControl: false,
     attributionControl: false,
   }).setView(center, 13);
 
@@ -300,7 +433,9 @@ const initMap = () => {
       },
     });
 
-    map.addControl(drawControl);
+    if (drawControlVisible) {
+      map.addControl(drawControl);
+    }
 
     map.on(L.Draw.Event.CREATED, (event) => {
       const layer = event.layer;
@@ -334,22 +469,32 @@ const renderPolygonsOnMap = () => {
   drawnItems.clearLayers();
   polygonLayers.clear();
 
-  // Цветовая палитра для разных полигонов
-  const colors = ["#FFD200", "#9333EA", "#06B6D4"];
-
   const visiblePolygons = branchId.value
     ? polygons.value
     : cityId.value
       ? allPolygons.value.filter((polygon) => polygon.city_id === parseInt(cityId.value))
       : allPolygons.value;
 
-  visiblePolygons.forEach((polygon, index) => {
+  visiblePolygons.forEach((polygon) => {
     if (!polygon.polygon) return;
-    const color = colors[index % colors.length];
+
+    // Определяем цвет в зависимости от статуса
+    let color, fillOpacity;
+    if (isPolygonBlocked(polygon)) {
+      color = "#ef4444"; // red-500
+      fillOpacity = 0.3;
+    } else if (!polygon.is_active) {
+      color = "#9ca3af"; // gray-400
+      fillOpacity = 0.2;
+    } else {
+      color = "#FFD200"; // yellow
+      fillOpacity = 0.25;
+    }
+
     const style = {
       color: color,
       fillColor: color,
-      fillOpacity: 0.25,
+      fillOpacity: fillOpacity,
       weight: 3,
       opacity: 0.9,
     };
@@ -361,12 +506,28 @@ const renderPolygonsOnMap = () => {
     const layer = L.polygon(coords, style);
     layer.polygonId = polygon.id;
 
+    // Добавляем обработчик клика для открытия сайдбара
+    layer.on("click", () => {
+      openPolygonSidebar(polygon);
+    });
+
+    let statusBadge = "";
+    if (isPolygonBlocked(polygon)) {
+      statusBadge =
+        '<span style="display: inline-block; background: #fee2e2; color: #dc2626; padding: 2px 6px; border-radius: 4px; font-size: 11px; margin-top: 4px;">🔒 Заблокирован</span>';
+    } else if (!polygon.is_active) {
+      statusBadge =
+        '<span style="display: inline-block; background: #f3f4f6; color: #6b7280; padding: 2px 6px; border-radius: 4px; font-size: 11px; margin-top: 4px;">❌ Неактивен</span>';
+    }
+
     const popupContent = `
       <div style="font-family: system-ui, -apple-system, sans-serif;">
         <strong style="font-size: 14px;">${polygon.name || `Полигон #${polygon.id}`}</strong><br>
+        <span style="font-size: 12px; color: #666;">${polygon.branch_name || ""}</span><br>
         <span style="font-size: 12px; color: #666;">⏱️ ${polygon.delivery_time || 30} мин</span><br>
         <span style="font-size: 12px; color: #666;">💰 Мин. заказ: ${polygon.min_order_amount || 0}₽</span><br>
         <span style="font-size: 12px; color: #666;">🚚 Доставка: ${polygon.delivery_cost || 0}₽</span>
+        ${statusBadge}
       </div>
     `;
     layer.bindPopup(popupContent, { autoPan: false });
@@ -406,6 +567,267 @@ const deletePolygon = async (polygon) => {
   }
 };
 
+const isPolygonBlocked = (polygon) => {
+  if (!polygon.is_blocked) return false;
+  if (!polygon.blocked_from || !polygon.blocked_until) return true;
+
+  const now = new Date();
+  const from = new Date(polygon.blocked_from);
+  const until = new Date(polygon.blocked_until);
+
+  return now >= from && now <= until;
+};
+
+const formatDateTime = (dateTimeStr) => {
+  if (!dateTimeStr) return "";
+  const date = new Date(dateTimeStr);
+  return date.toLocaleString("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+
+const showBlockModal = (polygon) => {
+  blockingPolygon.value = polygon;
+  blockForm.value = {
+    blockType: "permanent",
+    blocked_from: "",
+    blocked_until: "",
+    block_reason: "",
+  };
+  showBlockModalWindow.value = true;
+};
+
+const closeBlockModal = () => {
+  showBlockModalWindow.value = false;
+  blockingPolygon.value = null;
+  blockForm.value = {
+    blockType: "permanent",
+    blocked_from: "",
+    blocked_until: "",
+    block_reason: "",
+  };
+};
+
+const submitBlock = async () => {
+  if (!blockingPolygon.value) return;
+
+  try {
+    const payload = {
+      block_reason: blockForm.value.block_reason || null,
+    };
+
+    if (blockForm.value.blockType === "temporary") {
+      if (!blockForm.value.blocked_from || !blockForm.value.blocked_until) {
+        showErrorNotification("Укажите период блокировки");
+        return;
+      }
+      payload.blocked_from = blockForm.value.blocked_from;
+      payload.blocked_until = blockForm.value.blocked_until;
+    }
+
+    // Проверяем, массовая ли это операция
+    if (blockingPolygon.value.id === "bulk") {
+      await api.post("/api/polygons/admin/bulk-block", {
+        polygon_ids: blockingPolygon.value.ids,
+        ...payload,
+      });
+      selectedPolygons.value = [];
+    } else {
+      await api.post(`/api/polygons/admin/${blockingPolygon.value.id}/block`, payload);
+    }
+
+    await loadPolygons();
+    await loadAllPolygons();
+    closeBlockModal();
+  } catch (error) {
+    console.error("Ошибка блокировки полигона:", error);
+    showErrorNotification("Не удалось заблокировать полигон");
+  }
+};
+
+const unblockPolygon = async (polygon) => {
+  if (!confirm("Разблокировать полигон?")) return;
+
+  try {
+    await api.post(`/api/polygons/admin/${polygon.id}/unblock`);
+    await loadPolygons();
+    await loadAllPolygons();
+  } catch (error) {
+    console.error("Ошибка разблокировки полигона:", error);
+    showErrorNotification("Не удалось разблокировать полигон");
+  }
+};
+
+const onFilterChange = () => {
+  // Пересчет фильтрованных полигонов и перерисовка карты
+  nextTick(() => {
+    if (map && drawnItems) {
+      renderPolygonsOnMap();
+    }
+  });
+};
+
+const togglePolygonSelection = (polygonId) => {
+  const index = selectedPolygons.value.indexOf(polygonId);
+  if (index === -1) {
+    selectedPolygons.value.push(polygonId);
+  } else {
+    selectedPolygons.value.splice(index, 1);
+  }
+};
+
+const bulkBlock = () => {
+  if (selectedPolygons.value.length === 0) return;
+
+  // Для массовой блокировки используем первый выбранный полигон и открываем модалку
+  const firstPolygon = filteredPolygons.value.find((p) => p.id === selectedPolygons.value[0]);
+  if (firstPolygon) {
+    blockingPolygon.value = { id: "bulk", ids: selectedPolygons.value };
+    blockForm.value = {
+      blockType: "permanent",
+      blocked_from: "",
+      blocked_until: "",
+      block_reason: "",
+    };
+    showBlockModalWindow.value = true;
+  }
+};
+
+const bulkUnblock = async () => {
+  if (selectedPolygons.value.length === 0) return;
+
+  if (!confirm(`Разблокировать ${selectedPolygons.value.length} ${getPluralForm(selectedPolygons.value.length)}?`)) return;
+
+  try {
+    await api.post("/api/polygons/admin/bulk-unblock", {
+      polygon_ids: selectedPolygons.value,
+    });
+    selectedPolygons.value = [];
+    await loadPolygons();
+    await loadAllPolygons();
+  } catch (error) {
+    console.error("Ошибка массовой разблокировки:", error);
+    showErrorNotification("Не удалось разблокировать полигоны");
+  }
+};
+
+const getPluralForm = (count) => {
+  const cases = [2, 0, 1, 1, 1, 2];
+  const titles = ["полигон", "полигона", "полигонов"];
+  return titles[count % 100 > 4 && count % 100 < 20 ? 2 : cases[Math.min(count % 10, 5)]];
+};
+
+// Функции для работы с боковой панелью
+const openPolygonSidebar = (polygon) => {
+  const branchName = branches.value.find((branch) => branch.id === polygon.branch_id)?.name || "";
+  const enrichedPolygon = {
+    ...polygon,
+    branch_name: polygon.branch_name || branchName,
+  };
+  if (editingPolygonId.value && editingPolygonId.value !== polygon.id) {
+    stopPolygonEditing();
+  }
+  selectedPolygon.value = enrichedPolygon;
+  showSidebar.value = true;
+};
+
+const closeSidebar = () => {
+  stopPolygonEditing();
+  showSidebar.value = false;
+  setTimeout(() => {
+    selectedPolygon.value = null;
+  }, 300);
+};
+
+const savePolygonFromSidebar = async (data) => {
+  try {
+    const payload = {
+      delivery_cost: data.delivery_cost,
+      delivery_time: data.delivery_time,
+      min_order_amount: data.min_order_amount,
+      is_active: data.is_active ? 1 : 0,
+    };
+
+    if (editingPolygonId.value === data.id && currentLayer) {
+      payload.polygon = currentLayer.toGeoJSON().geometry.coordinates[0];
+    }
+
+    await api.put(`/api/polygons/admin/${data.id}`, payload);
+    await loadPolygons();
+    await loadAllPolygons();
+    showSuccessNotification("Полигон сохранен");
+    stopPolygonEditing();
+    closeSidebar();
+  } catch (error) {
+    console.error("Ошибка сохранения полигона:", error);
+    showErrorNotification("Не удалось сохранить изменения");
+  }
+};
+
+const showBlockModalFromSidebar = (polygon) => {
+  closeSidebar();
+  showBlockModal(polygon);
+};
+
+const unblockPolygonFromSidebar = async (polygon) => {
+  closeSidebar();
+  await unblockPolygon(polygon);
+};
+
+const deletePolygonFromSidebar = async (polygon) => {
+  closeSidebar();
+  await deletePolygon(polygon);
+};
+
+const transferPolygon = async (data) => {
+  try {
+    await api.post(`/api/polygons/admin/${data.polygonId}/transfer`, {
+      new_branch_id: data.newBranchId,
+    });
+    await loadPolygons();
+    await loadAllPolygons();
+    closeSidebar();
+  } catch (error) {
+    console.error("Ошибка переноса полигона:", error);
+    showErrorNotification(error.response?.data?.error || "Не удалось перенести полигон");
+  }
+};
+
+const startRedrawPolygon = (polygon) => {
+  if (!branchId.value || !polygon?.id) return;
+  const layer = polygonLayers.get(polygon.id);
+  if (!layer) return;
+  stopPolygonEditing();
+  currentLayer = layer;
+  editingPolygonId.value = polygon.id;
+  if (drawControl && map && drawControlVisible) {
+    map.removeControl(drawControl);
+    drawControlVisible = false;
+  }
+  if (layer.bringToFront) {
+    layer.bringToFront();
+  }
+  if (layer.editing?.enable) {
+    layer.editing.enable();
+  }
+};
+
+const stopPolygonEditing = () => {
+  if (currentLayer?.editing?.disable) {
+    currentLayer.editing.disable();
+  }
+  if (drawControl && map && !drawControlVisible) {
+    map.addControl(drawControl);
+    drawControlVisible = true;
+  }
+  editingPolygonId.value = null;
+  currentLayer = null;
+};
+
 const closeModal = () => {
   showModal.value = false;
   editing.value = null;
@@ -442,6 +864,7 @@ const submitPolygon = async () => {
     }
 
     await loadPolygons();
+    showSuccessNotification(editing.value ? "Полигон обновлен" : "Полигон создан");
     closeModal();
   } catch (error) {
     console.error("Ошибка сохранения полигона:", error);

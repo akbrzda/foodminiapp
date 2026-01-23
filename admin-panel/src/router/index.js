@@ -59,12 +59,17 @@ const router = createRouter({
           component: Branches,
           meta: { title: "Филиалы", subtitle: "Рестораны и точки самовывоза", roles: ["admin", "ceo"] },
         },
-        { path: "delivery-zones", name: "delivery-zones", component: DeliveryZones, meta: { title: "Зоны доставки", subtitle: "Полигоны на карте" } },
+        {
+          path: "delivery-zones",
+          name: "delivery-zones",
+          component: DeliveryZones,
+          meta: { title: "Зоны доставки", subtitle: "Полигоны на карте", sidebarCollapsed: true, fullBleed: true },
+        },
         {
           path: "delivery-zones/:branchId/:polygonId",
           name: "delivery-zone-editor",
           component: DeliveryZoneEditor,
-          meta: { title: "Полигон доставки", subtitle: "Редактирование зоны" },
+          meta: { title: "Полигон доставки", subtitle: "Редактирование зоны", sidebarCollapsed: true, fullBleed: true },
         },
         {
           path: "menu/categories",

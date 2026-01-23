@@ -34,8 +34,11 @@ router.get("/city/:cityId", async (req, res, next) => {
               b.name as branch_name
        FROM delivery_polygons dp
        JOIN branches b ON dp.branch_id = b.id
-       WHERE b.city_id = ? AND dp.is_active = TRUE AND b.is_active = TRUE`,
-      [cityId]
+       WHERE b.city_id = ? AND dp.is_active = TRUE AND b.is_active = TRUE
+         AND (dp.is_blocked = FALSE OR 
+              (dp.blocked_from IS NOT NULL AND dp.blocked_until IS NOT NULL 
+               AND NOW() NOT BETWEEN dp.blocked_from AND dp.blocked_until))`,
+      [cityId],
     );
 
     // Парсим GeoJSON для каждого полигона
@@ -61,8 +64,11 @@ router.get("/branch/:branchId", async (req, res, next) => {
               delivery_time,
               min_order_amount, delivery_cost
        FROM delivery_polygons
-       WHERE branch_id = ? AND is_active = TRUE`,
-      [branchId]
+       WHERE branch_id = ? AND is_active = TRUE
+         AND (is_blocked = FALSE OR 
+              (blocked_from IS NOT NULL AND blocked_until IS NOT NULL 
+               AND NOW() NOT BETWEEN blocked_from AND blocked_until))`,
+      [branchId],
     );
 
     // Парсим GeoJSON для каждого полигона
@@ -265,7 +271,13 @@ router.post("/reverse", async (req, res, next) => {
     const result = response.data;
     const address = result.address || {};
     const street =
-      address.road || address.pedestrian || address.footway || address.residential || address.living_street || address.street || address.neighbourhood;
+      address.road ||
+      address.pedestrian ||
+      address.footway ||
+      address.residential ||
+      address.living_street ||
+      address.street ||
+      address.neighbourhood;
     const house = address.house_number || address.building;
     const label = street ? (house ? `${street}, ${house}` : street) : result.display_name || "";
 
@@ -319,10 +331,13 @@ router.post("/check-delivery", async (req, res, next) => {
        WHERE b.city_id = ? 
          AND dp.is_active = TRUE 
          AND b.is_active = TRUE
+         AND (dp.is_blocked = FALSE OR 
+              (dp.blocked_from IS NOT NULL AND dp.blocked_until IS NOT NULL 
+               AND NOW() NOT BETWEEN dp.blocked_from AND dp.blocked_until))
          AND ST_Contains(dp.polygon, ST_GeomFromText(?, 4326))
        ORDER BY dp.delivery_cost, dp.delivery_time
        LIMIT 1`,
-      [city_id, point]
+      [city_id, point],
     );
 
     if (polygons.length === 0) {
@@ -363,12 +378,13 @@ router.get("/admin/all", authenticateToken, requireRole("admin", "manager", "ceo
               ST_AsGeoJSON(dp.polygon) as polygon,
               dp.delivery_time,
               dp.min_order_amount, dp.delivery_cost, dp.is_active,
+              dp.is_blocked, dp.blocked_from, dp.blocked_until, dp.block_reason,
               b.city_id, b.name as branch_name
        FROM delivery_polygons dp
        JOIN branches b ON dp.branch_id = b.id
        ${cityFilter}
        ORDER BY b.city_id, dp.name`,
-      values
+      values,
     );
 
     const parsedPolygons = polygons.map((p) => ({
@@ -402,15 +418,16 @@ router.get("/admin/branch/:branchId", authenticateToken, requireRole("admin", "m
     }
 
     const [polygons] = await db.query(
-      `SELECT id, branch_id, name, 
+      `SELECT id, branch_id, name,
                 ST_AsGeoJSON(polygon) as polygon,
                 delivery_time,
                 min_order_amount, delivery_cost, is_active,
+                is_blocked, blocked_from, blocked_until, block_reason,
                 created_at, updated_at
          FROM delivery_polygons
          WHERE branch_id = ?
          ORDER BY name`,
-      [branchId]
+      [branchId],
     );
 
     // Парсим GeoJSON для каждого полигона
@@ -469,7 +486,7 @@ router.post("/admin", authenticateToken, requireRole("admin", "manager", "ceo"),
          (branch_id, name, polygon, delivery_time, 
           min_order_amount, delivery_cost)
          VALUES (?, ?, ST_GeomFromText(?, 4326), ?, ?, ?)`,
-      [branch_id, name || null, wkt, delivery_time || 30, min_order_amount || 0, delivery_cost || 0]
+      [branch_id, name || null, wkt, delivery_time || 30, min_order_amount || 0, delivery_cost || 0],
     );
 
     const [newPolygon] = await db.query(
@@ -479,7 +496,7 @@ router.post("/admin", authenticateToken, requireRole("admin", "manager", "ceo"),
                 min_order_amount, delivery_cost, is_active,
                 created_at, updated_at
          FROM delivery_polygons WHERE id = ?`,
-      [result.insertId]
+      [result.insertId],
     );
 
     res.status(201).json({
@@ -505,7 +522,7 @@ router.put("/admin/:id", authenticateToken, requireRole("admin", "manager", "ceo
          FROM delivery_polygons dp
          JOIN branches b ON dp.branch_id = b.id
          WHERE dp.id = ?`,
-      [polygonId]
+      [polygonId],
     );
 
     if (polygons.length === 0) {
@@ -568,10 +585,340 @@ router.put("/admin/:id", authenticateToken, requireRole("admin", "manager", "ceo
                 min_order_amount, delivery_cost, is_active,
                 created_at, updated_at
          FROM delivery_polygons WHERE id = ?`,
-      [polygonId]
+      [polygonId],
     );
 
     res.json({
+      polygon: {
+        ...updatedPolygon[0],
+        polygon: parseGeoJson(updatedPolygon[0].polygon),
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Заблокировать полигон
+router.post("/admin/:id/block", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
+  try {
+    const polygonId = req.params.id;
+    const { blocked_from, blocked_until, block_reason } = req.body;
+
+    // Проверяем существование полигона и доступ
+    const [polygons] = await db.query(
+      `SELECT dp.id, b.city_id
+         FROM delivery_polygons dp
+         JOIN branches b ON dp.branch_id = b.id
+         WHERE dp.id = ?`,
+      [polygonId],
+    );
+
+    if (polygons.length === 0) {
+      return res.status(404).json({ error: "Polygon not found" });
+    }
+
+    // Проверка доступа к городу для менеджеров
+    if (req.user.role === "manager" && !req.user.cities.includes(polygons[0].city_id)) {
+      return res.status(403).json({
+        error: "You do not have access to this city",
+      });
+    }
+
+    // Проверяем валидность временного периода
+    if (blocked_from && blocked_until) {
+      const from = new Date(blocked_from);
+      const until = new Date(blocked_until);
+      if (from >= until) {
+        return res.status(400).json({ error: "blocked_from must be before blocked_until" });
+      }
+    }
+
+    // Блокируем полигон
+    await db.query(
+      `UPDATE delivery_polygons 
+       SET is_blocked = TRUE, 
+           blocked_from = ?, 
+           blocked_until = ?, 
+           block_reason = ?,
+           blocked_by = ?,
+           blocked_at = NOW()
+       WHERE id = ?`,
+      [blocked_from || null, blocked_until || null, block_reason || null, req.user.id, polygonId],
+    );
+
+    const [updatedPolygon] = await db.query(
+      `SELECT id, branch_id, name, 
+              ST_AsGeoJSON(polygon) as polygon,
+              delivery_time,
+              min_order_amount, delivery_cost, is_active,
+              is_blocked, blocked_from, blocked_until, block_reason,
+              created_at, updated_at
+       FROM delivery_polygons WHERE id = ?`,
+      [polygonId],
+    );
+
+    res.json({
+      message: "Polygon blocked successfully",
+      polygon: {
+        ...updatedPolygon[0],
+        polygon: parseGeoJson(updatedPolygon[0].polygon),
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Разблокировать полигон
+router.post("/admin/:id/unblock", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
+  try {
+    const polygonId = req.params.id;
+
+    // Проверяем существование полигона и доступ
+    const [polygons] = await db.query(
+      `SELECT dp.id, b.city_id
+         FROM delivery_polygons dp
+         JOIN branches b ON dp.branch_id = b.id
+         WHERE dp.id = ?`,
+      [polygonId],
+    );
+
+    if (polygons.length === 0) {
+      return res.status(404).json({ error: "Polygon not found" });
+    }
+
+    // Проверка доступа к городу для менеджеров
+    if (req.user.role === "manager" && !req.user.cities.includes(polygons[0].city_id)) {
+      return res.status(403).json({
+        error: "You do not have access to this city",
+      });
+    }
+
+    // Разблокируем полигон
+    await db.query(
+      `UPDATE delivery_polygons 
+       SET is_blocked = FALSE, 
+           blocked_from = NULL, 
+           blocked_until = NULL, 
+           block_reason = NULL,
+           blocked_by = NULL,
+           blocked_at = NULL
+       WHERE id = ?`,
+      [polygonId],
+    );
+
+    const [updatedPolygon] = await db.query(
+      `SELECT id, branch_id, name, 
+              ST_AsGeoJSON(polygon) as polygon,
+              delivery_time,
+              min_order_amount, delivery_cost, is_active,
+              is_blocked, blocked_from, blocked_until, block_reason,
+              created_at, updated_at
+       FROM delivery_polygons WHERE id = ?`,
+      [polygonId],
+    );
+
+    res.json({
+      message: "Polygon unblocked successfully",
+      polygon: {
+        ...updatedPolygon[0],
+        polygon: parseGeoJson(updatedPolygon[0].polygon),
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Пакетная блокировка полигонов
+router.post("/admin/bulk-block", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
+  try {
+    const { polygon_ids, blocked_from, blocked_until, block_reason } = req.body;
+
+    if (!Array.isArray(polygon_ids) || polygon_ids.length === 0) {
+      return res.status(400).json({ error: "polygon_ids must be a non-empty array" });
+    }
+
+    // Проверяем временной период
+    if (blocked_from && blocked_until) {
+      const from = new Date(blocked_from);
+      const until = new Date(blocked_until);
+      if (from >= until) {
+        return res.status(400).json({ error: "blocked_from must be before blocked_until" });
+      }
+    }
+
+    // Проверяем доступ к полигонам
+    const placeholders = polygon_ids.map(() => "?").join(",");
+    const [polygons] = await db.query(
+      `SELECT dp.id, b.city_id
+         FROM delivery_polygons dp
+         JOIN branches b ON dp.branch_id = b.id
+         WHERE dp.id IN (${placeholders})`,
+      polygon_ids,
+    );
+
+    if (polygons.length === 0) {
+      return res.status(404).json({ error: "No polygons found" });
+    }
+
+    // Проверка доступа к городу для менеджеров
+    if (req.user.role === "manager") {
+      const hasAccess = polygons.every((p) => req.user.cities.includes(p.city_id));
+      if (!hasAccess) {
+        return res.status(403).json({
+          error: "You do not have access to one or more cities",
+        });
+      }
+    }
+
+    // Блокируем полигоны
+    await db.query(
+      `UPDATE delivery_polygons 
+       SET is_blocked = TRUE, 
+           blocked_from = ?, 
+           blocked_until = ?, 
+           block_reason = ?,
+           blocked_by = ?,
+           blocked_at = NOW()
+       WHERE id IN (${placeholders})`,
+      [blocked_from || null, blocked_until || null, block_reason || null, req.user.id, ...polygon_ids],
+    );
+
+    res.json({
+      message: `${polygon_ids.length} polygon(s) blocked successfully`,
+      count: polygon_ids.length,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Пакетная разблокировка полигонов
+router.post("/admin/bulk-unblock", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
+  try {
+    const { polygon_ids } = req.body;
+
+    if (!Array.isArray(polygon_ids) || polygon_ids.length === 0) {
+      return res.status(400).json({ error: "polygon_ids must be a non-empty array" });
+    }
+
+    // Проверяем доступ к полигонам
+    const placeholders = polygon_ids.map(() => "?").join(",");
+    const [polygons] = await db.query(
+      `SELECT dp.id, b.city_id
+         FROM delivery_polygons dp
+         JOIN branches b ON dp.branch_id = b.id
+         WHERE dp.id IN (${placeholders})`,
+      polygon_ids,
+    );
+
+    if (polygons.length === 0) {
+      return res.status(404).json({ error: "No polygons found" });
+    }
+
+    // Проверка доступа к городу для менеджеров
+    if (req.user.role === "manager") {
+      const hasAccess = polygons.every((p) => req.user.cities.includes(p.city_id));
+      if (!hasAccess) {
+        return res.status(403).json({
+          error: "You do not have access to one or more cities",
+        });
+      }
+    }
+
+    // Разблокируем полигоны
+    await db.query(
+      `UPDATE delivery_polygons 
+       SET is_blocked = FALSE, 
+           blocked_from = NULL, 
+           blocked_until = NULL, 
+           block_reason = NULL,
+           blocked_by = NULL,
+           blocked_at = NULL
+       WHERE id IN (${placeholders})`,
+      polygon_ids,
+    );
+
+    res.json({
+      message: `${polygon_ids.length} polygon(s) unblocked successfully`,
+      count: polygon_ids.length,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Переместить полигон на другой филиал
+router.post("/admin/:id/transfer", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
+  try {
+    const polygonId = req.params.id;
+    const { new_branch_id } = req.body;
+
+    if (!new_branch_id) {
+      return res.status(400).json({ error: "new_branch_id is required" });
+    }
+
+    // Проверяем существование полигона и получаем текущий город
+    const [polygons] = await db.query(
+      `SELECT dp.id, dp.branch_id, b.city_id
+         FROM delivery_polygons dp
+         JOIN branches b ON dp.branch_id = b.id
+         WHERE dp.id = ?`,
+      [polygonId],
+    );
+
+    if (polygons.length === 0) {
+      return res.status(404).json({ error: "Polygon not found" });
+    }
+
+    const currentCityId = polygons[0].city_id;
+
+    // Проверка доступа к городу для менеджеров
+    if (req.user.role === "manager" && !req.user.cities.includes(currentCityId)) {
+      return res.status(403).json({
+        error: "You do not have access to this city",
+      });
+    }
+
+    // Проверяем существование нового филиала и что он в том же городе
+    const [newBranches] = await db.query(`SELECT id, city_id, name FROM branches WHERE id = ?`, [new_branch_id]);
+
+    if (newBranches.length === 0) {
+      return res.status(404).json({ error: "New branch not found" });
+    }
+
+    if (newBranches[0].city_id !== currentCityId) {
+      return res.status(400).json({ error: "Cannot transfer polygon to a branch in a different city" });
+    }
+
+    // Проверяем, что у нового филиала не более 3 полигонов
+    const [branchPolygons] = await db.query(`SELECT COUNT(*) as count FROM delivery_polygons WHERE branch_id = ?`, [new_branch_id]);
+
+    if (branchPolygons[0].count >= 3) {
+      return res.status(400).json({ error: "Target branch already has maximum number of polygons (3)" });
+    }
+
+    // Переносим полигон
+    await db.query(`UPDATE delivery_polygons SET branch_id = ? WHERE id = ?`, [new_branch_id, polygonId]);
+
+    const [updatedPolygon] = await db.query(
+      `SELECT dp.id, dp.branch_id, dp.name, 
+              ST_AsGeoJSON(dp.polygon) as polygon,
+              dp.delivery_time,
+              dp.min_order_amount, dp.delivery_cost, dp.is_active,
+              dp.is_blocked, dp.blocked_from, dp.blocked_until, dp.block_reason,
+              b.name as branch_name,
+              created_at, updated_at
+       FROM delivery_polygons dp
+       JOIN branches b ON dp.branch_id = b.id
+       WHERE dp.id = ?`,
+      [polygonId],
+    );
+
+    res.json({
+      message: "Polygon transferred successfully",
       polygon: {
         ...updatedPolygon[0],
         polygon: parseGeoJson(updatedPolygon[0].polygon),
@@ -593,7 +940,7 @@ router.delete("/admin/:id", authenticateToken, requireRole("admin", "manager", "
          FROM delivery_polygons dp
          JOIN branches b ON dp.branch_id = b.id
          WHERE dp.id = ?`,
-      [polygonId]
+      [polygonId],
     );
 
     if (polygons.length === 0) {

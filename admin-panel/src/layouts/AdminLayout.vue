@@ -11,7 +11,7 @@
       <div class="flex min-h-screen flex-1 flex-col">
         <TopBar :title="pageTitle" :subtitle="pageSubtitle" @toggle-menu="mobileMenuOpen = true" />
 
-        <main class="flex-1 px-4 pb-12 pt-6 sm:px-6 lg:px-10">
+        <main :class="mainClasses">
           <RouterView />
         </main>
       </div>
@@ -34,7 +34,7 @@
 </template>
 
 <script setup>
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import SidebarNav from "../components/SidebarNav.vue";
 import TopBar from "../components/TopBar.vue";
@@ -45,6 +45,19 @@ const sidebarCollapsed = ref(false);
 
 const pageTitle = computed(() => route.meta.title || "Админ-панель");
 const pageSubtitle = computed(() => route.meta.subtitle || "Операционная панель");
+const mainClasses = computed(() =>
+  route.meta.fullBleed ? "flex-1" : "flex-1 px-4 pb-12 pt-6 sm:px-6 lg:px-10",
+);
+
+const syncSidebarState = () => {
+  if (Object.prototype.hasOwnProperty.call(route.meta, "sidebarCollapsed")) {
+    sidebarCollapsed.value = Boolean(route.meta.sidebarCollapsed);
+  } else {
+    sidebarCollapsed.value = false;
+  }
+};
+
+watch(() => route.fullPath, syncSidebarState, { immediate: true });
 </script>
 
 <style scoped>
