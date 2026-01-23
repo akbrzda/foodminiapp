@@ -132,15 +132,9 @@
             <option value="temporary">Временная</option>
           </Select>
         </div>
-        <div v-if="blockForm.blockType === 'temporary'" class="grid gap-4 md:grid-cols-2">
-          <div class="space-y-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">С</label>
-            <Input v-model="blockForm.blocked_from" type="datetime-local" required />
-          </div>
-          <div class="space-y-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">До</label>
-            <Input v-model="blockForm.blocked_until" type="datetime-local" required />
-          </div>
+        <div v-if="blockForm.blockType === 'temporary'" class="space-y-2">
+          <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Период</label>
+          <RangeCalendar v-model:from="blockForm.blocked_from" v-model:to="blockForm.blocked_until" :allow-future="true" />
         </div>
         <div class="space-y-2">
           <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Причина блокировки</label>
@@ -192,6 +186,7 @@ import { useReferenceStore } from "../stores/reference.js";
 import { useRoute, useRouter } from "vue-router";
 import Button from "../components/ui/Button.vue";
 import Input from "../components/ui/Input.vue";
+import RangeCalendar from "../components/ui/RangeCalendar.vue";
 import Select from "../components/ui/Select.vue";
 import { useNotifications } from "../composables/useNotifications.js";
 import L from "leaflet";
@@ -525,6 +520,16 @@ const formatDateTime = (dateTimeStr) => {
     minute: "2-digit",
   });
 };
+const toStartOfDay = (value) => {
+  if (!value) return "";
+  if (value.includes("T")) return value;
+  return `${value}T00:00`;
+};
+const toEndOfDay = (value) => {
+  if (!value) return "";
+  if (value.includes("T")) return value;
+  return `${value}T23:59`;
+};
 const showBlockModal = (polygon) => {
   blockingPolygon.value = polygon;
   blockForm.value = {
@@ -556,8 +561,8 @@ const submitBlock = async () => {
         showErrorNotification("Укажите период блокировки");
         return;
       }
-      payload.blocked_from = blockForm.value.blocked_from;
-      payload.blocked_until = blockForm.value.blocked_until;
+      payload.blocked_from = toStartOfDay(blockForm.value.blocked_from);
+      payload.blocked_until = toEndOfDay(blockForm.value.blocked_until);
     }
     if (blockingPolygon.value.id === "bulk") {
       await api.post("/api/polygons/admin/bulk-block", {

@@ -71,6 +71,7 @@ import { cn } from "../../lib/utils.js";
 const props = defineProps({
   from: { type: String, default: "" },
   to: { type: String, default: "" },
+  allowFuture: { type: Boolean, default: false },
   class: { type: String, default: "" },
 });
 const emit = defineEmits(["update:from", "update:to"]);
@@ -162,7 +163,7 @@ const monthDays = (monthDate) => {
     const isEnd = isSameDay(cursor, toDate.value);
     const inRange = fromDate.value && toDate.value && (isAfter(cursor, fromDate.value) || isStart) && (isBefore(cursor, toDate.value) || isEnd);
     const isToday = isSameDay(cursor, now);
-    const isFuture = isAfter(cursor, now);
+    const isFuture = !props.allowFuture && isAfter(cursor, now);
     const classes = cn(
       "h-9 w-9 rounded-md text-sm transition-colors",
       inMonth ? "text-foreground" : "text-muted-foreground/50",
@@ -182,7 +183,7 @@ const monthDays = (monthDate) => {
   return days;
 };
 const selectDate = (date) => {
-  if (isAfter(date, today())) return;
+  if (!props.allowFuture && isAfter(date, today())) return;
   if (!fromDate.value || (fromDate.value && toDate.value)) {
     emit("update:from", formatISO(date));
     emit("update:to", "");
@@ -202,7 +203,7 @@ const clearRange = () => {
 };
 const shiftMonth = (amount) => {
   const next = addMonths(currentMonth.value, amount);
-  if (amount > 0 && isAfter(next, startOfMonth(today()))) {
+  if (!props.allowFuture && amount > 0 && isAfter(next, startOfMonth(today()))) {
     currentMonth.value = startOfMonth(today());
     return;
   }
