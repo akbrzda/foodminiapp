@@ -1,5 +1,6 @@
 import db from "../config/database.js";
 import { earnBonuses } from "../utils/bonuses.js";
+import { getSystemSettings } from "../utils/settings.js";
 import { logger } from "../utils/logger.js";
 
 const AUTO_STATUS_INTERVAL_MS = 60 * 1000;
@@ -90,7 +91,8 @@ async function updateOrderStatus(order, localDate) {
   ]);
   if (newStatus === "completed") {
     const orderTotal = parseFloat(order.total) || 0;
-    if (orderTotal > 0) {
+    const settings = await getSystemSettings();
+    if (settings.bonuses_enabled && orderTotal > 0) {
       try {
         await earnBonuses(order.user_id, order.id, orderTotal, "Bonus earned from completed order");
       } catch (bonusError) {

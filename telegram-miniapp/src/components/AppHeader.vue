@@ -7,7 +7,7 @@
       <MapPin :size="16" />
       <span class="city-name">{{ currentCityName }}</span>
     </button>
-    <button v-if="authStore.isAuthenticated" class="bonus-button" @click="openBonusHistory">
+    <button v-if="authStore.isAuthenticated && bonusesEnabled" class="bonus-button" @click="openBonusHistory">
       <Gift :size="16" />
       <span class="bonus-value">{{ bonusBalance }}</span>
     </button>
@@ -32,7 +32,7 @@
                 <Package :size="20" />
                 <span>Мои заказы</span>
               </button>
-              <button class="sidebar-item" @click="navigateTo('/bonus-history')">
+              <button v-if="bonusesEnabled" class="sidebar-item" @click="navigateTo('/bonus-history')">
                 <Gift :size="20" />
                 <span>Бонусы</span>
               </button>
@@ -73,11 +73,13 @@ import { useRouter } from "vue-router";
 import { Menu, MapPin, X, Home, Package, Gift, User } from "lucide-vue-next";
 import { useLocationStore } from "../stores/location";
 import { useAuthStore } from "../stores/auth";
+import { useSettingsStore } from "../stores/settings";
 import { citiesAPI, bonusesAPI } from "../api/endpoints";
 import { hapticFeedback } from "../services/telegram";
 const router = useRouter();
 const locationStore = useLocationStore();
 const authStore = useAuthStore();
+const settingsStore = useSettingsStore();
 const emit = defineEmits(["toggleMenu"]);
 const showSidebar = ref(false);
 const showCityPopup = ref(false);
@@ -85,6 +87,7 @@ const cityQuery = ref("");
 const cities = ref([]);
 const bonusBalance = ref(0);
 const currentCityName = computed(() => locationStore.selectedCity?.name || "Город");
+const bonusesEnabled = computed(() => settingsStore.bonusesEnabled);
 const filteredCities = computed(() => {
   if (!cityQuery.value) return cities.value;
   const query = cityQuery.value.toLowerCase();
@@ -107,7 +110,10 @@ function openBonusHistory() {
   router.push("/bonus-history");
 }
 async function loadBonusBalance() {
-  if (!authStore.isAuthenticated) return;
+  if (!authStore.isAuthenticated || !settingsStore.bonusesEnabled) {
+    bonusBalance.value = 0;
+    return;
+  }
   try {
     const response = await bonusesAPI.getBalance();
     bonusBalance.value = response.data.balance || 0;

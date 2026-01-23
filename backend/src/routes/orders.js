@@ -5,7 +5,23 @@ import { authenticateToken, requireRole, checkCityAccess } from "../middleware/a
 import { calculateEarnedBonuses, validateBonusUsage, earnBonuses, useBonuses } from "../utils/bonuses.js";
 import { logger, adminActionLogger } from "../utils/logger.js";
 import { addTelegramNotification } from "../queues/config.js";
+import { getSystemSettings } from "../utils/settings.js";
 const router = express.Router();
+const ensureOrderAccess = (settings, orderType, res) => {
+  if (!settings.orders_enabled) {
+    res.status(403).json({ error: "Прием заказов временно отключен" });
+    return false;
+  }
+  if (orderType === "delivery" && !settings.delivery_enabled) {
+    res.status(400).json({ error: "Доставка временно отключена" });
+    return false;
+  }
+  if (orderType === "pickup" && !settings.pickup_enabled) {
+    res.status(400).json({ error: "Самовывоз временно отключен" });
+    return false;
+  }
+  return true;
+};
 async function generateOrderNumber() {
   let attempts = 0;
   const maxAttempts = 10;
@@ -160,13 +176,20 @@ router.post("/calculate", authenticateToken, async (req, res, next) => {
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: "Items are required" });
     }
-    const fulfillmentType = order_type === "pickup" ? "pickup" : "delivery";
+    if (order_type && !["delivery", "pickup"].includes(order_type)) {
+      return res.status(400).json({ error: "order_type must be 'delivery' or 'pickup'" });
+    }
+    const settings = await getSystemSettings();
+    const orderType = order_type === "pickup" ? "pickup" : "delivery";
+    if (!ensureOrderAccess(settings, orderType, res)) return;
+    const effectiveBonusToUse = settings.bonuses_enabled ? bonus_to_use : 0;
+    const fulfillmentType = orderType;
     const { subtotal, bonusUsed, total, validatedItems } = await calculateOrderCost(items, {
       cityId: city_id,
       fulfillmentType,
-      bonusToUse: bonus_to_use,
+      bonusToUse: effectiveBonusToUse,
     });
-    if (order_type === "delivery" && delivery_polygon_id) {
+    if (orderType === "delivery" && delivery_polygon_id) {
       const [polygons] = await db.query("SELECT min_order_amount FROM delivery_polygons WHERE id = ?", [delivery_polygon_id]);
       const minOrderAmount = parseFloat(polygons[0]?.min_order_amount) || 0;
       if (minOrderAmount > 0 && subtotal < minOrderAmount) {
@@ -175,14 +198,19 @@ router.post("/calculate", authenticateToken, async (req, res, next) => {
         });
       }
     }
-    const bonusValidation = await validateBonusUsage(req.user.id, bonus_to_use, subtotal);
-    if (!bonusValidation.valid) {
-      return res.status(400).json({ error: bonusValidation.error });
+    if (settings.bonuses_enabled && effectiveBonusToUse > 0) {
+      const bonusValidation = await validateBonusUsage(req.user.id, effectiveBonusToUse, subtotal);
+      if (!bonusValidation.valid) {
+        return res.status(400).json({ error: bonusValidation.error });
+      }
     }
     const finalTotal = total + parseFloat(delivery_cost);
-    const [userData] = await db.query("SELECT loyalty_level FROM users WHERE id = ?", [req.user.id]);
-    const loyaltyLevel = userData[0]?.loyalty_level || 1;
-    const earnedBonuses = calculateEarnedBonuses(finalTotal, loyaltyLevel);
+    let earnedBonuses = 0;
+    if (settings.bonuses_enabled) {
+      const [userData] = await db.query("SELECT loyalty_level FROM users WHERE id = ?", [req.user.id]);
+      const loyaltyLevel = userData[0]?.loyalty_level || 1;
+      earnedBonuses = calculateEarnedBonuses(finalTotal, loyaltyLevel);
+    }
     res.json({
       subtotal,
       delivery_cost: parseFloat(delivery_cost),
@@ -229,6 +257,11 @@ router.post("/", authenticateToken, async (req, res, next) => {
       return res.status(400).json({
         error: "order_type must be 'delivery' or 'pickup'",
       });
+    }
+    const settings = await getSystemSettings();
+    if (!ensureOrderAccess(settings, order_type, res)) {
+      await connection.rollback();
+      return;
     }
     if (!["cash", "card"].includes(payment_method)) {
       await connection.rollback();
@@ -282,10 +315,11 @@ router.post("/", authenticateToken, async (req, res, next) => {
       }
     }
     const fulfillmentType = order_type === "pickup" ? "pickup" : "delivery";
+    const effectiveBonusToUse = settings.bonuses_enabled ? bonus_to_use : 0;
     const { subtotal, bonusUsed, total, validatedItems } = await calculateOrderCost(items, {
       cityId: city_id,
       fulfillmentType,
-      bonusToUse: bonus_to_use,
+      bonusToUse: effectiveBonusToUse,
     });
     if (order_type === "delivery" && deliveryPolygon) {
       const minOrderAmount = parseFloat(deliveryPolygon.min_order_amount) || 0;
@@ -296,17 +330,20 @@ router.post("/", authenticateToken, async (req, res, next) => {
         });
       }
     }
-    if (bonus_to_use > 0) {
-      const bonusValidation = await validateBonusUsage(req.user.id, bonus_to_use, subtotal);
+    if (settings.bonuses_enabled && effectiveBonusToUse > 0) {
+      const bonusValidation = await validateBonusUsage(req.user.id, effectiveBonusToUse, subtotal);
       if (!bonusValidation.valid) {
         await connection.rollback();
         return res.status(400).json({ error: bonusValidation.error });
       }
     }
     const finalTotal = total + deliveryCost;
-    const [userData] = await db.query("SELECT loyalty_level FROM users WHERE id = ?", [req.user.id]);
-    const loyaltyLevel = userData[0]?.loyalty_level || 1;
-    const earnedBonuses = calculateEarnedBonuses(finalTotal, loyaltyLevel);
+    let earnedBonuses = 0;
+    if (settings.bonuses_enabled) {
+      const [userData] = await db.query("SELECT loyalty_level FROM users WHERE id = ?", [req.user.id]);
+      const loyaltyLevel = userData[0]?.loyalty_level || 1;
+      earnedBonuses = calculateEarnedBonuses(finalTotal, loyaltyLevel);
+    }
     const orderNumber = await generateOrderNumber();
     const timezoneOffset = Number.isFinite(Number(timezone_offset)) ? Number(timezone_offset) : 0;
     const normalizedTimezoneOffset = Math.max(-840, Math.min(840, Math.trunc(timezoneOffset)));
@@ -370,7 +407,7 @@ router.post("/", authenticateToken, async (req, res, next) => {
         }
       }
     }
-    if (bonusUsed > 0) {
+    if (settings.bonuses_enabled && bonusUsed > 0) {
       await useBonuses(req.user.id, orderId, bonusUsed, "Used for order", connection);
     }
     await connection.commit();
@@ -680,7 +717,8 @@ router.put(
         }
       }
       await db.query("UPDATE orders SET status = ?, completed_at = ? WHERE id = ?", [status, status === "completed" ? new Date() : null, orderId]);
-      if (status === "completed" && oldStatus !== "completed" && orderTotal > 0) {
+      const settings = await getSystemSettings();
+      if (settings.bonuses_enabled && status === "completed" && oldStatus !== "completed" && orderTotal > 0) {
         try {
           await earnBonuses(userId, orderId, orderTotal, "Bonus earned from completed order");
         } catch (bonusError) {

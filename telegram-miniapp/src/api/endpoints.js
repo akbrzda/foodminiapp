@@ -92,3 +92,8 @@ export const geocodeAPI = {
     return api.post("/geocode", { address });
   },
 };
+export const settingsAPI = {
+  getSettings() {
+    return api.get("/settings");
+  },
+};

@@ -3,6 +3,7 @@ node_modules/
 .DS_Store
 .env
 AGENTS.md
+TASKS.md
 logs/
 design/
 uploads/

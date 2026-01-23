@@ -1,23 +1,27 @@
 <template>
   <div class="checkout">
     <div class="content">
-      <div class="order-type-tabs">
-        <button class="order-tab" :class="{ active: orderType === 'delivery' }" @click="selectOrderType('delivery')">
-          <Truck :size="18" />
-          Доставка
-        </button>
-        <button class="order-tab" :class="{ active: orderType === 'pickup' }" @click="selectOrderType('pickup')">
-          <Store :size="18" />
-          Самовывоз
-        </button>
-      </div>
-      <div v-if="orderType" class="time-panel">
-        <div v-if="estimatedFulfillmentTime" class="time-info">
-          <Clock size="24" /> <span class="delivery-time">{{ estimatedFulfillmentTime }}</span>
+      <div v-if="!ordersEnabled" class="order-disabled">Прием заказов временно отключен</div>
+      <div v-else-if="!deliveryEnabled && !pickupEnabled" class="order-disabled">Нет доступных способов заказа</div>
+      <template v-else>
+        <div class="order-type-tabs">
+          <button v-if="deliveryEnabled" class="order-tab" :class="{ active: orderType === 'delivery' }" @click="selectOrderType('delivery')">
+            <Truck :size="18" />
+            Доставка
+          </button>
+          <button v-if="pickupEnabled" class="order-tab" :class="{ active: orderType === 'pickup' }" @click="selectOrderType('pickup')">
+            <Store :size="18" />
+            Самовывоз
+          </button>
         </div>
-      </div>
+        <div v-if="orderType" class="time-panel">
+          <div v-if="estimatedFulfillmentTime" class="time-info">
+            <Clock size="24" /> <span class="delivery-time">{{ estimatedFulfillmentTime }}</span>
+          </div>
+        </div>
+      </template>
     </div>
-    <div class="content" v-if="orderType === 'delivery'">
+    <div class="content" v-if="ordersEnabled && orderType === 'delivery'">
       <div class="delivery-form">
         <h2 class="section-title">Адрес доставки</h2>
         <div class="form-group">
@@ -63,7 +67,7 @@
         </div>
       </div>
     </div>
-    <div class="content" v-if="orderType === 'pickup'">
+    <div class="content" v-if="ordersEnabled && orderType === 'pickup'">
       <div class="pickup-form">
         <h2 class="section-title">Выберите филиал</h2>
         <div v-if="loadingBranches" class="loading">Загрузка филиалов...</div>
@@ -84,7 +88,7 @@
         </div>
       </div>
     </div>
-    <div class="content" v-if="orderType && (orderType === 'pickup' ? selectedBranch : inDeliveryZone)">
+    <div class="content" v-if="ordersEnabled && orderType && (orderType === 'pickup' ? selectedBranch : inDeliveryZone)">
       <div class="order-options">
         <h2 class="section-title">Дополнительно</h2>
         <div class="form-group">
@@ -118,11 +122,11 @@
           <span>Доставка</span>
           <span>{{ formatPrice(deliveryCost) }} ₽</span>
         </div>
-        <div class="summary-row bonus-earn" v-if="bonusesToEarn > 0">
+        <div class="summary-row bonus-earn" v-if="bonusesEnabled && bonusesToEarn > 0">
           <span>Будет начислено</span>
           <span class="earn">{{ formatPrice(bonusesToEarn) }} бонусов</span>
         </div>
-        <div class="summary-row bonus-discount" v-if="appliedBonusToUse > 0">
+        <div class="summary-row bonus-discount" v-if="bonusesEnabled && appliedBonusToUse > 0">
           <span>Будет списано</span>
           <span class="discount">{{ formatPrice(appliedBonusToUse) }} бонусов</span>
         </div>
@@ -135,7 +139,7 @@
         </div>
       </div>
     </div>
-    <div class="footer" :class="{ 'hidden-on-keyboard': isKeyboardOpen }" v-if="orderType">
+    <div class="footer" :class="{ 'hidden-on-keyboard': isKeyboardOpen }" v-if="ordersEnabled && orderType">
       <button class="submit-btn" @click="submitOrder" :disabled="submitting || !canSubmitOrder">
         {{ submitting ? "Оформление..." : `Оформить заказ • ${formatPrice(finalTotalPrice)} ₽` }}
       </button>
@@ -150,6 +154,7 @@ import { useCartStore } from "../stores/cart";
 import { useLoyaltyStore } from "../stores/loyalty";
 import { useLocationStore } from "../stores/location";
 import { useMenuStore } from "../stores/menu";
+import { useSettingsStore } from "../stores/settings";
 import { useKeyboardHandler } from "../composables/useKeyboardHandler";
 import { citiesAPI, addressesAPI, ordersAPI, menuAPI } from "../api/endpoints";
 import { hapticFeedback } from "../services/telegram";
@@ -159,6 +164,7 @@ const cartStore = useCartStore();
 const locationStore = useLocationStore();
 const loyaltyStore = useLoyaltyStore();
 const menuStore = useMenuStore();
+const settingsStore = useSettingsStore();
 const { isKeyboardOpen } = useKeyboardHandler();
 const orderType = ref(locationStore.deliveryType || null);
 const deliveryAddress = ref(locationStore.deliveryAddress || "");
@@ -176,6 +182,10 @@ const deliveryTime = ref(0);
 const minOrderAmount = ref(0);
 const prepTime = ref(0);
 const assemblyTime = ref(0);
+const ordersEnabled = computed(() => settingsStore.ordersEnabled);
+const deliveryEnabled = computed(() => settingsStore.deliveryEnabled);
+const pickupEnabled = computed(() => settingsStore.pickupEnabled);
+const bonusesEnabled = computed(() => settingsStore.bonusesEnabled);
 const deliveryDetails = ref({
   entrance: locationStore.deliveryDetails?.entrance || "",
   doorCode: locationStore.deliveryDetails?.doorCode || "",
@@ -185,6 +195,7 @@ const deliveryDetails = ref({
 });
 const deliveryCoords = computed(() => locationStore.deliveryCoords);
 const canSubmitOrder = computed(() => {
+  if (!ordersEnabled.value) return false;
   if (!orderType.value) return false;
   if (orderType.value === "delivery") {
     return addressValidated.value && inDeliveryZone.value && deliveryAddress.value.trim() && isMinOrderReached.value;
@@ -198,6 +209,7 @@ const isMinOrderReached = computed(() => {
   return summarySubtotal.value >= minOrderAmount.value;
 });
 const appliedBonusToUse = computed(() => {
+  if (!bonusesEnabled.value) return 0;
   if (!cartStore.bonusUsage.useBonuses) return 0;
   return Math.min(cartStore.bonusUsage.bonusToUse, Math.floor(cartStore.totalPrice * loyaltyStore.maxRedeemPercent));
 });
@@ -208,6 +220,7 @@ const summarySubtotal = computed(() => {
   return cartStore.totalPrice;
 });
 const bonusesToEarn = computed(() => {
+  if (!bonusesEnabled.value) return 0;
   return Math.floor(finalTotalPrice.value * loyaltyStore.rate);
 });
 const estimatedFulfillmentTime = computed(() => {
@@ -233,11 +246,28 @@ const estimatedFulfillmentTime = computed(() => {
   return `Заказ приготовим до ${pickupRange}`;
 });
 const totalPrice = computed(() => finalTotalPrice.value);
-onMounted(async () => {
-  if (!orderType.value) {
-    orderType.value = locationStore.deliveryType || "delivery";
+const resolveOrderType = () => {
+  if (!ordersEnabled.value) {
+    orderType.value = null;
+    return;
   }
-  locationStore.setDeliveryType(orderType.value);
+  if (deliveryEnabled.value && pickupEnabled.value) {
+    if (!["delivery", "pickup"].includes(orderType.value)) {
+      orderType.value = locationStore.deliveryType || "delivery";
+    }
+  } else if (deliveryEnabled.value) {
+    orderType.value = "delivery";
+  } else if (pickupEnabled.value) {
+    orderType.value = "pickup";
+  } else {
+    orderType.value = null;
+  }
+  if (orderType.value) {
+    locationStore.setDeliveryType(orderType.value);
+  }
+};
+onMounted(async () => {
+  resolveOrderType();
   if (orderType.value === "pickup") {
     await loadBranches();
     applyBranchTimes(selectedBranch.value);
@@ -263,8 +293,23 @@ onMounted(async () => {
       console.error("Failed to refresh delivery zone:", error);
     }
   }
-  loyaltyStore.refreshFromOrders();
+  if (bonusesEnabled.value) {
+    loyaltyStore.refreshFromOrders();
+  }
 });
+watch(
+  () => [ordersEnabled.value, deliveryEnabled.value, pickupEnabled.value],
+  () => {
+    resolveOrderType();
+  },
+);
+watch(
+  () => bonusesEnabled.value,
+  (isEnabled) => {
+    if (isEnabled) return;
+    cartStore.resetBonusUsage();
+  },
+);
 watch(
   () => orderType.value,
   async (newType) => {
@@ -306,6 +351,7 @@ watch(
   { immediate: true },
 );
 async function refreshCartPricesForOrderType() {
+  if (!orderType.value) return;
   if (!locationStore.selectedCity) return;
   const fulfillmentType = orderType.value === "pickup" ? "pickup" : "delivery";
   const branchId = locationStore.selectedBranch?.id || null;
@@ -334,6 +380,9 @@ watch(
   },
 );
 function selectOrderType(type) {
+  if (!ordersEnabled.value) return;
+  if (type === "delivery" && !deliveryEnabled.value) return;
+  if (type === "pickup" && !pickupEnabled.value) return;
   hapticFeedback("light");
   orderType.value = type;
   locationStore.setDeliveryType(type);
@@ -387,6 +436,7 @@ function applyDeliveryZone(zone) {
 }
 async function submitOrder() {
   if (!canSubmitOrder.value || submitting.value) return;
+  if (!ordersEnabled.value) return;
   submitting.value = true;
   hapticFeedback("medium");
   try {
@@ -413,7 +463,7 @@ async function submitOrder() {
       })),
       payment_method: paymentMethod.value,
       comment: orderComment.value,
-      bonus_to_use: appliedBonusToUse.value,
+      bonus_to_use: bonusesEnabled.value ? appliedBonusToUse.value : 0,
     };
     if (orderType.value === "delivery") {
       const addressParts = deliveryAddress.value.split(",").map((s) => s.trim());
@@ -486,6 +536,14 @@ async function submitOrder() {
   background: var(--color-background);
   padding: 12px;
   padding-bottom: 108px;
+}
+.order-disabled {
+  padding: 16px;
+  border-radius: var(--border-radius-lg);
+  background: var(--color-background-secondary);
+  color: var(--color-text-secondary);
+  text-align: center;
+  font-weight: var(--font-weight-semibold);
 }
 .time-panel {
   margin-top: 12px;

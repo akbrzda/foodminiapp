@@ -17,6 +17,7 @@ import MenuModifiers from "../views/MenuModifiers.vue";
 import MenuTags from "../views/MenuTags.vue";
 import MenuStopList from "../views/MenuStopList.vue";
 import MenuSettings from "../views/MenuSettings.vue";
+import SystemSettings from "../views/SystemSettings.vue";
 import AdminUsers from "../views/AdminUsers.vue";
 import AdminLogs from "../views/AdminLogs.vue";
 import OrderDetail from "../views/OrderDetail.vue";
@@ -87,6 +88,12 @@ const router = createRouter({
         { path: "menu/tags", name: "menu-tags", component: MenuTags, meta: { title: "Теги", subtitle: "Метки для фильтрации блюд" } },
         { path: "menu/stop-list", name: "menu-stop-list", component: MenuStopList, meta: { title: "Стоп-лист", subtitle: "Недоступные позиции" } },
         { path: "menu/settings", name: "menu-settings", component: MenuSettings, meta: { title: "Настройки меню", subtitle: "Причины стоп-листа" } },
+        {
+          path: "system/settings",
+          name: "system-settings",
+          component: SystemSettings,
+          meta: { title: "Настройки системы", subtitle: "Модули и функциональные блоки", roles: ["admin", "ceo"] },
+        },
         {
           path: "admin-users",
           name: "admin-users",

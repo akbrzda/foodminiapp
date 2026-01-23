@@ -1,58 +1,61 @@
 <template>
   <div class="bonus-history">
     <div class="content">
-      <div class="loyalty-card">
-        <div class="loyalty-card-header">
-          <div class="loyalty-balance">
-            <div class="loyalty-icon">Б</div>
-            <div class="loyalty-amount">{{ formatPrice(bonusBalance) }}</div>
-          </div>
-          <div class="loyalty-status">
-            <div class="loyalty-rate">Ваш статус {{ currentRateLabel }}%</div>
-            <div class="loyalty-tier">
-              {{ currentLevel.name }}
-              <button class="info-button" type="button" @click="showRulesModal = true">!</button>
+      <div v-if="!bonusesEnabled" class="bonus-disabled">Бонусная система временно отключена</div>
+      <template v-else>
+        <div class="loyalty-card">
+          <div class="loyalty-card-header">
+            <div class="loyalty-balance">
+              <div class="loyalty-icon">Б</div>
+              <div class="loyalty-amount">{{ formatPrice(bonusBalance) }}</div>
+            </div>
+            <div class="loyalty-status">
+              <div class="loyalty-rate">Ваш статус {{ currentRateLabel }}%</div>
+              <div class="loyalty-tier">
+                {{ currentLevel.name }}
+                <button class="info-button" type="button" @click="showRulesModal = true">!</button>
+              </div>
             </div>
           </div>
         </div>
-      </div>
-      <div class="progress-card">
-        <div class="progress-values">
-          <span>{{ formatPrice(spendLast60Days) }} ₽</span>
-          <span>/</span>
-          <span v-if="nextLevel">{{ formatPrice(nextLevel.min) }} ₽</span>
-          <span v-else>∞</span>
+        <div class="progress-card">
+          <div class="progress-values">
+            <span>{{ formatPrice(spendLast60Days) }} ₽</span>
+            <span>/</span>
+            <span v-if="nextLevel">{{ formatPrice(nextLevel.min) }} ₽</span>
+            <span v-else>∞</span>
+          </div>
+          <div class="progress-bar">
+            <span class="progress-fill" :style="{ width: `${progressPercent}%` }"></span>
+          </div>
+          <div class="progress-caption" v-if="nextLevel">До обновления статуса — {{ formatPrice(amountToNextLevel) }} ₽</div>
+          <div class="progress-caption" v-else>У вас максимальный статус</div>
         </div>
-        <div class="progress-bar">
-          <span class="progress-fill" :style="{ width: `${progressPercent}%` }"></span>
-        </div>
-        <div class="progress-caption" v-if="nextLevel">До обновления статуса — {{ formatPrice(amountToNextLevel) }} ₽</div>
-        <div class="progress-caption" v-else>У вас максимальный статус</div>
-      </div>
-      <div class="history-section">
-        <h3>История операций</h3>
-        <div class="loading" v-if="loading">Загрузка...</div>
-        <div class="empty" v-else-if="!transactions.length">
-          <p>У вас пока нет операций с бонусами</p>
-        </div>
-        <div class="transactions" v-else>
-          <div v-for="transaction in transactions" :key="transaction.id" class="transaction-item">
-            <div class="transaction-icon" :class="transaction.type === 'earned' ? 'earn' : 'spend'">
-              <Plus v-if="transaction.type === 'earned'" :size="20" />
-              <Minus v-else :size="20" />
-            </div>
-            <div class="transaction-info">
-              <div class="transaction-title">{{ getTransactionTitle(transaction) }}</div>
-              <div class="transaction-date">{{ formatDate(transaction.created_at) }}</div>
-            </div>
-            <div class="transaction-amount" :class="transaction.type === 'earned' ? 'earn' : 'spend'">
-              {{ transaction.type === "earned" ? "+" : "−" }}{{ formatPrice(transaction.amount) }} ₽
+        <div class="history-section">
+          <h3>История операций</h3>
+          <div class="loading" v-if="loading">Загрузка...</div>
+          <div class="empty" v-else-if="!transactions.length">
+            <p>У вас пока нет операций с бонусами</p>
+          </div>
+          <div class="transactions" v-else>
+            <div v-for="transaction in transactions" :key="transaction.id" class="transaction-item">
+              <div class="transaction-icon" :class="transaction.type === 'earned' ? 'earn' : 'spend'">
+                <Plus v-if="transaction.type === 'earned'" :size="20" />
+                <Minus v-else :size="20" />
+              </div>
+              <div class="transaction-info">
+                <div class="transaction-title">{{ getTransactionTitle(transaction) }}</div>
+                <div class="transaction-date">{{ formatDate(transaction.created_at) }}</div>
+              </div>
+              <div class="transaction-amount" :class="transaction.type === 'earned' ? 'earn' : 'spend'">
+                {{ transaction.type === "earned" ? "+" : "−" }}{{ formatPrice(transaction.amount) }} ₽
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      </template>
     </div>
-    <div v-if="showRulesModal" class="modal-overlay" @click.self="showRulesModal = false">
+    <div v-if="bonusesEnabled && showRulesModal" class="modal-overlay" @click.self="showRulesModal = false">
       <div class="modal-card" role="dialog" aria-modal="true">
         <div class="modal-header">
           <h3>Бонусная система</h3>
@@ -87,11 +90,14 @@ import { X, Plus, Minus } from "lucide-vue-next";
 import { bonusesAPI } from "../api/endpoints";
 import { formatPrice } from "../utils/format";
 import { useLoyaltyStore } from "../stores/loyalty";
+import { useSettingsStore } from "../stores/settings";
 const bonusBalance = ref(0);
 const transactions = ref([]);
 const loading = ref(true);
 const loyaltyStore = useLoyaltyStore();
+const settingsStore = useSettingsStore();
 const showRulesModal = ref(false);
+const bonusesEnabled = computed(() => settingsStore.bonusesEnabled);
 const currentLevel = computed(() => loyaltyStore.currentLevel);
 const nextLevel = computed(() => loyaltyStore.nextLevel);
 const spendLast60Days = computed(() => loyaltyStore.spendLast60Days);
@@ -109,6 +115,10 @@ const formattedLevels = computed(() =>
   })),
 );
 onMounted(async () => {
+  if (!bonusesEnabled.value) {
+    loading.value = false;
+    return;
+  }
   await Promise.all([loadData(), loyaltyStore.refreshFromOrders()]);
 });
 async function loadData() {
@@ -159,6 +169,14 @@ function formatDate(dateString) {
 }
 .content {
   padding: 16px 12px;
+}
+.bonus-disabled {
+  padding: 20px;
+  border-radius: var(--border-radius-lg);
+  background: var(--color-background-secondary);
+  color: var(--color-text-secondary);
+  text-align: center;
+  font-weight: var(--font-weight-semibold);
 }
 .loyalty-card {
   padding: 20px;

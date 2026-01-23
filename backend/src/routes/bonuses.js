@@ -2,9 +2,19 @@ import express from "express";
 import db from "../config/database.js";
 import { authenticateToken } from "../middleware/auth.js";
 import { getBonusHistory, calculateMaxUsableBonuses } from "../utils/bonuses.js";
+import { getSystemSettings } from "../utils/settings.js";
 const router = express.Router();
+const ensureBonusesEnabled = async (res) => {
+  const settings = await getSystemSettings();
+  if (!settings.bonuses_enabled) {
+    res.status(403).json({ error: "Бонусная система отключена" });
+    return false;
+  }
+  return true;
+};
 router.get("/balance", authenticateToken, async (req, res, next) => {
   try {
+    if (!(await ensureBonusesEnabled(res))) return;
     const userId = req.user.id;
     const [users] = await db.query("SELECT bonus_balance FROM users WHERE id = ?", [userId]);
     if (users.length === 0) {
@@ -19,6 +29,7 @@ router.get("/balance", authenticateToken, async (req, res, next) => {
 });
 router.get("/history", authenticateToken, async (req, res, next) => {
   try {
+    if (!(await ensureBonusesEnabled(res))) return;
     const userId = req.user.id;
     const { limit = 50, offset = 0 } = req.query;
     const history = await getBonusHistory(userId, parseInt(limit), parseInt(offset));
@@ -29,6 +40,7 @@ router.get("/history", authenticateToken, async (req, res, next) => {
 });
 router.post("/calculate-usable", authenticateToken, async (req, res, next) => {
   try {
+    if (!(await ensureBonusesEnabled(res))) return;
     const userId = req.user.id;
     const { order_subtotal } = req.body;
     if (!order_subtotal || order_subtotal <= 0) {

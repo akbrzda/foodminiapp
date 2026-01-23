@@ -2,15 +2,27 @@
   <div class="home">
     <AppHeader @toggleMenu="showMenu = true" />
     <div class="location-bar">
-      <div class="location-tabs">
-        <button @click="setDeliveryType('delivery')" class="pill-tab" :class="{ active: locationStore.isDelivery }">Доставка</button>
-        <button @click="setDeliveryType('pickup')" class="pill-tab" :class="{ active: locationStore.isPickup }">Самовывоз</button>
-      </div>
-      <div class="location-actions">
-        <button @click="openDeliverySelector" class="action-pill">
-          <span class="action-text">{{ actionButtonText }}</span>
-        </button>
-      </div>
+      <div v-if="!ordersEnabled" class="order-disabled">Прием заказов временно отключен</div>
+      <template v-else>
+        <div class="location-tabs" v-if="deliveryEnabled || pickupEnabled">
+          <button
+            v-if="deliveryEnabled"
+            @click="setDeliveryType('delivery')"
+            class="pill-tab"
+            :class="{ active: locationStore.isDelivery }"
+          >
+            Доставка
+          </button>
+          <button v-if="pickupEnabled" @click="setDeliveryType('pickup')" class="pill-tab" :class="{ active: locationStore.isPickup }">
+            Самовывоз
+          </button>
+        </div>
+        <div class="location-actions">
+          <button @click="openDeliverySelector" class="action-pill">
+            <span class="action-text">{{ actionButtonText }}</span>
+          </button>
+        </div>
+      </template>
     </div>
     <div v-if="activeOrders.length > 0" class="active-orders-container">
       <div class="active-orders" :class="{ 'has-scroll': activeOrders.length > 1 }">
@@ -138,6 +150,7 @@ import { useAuthStore } from "../stores/auth";
 import { useLocationStore } from "../stores/location";
 import { useCartStore } from "../stores/cart";
 import { useMenuStore } from "../stores/menu";
+import { useSettingsStore } from "../stores/settings";
 import { useKeyboardHandler } from "../composables/useKeyboardHandler";
 import { bonusesAPI, menuAPI, ordersAPI } from "../api/endpoints";
 import { hapticFeedback } from "../services/telegram";
@@ -150,6 +163,7 @@ const authStore = useAuthStore();
 const locationStore = useLocationStore();
 const cartStore = useCartStore();
 const menuStore = useMenuStore();
+const settingsStore = useSettingsStore();
 const { isKeyboardOpen } = useKeyboardHandler();
 const categoriesRef = ref(null);
 const categoryRefs = ref({});
@@ -161,7 +175,12 @@ const selectedTagId = ref(null);
 let observer = null;
 let orderStatusHandler = null;
 const cityName = computed(() => locationStore.selectedCity?.name || "Когалым");
+const ordersEnabled = computed(() => settingsStore.ordersEnabled);
+const deliveryEnabled = computed(() => settingsStore.deliveryEnabled);
+const pickupEnabled = computed(() => settingsStore.pickupEnabled);
 const actionButtonText = computed(() => {
+  if (!ordersEnabled.value) return "Заказы недоступны";
+  if (!deliveryEnabled.value && !pickupEnabled.value) return "Нет доступных способов";
   if (locationStore.isDelivery) {
     return locationStore.deliveryAddress ? truncateText(locationStore.deliveryAddress, 48) : "Укажите адрес";
   }
@@ -171,6 +190,7 @@ const actionButtonText = computed(() => {
   return "Укажите адрес";
 });
 onMounted(async () => {
+  resolveDeliveryType();
   if (route.query.openCity === "1") {
     window.dispatchEvent(new CustomEvent("open-city-popup"));
     router.replace({ query: {} });
@@ -183,6 +203,12 @@ onMounted(async () => {
     setupOrderStatusListener();
   }
 });
+watch(
+  () => [ordersEnabled.value, deliveryEnabled.value, pickupEnabled.value],
+  () => {
+    resolveDeliveryType();
+  },
+);
 watch(
   () => locationStore.selectedCity,
   async (newCity) => {
@@ -286,10 +312,13 @@ function openCitySelector() {
   window.dispatchEvent(new CustomEvent("open-city-popup"));
 }
 function openDeliverySelector() {
+  if (!ordersEnabled.value) return;
   if (!locationStore.selectedCity) {
     window.dispatchEvent(new CustomEvent("open-city-popup"));
     return;
   }
+  if (locationStore.isDelivery && !deliveryEnabled.value) return;
+  if (locationStore.isPickup && !pickupEnabled.value) return;
   if (locationStore.isPickup) {
     router.push("/pickup-map");
     return;
@@ -297,7 +326,19 @@ function openDeliverySelector() {
   router.push("/delivery-map");
 }
 function setDeliveryType(type) {
+  if (!ordersEnabled.value) return;
+  if (type === "delivery" && !deliveryEnabled.value) return;
+  if (type === "pickup" && !pickupEnabled.value) return;
   locationStore.setDeliveryType(type);
+}
+function resolveDeliveryType() {
+  if (!ordersEnabled.value) return;
+  if (deliveryEnabled.value && pickupEnabled.value) return;
+  if (deliveryEnabled.value) {
+    locationStore.setDeliveryType("delivery");
+  } else if (pickupEnabled.value) {
+    locationStore.setDeliveryType("pickup");
+  }
 }
 const deliveryCost = computed(() => {
   if (locationStore.deliveryType !== "delivery") return 0;
@@ -576,6 +617,14 @@ function goToCart() {
   min-height: 100vh;
   padding-bottom: 96px;
   background: var(--color-background);
+}
+.order-disabled {
+  padding: 12px 16px;
+  border-radius: var(--border-radius-lg);
+  background: var(--color-background-secondary);
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-semibold);
+  text-align: center;
 }
 .active-orders-container {
   padding: 12px 0;

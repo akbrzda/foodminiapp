@@ -3,6 +3,7 @@ import bcrypt from "bcrypt";
 import db from "../config/database.js";
 import { authenticateToken, requireRole } from "../middleware/auth.js";
 import { telegramQueue, imageQueue, getQueueStats, getFailedJobs, retryFailedJobs, cleanQueue } from "../queues/config.js";
+import { getSystemSettings } from "../utils/settings.js";
 const router = express.Router();
 router.use(authenticateToken);
 router.get("/users/admins", requireRole("admin", "ceo"), async (req, res, next) => {
@@ -222,6 +223,10 @@ router.put("/clients/:id", requireRole("admin", "manager", "ceo"), async (req, r
 });
 router.post("/clients/:id/bonuses", requireRole("admin", "manager", "ceo"), async (req, res, next) => {
   try {
+    const settings = await getSystemSettings();
+    if (!settings.bonuses_enabled) {
+      return res.status(403).json({ error: "Бонусная система отключена" });
+    }
     const userId = req.params.id;
     const { amount, mode = "add", description } = req.body;
     const hasAccess = await ensureManagerClientAccess(req, userId);

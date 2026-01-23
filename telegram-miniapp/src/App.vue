@@ -8,11 +8,13 @@ import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useAuthStore } from "./stores/auth";
 import { useCartStore } from "./stores/cart";
 import { useLocationStore } from "./stores/location";
+import { useSettingsStore } from "./stores/settings";
 import { citiesAPI, userStateAPI } from "./api/endpoints";
 import { wsService } from "./services/websocket";
 const authStore = useAuthStore();
 const cartStore = useCartStore();
 const locationStore = useLocationStore();
+const settingsStore = useSettingsStore();
 const isHydrated = ref(false);
 const lastSyncedPayload = ref("");
 let syncTimer = null;
@@ -91,6 +93,7 @@ function scheduleSync() {
   }, 600);
 }
 onMounted(async () => {
+  await settingsStore.loadSettings();
   try {
     await loadRemoteState();
   } catch (error) {

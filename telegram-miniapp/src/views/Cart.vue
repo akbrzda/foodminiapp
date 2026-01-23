@@ -27,7 +27,7 @@
           </div>
         </div>
       </div>
-      <div class="bonus-section" v-if="bonusBalance > 0">
+      <div class="bonus-section" v-if="bonusesEnabled && bonusBalance > 0">
         <div class="bonus-header">
           <label class="bonus-switch">
             <input type="checkbox" v-model="useBonuses" @change="onBonusToggle" />
@@ -95,6 +95,7 @@ import { useRouter } from "vue-router";
 import { useCartStore } from "../stores/cart";
 import { useLoyaltyStore } from "../stores/loyalty";
 import { useLocationStore } from "../stores/location";
+import { useSettingsStore } from "../stores/settings";
 import { useKeyboardHandler } from "../composables/useKeyboardHandler";
 import { hapticFeedback } from "../services/telegram";
 import { bonusesAPI, addressesAPI } from "../api/endpoints";
@@ -103,11 +104,14 @@ const router = useRouter();
 const cartStore = useCartStore();
 const locationStore = useLocationStore();
 const loyaltyStore = useLoyaltyStore();
+const settingsStore = useSettingsStore();
 const { isKeyboardOpen } = useKeyboardHandler();
 const bonusBalance = ref(0);
 const showBonusInfo = ref(false);
 const showPartialModal = ref(false);
 const partialBonusInput = ref("");
+const bonusesEnabled = computed(() => settingsStore.bonusesEnabled);
+const ordersEnabled = computed(() => settingsStore.ordersEnabled);
 const useBonuses = computed({
   get: () => cartStore.bonusUsage.useBonuses,
   set: (value) => cartStore.setUseBonuses(value),
@@ -117,10 +121,12 @@ const bonusToUse = computed({
   set: (value) => cartStore.setBonusToUse(value),
 });
 const maxBonusToUse = computed(() => {
+  if (!bonusesEnabled.value) return 0;
   const maxAllowed = Math.floor(cartStore.totalPrice * loyaltyStore.maxRedeemPercent);
   return Math.min(bonusBalance.value, maxAllowed);
 });
 const appliedBonusToUse = computed(() => {
+  if (!bonusesEnabled.value) return 0;
   if (!useBonuses.value) return 0;
   return Math.min(bonusToUse.value, maxBonusToUse.value);
 });
@@ -184,6 +190,21 @@ function decreaseQuantity(index) {
   cartStore.updateQuantity(index, cartStore.items[index].quantity - 1);
 }
 function checkout() {
+  if (!ordersEnabled.value) {
+    hapticFeedback("error");
+    alert("Прием заказов временно отключен");
+    return;
+  }
+  if (isDelivery.value && !settingsStore.deliveryEnabled) {
+    hapticFeedback("error");
+    alert("Доставка временно отключена");
+    return;
+  }
+  if (!isDelivery.value && !settingsStore.pickupEnabled) {
+    hapticFeedback("error");
+    alert("Самовывоз временно отключен");
+    return;
+  }
   if (isDelivery.value && !isMinOrderReached.value) {
     hapticFeedback("error");
     return;
@@ -249,6 +270,10 @@ function confirmPartialBonus() {
   showPartialModal.value = false;
 }
 async function loadBonusBalance() {
+  if (!bonusesEnabled.value) {
+    bonusBalance.value = 0;
+    return;
+  }
   try {
     const response = await bonusesAPI.getBalance();
     bonusBalance.value = response.data.balance || 0;
@@ -280,6 +305,15 @@ watch(
     if (bonusToUse.value > newMax) {
       bonusToUse.value = newMax;
     }
+  },
+);
+watch(
+  () => bonusesEnabled.value,
+  (isEnabled) => {
+    if (isEnabled) return;
+    cartStore.resetBonusUsage();
+    bonusBalance.value = 0;
+    showPartialModal.value = false;
   },
 );
 </script>

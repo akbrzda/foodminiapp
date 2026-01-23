@@ -80,6 +80,10 @@
             <span v-if="!isCollapsed">Зоны доставки</span>
           </RouterLink>
           <div v-if="!isCollapsed" class="mt-4 text-xs font-semibold uppercase text-muted-foreground">Система</div>
+          <RouterLink v-if="!isManager" class="nav-link" to="/system/settings" @click="emit('navigate')">
+            <SlidersHorizontal :size="18" />
+            <span v-if="!isCollapsed">Настройки системы</span>
+          </RouterLink>
           <RouterLink v-if="!isManager" class="nav-link" to="/admin-users" @click="emit('navigate')">
             <UserCog :size="18" />
             <span v-if="!isCollapsed">Пользователи</span>
@@ -122,6 +126,7 @@ import {
   MapPinned,
   Radio,
   Settings,
+  SlidersHorizontal,
   Tag,
   UserCog,
   Users,
