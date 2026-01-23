@@ -1,5 +1,4 @@
 name: Deploy Admin
-
 on:
   push:
     branches:
@@ -7,27 +6,22 @@ on:
     paths:
       - "admin-panel/**"
       - ".github/workflows/deploy-admin.yml"
-
 jobs:
   deploy:
     name: Deploy Admin Panel to Server
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: "npm"
           cache-dependency-path: admin-panel/package-lock.json
-
       - name: Install dependencies
         working-directory: admin-panel
         run: npm ci
-
       - name: Create .env file
         working-directory: admin-panel
         run: |
@@ -36,11 +30,9 @@ jobs:
           VITE_WS_URL=${{ secrets.VITE_WS_URL }}
           VITE_UPLOADS_URL=${{ secrets.VITE_UPLOADS_URL }}
           EOF
-
       - name: Build application
         working-directory: admin-panel
         run: npm run build
-
       - name: Setup SSH
         run: |
           if [ -z "${{ secrets.SSH_HOST }}" ]; then
@@ -60,13 +52,11 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
           echo "SSH setup completed successfully"
-
       - name: Deploy to server
         run: |
           rsync -avz --delete \
             -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no" \
             admin-panel/dist/ ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/var/www/panda.akbrzda.ru/
-
       - name: Verify deployment
         uses: appleboy/ssh-action@v1.0.0
         with:

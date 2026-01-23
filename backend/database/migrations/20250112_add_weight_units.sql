@@ -14,7 +14,6 @@ SET @preparedStatement = (SELECT IF(
 PREPARE alterIfNotExists FROM @preparedStatement;
 EXECUTE alterIfNotExists;
 DEALLOCATE PREPARE alterIfNotExists;
-
 SET @columnname = 'weight_unit';
 SET @preparedStatement = (SELECT IF(
   (
@@ -30,7 +29,6 @@ SET @preparedStatement = (SELECT IF(
 PREPARE alterIfNotExists FROM @preparedStatement;
 EXECUTE alterIfNotExists;
 DEALLOCATE PREPARE alterIfNotExists;
-
 SET @tablename = 'item_variants';
 SET @columnname = 'weight_value';
 SET @preparedStatement = (SELECT IF(
@@ -47,7 +45,6 @@ SET @preparedStatement = (SELECT IF(
 PREPARE alterIfNotExists FROM @preparedStatement;
 EXECUTE alterIfNotExists;
 DEALLOCATE PREPARE alterIfNotExists;
-
 SET @columnname = 'weight_unit';
 SET @preparedStatement = (SELECT IF(
   (

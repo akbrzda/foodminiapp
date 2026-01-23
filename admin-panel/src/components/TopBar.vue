@@ -26,20 +26,16 @@
     </div>
   </header>
 </template>
-
 <script setup>
 import { computed } from "vue";
 import { LogOut, Menu } from "lucide-vue-next";
 import { useAuthStore } from "../stores/auth.js";
 import Button from "./ui/Button.vue";
-
 defineProps({
   title: { type: String, default: "" },
   subtitle: { type: String, default: "" },
 });
-
 const authStore = useAuthStore();
-
 const initials = computed(() => {
   const first = authStore.user?.first_name?.[0] || "";
   const last = authStore.user?.last_name?.[0] || "";

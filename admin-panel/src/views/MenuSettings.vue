@@ -12,7 +12,6 @@
         </Button>
       </CardHeader>
     </Card>
-
     <Card>
       <CardHeader>
         <CardTitle>Причины стоп-листа</CardTitle>
@@ -50,7 +49,6 @@
         <div v-else class="py-8 text-center text-sm text-muted-foreground">Причины не добавлены</div>
       </CardContent>
     </Card>
-
     <BaseModal v-if="showModal" :title="modalTitle" :subtitle="modalSubtitle" @close="closeModal">
       <form class="space-y-4" @submit.prevent="submitReason">
         <div class="space-y-2">
@@ -78,7 +76,6 @@
     </BaseModal>
   </div>
 </template>
-
 <script setup>
 import { computed, onMounted, ref } from "vue";
 import { Pencil, Plus, Save, Trash2 } from "lucide-vue-next";
@@ -101,22 +98,18 @@ import TableHeader from "../components/ui/TableHeader.vue";
 import TableRow from "../components/ui/TableRow.vue";
 import { useNotifications } from "../composables/useNotifications.js";
 import { formatNumber } from "../utils/format.js";
-
 const reasons = ref([]);
 const { showErrorNotification } = useNotifications();
 const showModal = ref(false);
 const editing = ref(null);
 const saving = ref(false);
-
 const form = ref({
   name: "",
   sort_order: 0,
   is_active: true,
 });
-
 const modalTitle = computed(() => (editing.value ? "Редактировать причину" : "Новая причина"));
 const modalSubtitle = computed(() => (editing.value ? "Измените параметры" : "Создайте причину стоп-листа"));
-
 const loadReasons = async () => {
   try {
     const response = await api.get("/api/menu/admin/stop-list-reasons");
@@ -126,7 +119,6 @@ const loadReasons = async () => {
     showErrorNotification("Ошибка при загрузке причин");
   }
 };
-
 const openModal = (reason = null) => {
   editing.value = reason;
   form.value = reason
@@ -142,11 +134,9 @@ const openModal = (reason = null) => {
       };
   showModal.value = true;
 };
-
 const closeModal = () => {
   showModal.value = false;
 };
-
 const submitReason = async () => {
   saving.value = true;
   try {
@@ -164,7 +154,6 @@ const submitReason = async () => {
     saving.value = false;
   }
 };
-
 const deleteReason = async (reason) => {
   if (!confirm(`Удалить причину "${reason.name}"?`)) return;
   try {
@@ -175,6 +164,5 @@ const deleteReason = async (reason) => {
     showErrorNotification(`Ошибка при удалении причины: ${error.response?.data?.error || error.message}`);
   }
 };
-
 onMounted(loadReasons);
 </script>

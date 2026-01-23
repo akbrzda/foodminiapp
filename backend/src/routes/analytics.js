@@ -1,42 +1,33 @@
 import express from "express";
 import db from "../config/database.js";
 import { authenticateToken, requireRole } from "../middleware/auth.js";
-
 const router = express.Router();
-
 router.use(authenticateToken);
 router.use(requireRole("admin", "manager", "ceo"));
-
-// Получить общую статистику
 router.get("/dashboard", async (req, res, next) => {
   try {
     const { period = "today", city_id, branch_id, date_from, date_to, base_date } = req.query;
-
     const toDateString = (date) => {
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, "0");
       const day = String(date.getDate()).padStart(2, "0");
       return `${year}-${month}-${day}`;
     };
-
     const parseDate = (value) => {
       if (!value) return null;
       const [year, month, day] = value.split("-").map(Number);
       if (!year || !month || !day) return null;
       return new Date(year, month - 1, day);
     };
-
     const addDays = (date, days) => {
       const result = new Date(date);
       result.setDate(result.getDate() + days);
       return result;
     };
-
     const getRange = () => {
       const today = new Date();
       const baseDate = parseDate(base_date) || today;
       const baseStart = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate());
-
       if (period === "custom") {
         const fromDate = parseDate(date_from);
         const toDate = parseDate(date_to);
@@ -57,7 +48,6 @@ router.get("/dashboard", async (req, res, next) => {
           rangeDays,
         };
       }
-
       if (period === "week") {
         const weekday = baseStart.getDay();
         const diffToMonday = (weekday + 6) % 7;
@@ -71,7 +61,6 @@ router.get("/dashboard", async (req, res, next) => {
           rangeDays: 7,
         };
       }
-
       if (period === "month") {
         const start = new Date(baseStart.getFullYear(), baseStart.getMonth(), 1);
         const end = new Date(baseStart.getFullYear(), baseStart.getMonth() + 1, 1);
@@ -83,7 +72,6 @@ router.get("/dashboard", async (req, res, next) => {
           rangeDays: Math.round((end - start) / (24 * 60 * 60 * 1000)),
         };
       }
-
       if (period === "year") {
         const start = new Date(baseStart.getFullYear(), 0, 1);
         const end = new Date(baseStart.getFullYear() + 1, 0, 1);
@@ -95,7 +83,6 @@ router.get("/dashboard", async (req, res, next) => {
           rangeDays: Math.round((end - start) / (24 * 60 * 60 * 1000)),
         };
       }
-
       const start = baseStart;
       const end = addDays(baseStart, 1);
       return {
@@ -106,17 +93,14 @@ router.get("/dashboard", async (req, res, next) => {
         rangeDays: 1,
       };
     };
-
     const range = getRange();
     if (range.error) {
       return res.status(400).json({ error: range.error });
     }
-
     const filterParams = [];
     let filterSql = "";
     const parsedCityId = city_id ? Number(city_id) : null;
     const parsedBranchId = branch_id ? Number(branch_id) : null;
-
     if (req.user.role === "manager") {
       const branchIds = Array.isArray(req.user.branch_ids) ? req.user.branch_ids : [];
       if (branchIds.length > 0) {
@@ -160,11 +144,9 @@ router.get("/dashboard", async (req, res, next) => {
         filterParams.push(parsedBranchId);
       }
     }
-
     const dateFilter = "o.created_at >= ? AND o.created_at < ?";
     const paramsCurrent = [toDateString(range.start), toDateString(range.end), ...filterParams];
     const paramsPrevious = [toDateString(range.compareStart), toDateString(range.compareEnd), ...filterParams];
-
     const [orderStatsCurrent] = await db.query(
       `SELECT 
         COUNT(*) as total_orders,
@@ -179,32 +161,28 @@ router.get("/dashboard", async (req, res, next) => {
         COUNT(CASE WHEN status = 'cancelled' THEN 1 END) as cancelled_orders
       FROM orders o
       WHERE ${dateFilter}${filterSql}`,
-      paramsCurrent
+      paramsCurrent,
     );
-
     const [orderStatsPrevious] = await db.query(
       `SELECT 
         COUNT(*) as total_orders,
         COALESCE(SUM(total), 0) as total_revenue
       FROM orders o
       WHERE ${dateFilter}${filterSql}`,
-      paramsPrevious
+      paramsPrevious,
     );
-
     const [discountsCurrent] = await db.query(
       `SELECT COALESCE(SUM(bonus_used), 0) as total_discounts
       FROM orders o
       WHERE ${dateFilter}${filterSql}`,
-      paramsCurrent
+      paramsCurrent,
     );
-
     const [discountsPrevious] = await db.query(
       `SELECT COALESCE(SUM(bonus_used), 0) as total_discounts
       FROM orders o
       WHERE ${dateFilter}${filterSql}`,
-      paramsPrevious
+      paramsPrevious,
     );
-
     const [customerStatsCurrent] = await db.query(
       `SELECT 
         COUNT(DISTINCT customer_type.user_id) as total_customers,
@@ -218,30 +196,26 @@ router.get("/dashboard", async (req, res, next) => {
         WHERE ${dateFilter}${filterSql}
         GROUP BY o.user_id
       ) as customer_type`,
-      paramsCurrent
+      paramsCurrent,
     );
-
     const [customerStatsPrevious] = await db.query(
       `SELECT 
         COUNT(DISTINCT o.user_id) as total_customers
       FROM orders o
       WHERE ${dateFilter}${filterSql}`,
-      paramsPrevious
+      paramsPrevious,
     );
-
     const compareMetric = (current, previous) => {
       const change = current - previous;
       const percent = previous === 0 ? null : (change / previous) * 100;
       return { current, previous, change, percent };
     };
-
     const comparisons = {
       orders: compareMetric(orderStatsCurrent[0].total_orders, orderStatsPrevious[0].total_orders),
       revenue: compareMetric(orderStatsCurrent[0].total_revenue, orderStatsPrevious[0].total_revenue),
       customers: compareMetric(customerStatsCurrent[0].total_customers, customerStatsPrevious[0].total_customers),
       discounts: compareMetric(discountsCurrent[0].total_discounts, discountsPrevious[0].total_discounts),
     };
-
     const [orderTypes] = await db.query(
       `SELECT 
         order_type,
@@ -250,9 +224,8 @@ router.get("/dashboard", async (req, res, next) => {
       FROM orders o
       WHERE ${dateFilter}${filterSql}
       GROUP BY order_type`,
-      paramsCurrent
+      paramsCurrent,
     );
-
     const [paymentMethods] = await db.query(
       `SELECT 
         payment_method,
@@ -261,9 +234,8 @@ router.get("/dashboard", async (req, res, next) => {
       FROM orders o
       WHERE ${dateFilter}${filterSql}
       GROUP BY payment_method`,
-      paramsCurrent
+      paramsCurrent,
     );
-
     const [topItems] = await db.query(
       `SELECT 
         mi.name,
@@ -277,9 +249,8 @@ router.get("/dashboard", async (req, res, next) => {
       GROUP BY mi.id, mi.name
       ORDER BY revenue DESC
       LIMIT 10`,
-      paramsCurrent
+      paramsCurrent,
     );
-
     let groupBy = "day";
     if (period === "today") {
       groupBy = "hour";
@@ -288,14 +259,12 @@ router.get("/dashboard", async (req, res, next) => {
     } else if (range.rangeDays > 31) {
       groupBy = "week";
     }
-
     const groupBySql = {
       hour: 'DATE_FORMAT(o.created_at, "%Y-%m-%d %H:00:00")',
       day: "DATE(o.created_at)",
       week: 'DATE_FORMAT(o.created_at, "%Y-%u")',
       month: 'DATE_FORMAT(o.created_at, "%Y-%m")',
     }[groupBy];
-
     const [series] = await db.query(
       `SELECT 
         ${groupBySql} as period,
@@ -306,9 +275,8 @@ router.get("/dashboard", async (req, res, next) => {
       WHERE ${dateFilter}${filterSql}
       GROUP BY period
       ORDER BY period`,
-      paramsCurrent
+      paramsCurrent,
     );
-
     res.json({
       period,
       date_from: toDateString(range.start),
@@ -331,20 +299,15 @@ router.get("/dashboard", async (req, res, next) => {
     next(error);
   }
 });
-
-// Отчет по продажам за период
 router.get("/sales-report", async (req, res, next) => {
   try {
     const { date_from, date_to, city_id, branch_id, group_by = "day" } = req.query;
-
     if (!date_from || !date_to) {
       return res.status(400).json({ error: "date_from and date_to are required" });
     }
-
     const params = [date_from, date_to];
     let cityFilter = "";
     let branchFilter = "";
-
     if (city_id) {
       cityFilter = " AND b.city_id = ?";
       params.push(city_id);
@@ -353,8 +316,6 @@ router.get("/sales-report", async (req, res, next) => {
       branchFilter = " AND o.branch_id = ?";
       params.push(branch_id);
     }
-
-    // Группировка по периодам
     let dateGrouping = "";
     switch (group_by) {
       case "hour":
@@ -372,7 +333,6 @@ router.get("/sales-report", async (req, res, next) => {
       default:
         dateGrouping = "DATE(o.created_at)";
     }
-
     const [report] = await db.query(
       `SELECT 
         ${dateGrouping} as period,
@@ -387,42 +347,33 @@ router.get("/sales-report", async (req, res, next) => {
         AND o.status != 'cancelled'${cityFilter}${branchFilter}
       GROUP BY period
       ORDER BY period`,
-      params
+      params,
     );
-
     res.json({ report });
   } catch (error) {
     next(error);
   }
 });
-
-// Отчет по популярным позициям
 router.get("/popular-items", async (req, res, next) => {
   try {
     const { date_from, date_to, city_id, category_id, limit = 20 } = req.query;
-
     const params = [];
     let dateFilter = "";
     let cityFilter = "";
     let categoryFilter = "";
-
     if (date_from && date_to) {
       dateFilter = " AND o.created_at >= ? AND o.created_at < DATE_ADD(?, INTERVAL 1 DAY)";
       params.push(date_from, date_to);
     }
-
     if (city_id) {
       cityFilter = " AND b.city_id = ?";
       params.push(city_id);
     }
-
     if (category_id) {
       categoryFilter = " AND mi.category_id = ?";
       params.push(category_id);
     }
-
     params.push(parseInt(limit));
-
     const [items] = await db.query(
       `SELECT 
         mi.id,
@@ -441,39 +392,31 @@ router.get("/popular-items", async (req, res, next) => {
       GROUP BY mi.id, mi.name, mc.name
       ORDER BY revenue DESC
       LIMIT ?`,
-      params
+      params,
     );
-
     res.json({ items });
   } catch (error) {
     next(error);
   }
 });
-
-// Отчет по клиентам
 router.get("/customer-report", async (req, res, next) => {
   try {
     const { date_from, date_to, city_id, sort_by = "revenue" } = req.query;
-
     const params = [];
     let dateFilter = "";
     let cityFilter = "";
-
     if (date_from && date_to) {
       dateFilter = " AND o.created_at >= ? AND o.created_at < DATE_ADD(?, INTERVAL 1 DAY)";
       params.push(date_from, date_to);
     }
-
     if (city_id) {
       cityFilter = " AND b.city_id = ?";
       params.push(city_id);
     }
-
     let orderBy = "total_revenue DESC";
     if (sort_by === "orders") {
       orderBy = "orders_count DESC";
     }
-
     const [customers] = await db.query(
       `SELECT 
         u.id,
@@ -492,13 +435,11 @@ router.get("/customer-report", async (req, res, next) => {
       GROUP BY u.id, u.first_name, u.last_name, u.phone, u.loyalty_level
       ORDER BY ${orderBy}
       LIMIT 100`,
-      params
+      params,
     );
-
     res.json({ customers });
   } catch (error) {
     next(error);
   }
 });
-
 export default router;

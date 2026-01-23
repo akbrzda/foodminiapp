@@ -1,7 +1,6 @@
 <template>
   <div class="relative h-full min-h-[calc(100vh-80px)] bg-background">
     <div id="editor-map" class="absolute inset-0 z-0"></div>
-
     <div class="absolute left-4 top-4 z-10 w-[260px] rounded-xl border border-border bg-background/95 shadow-xl backdrop-blur">
       <div class="p-4 space-y-3">
         <div>
@@ -11,7 +10,6 @@
         <Button variant="outline" class="w-full" @click="goBack">Назад</Button>
       </div>
     </div>
-
     <div
       class="absolute right-4 top-4 bottom-4 z-20 w-[360px] max-w-[calc(100%-2rem)] overflow-hidden rounded-xl border border-border bg-background/95 shadow-xl backdrop-blur flex flex-col"
     >
@@ -37,7 +35,6 @@
             <Input v-model.number="form.delivery_cost" type="number" min="0" step="10" />
           </div>
         </div>
-
         <div class="flex flex-wrap gap-2">
           <Button variant="secondary" @click="startDrawing">Перерисовать</Button>
           <Button variant="outline" @click="resetPolygon">Сбросить изменения</Button>
@@ -50,7 +47,6 @@
     </div>
   </div>
 </template>
-
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { Save } from "lucide-vue-next";
@@ -68,39 +64,31 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "leaflet-draw";
 import "leaflet-draw/dist/leaflet.draw.css";
-
 if (L?.GeometryUtil?.readableArea && !L.GeometryUtil.__patched) {
   L.GeometryUtil.readableArea = () => "";
   L.GeometryUtil.__patched = true;
 }
-
 const route = useRoute();
 const router = useRouter();
 const referenceStore = useReferenceStore();
 const { showErrorNotification, showSuccessNotification } = useNotifications();
-
 const branchId = computed(() => parseInt(route.params.branchId, 10));
 const polygonId = computed(() => route.params.polygonId);
 const cityId = computed(() => parseInt(route.query.cityId, 10));
-
 const form = ref({
   name: "",
   delivery_time: 30,
   min_order_amount: 0,
   delivery_cost: 0,
 });
-
 const branchPolygons = ref([]);
-
 const pageTitle = computed(() => (polygonId.value === "new" ? "Новый полигон" : "Редактировать полигон"));
-
 let map = null;
 let drawnItems = null;
 let drawControl = null;
 let currentLayer = null;
 let originalPolygon = null;
 let backgroundLayer = null;
-
 const goBack = () => {
   router.push({
     name: "delivery-zones",
@@ -110,31 +98,24 @@ const goBack = () => {
     },
   });
 };
-
 const initMap = () => {
   const container = document.getElementById("editor-map");
   if (!container) return;
   if (map) {
     map.remove();
   }
-
   if (L?.GeometryUtil?.readableArea) {
     L.GeometryUtil.readableArea = () => "";
   }
-
   const branches = cityId.value ? referenceStore.branchesByCity[cityId.value] || [] : [];
   const selectedBranch = branches.find((b) => b.id === branchId.value);
-  const center =
-    selectedBranch?.latitude && selectedBranch?.longitude ? [selectedBranch.latitude, selectedBranch.longitude] : [55.751244, 37.618423];
-
+  const center = selectedBranch?.latitude && selectedBranch?.longitude ? [selectedBranch.latitude, selectedBranch.longitude] : [55.751244, 37.618423];
   map = L.map(container, { zoomControl: false, attributionControl: false }).setView(center, 13);
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 20 }).addTo(map);
-
   drawnItems = new L.FeatureGroup();
   map.addLayer(drawnItems);
   backgroundLayer = new L.FeatureGroup();
   map.addLayer(backgroundLayer);
-
   drawControl = new L.Control.Draw({
     edit: { featureGroup: drawnItems, remove: false },
     draw: {
@@ -156,9 +137,7 @@ const initMap = () => {
       marker: false,
     },
   });
-
   map.addControl(drawControl);
-
   map.on(L.Draw.Event.CREATED, (event) => {
     if (currentLayer) {
       drawnItems.removeLayer(currentLayer);
@@ -167,11 +146,9 @@ const initMap = () => {
     drawnItems.addLayer(currentLayer);
   });
 };
-
 const renderPolygon = (polygon) => {
   if (!map || !drawnItems || !polygon?.polygon?.coordinates?.[0]) return;
   drawnItems.clearLayers();
-
   const rawCoords = polygon.polygon.coordinates[0];
   const coords = rawCoords.map((coord) => [coord[0], coord[1]]);
   currentLayer = L.polygon(coords, {
@@ -184,7 +161,6 @@ const renderPolygon = (polygon) => {
   drawnItems.addLayer(currentLayer);
   map.fitBounds(currentLayer.getBounds(), { padding: [24, 24] });
 };
-
 const renderBackgroundPolygons = (excludeId = null) => {
   if (!map || !backgroundLayer) return;
   backgroundLayer.clearLayers();
@@ -195,7 +171,6 @@ const renderBackgroundPolygons = (excludeId = null) => {
     weight: 2,
     opacity: 0.6,
   };
-
   branchPolygons.value.forEach((polygon) => {
     if (excludeId && polygon.id === excludeId) return;
     const rawCoords = polygon.polygon?.coordinates?.[0];
@@ -205,7 +180,6 @@ const renderBackgroundPolygons = (excludeId = null) => {
     backgroundLayer.addLayer(layer);
   });
 };
-
 const loadPolygon = async () => {
   if (!branchId.value) return;
   const response = await api.get(`/api/polygons/admin/branch/${branchId.value}`);
@@ -226,12 +200,10 @@ const loadPolygon = async () => {
   };
   renderPolygon(polygon);
 };
-
 const startDrawing = () => {
   if (!map || !drawControl) return;
   new L.Draw.Polygon(map, drawControl.options.draw.polygon).enable();
 };
-
 const resetPolygon = () => {
   if (polygonId.value === "new") {
     if (currentLayer) {
@@ -243,7 +215,6 @@ const resetPolygon = () => {
   renderPolygon(originalPolygon);
   renderBackgroundPolygons(originalPolygon?.id || null);
 };
-
 const savePolygon = async () => {
   if (!currentLayer) return;
   const payload = {
@@ -254,7 +225,6 @@ const savePolygon = async () => {
     delivery_cost: form.value.delivery_cost,
     polygon: currentLayer.toGeoJSON().geometry.coordinates[0],
   };
-
   try {
     if (polygonId.value === "new") {
       await api.post("/api/polygons/admin", payload);
@@ -269,7 +239,6 @@ const savePolygon = async () => {
     showErrorNotification("Ошибка сохранения полигона");
   }
 };
-
 onMounted(async () => {
   await referenceStore.loadCities();
   if (cityId.value) {
@@ -278,7 +247,6 @@ onMounted(async () => {
   initMap();
   await loadPolygon();
 });
-
 onUnmounted(() => {
   if (map) {
     map.remove();
@@ -286,14 +254,12 @@ onUnmounted(() => {
   }
 });
 </script>
-
 <style scoped>
 :deep(#editor-map .leaflet-top.leaflet-left) {
   left: auto;
   right: 400px;
   top: 16px;
 }
-
 @media (max-width: 1024px) {
   :deep(#editor-map .leaflet-top.leaflet-left) {
     right: 16px;

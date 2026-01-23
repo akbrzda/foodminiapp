@@ -1,5 +1,4 @@
 version: '3.8'
-
 services:
   mysql:
     image: mysql:8.0
@@ -23,7 +22,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-
   # Redis для кеширования и очередей (BullMQ)
   redis:
     image: redis:7-alpine
@@ -41,7 +39,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-
   phpmyadmin:
     image: phpmyadmin/phpmyadmin:5.2
     container_name: miniapp-panda-phpmyadmin
@@ -57,13 +54,11 @@ services:
       - "8081:80"
     networks:
       - miniapp-network
-
 volumes:
   mysql_data:
     driver: local
   redis_data:
     driver: local
-
 networks:
   miniapp-network:
     driver: bridge

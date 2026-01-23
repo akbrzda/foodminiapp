@@ -11,19 +11,15 @@
           Самовывоз
         </button>
       </div>
-
       <div v-if="orderType" class="time-panel">
         <div v-if="estimatedFulfillmentTime" class="time-info">
           <Clock size="24" /> <span class="delivery-time">{{ estimatedFulfillmentTime }}</span>
         </div>
       </div>
     </div>
-
-    <!-- Форма доставки -->
     <div class="content" v-if="orderType === 'delivery'">
       <div class="delivery-form">
         <h2 class="section-title">Адрес доставки</h2>
-
         <div class="form-group">
           <label class="label">Улица, дом</label>
           <div class="address-row">
@@ -35,7 +31,6 @@
             </button>
           </div>
         </div>
-
         <div v-if="addressValidated && inDeliveryZone" class="address-details">
           <div class="form-row">
             <div class="form-group">
@@ -47,7 +42,6 @@
               <input v-model="deliveryDetails.floor" class="input" placeholder="Этаж" />
             </div>
           </div>
-
           <div class="form-row">
             <div class="form-group">
               <label class="label">Квартира</label>
@@ -58,25 +52,20 @@
               <input v-model="deliveryDetails.doorCode" class="input" placeholder="Код" />
             </div>
           </div>
-
           <div class="form-group">
             <label class="label">Комментарий к адресу</label>
             <textarea v-model="deliveryDetails.comment" class="textarea" placeholder="Дополнительная информация для курьера" resize="none"></textarea>
           </div>
         </div>
-
         <div v-if="addressValidated && !inDeliveryZone" class="error-message">
           <p>Адрес не входит в зону доставки</p>
           <button class="btn-secondary" @click="openDeliveryMap">Выбрать другой адрес</button>
         </div>
       </div>
     </div>
-
-    <!-- Форма самовывоза -->
     <div class="content" v-if="orderType === 'pickup'">
       <div class="pickup-form">
         <h2 class="section-title">Выберите филиал</h2>
-
         <div v-if="loadingBranches" class="loading">Загрузка филиалов...</div>
         <div v-else class="branches-list">
           <button
@@ -95,12 +84,9 @@
         </div>
       </div>
     </div>
-
-    <!-- Общие поля заказа -->
     <div class="content" v-if="orderType && (orderType === 'pickup' ? selectedBranch : inDeliveryZone)">
       <div class="order-options">
         <h2 class="section-title">Дополнительно</h2>
-
         <div class="form-group">
           <label class="label">Способ оплаты</label>
           <div class="payment-options">
@@ -114,19 +100,15 @@
             </button>
           </div>
         </div>
-
         <div class="form-group" v-if="paymentMethod === 'cash'">
           <label class="label">Сдача с</label>
           <input v-model.number="changeFrom" type="number" class="input" placeholder="Сумма" min="0" step="100" />
         </div>
-
         <div class="form-group">
           <label class="label">Комментарий к заказу</label>
           <textarea v-model="orderComment" class="textarea" placeholder="Дополнительные пожелания"></textarea>
         </div>
       </div>
-
-      <!-- Итоговая сумма -->
       <div class="order-summary">
         <div class="summary-row">
           <span>Сумма</span>
@@ -153,8 +135,6 @@
         </div>
       </div>
     </div>
-
-    <!-- Кнопка подтверждения -->
     <div class="footer" :class="{ 'hidden-on-keyboard': isKeyboardOpen }" v-if="orderType">
       <button class="submit-btn" @click="submitOrder" :disabled="submitting || !canSubmitOrder">
         {{ submitting ? "Оформление..." : `Оформить заказ • ${formatPrice(finalTotalPrice)} ₽` }}
@@ -162,7 +142,6 @@
     </div>
   </div>
 </template>
-
 <script setup>
 import { ref, computed, onMounted, watch } from "vue";
 import { useRouter } from "vue-router";
@@ -175,14 +154,12 @@ import { useKeyboardHandler } from "../composables/useKeyboardHandler";
 import { citiesAPI, addressesAPI, ordersAPI, menuAPI } from "../api/endpoints";
 import { hapticFeedback } from "../services/telegram";
 import { formatPrice } from "../utils/format";
-
 const router = useRouter();
 const cartStore = useCartStore();
 const locationStore = useLocationStore();
 const loyaltyStore = useLoyaltyStore();
 const menuStore = useMenuStore();
 const { isKeyboardOpen } = useKeyboardHandler();
-
 const orderType = ref(locationStore.deliveryType || null);
 const deliveryAddress = ref(locationStore.deliveryAddress || "");
 const addressValidated = ref(false);
@@ -199,7 +176,6 @@ const deliveryTime = ref(0);
 const minOrderAmount = ref(0);
 const prepTime = ref(0);
 const assemblyTime = ref(0);
-
 const deliveryDetails = ref({
   entrance: locationStore.deliveryDetails?.entrance || "",
   doorCode: locationStore.deliveryDetails?.doorCode || "",
@@ -207,45 +183,35 @@ const deliveryDetails = ref({
   apartment: locationStore.deliveryDetails?.apartment || "",
   comment: locationStore.deliveryDetails?.comment || "",
 });
-
 const deliveryCoords = computed(() => locationStore.deliveryCoords);
-
 const canSubmitOrder = computed(() => {
   if (!orderType.value) return false;
-
   if (orderType.value === "delivery") {
     return addressValidated.value && inDeliveryZone.value && deliveryAddress.value.trim() && isMinOrderReached.value;
   } else {
     return selectedBranch.value !== null;
   }
 });
-
 const isMinOrderReached = computed(() => {
   if (orderType.value !== "delivery") return true;
   if (!minOrderAmount.value) return true;
   return summarySubtotal.value >= minOrderAmount.value;
 });
-
 const appliedBonusToUse = computed(() => {
   if (!cartStore.bonusUsage.useBonuses) return 0;
   return Math.min(cartStore.bonusUsage.bonusToUse, Math.floor(cartStore.totalPrice * loyaltyStore.maxRedeemPercent));
 });
-
 const finalTotalPrice = computed(() => {
   return cartStore.totalPrice + deliveryCost.value - appliedBonusToUse.value;
 });
-
 const summarySubtotal = computed(() => {
   return cartStore.totalPrice;
 });
-
 const bonusesToEarn = computed(() => {
   return Math.floor(finalTotalPrice.value * loyaltyStore.rate);
 });
-
 const estimatedFulfillmentTime = computed(() => {
   if (!orderType.value) return null;
-
   const formatTime = (date) => `${date.getHours()}:${String(date.getMinutes()).padStart(2, "0")}`;
   const buildRange = (centerMinutes) => {
     const total = Number(centerMinutes || 0);
@@ -255,40 +221,31 @@ const estimatedFulfillmentTime = computed(() => {
     const maxTime = new Date(centerTime.getTime() + 5 * 60000);
     return `${formatTime(minTime)}-${formatTime(maxTime)}`;
   };
-
   const now = new Date();
-
   if (orderType.value === "delivery") {
     const total = deliveryTime.value + prepTime.value + assemblyTime.value;
     const range = buildRange(total);
     if (!range) return null;
     return `Заказ доставим до ${range}`;
   }
-
   const pickupRange = buildRange(prepTime.value);
   if (!pickupRange) return null;
   return `Заказ приготовим до ${pickupRange}`;
 });
-
-// Для совместимости со старыми ссылками
 const totalPrice = computed(() => finalTotalPrice.value);
-
 onMounted(async () => {
   if (!orderType.value) {
     orderType.value = locationStore.deliveryType || "delivery";
   }
   locationStore.setDeliveryType(orderType.value);
-
   if (orderType.value === "pickup") {
     await loadBranches();
     applyBranchTimes(selectedBranch.value);
   }
-
   if (orderType.value === "delivery" && locationStore.deliveryAddress && locationStore.deliveryCoords) {
     addressValidated.value = true;
     inDeliveryZone.value = true;
   }
-
   if (locationStore.deliveryZone) {
     applyDeliveryZone(locationStore.deliveryZone);
   } else if (orderType.value === "delivery" && locationStore.deliveryCoords && locationStore.selectedCity?.id) {
@@ -306,10 +263,8 @@ onMounted(async () => {
       console.error("Failed to refresh delivery zone:", error);
     }
   }
-
   loyaltyStore.refreshFromOrders();
 });
-
 watch(
   () => orderType.value,
   async (newType) => {
@@ -330,11 +285,9 @@ watch(
         applyDeliveryZone(locationStore.deliveryZone);
       }
     }
-
     await refreshCartPricesForOrderType();
   },
 );
-
 watch(
   () => [locationStore.deliveryAddress, deliveryCoords.value, locationStore.deliveryZone],
   () => {
@@ -352,7 +305,6 @@ watch(
   },
   { immediate: true },
 );
-
 async function refreshCartPricesForOrderType() {
   if (!locationStore.selectedCity) return;
   const fulfillmentType = orderType.value === "pickup" ? "pickup" : "delivery";
@@ -373,7 +325,6 @@ async function refreshCartPricesForOrderType() {
     console.error("Failed to refresh cart prices:", error);
   }
 }
-
 watch(
   () => cartStore.totalPrice,
   () => {
@@ -382,7 +333,6 @@ watch(
     }
   },
 );
-
 function selectOrderType(type) {
   hapticFeedback("light");
   orderType.value = type;
@@ -403,15 +353,12 @@ function selectOrderType(type) {
     applyBranchTimes(selectedBranch.value);
   }
 }
-
 function openDeliveryMap() {
   hapticFeedback("light");
   router.push("/delivery-map");
 }
-
 async function loadBranches() {
   if (!locationStore.selectedCity) return;
-
   try {
     loadingBranches.value = true;
     const response = await citiesAPI.getBranches(locationStore.selectedCity.id);
@@ -422,18 +369,15 @@ async function loadBranches() {
     loadingBranches.value = false;
   }
 }
-
 function selectBranch(branch) {
   hapticFeedback("light");
   selectedBranch.value = branch;
   locationStore.setBranch(branch);
   applyBranchTimes(branch);
 }
-
 function applyBranchTimes(branch) {
   prepTime.value = parseInt(branch?.prep_time || 0);
 }
-
 function applyDeliveryZone(zone) {
   deliveryCost.value = parseFloat(zone?.delivery_cost || 0);
   deliveryTime.value = parseInt(zone?.delivery_time || 0);
@@ -441,19 +385,15 @@ function applyDeliveryZone(zone) {
   prepTime.value = parseInt(zone?.prep_time || 0);
   assemblyTime.value = parseInt(zone?.assembly_time || 0);
 }
-
 async function submitOrder() {
   if (!canSubmitOrder.value || submitting.value) return;
-
   submitting.value = true;
   hapticFeedback("medium");
-
   try {
     if (!locationStore.selectedCity?.id) {
       alert("Выберите город перед оформлением заказа");
       return;
     }
-
     const orderData = {
       city_id: locationStore.selectedCity.id,
       order_type: orderType.value,
@@ -474,20 +414,14 @@ async function submitOrder() {
       comment: orderComment.value,
       bonus_to_use: appliedBonusToUse.value,
     };
-
     if (orderType.value === "delivery") {
-      // Разделяем адрес на улицу и дом
       const addressParts = deliveryAddress.value.split(",").map((s) => s.trim());
       let street = "";
       let house = "";
-
       if (addressParts.length >= 2) {
-        // Последняя часть обычно содержит дом
         house = addressParts[addressParts.length - 1];
-        // Все остальное - улица
         street = addressParts.slice(0, -1).join(", ");
       } else {
-        // Если адрес не содержит запятых, пытаемся найти номер дома
         const match = deliveryAddress.value.match(/^(.+?)\s+(\d+.*)$/);
         if (match) {
           street = match[1];
@@ -497,7 +431,6 @@ async function submitOrder() {
           house = "";
         }
       }
-
       orderData.delivery_street = street;
       orderData.delivery_house = house;
       orderData.delivery_entrance = deliveryDetails.value.entrance;
@@ -508,25 +441,17 @@ async function submitOrder() {
     } else {
       orderData.branch_id = selectedBranch.value.id;
     }
-
     if (paymentMethod.value === "cash" && changeFrom.value) {
       orderData.change_from = changeFrom.value;
     }
-
     const response = await ordersAPI.createOrder(orderData);
-
     hapticFeedback("success");
     cartStore.clearCart();
-    // Перенаправляем на главную, где отображается активный заказ
     router.push("/");
   } catch (error) {
     console.error("Failed to create order:", error);
     hapticFeedback("error");
-
-    // Перевод ошибок на русский
     let errorMessage = "Ошибка при оформлении заказа";
-
-    // Словарь переводов ошибок
     const errorTranslations = {
       "Delivery is not available to this address": "Доставка по этому адресу недоступна. Возможно, адрес находится вне зоны доставки.",
       "delivery address is required for delivery orders": "Укажите адрес доставки",
@@ -535,13 +460,9 @@ async function submitOrder() {
       "Insufficient stock": "Недостаточно товара на складе",
       "Minimum order amount is": "Минимальная сумма заказа не достигнута",
     };
-
-    // API клиент преобразует ошибки в формат {message, status, data}
     if (error.status === 0) {
-      // Нет связи с сервером
       errorMessage = "Нет связи с сервером. Проверьте интернет-соединение и убедитесь, что backend запущен.";
     } else if (error.data?.error) {
-      // Ошибка с сервера
       const serverError = error.data.error;
       if (serverError.startsWith("Minimum order amount is")) {
         const amount = serverError.replace("Minimum order amount is", "").trim();
@@ -550,17 +471,14 @@ async function submitOrder() {
         errorMessage = errorTranslations[serverError] || serverError;
       }
     } else if (error.message) {
-      // Другая ошибка
       errorMessage = error.message;
     }
-
     alert(errorMessage);
   } finally {
     submitting.value = false;
   }
 }
 </script>
-
 <style scoped>
 .checkout {
   min-height: 100vh;
@@ -568,12 +486,10 @@ async function submitOrder() {
   padding: 12px;
   padding-bottom: 108px;
 }
-
 .time-panel {
   margin-top: 12px;
   padding: 12px;
 }
-
 .time-info {
   display: flex;
   align-items: center;
@@ -581,7 +497,6 @@ async function submitOrder() {
   color: var(--color-text-primary);
   font-size: var(--font-size-h3);
 }
-
 .order-type-tabs {
   display: flex;
   gap: 10px;
@@ -590,7 +505,6 @@ async function submitOrder() {
   border-radius: var(--border-radius-md);
   padding: 2px;
 }
-
 .order-tab {
   flex: 1;
   display: inline-flex;
@@ -607,33 +521,27 @@ async function submitOrder() {
   cursor: pointer;
   transition: background-color var(--transition-duration) var(--transition-easing);
 }
-
 .order-tab.active {
   background: var(--color-primary);
   color: var(--color-text-primary);
 }
-
 .order-tab:not(.active):hover {
   background: var(--color-background-secondary);
 }
-
 .section-title {
   font-size: var(--font-size-h2);
   font-weight: var(--font-weight-bold);
   color: var(--color-text-primary);
   margin: 0 0 8px 0;
 }
-
 .order-type-selection {
   margin-top: 16px;
 }
-
 .order-type-cards {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
-
 .order-type-card {
   display: flex;
   align-items: center;
@@ -645,40 +553,33 @@ async function submitOrder() {
   cursor: pointer;
   transition: all 0.2s;
 }
-
 .order-type-card:hover {
   box-shadow: 0px 4px 12px rgba(0, 0, 0, 0.12);
   transform: translateY(-2px);
 }
-
 .card-icon {
   font-size: 48px;
   line-height: 1;
 }
-
 .card-content h3 {
   font-size: var(--font-size-h3);
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-primary);
   margin: 0 0 4px 0;
 }
-
 .card-content p {
   font-size: var(--font-size-body);
   color: var(--color-text-secondary);
   margin: 0;
 }
-
 .form-group {
   margin-bottom: 16px;
 }
-
 .form-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
 }
-
 .label {
   display: block;
   font-size: var(--font-size-caption);
@@ -686,7 +587,6 @@ async function submitOrder() {
   color: var(--color-text-primary);
   margin-bottom: 8px;
 }
-
 .address-row {
   display: flex;
   align-items: center;
@@ -697,7 +597,6 @@ async function submitOrder() {
   border-radius: var(--border-radius-md);
   background: var(--color-background);
 }
-
 .address-text {
   font-size: var(--font-size-body);
   font-weight: var(--font-weight-semibold);
@@ -705,12 +604,10 @@ async function submitOrder() {
   line-height: 1.3;
   flex: 1;
 }
-
 .address-placeholder {
   color: var(--color-text-secondary);
   font-weight: var(--font-weight-regular);
 }
-
 .edit-address-btn {
   width: 32px;
   height: 32px;
@@ -724,11 +621,9 @@ async function submitOrder() {
   cursor: pointer;
   transition: background-color 0.2s;
 }
-
 .edit-address-btn:hover {
   background: var(--color-border);
 }
-
 .input,
 .textarea {
   width: 100%;
@@ -740,18 +635,15 @@ async function submitOrder() {
   color: var(--color-text-primary);
   font-family: inherit;
 }
-
 .input:focus,
 .textarea:focus {
   outline: none;
   border-color: var(--color-primary);
 }
-
 .textarea {
   min-height: 80px;
   resize: vertical;
 }
-
 .suggestions {
   margin-top: 8px;
   background: var(--color-background);
@@ -759,7 +651,6 @@ async function submitOrder() {
   border-radius: var(--border-radius-md);
   overflow: hidden;
 }
-
 .suggestion-item {
   width: 100%;
   padding: 12px 16px;
@@ -771,24 +662,20 @@ async function submitOrder() {
   cursor: pointer;
   transition: background-color 0.2s;
 }
-
 .suggestion-item:hover {
   background: var(--color-background-secondary);
 }
-
 .error-message {
   padding: 16px;
   background: #ffebee;
   border-radius: var(--border-radius-md);
   text-align: center;
 }
-
 .error-message p {
   color: #c62828;
   margin-bottom: 12px;
   font-weight: var(--font-weight-semibold);
 }
-
 .btn-secondary {
   padding: 8px 16px;
   border: 1px solid var(--color-border);
@@ -798,13 +685,11 @@ async function submitOrder() {
   font-size: var(--font-size-body);
   cursor: pointer;
 }
-
 .branches-list {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
-
 .branch-card {
   padding: 16px;
   background: var(--color-background);
@@ -814,25 +699,21 @@ async function submitOrder() {
   cursor: pointer;
   transition: all 0.2s;
 }
-
 .branch-card.active {
   border-color: var(--color-primary);
   background: var(--color-primary);
 }
-
 .branch-card h3 {
   font-size: var(--font-size-h3);
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-primary);
   margin: 0 0 4px 0;
 }
-
 .branch-address {
   font-size: var(--font-size-body);
   color: var(--color-text-secondary);
   margin: 4px 0;
 }
-
 .branch-phone {
   font-size: var(--font-size-caption);
   color: var(--color-text-secondary);
@@ -841,12 +722,10 @@ async function submitOrder() {
   align-items: center;
   gap: 6px;
 }
-
 .payment-options {
   display: flex;
   gap: 12px;
 }
-
 .payment-option {
   flex: 1;
   padding: 12px 16px;
@@ -863,16 +742,13 @@ async function submitOrder() {
   justify-content: center;
   gap: 8px;
 }
-
 .payment-option.active {
   border-color: var(--color-primary);
   background: var(--color-primary);
 }
-
 .order-summary {
   padding-bottom: 12px;
 }
-
 .summary-row {
   display: flex;
   justify-content: space-between;
@@ -881,7 +757,6 @@ async function submitOrder() {
   color: var(--color-text-primary);
   padding-bottom: 4px;
 }
-
 .summary-row.bonus-discount .discount {
   color: var(--color-text-primary);
   font-weight: var(--font-weight-semibold);
@@ -893,7 +768,6 @@ async function submitOrder() {
   color: var(--color-text-primary);
   font-weight: var(--font-weight-semibold);
 }
-
 .summary-row.total {
   font-weight: var(--font-weight-bold);
   font-size: var(--font-size-h3);
@@ -901,7 +775,6 @@ async function submitOrder() {
   border-top: 1px solid var(--color-border);
   margin-bottom: 0;
 }
-
 .summary-info {
   margin-top: 12px;
   padding-top: 12px;
@@ -910,11 +783,9 @@ async function submitOrder() {
   color: var(--color-text-secondary);
   text-align: center;
 }
-
 .delivery-time {
   display: block;
 }
-
 .footer {
   position: fixed;
   bottom: 40px;
@@ -923,7 +794,6 @@ async function submitOrder() {
   padding: 12px;
   z-index: 100;
 }
-
 .submit-btn {
   width: 100%;
   padding: 18px;
@@ -936,16 +806,13 @@ async function submitOrder() {
   cursor: pointer;
   transition: background-color 0.2s;
 }
-
 .submit-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
-
 .submit-btn:not(:disabled):hover {
   background: var(--color-primary-hover);
 }
-
 .loading {
   text-align: center;
   padding: 32px;

@@ -12,7 +12,6 @@
         </Button>
       </CardHeader>
     </Card>
-
     <Card>
       <CardContent>
         <div class="grid gap-4 md:grid-cols-2">
@@ -36,7 +35,6 @@
         </div>
       </CardContent>
     </Card>
-
     <Card>
       <CardHeader>
         <CardTitle>Список пользователей</CardTitle>
@@ -82,12 +80,7 @@
                   <Button variant="ghost" size="icon" @click="openModal(user)">
                     <Pencil :size="16" />
                   </Button>
-                  <Button
-                    v-if="user.id !== authStore.user?.id"
-                    variant="ghost"
-                    size="icon"
-                    @click="deleteUser(user)"
-                  >
+                  <Button v-if="user.id !== authStore.user?.id" variant="ghost" size="icon" @click="deleteUser(user)">
                     <Trash2 :size="16" class="text-red-600" />
                   </Button>
                 </div>
@@ -97,7 +90,6 @@
         </Table>
       </CardContent>
     </Card>
-
     <BaseModal v-if="showModal" :title="modalTitle" :subtitle="modalSubtitle" @close="closeModal">
       <form class="space-y-4" @submit.prevent="submitUser">
         <div class="grid gap-4 md:grid-cols-2">
@@ -110,18 +102,15 @@
             <Input v-model="form.last_name" required />
           </div>
         </div>
-
         <div class="space-y-2">
           <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Email</label>
           <Input v-model="form.email" type="email" required />
         </div>
-
         <div v-if="!editing" class="space-y-2">
           <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Пароль</label>
           <Input v-model="form.password" type="password" :required="!editing" minlength="6" />
           <p class="text-xs text-muted-foreground">Минимум 6 символов</p>
         </div>
-
         <div class="grid gap-4 md:grid-cols-2">
           <div class="space-y-2">
             <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Роль</label>
@@ -139,12 +128,10 @@
             </Select>
           </div>
         </div>
-
         <div class="space-y-2">
           <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Telegram ID (опционально)</label>
           <Input v-model="form.telegram_id" type="number" />
         </div>
-
         <div v-if="form.role === 'manager'">
           <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Города доступа</label>
           <div class="mt-2 grid gap-2 md:grid-cols-2">
@@ -154,7 +141,6 @@
             </label>
           </div>
         </div>
-
         <div v-if="form.role === 'manager'" class="space-y-2">
           <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground\">Филиалы доступа</label>
           <div class="mt-2 grid gap-2 md:grid-cols-2">
@@ -165,7 +151,6 @@
           </div>
           <p class="text-xs text-muted-foreground">Филиалы ограничены выбранными городами.</p>
         </div>
-
         <Button class="w-full" type="submit">
           <Save :size="16" />
           Сохранить
@@ -174,7 +159,6 @@
     </BaseModal>
   </div>
 </template>
-
 <script setup>
 import { computed, onMounted, ref, watch } from "vue";
 import { Pencil, Plus, Save, Trash2 } from "lucide-vue-next";
@@ -198,11 +182,9 @@ import TableHead from "../components/ui/TableHead.vue";
 import TableHeader from "../components/ui/TableHeader.vue";
 import TableRow from "../components/ui/TableRow.vue";
 import { useNotifications } from "../composables/useNotifications.js";
-
 const referenceStore = useReferenceStore();
 const authStore = useAuthStore();
 const { showErrorNotification } = useNotifications();
-
 const users = ref([]);
 const showModal = ref(false);
 const editing = ref(null);
@@ -210,7 +192,6 @@ const filters = ref({
   role: "",
   is_active: "",
 });
-
 const form = ref({
   first_name: "",
   last_name: "",
@@ -222,10 +203,8 @@ const form = ref({
   city_ids: [],
   branch_ids: [],
 });
-
 const modalTitle = computed(() => (editing.value ? "Редактировать пользователя" : "Новый пользователь"));
 const modalSubtitle = computed(() => (editing.value ? "Измените данные пользователя" : "Добавьте нового администратора или менеджера"));
-
 const availableBranches = computed(() => {
   const cityIds = form.value.city_ids || [];
   if (cityIds.length === 0) return [];
@@ -238,7 +217,6 @@ const availableBranches = computed(() => {
     }));
   });
 });
-
 const getRoleLabel = (role) => {
   const labels = {
     admin: "Администратор",
@@ -247,26 +225,22 @@ const getRoleLabel = (role) => {
   };
   return labels[role] || role;
 };
-
 const roleVariant = (role) => {
   if (role === "admin") return "warning";
   if (role === "ceo") return "secondary";
   return "default";
 };
-
 const loadUsers = async () => {
   try {
     const params = {};
     if (filters.value.role) params.role = filters.value.role;
     if (filters.value.is_active) params.is_active = filters.value.is_active;
-
     const response = await api.get("/api/admin/users", { params });
     users.value = response.data.users || [];
   } catch (error) {
     console.error("Ошибка загрузки пользователей:", error);
   }
 };
-
 const openModal = (user = null) => {
   editing.value = user;
   if (user) {
@@ -296,12 +270,10 @@ const openModal = (user = null) => {
   }
   showModal.value = true;
 };
-
 const closeModal = () => {
   showModal.value = false;
   editing.value = null;
 };
-
 const submitUser = async () => {
   try {
     const payload = {
@@ -314,13 +286,11 @@ const submitUser = async () => {
       cities: form.value.city_ids,
       branch_ids: form.value.branch_ids || [],
     };
-
     if (!editing.value) {
       payload.password = form.value.password;
     } else if (form.value.password) {
       payload.password = form.value.password;
     }
-
     if (editing.value) {
       await api.put(`/api/admin/users/${editing.value.id}`, payload);
     } else {
@@ -333,7 +303,6 @@ const submitUser = async () => {
     showErrorNotification(error.response?.data?.error || "Ошибка сохранения пользователя");
   }
 };
-
 const deleteUser = async (user) => {
   if (!confirm(`Удалить пользователя "${user.first_name} ${user.last_name}"?`)) return;
   try {
@@ -344,12 +313,10 @@ const deleteUser = async (user) => {
     showErrorNotification(error.response?.data?.error || "Ошибка удаления пользователя");
   }
 };
-
 onMounted(async () => {
   await referenceStore.loadCities();
   await loadUsers();
 });
-
 watch(
   () => [...(form.value.city_ids || [])],
   async (cityIds) => {
@@ -358,9 +325,8 @@ watch(
     if (form.value.branch_ids?.length) {
       form.value.branch_ids = form.value.branch_ids.filter((branchId) => availableBranches.value.some((branch) => branch.id === branchId));
     }
-  }
+  },
 );
-
 watch(
   () => form.value.role,
   (role) => {
@@ -368,6 +334,6 @@ watch(
       form.value.city_ids = [];
       form.value.branch_ids = [];
     }
-  }
+  },
 );
 </script>

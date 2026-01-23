@@ -1,6 +1,5 @@
 import { defineStore } from "pinia";
 import api from "../api/client.js";
-
 export const useReferenceStore = defineStore("reference", {
   state: () => ({
     cities: [],
@@ -12,7 +11,6 @@ export const useReferenceStore = defineStore("reference", {
   }),
   getters: {
     branches: (state) => {
-      // Возвращаем все филиалы из всех городов
       return Object.values(state.branchesByCity).flat();
     },
   },
@@ -61,7 +59,6 @@ export const useReferenceStore = defineStore("reference", {
     },
     async fetchCitiesAndBranches() {
       await this.loadCities();
-      // Загружаем филиалы для всех городов
       const branchPromises = this.cities.map((city) => this.loadBranches(city.id));
       await Promise.all(branchPromises);
     },

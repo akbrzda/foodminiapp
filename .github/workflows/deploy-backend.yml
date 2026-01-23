@@ -1,5 +1,4 @@
 name: Deploy Backend
-
 on:
   push:
     branches:
@@ -7,55 +6,43 @@ on:
     paths:
       - "backend/**"
       - ".github/workflows/deploy-backend.yml"
-
 jobs:
   deploy:
     name: Deploy Backend to Server
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: "npm"
           cache-dependency-path: backend/package-lock.json
-
       - name: Install dependencies
         working-directory: backend
         run: npm ci --production
-
       - name: Create .env file
         working-directory: backend
         run: |
           cat << EOF > .env
           NODE_ENV=${{ secrets.NODE_ENV }}
           PORT=${{ secrets.PORT }}
-
           DB_HOST=${{ secrets.DB_HOST }}
           DB_PORT=${{ secrets.DB_PORT }}
           DB_NAME=${{ secrets.DB_NAME }}
           DB_USER=${{ secrets.DB_USER }}
           DB_PASSWORD=${{ secrets.DB_PASSWORD }}
-
           REDIS_HOST=${{ secrets.REDIS_HOST }}
           REDIS_PORT=${{ secrets.REDIS_PORT }}
           REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}
-
           JWT_SECRET=${{ secrets.JWT_SECRET }}
-
           TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID=${{ secrets.TELEGRAM_CHAT_ID }}
-
           CORS_ORIGINS=${{ secrets.CORS_ORIGINS }}
-
           CDN_BASE_URL=${{ secrets.CDN_BASE_URL }}
           CDN_IMAGES_PATH=${{ secrets.CDN_IMAGES_PATH }}
           EOF
-
       - name: Setup SSH
         run: |
           if [ -z "${{ secrets.SSH_HOST }}" ]; then
@@ -75,7 +62,6 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
           echo "SSH setup completed successfully"
-
       - name: Deploy to server
         run: |
           rsync -avz --delete \
@@ -84,7 +70,6 @@ jobs:
             --exclude '.git' \
             --exclude 'logs' \
             backend/ ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/var/www/backend.panda.akbrzda.ru/
-
       - name: Install dependencies on server
         uses: appleboy/ssh-action@v1.0.0
         with:
@@ -94,7 +79,6 @@ jobs:
           script: |
             cd /var/www/backend.panda.akbrzda.ru
             npm ci --production
-
       - name: Run database migrations
         uses: appleboy/ssh-action@v1.0.0
         with:
@@ -104,7 +88,6 @@ jobs:
           script: |
             cd /var/www/backend.panda.akbrzda.ru
             npm run migrate
-
       - name: Restart application with PM2
         uses: appleboy/ssh-action@v1.0.0
         with:
@@ -120,7 +103,6 @@ jobs:
               pm2 start src/index.js --name foodminiapp-backend
               pm2 save
             fi
-
       - name: Check application status
         uses: appleboy/ssh-action@v1.0.0
         with:

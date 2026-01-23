@@ -7,11 +7,9 @@
       </Button>
       <Badge variant="secondary">ID: {{ route.params.id }}</Badge>
     </div>
-
     <Card v-if="!order">
       <CardContent class="py-10 text-center text-sm text-muted-foreground">Загрузка...</CardContent>
     </Card>
-
     <div v-else class="space-y-6">
       <Card>
         <CardContent class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -21,12 +19,11 @@
             <div class="text-xs text-muted-foreground">{{ formatDateTime(order.created_at) }}</div>
           </div>
           <div class="flex flex-wrap items-center gap-3">
-            <Badge variant="outline">{{ order.order_type === 'delivery' ? 'Доставка' : 'Самовывоз' }}</Badge>
+            <Badge variant="outline">{{ order.order_type === "delivery" ? "Доставка" : "Самовывоз" }}</Badge>
             <StatusBadge :status="order.status" />
           </div>
         </CardContent>
       </Card>
-
       <div class="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
@@ -43,10 +40,9 @@
             </div>
           </CardContent>
         </Card>
-
         <Card>
           <CardHeader>
-            <CardTitle>{{ order.order_type === 'delivery' ? 'Доставка' : 'Самовывоз' }}</CardTitle>
+            <CardTitle>{{ order.order_type === "delivery" ? "Доставка" : "Самовывоз" }}</CardTitle>
           </CardHeader>
           <CardContent class="space-y-2 text-sm">
             <div class="flex items-center justify-between">
@@ -88,7 +84,7 @@
             </div>
             <div v-else class="flex items-center justify-between">
               <span class="text-muted-foreground">Адрес филиала</span>
-              <span>{{ order.branch_address || '—' }}</span>
+              <span>{{ order.branch_address || "—" }}</span>
             </div>
             <div v-if="order.comment" class="rounded-md border border-border/60 bg-muted/40 p-3 text-xs text-muted-foreground">
               {{ order.comment }}
@@ -96,7 +92,6 @@
           </CardContent>
         </Card>
       </div>
-
       <Card>
         <CardHeader>
           <CardTitle>Состав заказа</CardTitle>
@@ -119,9 +114,7 @@
                     <span v-if="item.variant_name" class="text-xs text-muted-foreground">({{ item.variant_name }})</span>
                   </div>
                   <div v-if="item.modifiers && item.modifiers.length" class="mt-2 space-y-1 text-xs text-muted-foreground">
-                    <div v-for="mod in item.modifiers" :key="mod.id">
-                      + {{ mod.modifier_name }} (+{{ formatCurrency(mod.modifier_price) }})
-                    </div>
+                    <div v-for="mod in item.modifiers" :key="mod.id">+ {{ mod.modifier_name }} (+{{ formatCurrency(mod.modifier_price) }})</div>
                   </div>
                 </TableCell>
                 <TableCell>{{ formatNumber(item.quantity) }}</TableCell>
@@ -132,7 +125,6 @@
           </Table>
         </CardContent>
       </Card>
-
       <div class="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
@@ -162,7 +154,6 @@
             </div>
           </CardContent>
         </Card>
-
         <Card v-if="order.payment_method === 'cash' && order.change_from">
           <CardHeader>
             <CardTitle>Оплата наличными</CardTitle>
@@ -179,7 +170,6 @@
           </CardContent>
         </Card>
       </div>
-
       <Card>
         <CardHeader>
           <CardTitle>Управление заказом</CardTitle>
@@ -204,7 +194,6 @@
     </div>
   </div>
 </template>
-
 <script setup>
 import { ref, computed, onMounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -228,13 +217,11 @@ import TableHead from "../components/ui/TableHead.vue";
 import TableHeader from "../components/ui/TableHeader.vue";
 import TableRow from "../components/ui/TableRow.vue";
 import { useNotifications } from "../composables/useNotifications.js";
-
 const route = useRoute();
 const router = useRouter();
 const { showErrorNotification } = useNotifications();
 const order = ref(null);
 const statusUpdate = ref("");
-
 const statusOrder = {
   pending: 0,
   confirmed: 1,
@@ -244,13 +231,10 @@ const statusOrder = {
   completed: 5,
   cancelled: -1,
 };
-
 const availableStatuses = computed(() => {
   if (!order.value) return [];
-
   const currentStatusIndex = statusOrder[order.value.status];
   const isDelivery = order.value.order_type === "delivery";
-
   let allStatuses;
   if (isDelivery) {
     allStatuses = [
@@ -272,18 +256,15 @@ const availableStatuses = computed(() => {
       { value: "cancelled", label: "Отменен", index: -1 },
     ];
   }
-
   return allStatuses.filter((status) => {
     if (status.value === "cancelled") return true;
     if (order.value.status === "completed") return false;
     return status.index >= currentStatusIndex;
   });
 });
-
 onMounted(async () => {
   await loadOrder();
 });
-
 const loadOrder = async () => {
   try {
     const response = await api.get(`/api/orders/admin/${route.params.id}`);
@@ -292,7 +273,6 @@ const loadOrder = async () => {
     console.error("Failed to load order:", error);
   }
 };
-
 const updateStatus = async () => {
   if (!statusUpdate.value) return;
   try {
@@ -306,7 +286,6 @@ const updateStatus = async () => {
     showErrorNotification("Ошибка при обновлении статуса");
   }
 };
-
 const getChangeAmount = (orderData) => {
   if (!orderData) return 0;
   const changeFrom = Number(orderData.change_from || 0);

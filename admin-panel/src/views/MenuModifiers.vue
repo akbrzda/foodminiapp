@@ -12,7 +12,6 @@
         </Button>
       </CardHeader>
     </Card>
-
     <div class="space-y-4">
       <Card v-for="group in groups" :key="group.id">
         <CardHeader class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
@@ -69,7 +68,6 @@
               </Button>
             </div>
           </div>
-
           <Button variant="outline" size="sm" @click="openModifierModal(group)">
             <Plus :size="16" />
             Добавить модификатор
@@ -77,7 +75,6 @@
         </CardContent>
       </Card>
     </div>
-
     <BaseModal v-if="showModal" :title="modalTitle" :subtitle="modalSubtitle" @close="closeModal">
       <form class="space-y-4" @submit.prevent="submitGroup">
         <div class="space-y-2">
@@ -115,7 +112,6 @@
         </Button>
       </form>
     </BaseModal>
-
     <BaseModal v-if="showModifierModal" title="Модификатор" subtitle="Добавьте параметр" @close="closeModifierModal">
       <form class="space-y-4" @submit.prevent="submitModifier">
         <div class="space-y-2">
@@ -170,7 +166,6 @@
         </Button>
       </form>
     </BaseModal>
-
     <BaseModal v-if="showVariantPricesModal" title="Цены по вариациям" subtitle="Настройка цен модификатора" @close="closeVariantPricesModal">
       <form class="space-y-4" @submit.prevent="submitVariantPrices">
         <div v-if="variantPriceRows.length === 0" class="text-sm text-muted-foreground">Нет доступных вариаций</div>
@@ -206,7 +201,6 @@
     </BaseModal>
   </div>
 </template>
-
 <script setup>
 import { computed, onMounted, ref } from "vue";
 import { Pencil, Plus, Save, Settings2, Trash2, UploadCloud } from "lucide-vue-next";
@@ -222,7 +216,6 @@ import Input from "../components/ui/Input.vue";
 import Select from "../components/ui/Select.vue";
 import { useNotifications } from "../composables/useNotifications.js";
 import { formatCurrency } from "../utils/format.js";
-
 const groups = ref([]);
 const { showErrorNotification } = useNotifications();
 const showModal = ref(false);
@@ -241,7 +234,6 @@ const uploadState = ref({
   error: null,
   preview: null,
 });
-
 const form = ref({
   name: "",
   type: "single",
@@ -250,7 +242,6 @@ const form = ref({
   min_selections: 0,
   max_selections: 1,
 });
-
 const modifierForm = ref({
   name: "",
   price: 0,
@@ -258,17 +249,14 @@ const modifierForm = ref({
   weight_unit: "",
   image_url: "",
 });
-
 const normalizeImageUrl = (url) => {
   if (!url) return "";
   if (url.startsWith("http://") || url.startsWith("https://")) return url;
   const base = (import.meta.env.VITE_UPLOADS_URL || import.meta.env.VITE_API_URL || "http://localhost:3000").replace(/\/$/, "");
   return url.startsWith("/") ? `${base}${url}` : `${base}/${url}`;
 };
-
 const modalTitle = computed(() => (editing.value ? "Редактировать группу" : "Новая группа"));
 const modalSubtitle = computed(() => (editing.value ? "Параметры группы" : "Создайте группу модификаторов"));
-
 const loadGroups = async () => {
   try {
     const response = await api.get("/api/menu/admin/modifier-groups");
@@ -278,13 +266,11 @@ const loadGroups = async () => {
     showErrorNotification(`Ошибка при загрузке групп: ${error.response?.data?.error || error.message}`);
   }
 };
-
 const loadVariants = async () => {
   if (allVariants.value.length > 0) return;
   const response = await api.get("/api/menu/admin/variants");
   allVariants.value = response.data.variants || [];
 };
-
 const openModal = (group = null) => {
   editing.value = group;
   form.value = group
@@ -299,11 +285,9 @@ const openModal = (group = null) => {
     : { name: "", type: "single", is_required: false, is_global: false, min_selections: 0, max_selections: 1 };
   showModal.value = true;
 };
-
 const closeModal = () => {
   showModal.value = false;
 };
-
 const submitGroup = async () => {
   try {
     if (editing.value) {
@@ -318,7 +302,6 @@ const submitGroup = async () => {
     showErrorNotification(`Ошибка при сохранении группы: ${error.response?.data?.error || error.message}`);
   }
 };
-
 const deleteGroup = async (group) => {
   if (!confirm(`Удалить группу "${group.name}"?`)) return;
   try {
@@ -329,7 +312,6 @@ const deleteGroup = async (group) => {
     showErrorNotification(`Ошибка при удалении группы: ${error.response?.data?.error || error.message}`);
   }
 };
-
 const openModifierModal = (group) => {
   activeGroup.value = group;
   editingModifier.value = null;
@@ -337,7 +319,6 @@ const openModifierModal = (group) => {
   uploadState.value = { loading: false, error: null, preview: null };
   showModifierModal.value = true;
 };
-
 const editModifier = (group, modifier) => {
   activeGroup.value = group;
   editingModifier.value = modifier;
@@ -351,11 +332,9 @@ const editModifier = (group, modifier) => {
   uploadState.value = { loading: false, error: null, preview: null };
   showModifierModal.value = true;
 };
-
 const closeModifierModal = () => {
   showModifierModal.value = false;
 };
-
 const openVariantPricesModal = async (modifier) => {
   try {
     saving.value = true;
@@ -363,7 +342,6 @@ const openVariantPricesModal = async (modifier) => {
     const response = await api.get(`/api/menu/admin/modifiers/${modifier.id}/variant-prices`);
     const existingPrices = response.data.prices || [];
     const priceByVariant = new Map(existingPrices.map((price) => [price.variant_id, price]));
-
     variantPriceRows.value = allVariants.value.map((variant) => {
       const existing = priceByVariant.get(variant.id);
       return {
@@ -374,7 +352,6 @@ const openVariantPricesModal = async (modifier) => {
         weight_unit: existing?.weight_unit ?? "",
       };
     });
-
     activeModifierForPrices.value = modifier;
     showVariantPricesModal.value = true;
   } catch (error) {
@@ -384,27 +361,22 @@ const openVariantPricesModal = async (modifier) => {
     saving.value = false;
   }
 };
-
 const closeVariantPricesModal = () => {
   showVariantPricesModal.value = false;
   activeModifierForPrices.value = null;
   variantPriceRows.value = [];
 };
-
 const triggerFile = () => {
   fileInput.value?.click();
 };
-
 const onFileChange = (event) => {
   const file = event.target.files?.[0];
   if (file) handleFile(file);
 };
-
 const onDrop = (event) => {
   const file = event.dataTransfer.files?.[0];
   if (file) handleFile(file);
 };
-
 const readFileAsDataUrl = (file) =>
   new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -412,7 +384,6 @@ const readFileAsDataUrl = (file) =>
     reader.onerror = () => reject(reader.error);
     reader.readAsDataURL(file);
   });
-
 const handleFile = async (file) => {
   if (!file.type.startsWith("image/")) {
     uploadState.value.error = "Только изображения";
@@ -422,21 +393,16 @@ const handleFile = async (file) => {
     uploadState.value.error = "Файл слишком большой (макс 10MB)";
     return;
   }
-
   uploadState.value.loading = true;
   uploadState.value.error = null;
   uploadState.value.preview = URL.createObjectURL(file);
-
   try {
     const formData = new FormData();
     formData.append("image", file);
-
-    // Используем ID модификатора если редактируем, иначе 'temp' для временной загрузки
     const modifierId = editingModifier.value?.id || "temp";
     const response = await api.post(`/api/uploads/modifiers/${modifierId}`, formData, {
       headers: { "Content-Type": "multipart/form-data" },
     });
-
     const uploadedUrl = response.data?.data?.url || "";
     modifierForm.value.image_url = uploadedUrl;
     uploadState.value.preview = uploadedUrl;
@@ -447,14 +413,12 @@ const handleFile = async (file) => {
     uploadState.value.loading = false;
   }
 };
-
 const submitModifier = async () => {
   if (!activeGroup.value) {
     console.error("activeGroup is not set");
     showErrorNotification("Ошибка: не выбрана группа модификаторов");
     return;
   }
-
   try {
     if (editingModifier.value) {
       await api.put(`/api/menu/admin/modifiers/${editingModifier.value.id}`, modifierForm.value);
@@ -469,7 +433,6 @@ const submitModifier = async () => {
     showErrorNotification(`Ошибка при сохранении модификатора: ${error.response?.data?.error || error.message}`);
   }
 };
-
 const submitVariantPrices = async () => {
   if (!activeModifierForPrices.value) return;
   saving.value = true;
@@ -491,7 +454,6 @@ const submitVariantPrices = async () => {
     saving.value = false;
   }
 };
-
 const deleteModifier = async (modifier) => {
   if (!confirm(`Удалить модификатор "${modifier.name}"?`)) return;
   try {
@@ -502,6 +464,5 @@ const deleteModifier = async (modifier) => {
     showErrorNotification(`Ошибка при удалении модификатора: ${error.response?.data?.error || error.message}`);
   }
 };
-
 onMounted(loadGroups);
 </script>

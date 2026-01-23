@@ -3,7 +3,6 @@
     <h1 class="page-title">{{ title }}</h1>
   </header>
 </template>
-
 <script setup>
 defineProps({
   title: {
@@ -12,7 +11,6 @@ defineProps({
   },
 });
 </script>
-
 <style scoped>
 .page-header {
   position: sticky;
@@ -31,7 +29,6 @@ defineProps({
   border-bottom: 1px solid var(--color-border);
   min-height: calc(44px + var(--tg-content-safe-area-inset-top, 0px));
 }
-
 .page-title {
   font-size: var(--font-size-h2);
   font-weight: var(--font-weight-bold);

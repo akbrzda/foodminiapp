@@ -1,29 +1,20 @@
 import express from "express";
 import redis from "../config/redis.js";
 import axios from "axios";
-
 const router = express.Router();
-
-// Геокодирование адреса через Nominatim API
 router.post("/", async (req, res, next) => {
   try {
     const { address } = req.body;
-
     if (!address || typeof address !== "string" || address.trim().length === 0) {
       return res.status(400).json({
         error: "address is required and must be a non-empty string",
       });
     }
-
-    // Проверяем кеш Redis (TTL: 24 часа)
     const cacheKey = `geocode:${Buffer.from(address.trim().toLowerCase()).toString("base64")}`;
     const cached = await redis.get(cacheKey);
-
     if (cached) {
       return res.json(JSON.parse(cached));
     }
-
-    // Rate limiting: 1 запрос в секунду
     const rateLimitKey = "geocode:ratelimit";
     const lastRequest = await redis.get(rateLimitKey);
     if (lastRequest) {
@@ -33,8 +24,6 @@ router.post("/", async (req, res, next) => {
       }
     }
     await redis.set(rateLimitKey, Date.now().toString(), "EX", 1);
-
-    // Запрос к Nominatim API
     const nominatimUrl = "https://nominatim.openstreetmap.org/search";
     const response = await axios.get(nominatimUrl, {
       params: {
@@ -48,13 +37,11 @@ router.post("/", async (req, res, next) => {
       },
       timeout: 5000,
     });
-
     if (!response.data || response.data.length === 0) {
       return res.status(404).json({
         error: "Address not found",
       });
     }
-
     const result = response.data[0];
     const geocodeResult = {
       lat: parseFloat(result.lat),
@@ -67,10 +54,7 @@ router.post("/", async (req, res, next) => {
         country: result.address?.country || "",
       },
     };
-
-    // Кешируем результат на 24 часа
     await redis.set(cacheKey, JSON.stringify(geocodeResult), "EX", 86400);
-
     res.json(geocodeResult);
   } catch (error) {
     if (error.response) {
@@ -82,5 +66,4 @@ router.post("/", async (req, res, next) => {
     next(error);
   }
 });
-
 export default router;

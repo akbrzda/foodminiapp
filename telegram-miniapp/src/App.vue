@@ -3,7 +3,6 @@
     <router-view />
   </div>
 </template>
-
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useAuthStore } from "./stores/auth";
@@ -11,17 +10,14 @@ import { useCartStore } from "./stores/cart";
 import { useLocationStore } from "./stores/location";
 import { citiesAPI, userStateAPI } from "./api/endpoints";
 import { wsService } from "./services/websocket";
-
 const authStore = useAuthStore();
 const cartStore = useCartStore();
 const locationStore = useLocationStore();
-
 const isHydrated = ref(false);
 const lastSyncedPayload = ref("");
 let syncTimer = null;
 let blurListenersAttached = false;
 let blurScrollHandler = null;
-
 const stateToSync = computed(() => ({
   selected_city_id: locationStore.selectedCity?.id || null,
   selected_branch_id: locationStore.selectedBranch?.id || null,
@@ -31,10 +27,8 @@ const stateToSync = computed(() => ({
   delivery_details: locationStore.deliveryDetails || null,
   cart: cartStore.items || [],
 }));
-
 async function loadRemoteState() {
   if (!authStore.isAuthenticated) return;
-
   try {
     const response = await userStateAPI.getState();
     const state = response.data?.state;
@@ -42,7 +36,6 @@ async function loadRemoteState() {
       isHydrated.value = true;
       return;
     }
-
     if (state.selected_city_id && (!locationStore.selectedCity || locationStore.selectedCity.id !== state.selected_city_id)) {
       const citiesResponse = await citiesAPI.getCities();
       const city = (citiesResponse.data.cities || []).find((c) => c.id === state.selected_city_id);
@@ -50,7 +43,6 @@ async function loadRemoteState() {
         locationStore.setCity(city);
       }
     }
-
     if (state.selected_branch_id && state.selected_city_id) {
       const branchesResponse = await citiesAPI.getBranches(state.selected_city_id);
       const branch = (branchesResponse.data.branches || []).find((b) => b.id === state.selected_branch_id);
@@ -58,45 +50,35 @@ async function loadRemoteState() {
         locationStore.setBranch(branch);
       }
     }
-
     if (state.delivery_type) {
       locationStore.setDeliveryType(state.delivery_type);
     }
-
     if (state.delivery_address !== undefined) {
       locationStore.setDeliveryAddress(state.delivery_address || "");
     }
-
     if (state.delivery_coords !== undefined) {
       locationStore.setDeliveryCoords(state.delivery_coords || null);
     }
-
     if (state.delivery_details !== undefined) {
       locationStore.setDeliveryDetails(state.delivery_details || null);
     }
-
     if (Array.isArray(state.cart)) {
       cartStore.replaceItems(state.cart);
     }
-
     lastSyncedPayload.value = JSON.stringify(stateToSync.value);
   } finally {
     isHydrated.value = true;
   }
 }
-
 function scheduleSync() {
   if (syncTimer) {
     clearTimeout(syncTimer);
   }
-
   syncTimer = setTimeout(async () => {
     if (!authStore.isAuthenticated || !isHydrated.value) return;
-
     const payload = stateToSync.value;
     const payloadString = JSON.stringify(payload);
     if (payloadString === lastSyncedPayload.value) return;
-
     try {
       await userStateAPI.updateState(payload);
       lastSyncedPayload.value = payloadString;
@@ -105,36 +87,24 @@ function scheduleSync() {
     }
   }, 600);
 }
-
 onMounted(async () => {
   await loadRemoteState();
   setupWebSocket();
   attachBlurListeners();
 });
-
 onUnmounted(() => {
   wsService.disconnect();
   detachBlurListeners();
 });
-
 function setupWebSocket() {
-  // Подключаемся только если пользователь авторизован
   if (!authStore.isAuthenticated) return;
-
   wsService.connect(authStore.token);
-
-  // Обрабатываем обновление статуса заказа
   wsService.on("order-status-updated", (data) => {
     console.log("Order status updated:", data);
   });
-
-  // Обрабатываем обновление бонусов
   wsService.on("bonus-updated", (data) => {
     console.log("Bonus updated:", data);
-    // Можно обновить баланс в сторе или показать уведомление
   });
-
-  // Переподключаемся при восстановлении авторизации
   watch(
     () => authStore.isAuthenticated,
     (isAuth) => {
@@ -143,10 +113,9 @@ function setupWebSocket() {
       } else {
         wsService.disconnect();
       }
-    }
+    },
   );
 }
-
 function getStatusText(status) {
   const statuses = {
     pending: "Ожидает подтверждения",
@@ -159,7 +128,6 @@ function getStatusText(status) {
   };
   return statuses[status] || status;
 }
-
 function shouldBlurOnEvent(event) {
   const target = event?.target;
   if (!target) return true;
@@ -169,7 +137,6 @@ function shouldBlurOnEvent(event) {
   const isEditable = target.closest?.("input, textarea, [contenteditable='true']");
   return !isEditable;
 }
-
 function blurActiveElement() {
   const active = document.activeElement;
   if (!active) return;
@@ -177,7 +144,6 @@ function blurActiveElement() {
     active.blur();
   }
 }
-
 function attachBlurListeners() {
   if (blurListenersAttached || typeof window === "undefined") return;
   const handleScroll = () => {
@@ -187,12 +153,10 @@ function attachBlurListeners() {
     }
     blurActiveElement();
   };
-
   window.addEventListener("scroll", handleScroll, { passive: true, capture: true });
   blurScrollHandler = handleScroll;
   blurListenersAttached = true;
 }
-
 function detachBlurListeners() {
   if (!blurListenersAttached || typeof window === "undefined") return;
   if (blurScrollHandler) {
@@ -202,16 +166,14 @@ function detachBlurListeners() {
   blurScrollHandler = null;
   blurListenersAttached = false;
 }
-
 watch(
   stateToSync,
   () => {
     if (!isHydrated.value) return;
     scheduleSync();
   },
-  { deep: true }
+  { deep: true },
 );
-
 watch(
   () => authStore.isAuthenticated,
   (isAuth) => {
@@ -220,33 +182,28 @@ watch(
     } else {
       isHydrated.value = false;
     }
-  }
+  },
 );
 </script>
-
 <style>
 * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
 }
-
 body {
   font-family: var(--font-family);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background: var(--color-background);
 }
-
 #app {
   width: 100%;
   min-height: 100vh;
 }
-
 button {
   font-family: inherit;
 }
-
 /* Скрываем скроллбар, но оставляем функциональность */
 ::-webkit-scrollbar {
   width: 0px;

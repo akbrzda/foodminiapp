@@ -4,58 +4,35 @@ import { authenticateToken, requireRole } from "../middleware/auth.js";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
 const router = express.Router();
-
-/**
- * Получить логи действий администраторов
- * GET /api/admin/logs
- * Доступ: только admin и ceo
- * Query params:
- *   - admin_id: фильтр по конкретному администратору
- *   - action_type: фильтр по действию (create, update, delete)
- *   - object_type: фильтр по типу объекта
- *   - date_from, date_to: фильтр по дате
- *   - page, limit: пагинация
- */
 router.get("/admin", authenticateToken, requireRole("admin", "ceo"), async (req, res, next) => {
   try {
     const { admin_id, action_type, object_type, date_from, date_to, page = 1, limit = 50 } = req.query;
-
     let whereClause = "WHERE 1=1";
     const params = [];
-
     if (admin_id) {
       whereClause += " AND al.admin_user_id = ?";
       params.push(admin_id);
     }
-
     if (action_type) {
       whereClause += " AND al.action = ?";
       params.push(action_type);
     }
-
     if (object_type) {
       whereClause += " AND al.entity_type = ?";
       params.push(object_type);
     }
-
     if (date_from) {
       whereClause += " AND al.created_at >= ?";
       params.push(date_from);
     }
-
     if (date_to) {
       whereClause += " AND al.created_at <= ?";
       params.push(`${date_to} 23:59:59`);
     }
-
     const offset = (parseInt(page) - 1) * parseInt(limit);
-
-    // Получаем логи с информацией об администраторе
     const [logs] = await db.query(
       `SELECT 
          al.id,
@@ -75,10 +52,7 @@ router.get("/admin", authenticateToken, requireRole("admin", "ceo"), async (req,
        LIMIT ? OFFSET ?`,
       [...params, parseInt(limit), parseInt(offset)],
     );
-
-    // Получаем общее количество
     const [countResult] = await db.query(`SELECT COUNT(*) as total FROM admin_action_logs al ${whereClause}`, params);
-
     res.json({
       logs,
       total: countResult[0].total,
@@ -89,34 +63,15 @@ router.get("/admin", authenticateToken, requireRole("admin", "ceo"), async (req,
     next(error);
   }
 });
-
-/**
- * Получить системные логи из файла
- * GET /api/logs/system
- * Доступ: только admin и ceo
- * Query params:
- *   - level: фильтр по уровню (info, warn, error)
- *   - category: фильтр по категории
- *   - search: поиск по сообщению
- *   - limit: количество последних строк
- */
 router.get("/system", authenticateToken, requireRole("admin", "ceo"), async (req, res, next) => {
   try {
     const { level, category, search, limit = 100 } = req.query;
-
-    // Путь к файлу логов
     const logFilePath = path.join(__dirname, "../../logs/combined.log");
-
-    // Проверяем существование файла
     if (!fs.existsSync(logFilePath)) {
       return res.json({ logs: [], total: 0 });
     }
-
-    // Читаем файл
     const fileContent = fs.readFileSync(logFilePath, "utf-8");
     const lines = fileContent.split("\n").filter((line) => line.trim());
-
-    // Парсим JSON логи
     let logs = lines
       .map((line) => {
         try {
@@ -126,26 +81,17 @@ router.get("/system", authenticateToken, requireRole("admin", "ceo"), async (req
         }
       })
       .filter((log) => log !== null);
-
-    // Применяем фильтры
     if (level) {
       logs = logs.filter((log) => log.level === level);
     }
-
     if (category) {
       logs = logs.filter((log) => log.category === category);
     }
-
     if (search) {
       logs = logs.filter((log) => log.message && log.message.toLowerCase().includes(search.toLowerCase()));
     }
-
-    // Сортируем по дате (новые первые)
     logs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-
-    // Ограничиваем количество
     const limitedLogs = logs.slice(0, parseInt(limit));
-
     res.json({
       logs: limitedLogs,
       total: logs.length,
@@ -155,30 +101,19 @@ router.get("/system", authenticateToken, requireRole("admin", "ceo"), async (req
     next(error);
   }
 });
-
-/**
- * Получить статистику действий администраторов
- * GET /api/logs/stats
- * Доступ: только admin и ceo
- */
 router.get("/stats", authenticateToken, requireRole("admin", "ceo"), async (req, res, next) => {
   try {
     const { date_from, date_to } = req.query;
-
     let dateFilter = "";
     const params = [];
-
     if (date_from) {
       dateFilter += " AND created_at >= ?";
       params.push(date_from);
     }
-
     if (date_to) {
       dateFilter += " AND created_at <= ?";
       params.push(date_to);
     }
-
-    // Статистика действий администраторов
     const [adminActionStats] = await db.query(
       `SELECT action, COUNT(*) as count
        FROM admin_action_logs
@@ -188,8 +123,6 @@ router.get("/stats", authenticateToken, requireRole("admin", "ceo"), async (req,
        LIMIT 10`,
       params,
     );
-
-    // Самые активные администраторы
     const [adminUserStats] = await db.query(
       `SELECT 
          au.id,
@@ -204,8 +137,6 @@ router.get("/stats", authenticateToken, requireRole("admin", "ceo"), async (req,
        LIMIT 10`,
       params,
     );
-
-    // Статистика по типам сущностей
     const [entityTypeStats] = await db.query(
       `SELECT entity_type, COUNT(*) as count
        FROM admin_action_logs
@@ -214,7 +145,6 @@ router.get("/stats", authenticateToken, requireRole("admin", "ceo"), async (req,
        ORDER BY count DESC`,
       params,
     );
-
     res.json({
       admin_actions: {
         by_action: adminActionStats,
@@ -226,29 +156,17 @@ router.get("/stats", authenticateToken, requireRole("admin", "ceo"), async (req,
     next(error);
   }
 });
-
-/**
- * Очистить старые логи действий администраторов
- * DELETE /api/logs/cleanup
- * Доступ: только admin и ceo
- * Body: { days: 90 } - удалить логи старше N дней
- */
 router.delete("/cleanup", authenticateToken, requireRole("admin", "ceo"), async (req, res, next) => {
   try {
     const { days = 90 } = req.body;
-
     if (days < 30) {
       return res.status(400).json({
         error: "Cannot delete logs newer than 30 days",
       });
     }
-
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - days);
-
-    // Удаляем старые логи администраторов
     const [adminResult] = await db.query("DELETE FROM admin_action_logs WHERE created_at < ?", [cutoffDate]);
-
     res.json({
       deleted: {
         admin_action_logs: adminResult.affectedRows,
@@ -260,5 +178,4 @@ router.delete("/cleanup", authenticateToken, requireRole("admin", "ceo"), async 
     next(error);
   }
 });
-
 export default router;

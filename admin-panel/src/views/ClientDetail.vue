@@ -7,7 +7,6 @@
       </Button>
       <Badge variant="secondary">ID: {{ clientId }}</Badge>
     </div>
-
     <Card>
       <CardHeader>
         <CardTitle>Данные клиента</CardTitle>
@@ -43,7 +42,6 @@
         </div>
       </CardContent>
     </Card>
-
     <Card>
       <CardHeader>
         <CardTitle>История заказов</CardTitle>
@@ -70,7 +68,6 @@
         </Table>
       </CardContent>
     </Card>
-
     <Card>
       <CardHeader>
         <CardTitle>История бонусов</CardTitle>
@@ -99,7 +96,6 @@
     </Card>
   </div>
 </template>
-
 <script setup>
 import { onMounted, reactive, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -120,32 +116,27 @@ import TableCell from "../components/ui/TableCell.vue";
 import TableHead from "../components/ui/TableHead.vue";
 import TableHeader from "../components/ui/TableHeader.vue";
 import TableRow from "../components/ui/TableRow.vue";
-
 const route = useRoute();
 const router = useRouter();
 const clientId = route.params.id;
-
 const client = ref(null);
 const orders = ref([]);
 const bonuses = ref([]);
 const ordersLoading = ref(false);
 const bonusesLoading = ref(false);
 const saving = ref(false);
-
 const form = reactive({
   first_name: "",
   last_name: "",
   phone: "",
   email: "",
 });
-
 const formatBonusStatus = (type) => {
   if (type === "earned") return "Начислено";
   if (type === "used") return "Списано";
   if (type === "expired") return "Сгорело";
   return "Корректировка";
 };
-
 const loadClient = async () => {
   const response = await api.get(`/api/admin/clients/${clientId}`);
   client.value = response.data.user;
@@ -156,7 +147,6 @@ const loadClient = async () => {
     email: client.value.email || "",
   });
 };
-
 const loadOrders = async () => {
   ordersLoading.value = true;
   try {
@@ -166,7 +156,6 @@ const loadOrders = async () => {
     ordersLoading.value = false;
   }
 };
-
 const loadBonuses = async () => {
   bonusesLoading.value = true;
   try {
@@ -176,7 +165,6 @@ const loadBonuses = async () => {
     bonusesLoading.value = false;
   }
 };
-
 const saveClient = async () => {
   saving.value = true;
   try {
@@ -186,15 +174,12 @@ const saveClient = async () => {
     saving.value = false;
   }
 };
-
 const openOrder = (orderId) => {
   router.push(`/orders/${orderId}`);
 };
-
 const goBack = () => {
   router.push("/clients");
 };
-
 onMounted(async () => {
   await Promise.all([loadClient(), loadOrders(), loadBonuses()]);
 });

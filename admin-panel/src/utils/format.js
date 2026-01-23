@@ -2,12 +2,10 @@ export function formatCurrency(value) {
   const number = Number(value || 0);
   return new Intl.NumberFormat("ru-RU", { style: "currency", currency: "RUB", maximumFractionDigits: 0 }).format(number);
 }
-
 export function formatNumber(value) {
   const number = Number(value || 0);
   return new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(number);
 }
-
 export function formatDateTime(value) {
   if (!value) return "";
   const date = new Date(value);
@@ -16,7 +14,6 @@ export function formatDateTime(value) {
     timeStyle: "short",
   }).format(date);
 }
-
 export function formatPhone(phone) {
   if (!phone) return "";
   const digits = String(phone).replace(/\D/g, "");
@@ -24,7 +21,6 @@ export function formatPhone(phone) {
   const trimmed = digits.slice(-10);
   return `+7 (${trimmed.slice(0, 3)}) ${trimmed.slice(3, 6)}-${trimmed.slice(6, 8)}-${trimmed.slice(8)}`;
 }
-
 export function normalizeImageUrl(url) {
   if (!url) return "";
   if (/^data:/i.test(url)) return url;

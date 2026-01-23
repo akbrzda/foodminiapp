@@ -6,7 +6,6 @@
         <MapPin class="center-marker-icon" />
         <div class="center-marker-pulse"></div>
       </div>
-
       <div class="map-overlay">
         <div v-if="cityName" class="map-info">
           <div class="map-info-title">{{ cityName }}</div>
@@ -28,7 +27,6 @@
         </div>
       </div>
     </div>
-
     <div class="form-section" data-keep-focus="true" @touchstart.stop @mousedown.stop @pointerdown.stop>
       <div class="sheet-handle"></div>
       <div class="input-wrapper" @pointerdown.stop>
@@ -58,7 +56,6 @@
           </button>
         </div>
       </div>
-
       <div class="details-grid">
         <input v-model="deliveryDetails.apartment" class="detail-input" placeholder="Квартира" />
         <input v-model="deliveryDetails.entrance" class="detail-input" placeholder="Подъезд" />
@@ -66,12 +63,10 @@
         <input v-model="deliveryDetails.doorCode" class="detail-input" placeholder="Домофон" />
       </div>
       <textarea v-model="deliveryDetails.comment" class="detail-textarea" placeholder="Комментарий курьеру"></textarea>
-
       <button class="primary-btn" @click="confirmAddress">Сохранить адрес</button>
     </div>
   </div>
 </template>
-
 <script setup>
 import { ref, computed, onMounted, reactive, watch } from "vue";
 import { LocateFixed, MapPin, Minus, Plus, X } from "lucide-vue-next";
@@ -79,10 +74,8 @@ import { useRouter } from "vue-router";
 import { useLocationStore } from "../stores/location";
 import { addressesAPI } from "../api/endpoints";
 import { hapticFeedback } from "../services/telegram";
-
 const router = useRouter();
 const locationStore = useLocationStore();
-
 const mapContainerRef = ref(null);
 const addressInputRef = ref(null);
 const deliveryAddress = ref(locationStore.deliveryAddress || "");
@@ -100,9 +93,7 @@ const lastAddress = ref(deliveryAddress.value);
 const isAddressFocused = ref(false);
 const lastManualInputAt = ref(0);
 const suppressReverseUntil = ref(0);
-
 const GEO_PERMISSION_KEY = "geoPermission";
-
 let searchTimeout = null;
 let lastSearchId = 0;
 let leafletLoading = null;
@@ -114,7 +105,6 @@ const reverseCache = new Map();
 let reverseController = null;
 let lastReverseRequestAt = 0;
 let lastReverseCenter = null;
-
 const cityName = computed(() => locationStore.selectedCity?.name || "");
 const deliveryTimeLabel = computed(() => {
   const time = locationStore.deliveryZone?.delivery_time;
@@ -126,12 +116,10 @@ const cityCenter = computed(() => {
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
   return { lat, lon };
 });
-
 function hasHouseNumber(value) {
   if (!value) return false;
   return /\d/.test(String(value));
 }
-
 function normalizeCoords(coords) {
   if (!coords) return null;
   const lat = Number(coords.lat);
@@ -139,7 +127,6 @@ function normalizeCoords(coords) {
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
   return { lat, lon, lng: lon };
 }
-
 onMounted(async () => {
   locationStore.setDeliveryType("delivery");
   await initMap();
@@ -154,11 +141,9 @@ onMounted(async () => {
     queueReverseGeocode();
   }
 });
-
 function goBack() {
   router.back();
 }
-
 function onAddressInput() {
   selectedLocation.value = null;
   showSuggestions.value = true;
@@ -167,21 +152,17 @@ function onAddressInput() {
     clearTimeout(reverseTimeout);
   }
   lastReverseId += 1;
-
   if (searchTimeout) {
     clearTimeout(searchTimeout);
   }
-
   if (deliveryAddress.value.trim().length < 2) {
     addressSuggestions.value = [];
     return;
   }
-
   searchTimeout = setTimeout(() => {
     fetchAddressSuggestions(deliveryAddress.value.trim());
   }, 80);
 }
-
 function onAddressFocus() {
   isAddressFocused.value = true;
   showSuggestions.value = true;
@@ -200,8 +181,6 @@ function onAddressFocus() {
   if (mapInstance?.touchZoom) {
     mapInstance.touchZoom.disable();
   }
-
-  // Скроллим к input при открытии клавиатуры
   setTimeout(() => {
     const inputElement = document.querySelector(".address-input");
     if (inputElement) {
@@ -212,7 +191,6 @@ function onAddressFocus() {
     }
   }, 300);
 }
-
 function onAddressBlur() {
   isAddressFocused.value = false;
   if (mapContainerRef.value) {
@@ -225,7 +203,6 @@ function onAddressBlur() {
     mapInstance.touchZoom.enable();
   }
 }
-
 function getStoredGeoPermission() {
   try {
     return localStorage.getItem(GEO_PERMISSION_KEY) || "";
@@ -233,7 +210,6 @@ function getStoredGeoPermission() {
     return "";
   }
 }
-
 function setStoredGeoPermission(value) {
   try {
     if (value) {
@@ -241,11 +217,8 @@ function setStoredGeoPermission(value) {
     } else {
       localStorage.removeItem(GEO_PERMISSION_KEY);
     }
-  } catch {
-    // noop
-  }
+  } catch {}
 }
-
 async function requestInitialLocation() {
   const storedPermission = getStoredGeoPermission();
   if (storedPermission === "granted" || storedPermission === "denied") {
@@ -264,7 +237,6 @@ async function requestInitialLocation() {
     }
   }
 }
-
 function selectAddress(address) {
   hapticFeedback("light");
   deliveryAddress.value = address.label;
@@ -274,7 +246,6 @@ function selectAddress(address) {
   setMapCenter(address.lat, address.lon);
   showSuggestions.value = false;
 }
-
 function clearAddress() {
   deliveryAddress.value = "";
   addressSuggestions.value = [];
@@ -282,7 +253,6 @@ function clearAddress() {
   lastManualInputAt.value = Date.now();
   suppressReverseUntil.value = Date.now() + 800;
 }
-
 async function confirmAddress() {
   if (!deliveryAddress.value.trim()) {
     hapticFeedback("error");
@@ -293,7 +263,6 @@ async function confirmAddress() {
     showSuggestions.value = true;
     return;
   }
-
   if (!selectedLocation.value) {
     const resolved = await geocodeAddress(deliveryAddress.value.trim());
     if (!resolved) {
@@ -310,7 +279,6 @@ async function confirmAddress() {
     selectedLocation.value = { lat: resolved.lat, lon: resolved.lon };
     setMapCenter(resolved.lat, resolved.lon);
   }
-
   locationStore.setDeliveryAddress(deliveryAddress.value);
   locationStore.setDeliveryDetails({ ...deliveryDetails });
   if (selectedLocation.value) {
@@ -337,19 +305,17 @@ async function confirmAddress() {
     router.push("/");
   }
 }
-
 async function initMap() {
   if (!mapContainerRef.value || mapInstance) return;
   const L = await loadLeaflet();
   if (!L) return;
-
   const initial = selectedLocation.value || cityCenter.value || { lat: 0, lon: 0 };
-  mapInstance = L.map(mapContainerRef.value, { zoomControl: false, attributionControl: false }).setView([initial.lat, initial.lon ?? initial.lng], 15);
+  mapInstance = L.map(mapContainerRef.value, { zoomControl: false, attributionControl: false }).setView(
+    [initial.lat, initial.lon ?? initial.lng],
+    15,
+  );
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(mapInstance);
-
-  // Загружаем и отображаем полигоны доставки
   await loadDeliveryPolygons(L);
-
   mapInstance.on("movestart", () => {
     if (!isAddressFocused.value) {
       showSuggestions.value = false;
@@ -358,22 +324,17 @@ async function initMap() {
   mapInstance.on("moveend", () => {
     queueReverseGeocode();
   });
-
   if (selectedLocation.value) {
     setMapCenter(selectedLocation.value.lat, selectedLocation.value.lon ?? selectedLocation.value.lng);
   }
 }
-
 async function loadDeliveryPolygons(L) {
   if (!locationStore.selectedCity?.id) return;
-
   try {
     const response = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/polygons/city/${locationStore.selectedCity.id}`);
     if (!response.ok) return;
-
     const data = await response.json();
     if (!data.polygons || !data.polygons.length) return;
-
     data.polygons.forEach((polygon) => {
       if (polygon.polygon && polygon.polygon.coordinates) {
         const coords = polygon.polygon.coordinates[0].map((coord) => [coord[0], coord[1]]);
@@ -398,7 +359,6 @@ async function loadDeliveryPolygons(L) {
     console.error("Failed to load delivery polygons:", error);
   }
 }
-
 function setMapCenter(lat, lon) {
   if (!mapInstance) return;
   const nextLat = Number(lat);
@@ -406,7 +366,6 @@ function setMapCenter(lat, lon) {
   if (!Number.isFinite(nextLat) || !Number.isFinite(nextLon)) return;
   mapInstance.setView([nextLat, nextLon], mapInstance.getZoom(), { animate: true });
 }
-
 function queueReverseGeocode() {
   if (!mapInstance) return;
   if (isAddressFocused.value) return;
@@ -441,15 +400,12 @@ function queueReverseGeocode() {
     }
   }, 100);
 }
-
 function zoomIn() {
   mapInstance?.zoomIn();
 }
-
 function zoomOut() {
   mapInstance?.zoomOut();
 }
-
 async function locateUser() {
   try {
     const location = await locationStore.detectUserLocation();
@@ -464,7 +420,6 @@ async function locateUser() {
     console.error("Failed to detect user location:", error);
   }
 }
-
 async function fetchAddressSuggestions(query) {
   const normalized = query.trim().toLowerCase();
   if (searchCache.has(normalized)) {
@@ -481,7 +436,6 @@ async function fetchAddressSuggestions(query) {
     const data = await response.json();
     const elapsed = Math.round(performance.now() - start);
     if (searchId !== lastSearchId) return;
-
     const suggestions = data
       .map((item) => formatAddressSuggestion(item))
       .filter((item) => item && Number.isFinite(item.lat) && Number.isFinite(item.lon));
@@ -495,7 +449,6 @@ async function fetchAddressSuggestions(query) {
     console.error("Failed to search address:", error);
   }
 }
-
 async function geocodeAddress(query) {
   try {
     const response = await fetch(buildNominatimUrl(query, 1));
@@ -510,7 +463,6 @@ async function geocodeAddress(query) {
     return null;
   }
 }
-
 async function reverseGeocode(lat, lon) {
   try {
     const key = `${lat.toFixed(4)},${lon.toFixed(4)}`;
@@ -548,7 +500,6 @@ async function reverseGeocode(lat, lon) {
     return null;
   }
 }
-
 function buildNominatimUrl(query, limit = 5) {
   const url = new URL("https://nominatim.openstreetmap.org/search");
   const queryValue = cityName.value ? `${query}, ${cityName.value}` : query;
@@ -565,24 +516,20 @@ function buildNominatimUrl(query, limit = 5) {
   }
   return url.toString();
 }
-
 function formatAddressSuggestion(item) {
   const address = item?.address || {};
   const street =
     address.road || address.pedestrian || address.footway || address.residential || address.living_street || address.street || address.neighbourhood;
   const house = address.house_number || address.building;
-
   if (!street || !house) {
     return null;
   }
-
   return {
     label: house ? `${street}, ${house}` : street,
     lat: Number(item.lat),
     lon: Number(item.lon),
   };
 }
-
 async function loadLeaflet() {
   if (leafletLoading) return leafletLoading;
   leafletLoading = new Promise((resolve) => {
@@ -590,12 +537,10 @@ async function loadLeaflet() {
       resolve(window.L);
       return;
     }
-
     const css = document.createElement("link");
     css.rel = "stylesheet";
     css.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
     document.head.appendChild(css);
-
     const script = document.createElement("script");
     script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
     script.async = true;
@@ -605,7 +550,6 @@ async function loadLeaflet() {
   });
   return leafletLoading;
 }
-
 watch(deliveryAddress, (value) => {
   if (value !== lastAddress.value) {
     deliveryDetails.apartment = "";
@@ -617,7 +561,6 @@ watch(deliveryAddress, (value) => {
   }
 });
 </script>
-
 <style scoped>
 .delivery-map {
   min-height: 100vh;
@@ -625,26 +568,22 @@ watch(deliveryAddress, (value) => {
   display: flex;
   flex-direction: column;
 }
-
 .map-section {
   position: relative;
   overflow: hidden;
   height: 52vh;
   background: var(--color-background-secondary);
 }
-
 .map-disabled .map,
 .map-disabled .map-overlay,
 .map-disabled .center-marker {
   pointer-events: none;
 }
-
 .map {
   position: absolute;
   inset: 0;
   z-index: 0;
 }
-
 .center-marker {
   position: absolute;
   left: 50%;
@@ -653,14 +592,12 @@ watch(deliveryAddress, (value) => {
   z-index: 15;
   pointer-events: none;
 }
-
 .center-marker-icon {
   width: 34px;
   height: 34px;
   color: #ef4444;
   filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.25));
 }
-
 .map-overlay {
   position: absolute;
   top: 12px;
@@ -672,7 +609,6 @@ watch(deliveryAddress, (value) => {
   align-items: flex-start;
   gap: 12px;
 }
-
 .map-info {
   background: rgba(255, 255, 255, 0.92);
   border-radius: 16px;
@@ -680,14 +616,12 @@ watch(deliveryAddress, (value) => {
   box-shadow: var(--shadow-md);
   max-width: 70%;
 }
-
 .map-info-title {
   font-size: 15px;
   font-weight: 700;
   color: var(--color-text-primary);
   margin-bottom: 4px;
 }
-
 .map-info-subtitle {
   font-size: 12px;
   color: var(--color-text-muted);
@@ -695,18 +629,15 @@ watch(deliveryAddress, (value) => {
   gap: 6px;
   align-items: baseline;
 }
-
 .map-info-time {
   font-weight: 600;
   color: var(--color-text-primary);
 }
-
 .map-controls {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
-
 .map-btn {
   width: 42px;
   height: 42px;
@@ -720,12 +651,10 @@ watch(deliveryAddress, (value) => {
   box-shadow: var(--shadow-md);
   cursor: pointer;
 }
-
 .map-btn-primary {
   background: var(--color-primary);
   color: var(--color-text-primary);
 }
-
 .form-section {
   margin-top: -16px;
   background: var(--color-background);
@@ -734,7 +663,6 @@ watch(deliveryAddress, (value) => {
   z-index: 20;
   box-shadow: var(--shadow-md);
 }
-
 .sheet-handle {
   width: 40px;
   height: 4px;
@@ -742,12 +670,10 @@ watch(deliveryAddress, (value) => {
   background: var(--color-border);
   margin: 0 auto 12px;
 }
-
 .input-wrapper {
   position: relative;
   margin-bottom: 12px;
 }
-
 .address-input {
   width: 100%;
   padding: 12px 40px 12px 16px;
@@ -758,17 +684,14 @@ watch(deliveryAddress, (value) => {
   color: var(--color-text-primary);
   transition: background-color var(--transition-duration) var(--transition-easing);
 }
-
 .address-input:focus {
   outline: none;
   background: var(--color-background);
   border: 1px solid var(--color-primary);
 }
-
 .address-input::placeholder {
   color: var(--color-text-muted);
 }
-
 .clear-btn {
   position: absolute;
   right: 8px;
@@ -784,11 +707,9 @@ watch(deliveryAddress, (value) => {
   cursor: pointer;
   transition: background-color var(--transition-duration) var(--transition-easing);
 }
-
 .clear-btn:hover {
   background: var(--color-border);
 }
-
 .suggestions-dropdown {
   position: absolute;
   left: 0;
@@ -806,7 +727,6 @@ watch(deliveryAddress, (value) => {
   box-shadow: var(--shadow-md);
   z-index: 40;
 }
-
 .suggestion {
   text-align: left;
   padding: 10px 12px;
@@ -819,11 +739,9 @@ watch(deliveryAddress, (value) => {
   cursor: pointer;
   transition: background-color var(--transition-duration) var(--transition-easing);
 }
-
 .suggestion:hover {
   background: var(--color-border);
 }
-
 .primary-btn {
   width: 100%;
   padding: 16px;
@@ -836,14 +754,12 @@ watch(deliveryAddress, (value) => {
   cursor: pointer;
   transition: background-color var(--transition-duration) var(--transition-easing);
 }
-
 .details-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
   margin-bottom: 10px;
 }
-
 .detail-input {
   width: 100%;
   padding: 12px 14px;
@@ -853,13 +769,11 @@ watch(deliveryAddress, (value) => {
   font-size: var(--font-size-body);
   color: var(--color-text-primary);
 }
-
 .detail-input:focus {
   outline: none;
   border: 1px solid var(--color-primary);
   background: var(--color-background);
 }
-
 .detail-textarea {
   width: 100%;
   min-height: 90px;
@@ -873,17 +787,14 @@ watch(deliveryAddress, (value) => {
   margin-bottom: 10px;
   font-family: inherit;
 }
-
 .detail-textarea:focus {
   outline: none;
   border: 1px solid var(--color-primary);
   background: var(--color-background);
 }
-
 .primary-btn:hover {
   background: var(--color-primary-hover);
 }
-
 .primary-btn:active {
   transform: scale(0.98);
 }

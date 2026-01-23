@@ -1,6 +1,5 @@
 -- Migration: add_admin_user_branches
 -- Created: 2026-02-15T00:00:00.000Z
-
 CREATE TABLE IF NOT EXISTS admin_user_branches (
     id INT AUTO_INCREMENT PRIMARY KEY,
     admin_user_id INT NOT NULL,

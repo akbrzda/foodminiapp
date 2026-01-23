@@ -3,11 +3,9 @@
 -- Дата: 2026-01-19
 -- Описание: Добавление новых таблиц и полей согласно документации menu.md
 -- =====================================================
-
 -- ====================
 -- 1. Новые таблицы
 -- ====================
-
 -- Таблица тегов для блюд
 CREATE TABLE IF NOT EXISTS tags (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -18,7 +16,6 @@ CREATE TABLE IF NOT EXISTS tags (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_name (name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Теги для фильтрации и поиска блюд';
-
 -- Связь блюд с тегами (many-to-many)
 CREATE TABLE IF NOT EXISTS menu_item_tags (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -31,7 +28,6 @@ CREATE TABLE IF NOT EXISTS menu_item_tags (
     INDEX idx_item (item_id),
     INDEX idx_tag (tag_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Связь блюд с тегами';
-
 -- Связь блюд с несколькими категориями (many-to-many)
 CREATE TABLE IF NOT EXISTS menu_item_categories (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -46,7 +42,6 @@ CREATE TABLE IF NOT EXISTS menu_item_categories (
     INDEX idx_category (category_id),
     INDEX idx_category_sort (category_id, sort_order)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Связь блюд с несколькими категориями';
-
 -- Управление доступностью категорий по городам
 CREATE TABLE IF NOT EXISTS menu_category_cities (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -62,7 +57,6 @@ CREATE TABLE IF NOT EXISTS menu_category_cities (
     INDEX idx_city (city_id),
     INDEX idx_active (is_active)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Доступность категорий по городам';
-
 -- Управление доступностью блюд по городам
 CREATE TABLE IF NOT EXISTS menu_item_cities (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -78,7 +72,6 @@ CREATE TABLE IF NOT EXISTS menu_item_cities (
     INDEX idx_city (city_id),
     INDEX idx_active (is_active)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Доступность блюд по городам';
-
 -- Цены блюд по городам и способам получения
 CREATE TABLE IF NOT EXISTS menu_item_prices (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -95,7 +88,6 @@ CREATE TABLE IF NOT EXISTS menu_item_prices (
     INDEX idx_city (city_id),
     INDEX idx_fulfillment (fulfillment_type)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Цены блюд по городам и способам получения';
-
 -- Цены вариаций по городам и способам получения
 CREATE TABLE IF NOT EXISTS menu_variant_prices (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -112,7 +104,6 @@ CREATE TABLE IF NOT EXISTS menu_variant_prices (
     INDEX idx_city (city_id),
     INDEX idx_fulfillment (fulfillment_type)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Цены вариаций по городам и способам получения';
-
 -- Цены модификаторов в зависимости от выбранной вариации
 CREATE TABLE IF NOT EXISTS menu_modifier_variant_prices (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -129,7 +120,6 @@ CREATE TABLE IF NOT EXISTS menu_modifier_variant_prices (
     INDEX idx_modifier (modifier_id),
     INDEX idx_variant (variant_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Цены модификаторов для разных вариаций';
-
 -- Стоп-лист по филиалам
 CREATE TABLE IF NOT EXISTS menu_stop_list (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -145,7 +135,6 @@ CREATE TABLE IF NOT EXISTS menu_stop_list (
     INDEX idx_branch (branch_id),
     INDEX idx_entity (entity_type, entity_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Стоп-лист позиций по филиалам';
-
 -- Отключенные модификаторы в глобальных группах для конкретных блюд
 CREATE TABLE IF NOT EXISTS menu_item_disabled_modifiers (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -158,11 +147,9 @@ CREATE TABLE IF NOT EXISTS menu_item_disabled_modifiers (
     INDEX idx_item (item_id),
     INDEX idx_modifier (modifier_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Отключенные модификаторы из глобальных групп';
-
 -- ====================
 -- 2. Изменения существующих таблиц
 -- ====================
-
 -- Добавляем поле composition (состав блюда) в menu_items, если его нет
 SET @tablename = 'menu_items';
 SET @columnname = 'composition';
@@ -180,7 +167,6 @@ SET @preparedStatement = (SELECT IF(
 PREPARE alterIfNotExists FROM @preparedStatement;
 EXECUTE alterIfNotExists;
 DEALLOCATE PREPARE alterIfNotExists;
-
 -- Добавляем поля КБЖУ в menu_items
 SET @columnname = 'calories_per_100g';
 SET @preparedStatement = (SELECT IF(
@@ -197,7 +183,6 @@ SET @preparedStatement = (SELECT IF(
 PREPARE alterIfNotExists FROM @preparedStatement;
 EXECUTE alterIfNotExists;
 DEALLOCATE PREPARE alterIfNotExists;
-
 SET @columnname = 'proteins_per_100g';
 SET @preparedStatement = (SELECT IF(
   (
@@ -213,7 +198,6 @@ SET @preparedStatement = (SELECT IF(
 PREPARE alterIfNotExists FROM @preparedStatement;
 EXECUTE alterIfNotExists;
 DEALLOCATE PREPARE alterIfNotExists;
-
 SET @columnname = 'fats_per_100g';
 SET @preparedStatement = (SELECT IF(
   (
@@ -229,7 +213,6 @@ SET @preparedStatement = (SELECT IF(
 PREPARE alterIfNotExists FROM @preparedStatement;
 EXECUTE alterIfNotExists;
 DEALLOCATE PREPARE alterIfNotExists;
-
 SET @columnname = 'carbs_per_100g';
 SET @preparedStatement = (SELECT IF(
   (
@@ -245,7 +228,6 @@ SET @preparedStatement = (SELECT IF(
 PREPARE alterIfNotExists FROM @preparedStatement;
 EXECUTE alterIfNotExists;
 DEALLOCATE PREPARE alterIfNotExists;
-
 SET @columnname = 'calories_per_serving';
 SET @preparedStatement = (SELECT IF(
   (
@@ -261,7 +243,6 @@ SET @preparedStatement = (SELECT IF(
 PREPARE alterIfNotExists FROM @preparedStatement;
 EXECUTE alterIfNotExists;
 DEALLOCATE PREPARE alterIfNotExists;
-
 SET @columnname = 'proteins_per_serving';
 SET @preparedStatement = (SELECT IF(
   (
@@ -277,7 +258,6 @@ SET @preparedStatement = (SELECT IF(
 PREPARE alterIfNotExists FROM @preparedStatement;
 EXECUTE alterIfNotExists;
 DEALLOCATE PREPARE alterIfNotExists;
-
 SET @columnname = 'fats_per_serving';
 SET @preparedStatement = (SELECT IF(
   (
@@ -293,7 +273,6 @@ SET @preparedStatement = (SELECT IF(
 PREPARE alterIfNotExists FROM @preparedStatement;
 EXECUTE alterIfNotExists;
 DEALLOCATE PREPARE alterIfNotExists;
-
 SET @columnname = 'carbs_per_serving';
 SET @preparedStatement = (SELECT IF(
   (
@@ -309,10 +288,8 @@ SET @preparedStatement = (SELECT IF(
 PREPARE alterIfNotExists FROM @preparedStatement;
 EXECUTE alterIfNotExists;
 DEALLOCATE PREPARE alterIfNotExists;
-
 -- Добавляем поля КБЖУ в item_variants
 SET @tablename = 'item_variants';
-
 SET @columnname = 'calories_per_100g';
 SET @preparedStatement = (SELECT IF(
   (
@@ -328,7 +305,6 @@ SET @preparedStatement = (SELECT IF(
 PREPARE alterIfNotExists FROM @preparedStatement;
 EXECUTE alterIfNotExists;
 DEALLOCATE PREPARE alterIfNotExists;
-
 SET @columnname = 'proteins_per_100g';
 SET @preparedStatement = (SELECT IF(
   (
@@ -344,7 +320,6 @@ SET @preparedStatement = (SELECT IF(
 PREPARE alterIfNotExists FROM @preparedStatement;
 EXECUTE alterIfNotExists;
 DEALLOCATE PREPARE alterIfNotExists;
-
 SET @columnname = 'fats_per_100g';
 SET @preparedStatement = (SELECT IF(
   (
@@ -360,7 +335,6 @@ SET @preparedStatement = (SELECT IF(
 PREPARE alterIfNotExists FROM @preparedStatement;
 EXECUTE alterIfNotExists;
 DEALLOCATE PREPARE alterIfNotExists;
-
 SET @columnname = 'carbs_per_100g';
 SET @preparedStatement = (SELECT IF(
   (
@@ -376,7 +350,6 @@ SET @preparedStatement = (SELECT IF(
 PREPARE alterIfNotExists FROM @preparedStatement;
 EXECUTE alterIfNotExists;
 DEALLOCATE PREPARE alterIfNotExists;
-
 SET @columnname = 'calories_per_serving';
 SET @preparedStatement = (SELECT IF(
   (
@@ -392,7 +365,6 @@ SET @preparedStatement = (SELECT IF(
 PREPARE alterIfNotExists FROM @preparedStatement;
 EXECUTE alterIfNotExists;
 DEALLOCATE PREPARE alterIfNotExists;
-
 SET @columnname = 'proteins_per_serving';
 SET @preparedStatement = (SELECT IF(
   (
@@ -408,7 +380,6 @@ SET @preparedStatement = (SELECT IF(
 PREPARE alterIfNotExists FROM @preparedStatement;
 EXECUTE alterIfNotExists;
 DEALLOCATE PREPARE alterIfNotExists;
-
 SET @columnname = 'fats_per_serving';
 SET @preparedStatement = (SELECT IF(
   (
@@ -424,7 +395,6 @@ SET @preparedStatement = (SELECT IF(
 PREPARE alterIfNotExists FROM @preparedStatement;
 EXECUTE alterIfNotExists;
 DEALLOCATE PREPARE alterIfNotExists;
-
 SET @columnname = 'carbs_per_serving';
 SET @preparedStatement = (SELECT IF(
   (
@@ -440,10 +410,8 @@ SET @preparedStatement = (SELECT IF(
 PREPARE alterIfNotExists FROM @preparedStatement;
 EXECUTE alterIfNotExists;
 DEALLOCATE PREPARE alterIfNotExists;
-
 -- Добавляем поля в modifiers (вес, единицу измерения, фото)
 SET @tablename = 'modifiers';
-
 SET @columnname = 'weight';
 SET @preparedStatement = (SELECT IF(
   (
@@ -459,7 +427,6 @@ SET @preparedStatement = (SELECT IF(
 PREPARE alterIfNotExists FROM @preparedStatement;
 EXECUTE alterIfNotExists;
 DEALLOCATE PREPARE alterIfNotExists;
-
 SET @columnname = 'weight_unit';
 SET @preparedStatement = (SELECT IF(
   (
@@ -475,7 +442,6 @@ SET @preparedStatement = (SELECT IF(
 PREPARE alterIfNotExists FROM @preparedStatement;
 EXECUTE alterIfNotExists;
 DEALLOCATE PREPARE alterIfNotExists;
-
 SET @columnname = 'image_url';
 SET @preparedStatement = (SELECT IF(
   (
@@ -491,10 +457,8 @@ SET @preparedStatement = (SELECT IF(
 PREPARE alterIfNotExists FROM @preparedStatement;
 EXECUTE alterIfNotExists;
 DEALLOCATE PREPARE alterIfNotExists;
-
 -- Добавляем поля в modifier_groups (глобальность, мин/макс выборов)
 SET @tablename = 'modifier_groups';
-
 SET @columnname = 'is_global';
 SET @preparedStatement = (SELECT IF(
   (
@@ -510,7 +474,6 @@ SET @preparedStatement = (SELECT IF(
 PREPARE alterIfNotExists FROM @preparedStatement;
 EXECUTE alterIfNotExists;
 DEALLOCATE PREPARE alterIfNotExists;
-
 SET @columnname = 'min_selections';
 SET @preparedStatement = (SELECT IF(
   (
@@ -526,7 +489,6 @@ SET @preparedStatement = (SELECT IF(
 PREPARE alterIfNotExists FROM @preparedStatement;
 EXECUTE alterIfNotExists;
 DEALLOCATE PREPARE alterIfNotExists;
-
 SET @columnname = 'max_selections';
 SET @preparedStatement = (SELECT IF(
   (
@@ -542,7 +504,6 @@ SET @preparedStatement = (SELECT IF(
 PREPARE alterIfNotExists FROM @preparedStatement;
 EXECUTE alterIfNotExists;
 DEALLOCATE PREPARE alterIfNotExists;
-
 -- ====================
 -- Миграция завершена
 -- ====================

@@ -1,9 +1,6 @@
 import Redis from "ioredis";
 import dotenv from "dotenv";
-
 dotenv.config();
-
-// Конфигурация подключения к Redis
 const redisConfig = {
   host: process.env.REDIS_HOST || "localhost",
   port: process.env.REDIS_PORT || 6379,
@@ -13,20 +10,11 @@ const redisConfig = {
     return delay;
   },
 };
-
-// Создание клиента Redis
 const redis = new Redis(redisConfig);
-
-// Обработка событий
-redis.on("connect", () => {
-  console.log("✅ Redis connected successfully");
-});
-
+redis.on("connect", () => {});
 redis.on("error", (error) => {
   console.error("❌ Redis connection error:", error.message);
 });
-
-// Проверка подключения
 export async function testRedisConnection() {
   try {
     await redis.ping();
@@ -36,5 +24,4 @@ export async function testRedisConnection() {
     return false;
   }
 }
-
 export default redis;

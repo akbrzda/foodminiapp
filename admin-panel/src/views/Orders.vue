@@ -56,7 +56,6 @@
         </div>
       </CardContent>
     </Card>
-
     <Card>
       <CardHeader>
         <CardTitle>Список заказов</CardTitle>
@@ -101,7 +100,6 @@
     </Card>
   </div>
 </template>
-
 <script setup>
 import { onMounted, onBeforeUnmount, reactive, ref, watch } from "vue";
 import { useRouter } from "vue-router";
@@ -128,17 +126,14 @@ import TableCell from "../components/ui/TableCell.vue";
 import TableHead from "../components/ui/TableHead.vue";
 import TableHeader from "../components/ui/TableHeader.vue";
 import TableRow from "../components/ui/TableRow.vue";
-
 const router = useRouter();
 const authStore = useAuthStore();
 const referenceStore = useReferenceStore();
 const { showNewOrderNotification } = useNotifications();
-
 const orders = ref([]);
 const recentOrderIds = ref(new Set());
 let ws = null;
 const loadTimer = ref(null);
-
 const filters = reactive({
   city_id: "",
   status: "",
@@ -147,20 +142,17 @@ const filters = reactive({
   date_to: "",
   search: "",
 });
-
 const loadOrders = async () => {
   const params = Object.fromEntries(Object.entries(filters).filter(([, value]) => value));
   const response = await api.get("/api/orders/admin/all", { params });
   orders.value = response.data.orders || [];
 };
-
 const scheduleLoad = () => {
   if (loadTimer.value) {
     clearTimeout(loadTimer.value);
   }
   loadTimer.value = setTimeout(loadOrders, 300);
 };
-
 const resetFilters = () => {
   Object.assign(filters, {
     city_id: "",
@@ -172,25 +164,20 @@ const resetFilters = () => {
   });
   scheduleLoad();
 };
-
 const selectOrder = (order) => {
   router.push(`/orders/${order.id}`);
 };
-
 const orderRowClass = (order) => {
   const isRecent = recentOrderIds.value.has(order.id);
   return isRecent ? "bg-primary/10" : "";
 };
-
 const connectWebSocket = () => {
   const apiBase = api.defaults.baseURL || "http://localhost:3000";
   const wsBase = import.meta.env.VITE_WS_URL || apiBase;
   const token = authStore.token;
-
   if (!token) {
     return;
   }
-
   let wsUrl;
   try {
     wsUrl = new URL(wsBase);
@@ -198,7 +185,6 @@ const connectWebSocket = () => {
     wsUrl.protocol = isSecure ? "wss:" : "ws:";
     wsUrl.searchParams.set("token", token);
     ws = new WebSocket(wsUrl.toString());
-
     ws.onmessage = (event) => {
       const payload = JSON.parse(event.data);
       if (payload.type === "new-order") {
@@ -206,10 +192,7 @@ const connectWebSocket = () => {
         const next = new Set(recentOrderIds.value);
         next.add(payload.data.id);
         recentOrderIds.value = next;
-
-        // Показываем браузерное уведомление (со звуком)
         showNewOrderNotification(payload.data);
-
         setTimeout(() => {
           const updated = new Set(recentOrderIds.value);
           updated.delete(payload.data.id);
@@ -229,21 +212,18 @@ const connectWebSocket = () => {
     setTimeout(connectWebSocket, 5000);
   };
 };
-
 onMounted(async () => {
   await referenceStore.loadCities();
   await loadOrders();
   connectWebSocket();
 });
-
 watch(
   filters,
   () => {
     scheduleLoad();
   },
-  { deep: true }
+  { deep: true },
 );
-
 onBeforeUnmount(() => {
   if (ws) ws.close();
 });

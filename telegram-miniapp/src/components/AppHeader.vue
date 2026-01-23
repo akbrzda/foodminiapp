@@ -3,19 +3,15 @@
     <button class="menu-button" @click="toggleSidebar">
       <Menu :size="20" />
     </button>
-
     <button class="city-button" @click="openCityPopup">
       <MapPin :size="16" />
       <span class="city-name">{{ currentCityName }}</span>
     </button>
-
     <button v-if="authStore.isAuthenticated" class="bonus-button" @click="openBonusHistory">
       <Gift :size="16" />
       <span class="bonus-value">{{ bonusBalance }}</span>
     </button>
   </header>
-
-  <!-- Сайдбар меню -->
   <Teleport to="body">
     <Transition name="sidebar">
       <div v-if="showSidebar" class="sidebar-overlay" @click="closeSidebar">
@@ -26,7 +22,6 @@
               <X :size="18" />
             </button>
           </div>
-
           <div class="sidebar-content">
             <nav class="sidebar-nav">
               <button class="sidebar-item" @click="navigateTo('/')">
@@ -51,8 +46,6 @@
       </div>
     </Transition>
   </Teleport>
-
-  <!-- Попап выбора города -->
   <Teleport to="body">
     <Transition name="fade">
       <div v-if="showCityPopup" class="city-overlay" @click="closeCityPopup">
@@ -74,7 +67,6 @@
     </Transition>
   </Teleport>
 </template>
-
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from "vue";
 import { useRouter } from "vue-router";
@@ -83,46 +75,37 @@ import { useLocationStore } from "../stores/location";
 import { useAuthStore } from "../stores/auth";
 import { citiesAPI, bonusesAPI } from "../api/endpoints";
 import { hapticFeedback } from "../services/telegram";
-
 const router = useRouter();
 const locationStore = useLocationStore();
 const authStore = useAuthStore();
-
 const emit = defineEmits(["toggleMenu"]);
-
 const showSidebar = ref(false);
 const showCityPopup = ref(false);
 const cityQuery = ref("");
 const cities = ref([]);
 const bonusBalance = ref(0);
-
 const currentCityName = computed(() => locationStore.selectedCity?.name || "Город");
 const filteredCities = computed(() => {
   if (!cityQuery.value) return cities.value;
   const query = cityQuery.value.toLowerCase();
   return cities.value.filter((city) => city.name.toLowerCase().includes(query));
 });
-
 function toggleSidebar() {
   hapticFeedback("light");
   showSidebar.value = !showSidebar.value;
 }
-
 function closeSidebar() {
   showSidebar.value = false;
 }
-
 function navigateTo(path) {
   hapticFeedback("light");
   closeSidebar();
   router.push(path);
 }
-
 function openBonusHistory() {
   hapticFeedback("light");
   router.push("/bonus-history");
 }
-
 async function loadBonusBalance() {
   if (!authStore.isAuthenticated) return;
   try {
@@ -132,11 +115,9 @@ async function loadBonusBalance() {
     console.error("Failed to load bonus balance:", error);
   }
 }
-
 function toggleMenu() {
   emit("toggleMenu");
 }
-
 async function openCityPopup() {
   hapticFeedback("light");
   showCityPopup.value = true;
@@ -148,12 +129,10 @@ async function openCityPopup() {
     console.error("Failed to load cities:", error);
   }
 }
-
 function closeCityPopup() {
   showCityPopup.value = false;
   cityQuery.value = "";
 }
-
 async function selectCity(city) {
   hapticFeedback("light");
   closeCityPopup();
@@ -165,26 +144,20 @@ async function selectCity(city) {
     console.error("Failed to load branches:", error);
   }
 }
-
 function handleOpenCityPopup() {
   openCityPopup();
 }
-
 onMounted(() => {
   window.addEventListener("open-city-popup", handleOpenCityPopup);
   loadBonusBalance();
-
-  // Обновляем баланс при изменении маршрута
   router.afterEach(() => {
     loadBonusBalance();
   });
 });
-
 onBeforeUnmount(() => {
   window.removeEventListener("open-city-popup", handleOpenCityPopup);
 });
 </script>
-
 <style scoped>
 .app-header {
   top: 0;
@@ -196,7 +169,6 @@ onBeforeUnmount(() => {
   padding: 12px;
   background: var(--color-background);
 }
-
 .menu-button {
   width: 40px;
   height: 40px;
@@ -210,15 +182,12 @@ onBeforeUnmount(() => {
   justify-content: center;
   transition: background-color var(--transition-duration) var(--transition-easing);
 }
-
 .menu-button:hover {
   background: var(--color-border);
 }
-
 .menu-button:active {
   transform: scale(0.95);
 }
-
 .city-button {
   flex: 1;
   display: flex;
@@ -234,17 +203,14 @@ onBeforeUnmount(() => {
   cursor: pointer;
   transition: background-color var(--transition-duration) var(--transition-easing);
 }
-
 .city-button:hover {
   background: var(--color-border);
 }
-
 .city-name {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-
 .bonus-button {
   display: flex;
   align-items: center;
@@ -261,20 +227,16 @@ onBeforeUnmount(() => {
     transform 0.15s,
     opacity var(--transition-duration);
 }
-
 .bonus-button:active {
   transform: scale(0.95);
 }
-
 .bonus-icon {
   font-size: 18px;
   line-height: 1;
 }
-
 .bonus-value {
   font-size: var(--font-size-caption);
 }
-
 /* Сайдбар */
 .sidebar-overlay {
   position: fixed;
@@ -285,7 +247,6 @@ onBeforeUnmount(() => {
   background: rgba(0, 0, 0, 0.5);
   z-index: 1000;
 }
-
 .sidebar {
   position: fixed;
   top: 0;
@@ -297,7 +258,6 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
 }
-
 .sidebar-header {
   display: flex;
   align-items: center;
@@ -305,25 +265,21 @@ onBeforeUnmount(() => {
   padding: 16px;
   border-bottom: 1px solid var(--color-border);
 }
-
 .sidebar-title {
   font-size: var(--font-size-h3);
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-primary);
 }
-
 .sidebar-content {
   flex: 1;
   overflow-y: auto;
   padding: 8px;
 }
-
 .sidebar-nav {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
-
 .sidebar-item {
   display: flex;
   align-items: center;
@@ -339,34 +295,27 @@ onBeforeUnmount(() => {
   cursor: pointer;
   transition: background-color var(--transition-duration) var(--transition-easing);
 }
-
 .sidebar-item:hover {
   background: var(--color-background-secondary);
 }
-
 .sidebar-enter-active {
   transition: transform 0.3s ease-out;
 }
-
 .sidebar-leave-active {
   transition: transform 0.3s ease-in;
 }
-
 .sidebar-enter-from,
 .sidebar-leave-to {
   transform: translateX(-100%);
 }
-
 .sidebar-overlay.sidebar-enter-active,
 .sidebar-overlay.sidebar-leave-active {
   transition: opacity 0.3s;
 }
-
 .sidebar-overlay.sidebar-enter-from,
 .sidebar-overlay.sidebar-leave-to {
   opacity: 0;
 }
-
 /* Попап города */
 .city-overlay {
   position: fixed;
@@ -378,7 +327,6 @@ onBeforeUnmount(() => {
   z-index: 2000;
   padding: 20px;
 }
-
 .city-popup {
   width: 100%;
   max-width: 360px;
@@ -387,20 +335,17 @@ onBeforeUnmount(() => {
   padding: 16px;
   box-shadow: var(--shadow-md);
 }
-
 .popup-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin-bottom: 12px;
 }
-
 .popup-title {
   font-size: var(--font-size-h3);
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-primary);
 }
-
 .close-btn {
   width: 28px;
   height: 28px;
@@ -414,11 +359,9 @@ onBeforeUnmount(() => {
   justify-content: center;
   transition: background-color var(--transition-duration) var(--transition-easing);
 }
-
 .close-btn:hover {
   background: var(--color-border);
 }
-
 .city-search {
   width: 100%;
   padding: 12px 16px;
@@ -430,16 +373,13 @@ onBeforeUnmount(() => {
   color: var(--color-text-primary);
   transition: border-color var(--transition-duration) var(--transition-easing);
 }
-
 .city-search:focus {
   outline: none;
   border-color: var(--color-primary);
 }
-
 .city-search::placeholder {
   color: var(--color-text-muted);
 }
-
 .city-list {
   display: flex;
   flex-direction: column;
@@ -447,7 +387,6 @@ onBeforeUnmount(() => {
   max-height: 280px;
   overflow-y: auto;
 }
-
 .city-item {
   text-align: left;
   border: none;
@@ -460,16 +399,13 @@ onBeforeUnmount(() => {
   cursor: pointer;
   transition: background-color var(--transition-duration) var(--transition-easing);
 }
-
 .city-item:hover {
   background: var(--color-border);
 }
-
 .fade-enter-active,
 .fade-leave-active {
   transition: opacity var(--transition-duration) var(--transition-easing);
 }
-
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;

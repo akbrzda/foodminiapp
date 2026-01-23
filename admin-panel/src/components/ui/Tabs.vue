@@ -18,7 +18,6 @@
     </div>
   </div>
 </template>
-
 <script setup>
 defineProps({
   tabs: {
@@ -30,6 +29,5 @@ defineProps({
     default: 0,
   },
 });
-
 defineEmits(["update:modelValue"]);
 </script>

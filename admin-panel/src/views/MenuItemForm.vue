@@ -14,9 +14,7 @@
         </div>
       </CardHeader>
     </Card>
-
     <Tabs :tabs="tabLabels" v-model="activeTab">
-      <!-- Таб 1: Основная информация -->
       <div v-show="activeTab === 0" class="space-y-4">
         <Card>
           <CardHeader>
@@ -27,17 +25,14 @@
               <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Название *</label>
               <Input v-model="form.name" required />
             </div>
-
             <div class="space-y-2">
               <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Описание</label>
               <Textarea v-model="form.description" rows="3" />
             </div>
-
             <div class="space-y-2">
               <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Состав</label>
               <Textarea v-model="form.composition" rows="2" placeholder="Например: тесто, томаты, моцарелла" />
             </div>
-
             <div class="space-y-2">
               <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Изображение</label>
               <div
@@ -59,7 +54,6 @@
                 <Input v-model="form.image_url" class="text-xs" />
               </div>
             </div>
-
             <div class="grid gap-4 md:grid-cols-2">
               <div class="space-y-2">
                 <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Вес *</label>
@@ -76,7 +70,6 @@
                 </Select>
               </div>
             </div>
-
             <Card>
               <CardHeader>
                 <CardTitle class="text-base">КБЖУ на 100{{ form.weight_unit === "ml" || form.weight_unit === "l" ? "мл" : "г" }}</CardTitle>
@@ -102,7 +95,6 @@
                 </div>
               </CardContent>
             </Card>
-
             <Card>
               <CardHeader>
                 <CardTitle class="text-base">КБЖУ на порцию</CardTitle>
@@ -128,7 +120,6 @@
                 </div>
               </CardContent>
             </Card>
-
             <div class="grid gap-4 md:grid-cols-2">
               <div class="space-y-2">
                 <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Порядок</label>
@@ -142,7 +133,6 @@
                 </Select>
               </div>
             </div>
-
             <Card>
               <CardHeader>
                 <CardTitle class="text-base">Категории</CardTitle>
@@ -162,7 +152,6 @@
                 </div>
               </CardContent>
             </Card>
-
             <Button class="w-full" @click="saveItem" :disabled="saving">
               <Save :size="16" />
               {{ saving ? "Сохранение..." : "Сохранить" }}
@@ -170,8 +159,6 @@
           </CardContent>
         </Card>
       </div>
-
-      <!-- Таб 2: Вариации -->
       <div v-show="activeTab === 1" class="space-y-4">
         <Card>
           <CardHeader class="flex flex-row items-center justify-between">
@@ -188,7 +175,6 @@
             <div v-if="form.variants.length === 0" class="py-8 text-center text-sm text-muted-foreground">Вариации не добавлены</div>
           </CardContent>
         </Card>
-
         <Card v-for="(variant, index) in form.variants" :key="index">
           <CardHeader class="flex flex-row items-center justify-between">
             <CardTitle class="text-base">{{ variant.name || `Вариация ${index + 1}` }}</CardTitle>
@@ -207,7 +193,6 @@
                 <Input v-model.number="variant.price" type="number" step="0.01" required />
               </div>
             </div>
-
             <div class="grid gap-4 md:grid-cols-2">
               <div class="space-y-2">
                 <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Вес *</label>
@@ -224,7 +209,6 @@
                 </Select>
               </div>
             </div>
-
             <div>
               <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2 block">КБЖУ на 100г</label>
               <div class="grid gap-4 md:grid-cols-4">
@@ -234,7 +218,6 @@
                 <Input v-model.number="variant.carbs_per_100g" type="number" step="0.01" placeholder="Углеводы" />
               </div>
             </div>
-
             <div>
               <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2 block">КБЖУ на порцию</label>
               <div class="grid gap-4 md:grid-cols-4">
@@ -246,14 +229,11 @@
             </div>
           </CardContent>
         </Card>
-
         <Button v-if="form.variants.length > 0" class="w-full" @click="saveVariants" :disabled="saving">
           <Save :size="16" />
           {{ saving ? "Сохранение..." : "Сохранить вариации" }}
         </Button>
       </div>
-
-      <!-- Таб 3: Модификаторы -->
       <div v-show="activeTab === 2" class="space-y-4">
         <Card>
           <CardHeader>
@@ -274,7 +254,6 @@
             </div>
           </CardContent>
         </Card>
-
         <Card v-if="selectedModifierGroups.length > 0">
           <CardHeader>
             <CardTitle class="text-base">Отключение модификаторов</CardTitle>
@@ -297,14 +276,11 @@
             </div>
           </CardContent>
         </Card>
-
         <Button class="w-full" @click="saveModifiers" :disabled="saving">
           <Save :size="16" />
           {{ saving ? "Сохранение..." : "Сохранить модификаторы" }}
         </Button>
       </div>
-
-      <!-- Таб 4: Доступность -->
       <div v-show="activeTab === 3" class="space-y-4">
         <Card>
           <CardHeader>
@@ -325,13 +301,10 @@
             </div>
           </CardContent>
         </Card>
-
         <Button class="w-full" @click="saveCities" :disabled="saving">
           <Save :size="16" />
           {{ saving ? "Сохранение..." : "Сохранить доступность" }}
         </Button>
-
-        <!-- Цены по городам и способам получения -->
         <Card v-if="isEditing">
           <CardHeader>
             <CardTitle class="text-base">Цены</CardTitle>
@@ -370,12 +343,10 @@
             </div>
           </CardContent>
         </Card>
-
         <Button v-if="isEditing" class="w-full" @click="savePrices" :disabled="saving">
           <Save :size="16" />
           {{ saving ? "Сохранение..." : "Сохранить цены" }}
         </Button>
-
         <Card v-if="isEditing && form.variants.length > 0">
           <CardHeader>
             <CardTitle class="text-base">Цены вариаций</CardTitle>
@@ -418,14 +389,11 @@
             </div>
           </CardContent>
         </Card>
-
         <Button v-if="isEditing && form.variants.length > 0" class="w-full" @click="saveVariantPrices" :disabled="saving">
           <Save :size="16" />
           {{ saving ? "Сохранение..." : "Сохранить цены вариаций" }}
         </Button>
       </div>
-
-      <!-- Таб 5: Теги -->
       <div v-show="activeTab === 4" class="space-y-4">
         <Card>
           <CardHeader>
@@ -441,7 +409,6 @@
             </div>
           </CardContent>
         </Card>
-
         <Button class="w-full" @click="saveTags" :disabled="saving">
           <Save :size="16" />
           {{ saving ? "Сохранение..." : "Сохранить теги" }}
@@ -450,7 +417,6 @@
     </Tabs>
   </div>
 </template>
-
 <script setup>
 import { computed, onMounted, ref } from "vue";
 import { useRouter, useRoute } from "vue-router";
@@ -475,26 +441,20 @@ import Textarea from "../components/ui/Textarea.vue";
 import Tabs from "../components/ui/Tabs.vue";
 import { useNotifications } from "../composables/useNotifications.js";
 import { useReferenceStore } from "../stores/reference.js";
-
 const router = useRouter();
 const route = useRoute();
 const referenceStore = useReferenceStore();
 const { showErrorNotification, showSuccessNotification } = useNotifications();
-
 const allCategories = ref([]);
 const modifierGroups = ref([]);
 const tags = ref([]);
 const saving = ref(false);
 const activeTab = ref(0);
-
 const fileInput = ref(null);
 const uploadState = ref({ loading: false, error: null, preview: null });
-
 const tabLabels = ["Основное", "Вариации", "Модификаторы", "Доступность и цены", "Теги"];
-
 const itemId = computed(() => route.params.id);
 const isEditing = computed(() => !!itemId.value && itemId.value !== "new");
-
 const form = ref({
   name: "",
   description: "",
@@ -518,23 +478,19 @@ const form = ref({
   disabled_modifier_ids: [],
   city_ids: [],
   tag_ids: [],
-  prices: [], // { city_id, fulfillment_type, price }
+  prices: [],
 });
-
 const modalTitle = computed(() => (isEditing.value ? "Редактировать позицию" : "Новая позиция"));
 const modalSubtitle = computed(() => (isEditing.value ? "Измените параметры позиции" : "Создайте позицию меню"));
-
 const normalizeImageUrl = (url) => {
   if (!url) return "";
   if (url.startsWith("http://") || url.startsWith("https://")) return url;
   const base = (import.meta.env.VITE_UPLOADS_URL || import.meta.env.VITE_API_URL || window.location.origin).replace(/\/$/, "");
   return url.startsWith("/") ? `${base}${url}` : `${base}/${url}`;
 };
-
 const goBack = () => {
   router.push({ name: "menu-items" });
 };
-
 const loadCategories = async () => {
   try {
     const response = await api.get("/api/menu/admin/all-categories");
@@ -543,7 +499,6 @@ const loadCategories = async () => {
     console.error("Failed to load categories:", error);
   }
 };
-
 const loadModifierGroups = async () => {
   try {
     const response = await api.get("/api/menu/admin/modifier-groups");
@@ -552,7 +507,6 @@ const loadModifierGroups = async () => {
     console.error("Failed to load modifier groups:", error);
   }
 };
-
 const loadTags = async () => {
   try {
     const response = await api.get("/api/menu/admin/tags");
@@ -561,10 +515,8 @@ const loadTags = async () => {
     console.error("Failed to load tags:", error);
   }
 };
-
 const loadItem = async () => {
   if (!isEditing.value) return;
-
   try {
     const [itemRes, categoriesRes, variantsRes, modifiersRes, citiesRes, tagsRes, pricesRes, disabledModsRes] = await Promise.all([
       api.get(`/api/menu/admin/items/${itemId.value}`),
@@ -576,7 +528,6 @@ const loadItem = async () => {
       api.get(`/api/menu/admin/items/${itemId.value}/prices`),
       api.get(`/api/menu/admin/items/${itemId.value}/disabled-modifiers`),
     ]);
-
     const item = itemRes.data.item;
     const variants = variantsRes.data.variants || [];
     const variantPricesResponses = await Promise.all(
@@ -590,12 +541,10 @@ const loadItem = async () => {
           }),
       ),
     );
-
     const variantsWithPrices = variants.map((variant, index) => ({
       ...variant,
       prices: variantPricesResponses[index] || [],
     }));
-
     form.value = {
       name: item.name,
       description: item.description || "",
@@ -627,7 +576,6 @@ const loadItem = async () => {
     goBack();
   }
 };
-
 const saveItem = async () => {
   saving.value = true;
   try {
@@ -649,7 +597,6 @@ const saveItem = async () => {
       sort_order: form.value.sort_order,
       is_active: form.value.is_active,
     };
-
     let savedItemId;
     if (isEditing.value) {
       await api.put(`/api/menu/admin/items/${itemId.value}`, payload);
@@ -657,10 +604,8 @@ const saveItem = async () => {
     } else {
       const res = await api.post("/api/menu/admin/items", payload);
       savedItemId = res.data.item.id;
-      // Перенаправляем на редактирование созданной позиции
       router.replace({ name: "menu-item-form", params: { id: savedItemId } });
     }
-
     await api.put(`/api/menu/admin/items/${savedItemId}/categories`, { category_ids: form.value.category_ids });
     showSuccessNotification("Основная информация сохранена");
   } catch (error) {
@@ -670,7 +615,6 @@ const saveItem = async () => {
     saving.value = false;
   }
 };
-
 const saveVariants = async () => {
   if (!isEditing.value) {
     showErrorNotification("Сначала сохраните основную информацию (Таб 1)");
@@ -687,7 +631,6 @@ const saveVariants = async () => {
     saving.value = false;
   }
 };
-
 const saveModifiers = async () => {
   if (!isEditing.value) {
     showErrorNotification("Сначала сохраните основную информацию");
@@ -705,12 +648,10 @@ const saveModifiers = async () => {
     saving.value = false;
   }
 };
-
 const saveDisabledModifiers = async () => {
   const selectedGroups = modifierGroups.value.filter((group) => form.value.modifier_group_ids.includes(group.id));
   const allModifierIds = selectedGroups.flatMap((group) => group.modifiers?.map((modifier) => modifier.id) || []);
   const disabledIds = new Set(form.value.disabled_modifier_ids);
-
   for (const modifierId of allModifierIds) {
     if (disabledIds.has(modifierId)) {
       await api.post(`/api/menu/admin/items/${itemId.value}/disabled-modifiers`, { modifier_id: modifierId });
@@ -719,7 +660,6 @@ const saveDisabledModifiers = async () => {
     }
   }
 };
-
 const saveCities = async () => {
   if (!isEditing.value) {
     showErrorNotification("Сначала сохраните основную информацию");
@@ -736,7 +676,6 @@ const saveCities = async () => {
     saving.value = false;
   }
 };
-
 const saveTags = async () => {
   if (!isEditing.value) {
     showErrorNotification("Сначала сохраните основную информацию");
@@ -753,7 +692,6 @@ const saveTags = async () => {
     saving.value = false;
   }
 };
-
 const savePrices = async () => {
   if (!isEditing.value) {
     showErrorNotification("Сначала сохраните основную информацию");
@@ -761,7 +699,6 @@ const savePrices = async () => {
   }
   saving.value = true;
   try {
-    // Сохраняем каждую цену отдельно
     for (const priceItem of form.value.prices) {
       await api.post(`/api/menu/admin/items/${itemId.value}/prices`, {
         city_id: priceItem.city_id,
@@ -777,7 +714,6 @@ const savePrices = async () => {
     saving.value = false;
   }
 };
-
 const saveVariantPrices = async () => {
   if (!isEditing.value) {
     showErrorNotification("Сначала сохраните основную информацию");
@@ -804,7 +740,6 @@ const saveVariantPrices = async () => {
     saving.value = false;
   }
 };
-
 const addPrice = () => {
   form.value.prices.push({
     city_id: null,
@@ -812,7 +747,6 @@ const addPrice = () => {
     price: 0,
   });
 };
-
 const addVariantPrice = (variant) => {
   if (!Array.isArray(variant.prices)) variant.prices = [];
   variant.prices.push({
@@ -821,9 +755,7 @@ const addVariantPrice = (variant) => {
     price: 0,
   });
 };
-
 const selectedModifierGroups = computed(() => modifierGroups.value.filter((group) => form.value.modifier_group_ids.includes(group.id)));
-
 const addVariant = () => {
   form.value.variants.push({
     name: "",
@@ -841,25 +773,20 @@ const addVariant = () => {
     prices: [],
   });
 };
-
 const removeVariant = (index) => {
   form.value.variants.splice(index, 1);
 };
-
 const triggerFile = () => {
   fileInput.value?.click();
 };
-
 const onFileChange = (e) => {
   const file = e.target.files?.[0];
   if (file) handleFile(file);
 };
-
 const onDrop = (e) => {
   const file = e.dataTransfer.files[0];
   if (file) handleFile(file);
 };
-
 const readFileAsDataUrl = (file) =>
   new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -867,7 +794,6 @@ const readFileAsDataUrl = (file) =>
     reader.onerror = () => reject(reader.error);
     reader.readAsDataURL(file);
   });
-
 const handleFile = async (file) => {
   if (file.size > 10 * 1024 * 1024) {
     uploadState.value.error = "Файл больше 10MB";
@@ -877,19 +803,14 @@ const handleFile = async (file) => {
     uploadState.value.error = "Только изображения";
     return;
   }
-
   uploadState.value = { loading: true, error: null, preview: URL.createObjectURL(file) };
-
   try {
     const formData = new FormData();
     formData.append("image", file);
-
-    // Используем ID позиции если редактируем, иначе 'temp' для временной загрузки
     const itemId = route.params.id || "temp";
     const res = await api.post(`/api/uploads/menu-items/${itemId}`, formData, {
       headers: { "Content-Type": "multipart/form-data" },
     });
-
     const uploadedUrl = res.data?.data?.url || "";
     form.value.image_url = uploadedUrl;
     uploadState.value = { loading: false, error: null, preview: uploadedUrl };
@@ -898,7 +819,6 @@ const handleFile = async (file) => {
     uploadState.value = { loading: false, error: "Ошибка загрузки", preview: null };
   }
 };
-
 onMounted(async () => {
   await Promise.all([referenceStore.fetchCitiesAndBranches(), loadCategories(), loadModifierGroups(), loadTags()]);
   await loadItem();

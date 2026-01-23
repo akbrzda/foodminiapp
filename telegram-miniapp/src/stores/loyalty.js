@@ -10,14 +10,12 @@ import {
   getProgressToNextLevel,
   normalizeSpend,
 } from "../utils/loyalty";
-
 export const useLoyaltyStore = defineStore("loyalty", {
   state: () => ({
     spendLast60Days: 0,
     loading: false,
     updatedAt: null,
   }),
-
   getters: {
     levels: () => LOYALTY_LEVELS,
     currentLevel: (state) => getLoyaltyLevel(state.spendLast60Days),
@@ -27,29 +25,23 @@ export const useLoyaltyStore = defineStore("loyalty", {
     progressToNextLevel: (state) => getProgressToNextLevel(state.spendLast60Days),
     maxRedeemPercent: () => MAX_BONUS_REDEEM_PERCENT,
   },
-
   actions: {
     setSpend(amount) {
       this.spendLast60Days = normalizeSpend(amount);
       this.updatedAt = Date.now();
     },
-
     calculateSpendFromOrders(orders) {
       const cutoff = new Date();
       cutoff.setDate(cutoff.getDate() - LOYALTY_WINDOW_DAYS);
-
       return (orders || []).reduce((total, order) => {
         if (!order?.created_at) return total;
         if (order.status === "cancelled") return total;
-
         const createdAt = new Date(order.created_at);
         if (createdAt < cutoff) return total;
-
         const orderTotal = Number(order.total ?? order.total_amount) || 0;
         return total + orderTotal;
       }, 0);
     },
-
     async refreshFromOrders() {
       if (this.loading) return;
       this.loading = true;

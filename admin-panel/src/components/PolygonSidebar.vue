@@ -4,7 +4,6 @@
       v-if="isOpen"
       class="absolute right-4 top-4 bottom-4 z-20 w-[340px] max-w-[calc(100%-2rem)] overflow-hidden rounded-xl border border-border bg-background/95 shadow-xl backdrop-blur flex flex-col"
     >
-      <!-- Заголовок -->
       <div class="flex items-start justify-between border-b border-border px-4 py-4">
         <div class="min-w-0">
           <h2 class="text-lg font-semibold text-foreground truncate">{{ polygon?.name || "Полигон" }}</h2>
@@ -17,7 +16,6 @@
           </svg>
         </button>
       </div>
-
       <div class="px-4 pt-3">
         <div class="flex flex-wrap gap-2">
           <button
@@ -32,8 +30,6 @@
           </button>
         </div>
       </div>
-
-      <!-- Контент с прокруткой -->
       <div class="flex-1 overflow-y-auto px-4 pb-4 pt-4">
         <div v-if="activeTab === 'general'" class="space-y-4">
           <div>
@@ -43,35 +39,29 @@
               <span class="text-sm text-foreground">{{ editForm.is_active ? "Активен" : "Неактивен" }}</span>
             </label>
           </div>
-
           <div v-if="isBlocked" class="rounded-lg border border-orange-200 bg-orange-50 dark:border-orange-900 dark:bg-orange-950/20 p-4">
             <p class="text-sm font-medium text-orange-900 dark:text-orange-100 mb-2">🔒 Полигон заблокирован</p>
             <p v-if="polygon?.block_reason" class="text-sm text-orange-800 dark:text-orange-200 mb-1">{{ polygon.block_reason }}</p>
             <p v-if="polygon?.blocked_until" class="text-xs text-orange-600 dark:text-orange-400">До: {{ formatDateTime(polygon.blocked_until) }}</p>
           </div>
         </div>
-
         <div v-else-if="activeTab === 'delivery'" class="space-y-4">
           <div>
             <p class="text-xs text-muted-foreground mb-2">Плата за доставку</p>
             <Input v-model.number="editForm.delivery_cost" type="number" min="0" step="10" class="max-w-[200px]" />
           </div>
-
           <div>
             <p class="text-xs text-muted-foreground mb-2">Дополнительное время</p>
             <Input v-model.number="editForm.delivery_time" type="number" min="0" class="max-w-[200px]" />
             <p class="text-xs text-muted-foreground mt-1">00:{{ String(editForm.delivery_time || 0).padStart(2, "0") }}:00</p>
           </div>
-
           <div>
             <p class="text-xs text-muted-foreground mb-2">Минимальный заказ</p>
             <Input v-model.number="editForm.min_order_amount" type="number" min="0" step="10" class="max-w-[200px]" />
             <p class="text-xs text-muted-foreground mt-1">Нет</p>
           </div>
-
           <Button class="w-full" variant="outline" @click="$emit('redraw', polygon)"> Перерисовать </Button>
         </div>
-
         <div v-else class="space-y-4">
           <div class="space-y-2">
             <label class="text-xs font-medium text-muted-foreground">Новый филиал</label>
@@ -82,12 +72,10 @@
               </option>
             </Select>
           </div>
-
           <Button class="w-full" @click="handleTransfer" :disabled="!transferBranchId || parseInt(transferBranchId) === polygon?.branch_id">
             Переключить
           </Button>
         </div>
-
         <div class="pt-2">
           <Button class="w-full" @click="saveChanges">
             <Save :size="16" />
@@ -95,8 +83,6 @@
           </Button>
         </div>
       </div>
-
-      <!-- Футер с действиями -->
       <div class="border-t border-border p-4 space-y-2 bg-muted/30">
         <Button class="w-full" variant="outline" @click="$emit(isBlocked ? 'unblock' : 'block', polygon)">
           <svg
@@ -115,7 +101,6 @@
           </svg>
           {{ isBlocked ? "Разблокировать" : "Заблокировать" }}
         </Button>
-
         <Button class="w-full" variant="destructive" @click="$emit('delete', polygon)">
           <Trash2 :size="16" />
           Удалить полигон
@@ -124,14 +109,12 @@
     </div>
   </transition>
 </template>
-
 <script setup>
 import { ref, computed, watch } from "vue";
 import { Save, Trash2 } from "lucide-vue-next";
 import Button from "./ui/Button.vue";
 import Input from "./ui/Input.vue";
 import Select from "./ui/Select.vue";
-
 const props = defineProps({
   isOpen: Boolean,
   polygon: Object,
@@ -140,9 +123,7 @@ const props = defineProps({
     default: () => [],
   },
 });
-
 const emit = defineEmits(["close", "save", "block", "unblock", "delete", "transfer", "redraw"]);
-
 const transferBranchId = ref("");
 const activeTab = ref("general");
 const tabs = [
@@ -150,7 +131,6 @@ const tabs = [
   { id: "delivery", label: "Доставка" },
   { id: "transfer", label: "Переключение" },
 ];
-
 const editForm = ref({
   delivery_cost: 0,
   delivery_time: 30,
@@ -158,18 +138,14 @@ const editForm = ref({
   courier_reward: 0,
   is_active: true,
 });
-
 const isBlocked = computed(() => {
   if (!props.polygon?.is_blocked) return false;
   if (!props.polygon?.blocked_from || !props.polygon?.blocked_until) return true;
-
   const now = new Date();
   const from = new Date(props.polygon.blocked_from);
   const until = new Date(props.polygon.blocked_until);
-
   return now >= from && now <= until;
 });
-
 watch(
   () => props.polygon,
   (newPolygon) => {
@@ -186,7 +162,6 @@ watch(
   },
   { immediate: true },
 );
-
 const formatDateTime = (dateTimeStr) => {
   if (!dateTimeStr) return "";
   const date = new Date(dateTimeStr);
@@ -198,38 +173,31 @@ const formatDateTime = (dateTimeStr) => {
     minute: "2-digit",
   });
 };
-
 const saveChanges = () => {
   emit("save", {
     id: props.polygon.id,
     ...editForm.value,
   });
 };
-
 const handleTransfer = () => {
   if (!transferBranchId.value || parseInt(transferBranchId.value) === props.polygon?.branch_id) return;
-
   emit("transfer", {
     polygonId: props.polygon.id,
     newBranchId: parseInt(transferBranchId.value),
   });
 };
 </script>
-
 <style scoped>
 .slide-fade-enter-active {
   transition: all 0.3s ease-out;
 }
-
 .slide-fade-leave-active {
   transition: all 0.2s ease-in;
 }
-
 .slide-fade-enter-from {
   transform: translateX(100%);
   opacity: 0;
 }
-
 .slide-fade-leave-to {
   transform: translateX(100%);
   opacity: 0;

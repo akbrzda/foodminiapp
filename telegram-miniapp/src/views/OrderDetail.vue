@@ -1,9 +1,7 @@
 <template>
   <div class="order-detail">
     <PageHeader :title="`Заказ #${order?.order_number || ''}`" />
-
     <div v-if="loading" class="loading">Загрузка...</div>
-
     <div v-else-if="order" class="order-content">
       <div class="status-card">
         <div :class="['status-badge', `status-${order.status}`]">
@@ -11,7 +9,6 @@
         </div>
         <div class="order-date">{{ formatDate(order.created_at) }}</div>
       </div>
-
       <div class="section">
         <h3>Состав заказа</h3>
         <div v-if="order.items && order.items.length > 0" class="items-list">
@@ -33,7 +30,6 @@
         </div>
         <div v-else class="empty-state">Заказ пуст</div>
       </div>
-
       <div class="section" v-if="order.order_type === 'delivery'">
         <h3>Адрес доставки</h3>
         <div class="delivery-info">
@@ -79,7 +75,6 @@
           </div>
         </div>
       </div>
-
       <div class="section" v-else>
         <h3>Самовывоз</h3>
         <div class="pickup-info">
@@ -97,7 +92,6 @@
           </div>
         </div>
       </div>
-
       <div class="section" v-if="order.payment_method === 'cash' && order.change_from">
         <h3>Оплата</h3>
         <div class="info-row">
@@ -109,7 +103,6 @@
           <span>{{ formatPrice(getChangeAmount(order)) }} ₽</span>
         </div>
       </div>
-
       <div class="section">
         <h3>Итого</h3>
         <div class="total-row">
@@ -133,8 +126,6 @@
           <span>{{ formatPrice(order.total) }} ₽</span>
         </div>
       </div>
-
-      <!-- Кнопка повторения заказа -->
       <div class="actions" v-if="order.status === 'completed' || order.status === 'cancelled'">
         <button class="repeat-btn" @click="repeatOrder">
           <span>🔄</span>
@@ -144,7 +135,6 @@
     </div>
   </div>
 </template>
-
 <script setup>
 import { ref, onMounted, onUnmounted } from "vue";
 import PageHeader from "../components/PageHeader.vue";
@@ -154,38 +144,30 @@ import { ordersAPI } from "../api/endpoints";
 import { formatPrice } from "../utils/format";
 import { hapticFeedback } from "../services/telegram";
 import { wsService } from "../services/websocket";
-
 const route = useRoute();
 const router = useRouter();
 const cartStore = useCartStore();
 const order = ref(null);
 const loading = ref(false);
-
 let statusUpdateHandler = null;
-
 onMounted(async () => {
   await loadOrder();
   setupWebSocketListeners();
 });
-
 onUnmounted(() => {
   if (statusUpdateHandler) {
     wsService.off("order-status-updated", statusUpdateHandler);
   }
 });
-
 function setupWebSocketListeners() {
-  // Слушаем обновления статуса заказа
   statusUpdateHandler = (data) => {
     if (order.value && data.orderId === order.value.id) {
       order.value.status = data.newStatus;
       hapticFeedback("light");
     }
   };
-
   wsService.on("order-status-updated", statusUpdateHandler);
 }
-
 async function loadOrder() {
   try {
     loading.value = true;
@@ -197,16 +179,10 @@ async function loadOrder() {
     loading.value = false;
   }
 }
-
 async function repeatOrder() {
   if (!order.value) return;
-
   hapticFeedback("medium");
-
-  // Очищаем корзину
   cartStore.clearCart();
-
-  // Добавляем все товары из заказа в корзину
   order.value.items.forEach((item) => {
     const modifiers = (item.modifiers || []).map((mod) => ({
       id: mod.modifier_id || mod.old_modifier_id || mod.id,
@@ -214,11 +190,9 @@ async function repeatOrder() {
       price: Number(mod.modifier_price || mod.price || 0),
       group_id: mod.modifier_group_id || mod.group_id || null,
     }));
-
     const modifiersTotal = modifiers.reduce((sum, mod) => sum + (Number(mod.price) || 0), 0);
     const basePrice = Number(item.item_price || item.price || 0);
     const unitPrice = basePrice + modifiersTotal;
-
     cartStore.addItem({
       id: item.item_id || item.id,
       name: item.item_name || item.name,
@@ -230,14 +204,11 @@ async function repeatOrder() {
       quantity: item.quantity || 1,
     });
   });
-
   hapticFeedback("success");
   router.push("/cart");
 }
-
 function getStatusText(status) {
   const isDelivery = order.value?.order_type === "delivery";
-
   const deliveryStatuses = {
     pending: "Ожидает подтверждения",
     confirmed: "Подтвержден",
@@ -247,7 +218,6 @@ function getStatusText(status) {
     completed: "Доставлен",
     cancelled: "Отменен",
   };
-
   const pickupStatuses = {
     pending: "Ожидает подтверждения",
     confirmed: "Подтвержден",
@@ -256,11 +226,9 @@ function getStatusText(status) {
     completed: "Выдан",
     cancelled: "Отменен",
   };
-
   const statuses = isDelivery ? deliveryStatuses : pickupStatuses;
   return statuses[status] || status;
 }
-
 function formatDate(dateString) {
   const date = new Date(dateString);
   return date.toLocaleDateString("ru-RU", {
@@ -271,7 +239,6 @@ function formatDate(dateString) {
     minute: "2-digit",
   });
 }
-
 function formatDeliveryAddress(orderData) {
   if (!orderData) return "";
   const parts = [orderData.delivery_street, orderData.delivery_house, orderData.delivery_apartment]
@@ -279,7 +246,6 @@ function formatDeliveryAddress(orderData) {
     .filter(Boolean);
   return parts.join(", ");
 }
-
 function getChangeAmount(orderData) {
   if (!orderData) return 0;
   const changeFrom = Number(orderData.change_from || 0);
@@ -288,24 +254,20 @@ function getChangeAmount(orderData) {
   return Math.max(0, changeFrom - total);
 }
 </script>
-
 <style scoped>
 .order-detail {
   min-height: 100vh;
   background: var(--color-background);
 }
-
 .loading {
   text-align: center;
   padding: 64px 16px;
   color: var(--color-text-secondary);
   font-size: var(--font-size-body);
 }
-
 .order-content {
   padding: 16px 12px;
 }
-
 .status-card {
   padding: 20px;
   background: var(--color-background);
@@ -314,7 +276,6 @@ function getChangeAmount(orderData) {
   margin-bottom: 16px;
   box-shadow: var(--shadow-sm);
 }
-
 .status-badge {
   display: inline-block;
   padding: 8px 16px;
@@ -323,7 +284,6 @@ function getChangeAmount(orderData) {
   font-weight: var(--font-weight-bold);
   margin-bottom: 8px;
 }
-
 .status-pending {
   background: #fff3cd;
   color: #856404;
@@ -352,12 +312,10 @@ function getChangeAmount(orderData) {
   background: var(--color-error);
   color: var(--color-background);
 }
-
 .order-date {
   font-size: var(--font-size-caption);
   color: var(--color-text-secondary);
 }
-
 .section {
   padding: 16px;
   background: var(--color-background);
@@ -365,51 +323,43 @@ function getChangeAmount(orderData) {
   margin-bottom: 16px;
   box-shadow: var(--shadow-sm);
 }
-
 .section h3 {
   font-size: var(--font-size-h3);
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-primary);
   margin-bottom: 12px;
 }
-
 .section p {
   color: var(--color-text-secondary);
   font-size: var(--font-size-body);
 }
-
 .delivery-info,
 .pickup-info {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
-
 .info-row {
   display: flex;
   justify-content: space-between;
   font-size: var(--font-size-body);
   color: var(--color-text-primary);
 }
-
 .info-row .label {
   color: var(--color-text-secondary);
   font-weight: var(--font-weight-medium);
   min-width: 100px;
 }
-
 .text-secondary {
   font-size: var(--font-size-caption);
   color: var(--color-text-muted);
   margin-top: 4px;
 }
-
 .items-list {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
-
 .item-row {
   display: flex;
   justify-content: space-between;
@@ -418,54 +368,45 @@ function getChangeAmount(orderData) {
   background: var(--color-background-secondary);
   border-radius: var(--border-radius-sm);
 }
-
 .item-info {
   flex: 1;
 }
-
 .item-name {
   font-size: var(--font-size-body);
   color: var(--color-text-primary);
   font-weight: var(--font-weight-semibold);
 }
-
 .variant {
   color: var(--color-text-secondary);
   font-weight: var(--font-weight-normal);
   font-size: var(--font-size-caption);
 }
-
 .item-qty {
   font-size: var(--font-size-caption);
   color: var(--color-text-secondary);
   margin-top: 4px;
 }
-
 .item-modifiers {
   margin-top: 8px;
   padding-left: 12px;
   border-left: 2px solid var(--color-border);
 }
-
 .modifier {
   font-size: var(--font-size-caption);
   color: var(--color-text-muted);
   margin-top: 4px;
 }
-
 .empty-state {
   text-align: center;
   color: var(--color-text-secondary);
   padding: 24px;
   font-size: var(--font-size-body);
 }
-
 .item-price {
   font-weight: var(--font-weight-semibold);
   font-size: var(--font-size-h3);
   color: var(--color-text-primary);
 }
-
 .total-row {
   display: flex;
   justify-content: space-between;
@@ -473,17 +414,14 @@ function getChangeAmount(orderData) {
   font-size: var(--font-size-body);
   color: var(--color-text-primary);
 }
-
 .total-row .bonus-used {
   color: #f44336;
   font-weight: var(--font-weight-semibold);
 }
-
 .total-row .bonus-earned {
   color: #4caf50;
   font-weight: var(--font-weight-semibold);
 }
-
 .total-row.final {
   font-size: var(--font-size-h2);
   font-weight: var(--font-weight-bold);
@@ -492,12 +430,10 @@ function getChangeAmount(orderData) {
   margin-top: 4px;
   margin-bottom: 0;
 }
-
 .actions {
   padding: 0 16px;
   margin-top: 16px;
 }
-
 .repeat-btn {
   width: 100%;
   display: flex;
@@ -512,17 +448,16 @@ function getChangeAmount(orderData) {
   font-size: var(--font-size-h3);
   font-weight: var(--font-weight-semibold);
   cursor: pointer;
-  transition: background-color 0.2s, transform 0.15s;
+  transition:
+    background-color 0.2s,
+    transform 0.15s;
 }
-
 .repeat-btn:hover {
   background: var(--color-primary-hover);
 }
-
 .repeat-btn:active {
   transform: scale(0.98);
 }
-
 .repeat-btn span {
   font-size: 20px;
 }

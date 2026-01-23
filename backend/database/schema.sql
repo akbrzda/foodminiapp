@@ -8,7 +8,6 @@
 -- MySQL поддерживает типы GEOMETRY, POINT, POLYGON и функции ST_GeomFromText, ST_Contains, ST_AsGeoJSON.
 -- Это обеспечивает необходимую функциональность для работы с зонами доставки без необходимости PostGIS.
 -- ============================================
-
 -- Таблица пользователей (клиентов)
 CREATE TABLE IF NOT EXISTS users (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -26,7 +25,6 @@ CREATE TABLE IF NOT EXISTS users (
     INDEX idx_phone (phone),
     INDEX idx_telegram_id (telegram_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
-
 -- Таблица городов
 CREATE TABLE IF NOT EXISTS cities (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -38,7 +36,6 @@ CREATE TABLE IF NOT EXISTS cities (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_active (is_active)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
-
 -- Таблица филиалов (ресторанов)
 CREATE TABLE IF NOT EXISTS branches (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -57,7 +54,6 @@ CREATE TABLE IF NOT EXISTS branches (
     FOREIGN KEY (city_id) REFERENCES cities(id) ON DELETE CASCADE,
     INDEX idx_city_active (city_id, is_active)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
-
 -- Таблица адресов доставки
 CREATE TABLE IF NOT EXISTS delivery_addresses (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -78,7 +74,6 @@ CREATE TABLE IF NOT EXISTS delivery_addresses (
     FOREIGN KEY (city_id) REFERENCES cities(id) ON DELETE CASCADE,
     INDEX idx_user_id (user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
-
 -- Состояние пользователя (синхронизация между устройствами)
 CREATE TABLE IF NOT EXISTS user_states (
     user_id INT PRIMARY KEY,
@@ -96,7 +91,6 @@ CREATE TABLE IF NOT EXISTS user_states (
     INDEX idx_user_state_city (selected_city_id),
     INDEX idx_user_state_branch (selected_branch_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
-
 -- Таблица полигонов доставки (зоны)
 CREATE TABLE IF NOT EXISTS delivery_polygons (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -113,7 +107,6 @@ CREATE TABLE IF NOT EXISTS delivery_polygons (
     SPATIAL INDEX idx_polygon (polygon),
     INDEX idx_branch_active (branch_id, is_active)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
-
 -- Таблица категорий меню
 CREATE TABLE IF NOT EXISTS menu_categories (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -128,7 +121,6 @@ CREATE TABLE IF NOT EXISTS menu_categories (
     FOREIGN KEY (city_id) REFERENCES cities(id) ON DELETE CASCADE,
     INDEX idx_city_active_sort (city_id, is_active, sort_order)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
-
 -- Таблица позиций меню
 CREATE TABLE IF NOT EXISTS menu_items (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -148,7 +140,6 @@ CREATE TABLE IF NOT EXISTS menu_items (
     FOREIGN KEY (category_id) REFERENCES menu_categories(id) ON DELETE CASCADE,
     INDEX idx_category_active_sort (category_id, is_active, sort_order)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
-
 -- Таблица вариантов позиций (например: Маленькая/Средняя/Большая пицца)
 CREATE TABLE IF NOT EXISTS item_variants (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -164,7 +155,6 @@ CREATE TABLE IF NOT EXISTS item_variants (
     FOREIGN KEY (item_id) REFERENCES menu_items(id) ON DELETE CASCADE,
     INDEX idx_item_active_sort (item_id, is_active, sort_order)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
-
 -- Таблица групп модификаторов
 CREATE TABLE IF NOT EXISTS modifier_groups (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -176,7 +166,6 @@ CREATE TABLE IF NOT EXISTS modifier_groups (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_active (is_active)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
-
 -- Таблица модификаторов (привязаны к группам)
 CREATE TABLE IF NOT EXISTS modifiers (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -190,7 +179,6 @@ CREATE TABLE IF NOT EXISTS modifiers (
     FOREIGN KEY (group_id) REFERENCES modifier_groups(id) ON DELETE CASCADE,
     INDEX idx_group_active_sort (group_id, is_active, sort_order)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
-
 -- Таблица связи позиций меню и групп модификаторов
 CREATE TABLE IF NOT EXISTS item_modifier_groups (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -203,7 +191,6 @@ CREATE TABLE IF NOT EXISTS item_modifier_groups (
     INDEX idx_item_id (item_id),
     INDEX idx_modifier_group_id (modifier_group_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
-
 -- Таблица модификаторов (старая, для обратной совместимости - можно удалить после миграции)
 CREATE TABLE IF NOT EXISTS menu_modifiers (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -217,7 +204,6 @@ CREATE TABLE IF NOT EXISTS menu_modifiers (
     FOREIGN KEY (item_id) REFERENCES menu_items(id) ON DELETE CASCADE,
     INDEX idx_item_active (item_id, is_active)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
-
 -- Таблица заказов
 CREATE TABLE IF NOT EXISTS orders (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -227,7 +213,6 @@ CREATE TABLE IF NOT EXISTS orders (
     branch_id INT,
     order_type ENUM('delivery', 'pickup') NOT NULL,
     status ENUM('pending', 'confirmed', 'preparing', 'ready', 'delivering', 'completed', 'cancelled') DEFAULT 'pending',
-    
     -- Адрес доставки (для доставки)
     delivery_address_id INT,
     delivery_street VARCHAR(200),
@@ -237,44 +222,35 @@ CREATE TABLE IF NOT EXISTS orders (
     delivery_apartment VARCHAR(10),
     delivery_intercom VARCHAR(50),
     delivery_comment TEXT,
-    
     -- Оплата
     payment_method ENUM('cash', 'card') NOT NULL,
     change_from DECIMAL(10, 2),
-    
     -- Суммы
     subtotal DECIMAL(10, 2) NOT NULL,
     delivery_cost DECIMAL(10, 2) DEFAULT 0.00,
     bonus_used DECIMAL(10, 2) DEFAULT 0.00,
     total DECIMAL(10, 2) NOT NULL,
-    
     -- Комментарий
     comment TEXT,
-    
     -- Время
     desired_time DATETIME,
     completed_at DATETIME,
-    
     -- Синхронизация
     sync_status ENUM('pending', 'synced', 'failed') DEFAULT 'pending',
     sync_attempts INT DEFAULT 0,
     sync_error TEXT,
-    
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (city_id) REFERENCES cities(id) ON DELETE CASCADE,
     FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE SET NULL,
     FOREIGN KEY (delivery_address_id) REFERENCES delivery_addresses(id) ON DELETE SET NULL,
-    
     INDEX idx_user_id (user_id),
     INDEX idx_order_number (order_number),
     INDEX idx_status (status),
     INDEX idx_sync_status (sync_status),
     INDEX idx_created_at (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
-
 -- Таблица элементов заказа
 CREATE TABLE IF NOT EXISTS order_items (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -293,7 +269,6 @@ CREATE TABLE IF NOT EXISTS order_items (
     INDEX idx_order_id (order_id),
     INDEX idx_variant_id (variant_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
-
 -- Таблица модификаторов в заказе
 CREATE TABLE IF NOT EXISTS order_item_modifiers (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -311,7 +286,6 @@ CREATE TABLE IF NOT EXISTS order_item_modifiers (
     INDEX idx_order_item_id (order_item_id),
     INDEX idx_modifier_id (modifier_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
-
 -- Таблица истории бонусов
 CREATE TABLE IF NOT EXISTS bonus_history (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -329,7 +303,6 @@ CREATE TABLE IF NOT EXISTS bonus_history (
     INDEX idx_sync_status (sync_status),
     INDEX idx_created_at (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
-
 -- Таблица администраторов/менеджеров
 CREATE TABLE IF NOT EXISTS admin_users (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -348,7 +321,6 @@ CREATE TABLE IF NOT EXISTS admin_users (
     INDEX idx_branch_id (branch_id),
     FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
-
 -- Таблица связи менеджеров с городами
 CREATE TABLE IF NOT EXISTS admin_user_cities (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -359,7 +331,6 @@ CREATE TABLE IF NOT EXISTS admin_user_cities (
     FOREIGN KEY (city_id) REFERENCES cities(id) ON DELETE CASCADE,
     UNIQUE KEY unique_admin_city (admin_user_id, city_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
-
 -- Таблица связи менеджеров с филиалами
 CREATE TABLE IF NOT EXISTS admin_user_branches (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -370,7 +341,6 @@ CREATE TABLE IF NOT EXISTS admin_user_branches (
     FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE CASCADE,
     UNIQUE KEY unique_admin_branch (admin_user_id, branch_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
-
 -- Таблица очереди синхронизации
 CREATE TABLE IF NOT EXISTS sync_queue (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -389,7 +359,6 @@ CREATE TABLE IF NOT EXISTS sync_queue (
     INDEX idx_status_next_retry (status, next_retry_at),
     INDEX idx_entity (entity_type, entity_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
-
 -- Таблица логов действий администраторов
 CREATE TABLE IF NOT EXISTS admin_action_logs (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -405,7 +374,6 @@ CREATE TABLE IF NOT EXISTS admin_action_logs (
     INDEX idx_admin_user_id (admin_user_id),
     INDEX idx_created_at (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
-
 -- Таблица системных логов
 CREATE TABLE IF NOT EXISTS system_logs (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -417,13 +385,10 @@ CREATE TABLE IF NOT EXISTS system_logs (
     INDEX idx_level_created (level, created_at),
     INDEX idx_category (category)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
-
-
 -- ============================================
 -- Migration: 002_add_variants_and_modifier_groups.sql
 -- Executed: 2026-01-14T18:53:54.920Z
 -- ============================================
-
 SET @dbname = DATABASE();
 SET @tablename = 'users';
 SET @columnname = 'loyalty_level';
@@ -441,8 +406,6 @@ SET @preparedStatement = (SELECT IF(
 PREPARE alterIfNotExists FROM @preparedStatement;
 EXECUTE alterIfNotExists;
 DEALLOCATE PREPARE alterIfNotExists;
-
-
 SET @columnname = 'total_spent';
 SET @preparedStatement = (SELECT IF(
   (
@@ -458,11 +421,8 @@ SET @preparedStatement = (SELECT IF(
 PREPARE alterIfNotExists FROM @preparedStatement;
 EXECUTE alterIfNotExists;
 DEALLOCATE PREPARE alterIfNotExists;
-
-
 ALTER TABLE menu_items 
 MODIFY COLUMN price DECIMAL(10, 2) DEFAULT 0.00 COMMENT 'Базовая цена (используется если нет вариантов)';
-
 SET @tablename = 'menu_items';
 SET @columnname = 'weight_value';
 SET @preparedStatement = (SELECT IF(
@@ -479,7 +439,6 @@ SET @preparedStatement = (SELECT IF(
 PREPARE alterIfNotExists FROM @preparedStatement;
 EXECUTE alterIfNotExists;
 DEALLOCATE PREPARE alterIfNotExists;
-
 SET @columnname = 'weight_unit';
 SET @preparedStatement = (SELECT IF(
   (
@@ -495,7 +454,6 @@ SET @preparedStatement = (SELECT IF(
 PREPARE alterIfNotExists FROM @preparedStatement;
 EXECUTE alterIfNotExists;
 DEALLOCATE PREPARE alterIfNotExists;
-
 SET @tablename = 'item_variants';
 SET @columnname = 'weight_value';
 SET @preparedStatement = (SELECT IF(
@@ -512,7 +470,6 @@ SET @preparedStatement = (SELECT IF(
 PREPARE alterIfNotExists FROM @preparedStatement;
 EXECUTE alterIfNotExists;
 DEALLOCATE PREPARE alterIfNotExists;
-
 SET @columnname = 'weight_unit';
 SET @preparedStatement = (SELECT IF(
   (
@@ -528,8 +485,6 @@ SET @preparedStatement = (SELECT IF(
 PREPARE alterIfNotExists FROM @preparedStatement;
 EXECUTE alterIfNotExists;
 DEALLOCATE PREPARE alterIfNotExists;
-
-
 CREATE TABLE IF NOT EXISTS item_variants (
     id INT AUTO_INCREMENT PRIMARY KEY,
     item_id INT NOT NULL,
@@ -544,8 +499,6 @@ CREATE TABLE IF NOT EXISTS item_variants (
     FOREIGN KEY (item_id) REFERENCES menu_items(id) ON DELETE CASCADE,
     INDEX idx_item_active_sort (item_id, is_active, sort_order)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
-
-
 CREATE TABLE IF NOT EXISTS modifier_groups (
     id INT AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(200) NOT NULL COMMENT 'Название группы (например: "Уровень прожарки")',
@@ -556,8 +509,6 @@ CREATE TABLE IF NOT EXISTS modifier_groups (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_active (is_active)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
-
-
 CREATE TABLE IF NOT EXISTS modifiers (
     id INT AUTO_INCREMENT PRIMARY KEY,
     group_id INT NOT NULL,
@@ -570,8 +521,6 @@ CREATE TABLE IF NOT EXISTS modifiers (
     FOREIGN KEY (group_id) REFERENCES modifier_groups(id) ON DELETE CASCADE,
     INDEX idx_group_active_sort (group_id, is_active, sort_order)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
-
-
 CREATE TABLE IF NOT EXISTS item_modifier_groups (
     id INT AUTO_INCREMENT PRIMARY KEY,
     item_id INT NOT NULL,
@@ -583,8 +532,6 @@ CREATE TABLE IF NOT EXISTS item_modifier_groups (
     INDEX idx_item_id (item_id),
     INDEX idx_modifier_group_id (modifier_group_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
-
-
 SET @tablename = 'order_items';
 SET @columnname = 'variant_id';
 SET @preparedStatement = (SELECT IF(
@@ -601,7 +548,6 @@ SET @preparedStatement = (SELECT IF(
 PREPARE alterIfNotExists FROM @preparedStatement;
 EXECUTE alterIfNotExists;
 DEALLOCATE PREPARE alterIfNotExists;
-
 SET @columnname = 'variant_name';
 SET @preparedStatement = (SELECT IF(
   (
@@ -617,8 +563,6 @@ SET @preparedStatement = (SELECT IF(
 PREPARE alterIfNotExists FROM @preparedStatement;
 EXECUTE alterIfNotExists;
 DEALLOCATE PREPARE alterIfNotExists;
-
-
 SET @indexname = 'idx_variant_id';
 SET @preparedStatement = (SELECT IF(
   (
@@ -634,8 +578,6 @@ SET @preparedStatement = (SELECT IF(
 PREPARE alterIfNotExists FROM @preparedStatement;
 EXECUTE alterIfNotExists;
 DEALLOCATE PREPARE alterIfNotExists;
-
-
 SET @constraintname = 'fk_order_items_variant';
 SET @preparedStatement = (SELECT IF(
   (
@@ -651,11 +593,7 @@ SET @preparedStatement = (SELECT IF(
 PREPARE alterIfNotExists FROM @preparedStatement;
 EXECUTE alterIfNotExists;
 DEALLOCATE PREPARE alterIfNotExists;
-
-
 SET @tablename = 'order_item_modifiers';
-
-
 SET @columnname = 'old_modifier_id';
 SET @preparedStatement = (SELECT IF(
   (
@@ -671,8 +609,6 @@ SET @preparedStatement = (SELECT IF(
 PREPARE alterIfNotExists FROM @preparedStatement;
 EXECUTE alterIfNotExists;
 DEALLOCATE PREPARE alterIfNotExists;
-
-
 SET @columnname = 'modifier_group_id';
 SET @preparedStatement = (SELECT IF(
   (
@@ -688,13 +624,9 @@ SET @preparedStatement = (SELECT IF(
 PREPARE alterIfNotExists FROM @preparedStatement;
 EXECUTE alterIfNotExists;
 DEALLOCATE PREPARE alterIfNotExists;
-
-
 UPDATE order_item_modifiers 
 SET old_modifier_id = modifier_id 
 WHERE modifier_id IS NOT NULL AND old_modifier_id IS NULL;
-
-
 SET @indexname = 'idx_modifier_id';
 SET @preparedStatement = (SELECT IF(
   (
@@ -710,8 +642,6 @@ SET @preparedStatement = (SELECT IF(
 PREPARE alterIfNotExists FROM @preparedStatement;
 EXECUTE alterIfNotExists;
 DEALLOCATE PREPARE alterIfNotExists;
-
-
 SET @constraintname = 'fk_order_item_modifiers_modifier';
 SET @preparedStatement = (SELECT IF(
   (
@@ -727,7 +657,6 @@ SET @preparedStatement = (SELECT IF(
 PREPARE alterIfNotExists FROM @preparedStatement;
 EXECUTE alterIfNotExists;
 DEALLOCATE PREPARE alterIfNotExists;
-
 SET @constraintname = 'fk_order_item_modifiers_group';
 SET @preparedStatement = (SELECT IF(
   (
@@ -743,27 +672,18 @@ SET @preparedStatement = (SELECT IF(
 PREPARE alterIfNotExists FROM @preparedStatement;
 EXECUTE alterIfNotExists;
 DEALLOCATE PREPARE alterIfNotExists;
-
-
 -- ============================================
 -- Migration: 01_seed_cities.sql
 -- Executed: 2026-01-14T18:59:57.555Z
 -- ============================================
-
 SET NAMES utf8;
 SET CHARACTER SET utf8;
-
-
 DELETE FROM branches;
 DELETE FROM cities;
-
-
 INSERT INTO cities (name, latitude, longitude, is_active) VALUES
 ('Когалым', 62.2667, 74.4833, TRUE, NULL),
 ('Москва', 55.7558, 37.6173, TRUE, NULL),
 ('Пенза', 53.2001, 45.0047, TRUE, NULL);
-
-
 INSERT INTO branches (city_id, name, address, latitude, longitude, phone, working_hours, is_active) 
 SELECT 
     c.id,
@@ -785,8 +705,6 @@ SELECT
     NULL
 FROM cities c 
 WHERE c.name = 'Когалым';
-
-
 INSERT INTO branches (city_id, name, address, latitude, longitude, phone, working_hours, is_active) 
 SELECT 
     c.id,
@@ -807,8 +725,6 @@ SELECT
     TRUE
 FROM cities c 
 WHERE c.name = 'Москва';
-
-
 INSERT INTO branches (city_id, name, address, latitude, longitude, phone, working_hours, is_active) 
 SELECT 
     c.id,
@@ -829,36 +745,25 @@ SELECT
     TRUE
 FROM cities c 
 WHERE c.name = 'Пенза';
-
-
 -- ============================================
 -- Migration: 02_seed_menu.sql
 -- Executed: 2026-01-15T07:52:02.833Z
 -- ============================================
-
 SET @city_id = (SELECT id FROM cities LIMIT 1);
-
-
 INSERT INTO cities (name, is_active)
 SELECT 'Когалым', TRUE
 WHERE NOT EXISTS (SELECT 1 FROM cities LIMIT 1);
-
 SET @city_id = (SELECT id FROM cities LIMIT 1);
-
-
 INSERT INTO menu_categories (city_id, name, description, sort_order, is_active) VALUES
 (@city_id, 'Пицца', 'Классическая итальянская пицца', 1, TRUE),
 (@city_id, 'Бургеры', 'Сочные бургеры с мясом', 2, TRUE),
 (@city_id, 'Напитки', 'Холодные и горячие напитки', 3, TRUE),
 (@city_id, 'Стейки', 'Мясные стейки на любой вкус', 4, TRUE)
 ON DUPLICATE KEY UPDATE name=name;
-
 SET @pizza_category = (SELECT id FROM menu_categories WHERE name = 'Пицца' AND city_id = @city_id LIMIT 1);
 SET @burger_category = (SELECT id FROM menu_categories WHERE name = 'Бургеры' AND city_id = @city_id LIMIT 1);
 SET @drinks_category = (SELECT id FROM menu_categories WHERE name = 'Напитки' AND city_id = @city_id LIMIT 1);
 SET @steak_category = (SELECT id FROM menu_categories WHERE name = 'Стейки' AND city_id = @city_id LIMIT 1);
-
-
 INSERT INTO modifier_groups (name, type, is_required, is_active) VALUES
 ('Размер пиццы', 'single', FALSE, TRUE),
 ('Дополнительные ингредиенты', 'multiple', FALSE, TRUE),
@@ -866,128 +771,84 @@ INSERT INTO modifier_groups (name, type, is_required, is_active) VALUES
 ('Соусы', 'multiple', FALSE, TRUE),
 ('Размер порции', 'single', FALSE, TRUE)
 ON DUPLICATE KEY UPDATE name=name;
-
 SET @size_group = (SELECT id FROM modifier_groups WHERE name = 'Размер пиццы' LIMIT 1);
 SET @ingredients_group = (SELECT id FROM modifier_groups WHERE name = 'Дополнительные ингредиенты' LIMIT 1);
 SET @doneness_group = (SELECT id FROM modifier_groups WHERE name = 'Уровень прожарки' LIMIT 1);
 SET @sauce_group = (SELECT id FROM modifier_groups WHERE name = 'Соусы' LIMIT 1);
 SET @portion_group = (SELECT id FROM modifier_groups WHERE name = 'Размер порции' LIMIT 1);
-
-
 INSERT INTO modifiers (group_id, name, price, sort_order, is_active) VALUES
-
 (@ingredients_group, 'Дополнительный сыр', 50.00, 1, TRUE),
 (@ingredients_group, 'Бекон', 60.00, 2, TRUE),
 (@ingredients_group, 'Грибы', 40.00, 3, TRUE),
 (@ingredients_group, 'Оливки', 30.00, 4, TRUE),
-
 (@doneness_group, 'Rare (с кровью)', 0.00, 1, TRUE),
 (@doneness_group, 'Medium (средняя)', 0.00, 2, TRUE),
 (@doneness_group, 'Well Done (прожаренная)', 0.00, 3, TRUE),
-
 (@sauce_group, 'Кетчуп', 0.00, 1, TRUE),
 (@sauce_group, 'Майонез', 0.00, 2, TRUE),
 (@sauce_group, 'Чесночный соус', 20.00, 3, TRUE),
 (@sauce_group, 'Барбекю', 20.00, 4, TRUE),
-
 (@portion_group, 'Маленькая', 0.00, 1, TRUE),
 (@portion_group, 'Средняя', 30.00, 2, TRUE),
 (@portion_group, 'Большая', 60.00, 3, TRUE)
 ON DUPLICATE KEY UPDATE name=name;
-
-
 INSERT INTO menu_items (category_id, name, description, price, sort_order, is_active) VALUES
 (@pizza_category, 'Пицца Маргарита', 'Классическая пицца с томатами, моцареллой и базиликом', 0.00, 1, TRUE);
-
 SET @margherita_id = LAST_INSERT_ID();
-
-
 INSERT INTO item_variants (item_id, name, price, sort_order, is_active) VALUES
 (@margherita_id, 'Маленькая (25см)', 450.00, 1, TRUE),
 (@margherita_id, 'Средняя (30см)', 650.00, 2, TRUE),
 (@margherita_id, 'Большая (35см)', 850.00, 3, TRUE);
-
-
 INSERT INTO item_modifier_groups (item_id, modifier_group_id) VALUES
 (@margherita_id, @ingredients_group)
 ON DUPLICATE KEY UPDATE item_id=item_id;
-
-
 INSERT INTO menu_items (category_id, name, description, price, sort_order, is_active) VALUES
 (@pizza_category, 'Пицца Пепперони', 'Острая пицца с колбасой пепперони и сыром', 0.00, 2, TRUE);
-
 SET @pepperoni_id = LAST_INSERT_ID();
-
 INSERT INTO item_variants (item_id, name, price, sort_order, is_active) VALUES
 (@pepperoni_id, 'Маленькая (25см)', 500.00, 1, TRUE),
 (@pepperoni_id, 'Средняя (30см)', 700.00, 2, TRUE),
 (@pepperoni_id, 'Большая (35см)', 900.00, 3, TRUE);
-
 INSERT INTO item_modifier_groups (item_id, modifier_group_id) VALUES
 (@pepperoni_id, @ingredients_group)
 ON DUPLICATE KEY UPDATE item_id=item_id;
-
-
 INSERT INTO menu_items (category_id, name, description, price, sort_order, is_active) VALUES
 (@burger_category, 'Классический бургер', 'Бургер с говяжьей котлетой, овощами и соусом', 350.00, 1, TRUE);
-
 SET @burger_id = LAST_INSERT_ID();
-
 INSERT INTO item_modifier_groups (item_id, modifier_group_id) VALUES
 (@burger_id, @sauce_group),
 (@burger_id, @ingredients_group)
 ON DUPLICATE KEY UPDATE item_id=item_id;
-
-
 INSERT INTO menu_items (category_id, name, description, price, sort_order, is_active) VALUES
 (@burger_category, 'Чизбургер', 'Бургер с двойной котлетой и сыром', 420.00, 2, TRUE);
-
-
 INSERT INTO menu_items (category_id, name, description, price, sort_order, is_active) VALUES
 (@steak_category, 'Стейк Рибай', 'Премиальный стейк из мраморной говядины', 1200.00, 1, TRUE);
-
 SET @ribeye_id = LAST_INSERT_ID();
-
 INSERT INTO item_modifier_groups (item_id, modifier_group_id) VALUES
 (@ribeye_id, @doneness_group),
 (@ribeye_id, @sauce_group)
 ON DUPLICATE KEY UPDATE item_id=item_id;
-
-
 INSERT INTO menu_items (category_id, name, description, price, sort_order, is_active) VALUES
 (@steak_category, 'Стейк Филе-миньон', 'Нежный стейк из вырезки', 1500.00, 2, TRUE);
-
 SET @filet_id = LAST_INSERT_ID();
-
 INSERT INTO item_modifier_groups (item_id, modifier_group_id) VALUES
 (@filet_id, @doneness_group),
 (@filet_id, @sauce_group)
 ON DUPLICATE KEY UPDATE item_id=item_id;
-
-
 INSERT INTO menu_items (category_id, name, description, price, sort_order, is_active) VALUES
 (@burger_category, 'Картофель фри', 'Хрустящий картофель фри', 0.00, 3, TRUE);
-
 SET @fries_id = LAST_INSERT_ID();
-
 INSERT INTO item_variants (item_id, name, price, sort_order, is_active) VALUES
 (@fries_id, 'Маленькая порция', 150.00, 1, TRUE),
 (@fries_id, 'Большая порция', 220.00, 2, TRUE);
-
 INSERT INTO item_modifier_groups (item_id, modifier_group_id) VALUES
 (@fries_id, @sauce_group)
 ON DUPLICATE KEY UPDATE item_id=item_id;
-
-
 INSERT INTO menu_items (category_id, name, description, price, sort_order, is_active) VALUES
 (@drinks_category, 'Кола', 'Газированный напиток', 120.00, 1, TRUE);
-
-
 INSERT INTO menu_items (category_id, name, description, price, sort_order, is_active) VALUES
 (@drinks_category, 'Кофе', 'Ароматный кофе', 0.00, 2, TRUE);
-
 SET @coffee_id = LAST_INSERT_ID();
-
 INSERT INTO item_variants (item_id, name, price, sort_order, is_active) VALUES
 (@coffee_id, 'Маленький (200мл)', 150.00, 1, TRUE),
 (@coffee_id, 'Средний (300мл)', 180.00, 2, TRUE),

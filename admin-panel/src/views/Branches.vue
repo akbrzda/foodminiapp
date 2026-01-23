@@ -25,7 +25,6 @@
         </div>
       </CardContent>
     </Card>
-
     <Card v-if="cityId">
       <CardHeader>
         <CardTitle>Список филиалов</CardTitle>
@@ -79,14 +78,12 @@
         </Table>
       </CardContent>
     </Card>
-
     <BaseModal v-if="showModal" :title="modalTitle" :subtitle="modalSubtitle" @close="closeModal">
       <form class="space-y-4" @submit.prevent="submitBranch">
         <div class="space-y-2">
           <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Название филиала</label>
           <Input v-model="form.name" placeholder="Пиццерия на Ленина" required />
         </div>
-
         <div class="space-y-2">
           <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Адрес</label>
           <div class="flex flex-col gap-2 sm:flex-row">
@@ -98,7 +95,6 @@
           </div>
           <p class="text-xs text-muted-foreground">Введите адрес и нажмите "Найти на карте"</p>
         </div>
-
         <div class="rounded-xl border border-border bg-background p-2">
           <div id="branch-map" class="h-64 w-full rounded-lg"></div>
           <p class="mt-2 text-xs text-muted-foreground">Кликните на карте для уточнения позиции</p>
@@ -107,12 +103,10 @@
             {{ Number(form.latitude).toFixed(6) }}, {{ Number(form.longitude).toFixed(6) }}
           </div>
         </div>
-
         <div class="space-y-2">
           <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Телефон</label>
           <Input v-model="form.phone" placeholder="+7 (999) 123-45-67" />
         </div>
-
         <div class="grid gap-4 md:grid-cols-2">
           <div class="space-y-2">
             <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Время приготовления (мин)</label>
@@ -123,7 +117,6 @@
             <Input v-model.number="form.assembly_time" type="number" min="0" placeholder="10" />
           </div>
         </div>
-
         <div class="space-y-2">
           <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Часы работы</label>
           <div class="space-y-2">
@@ -146,7 +139,6 @@
             </Button>
           </div>
         </div>
-
         <div class="space-y-2">
           <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Статус</label>
           <Select v-model="form.is_active">
@@ -162,7 +154,6 @@
     </BaseModal>
   </div>
 </template>
-
 <script setup>
 import { computed, onMounted, ref, watch, nextTick } from "vue";
 import { MapPin, MapPinned, Pencil, Phone, Plus, Save, Trash2 } from "lucide-vue-next";
@@ -187,7 +178,6 @@ import TableRow from "../components/ui/TableRow.vue";
 import { useNotifications } from "../composables/useNotifications.js";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-
 const referenceStore = useReferenceStore();
 const { showErrorNotification } = useNotifications();
 const cityId = ref("");
@@ -205,15 +195,11 @@ const form = ref({
   assembly_time: 0,
   is_active: true,
 });
-
 let branchMap = null;
 let branchMarker = null;
-
 const modalTitle = computed(() => (editing.value ? "Редактировать филиал" : "Новый филиал"));
 const modalSubtitle = computed(() => (editing.value ? "Измените параметры филиала" : "Добавьте новый филиал"));
-
 let branchesRequestId = 0;
-
 const loadBranches = async () => {
   if (!cityId.value) {
     branches.value = [];
@@ -232,7 +218,6 @@ const loadBranches = async () => {
     }
   }
 };
-
 const openModal = (branch = null) => {
   editing.value = branch;
   if (branch) {
@@ -245,7 +230,6 @@ const openModal = (branch = null) => {
         }
       }
     }
-
     form.value = {
       name: branch.name,
       address: branch.address || "",
@@ -271,19 +255,15 @@ const openModal = (branch = null) => {
     };
   }
   showModal.value = true;
-
   nextTick(() => {
     initBranchMap();
   });
 };
-
 const initBranchMap = () => {
   if (branchMap) {
     branchMap.remove();
   }
-
   let center = [55.751244, 37.618423];
-
   if (form.value.latitude && form.value.longitude) {
     center = [form.value.latitude, form.value.longitude];
   } else if (cityId.value) {
@@ -292,19 +272,15 @@ const initBranchMap = () => {
       center = [selectedCity.latitude, selectedCity.longitude];
     }
   }
-
   const container = document.getElementById("branch-map");
   if (!container) return;
-
   branchMap = L.map(container, {
     attributionControl: false,
     zoomControl: true,
   }).setView(center, 13);
-
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom: 20,
   }).addTo(branchMap);
-
   if (form.value.latitude && form.value.longitude) {
     const branchIcon = L.divIcon({
       className: "custom-branch-marker",
@@ -314,23 +290,19 @@ const initBranchMap = () => {
       iconSize: [32, 32],
       iconAnchor: [16, 16],
     });
-
     branchMarker = L.marker([form.value.latitude, form.value.longitude], {
       draggable: true,
       icon: branchIcon,
     }).addTo(branchMap);
-
     branchMarker.on("dragend", () => {
       const pos = branchMarker.getLatLng();
       form.value.latitude = pos.lat;
       form.value.longitude = pos.lng;
     });
   }
-
   branchMap.on("click", (e) => {
     form.value.latitude = e.latlng.lat;
     form.value.longitude = e.latlng.lng;
-
     const branchIcon = L.divIcon({
       className: "custom-branch-marker",
       html: `<div style="background-color: #FFD200; border: 3px solid #fff; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(0,0,0,0.3);">
@@ -339,7 +311,6 @@ const initBranchMap = () => {
       iconSize: [32, 32],
       iconAnchor: [16, 16],
     });
-
     if (branchMarker) {
       branchMarker.setLatLng(e.latlng);
     } else {
@@ -347,7 +318,6 @@ const initBranchMap = () => {
         draggable: true,
         icon: branchIcon,
       }).addTo(branchMap);
-
       branchMarker.on("dragend", () => {
         const pos = branchMarker.getLatLng();
         form.value.latitude = pos.lat;
@@ -356,33 +326,26 @@ const initBranchMap = () => {
     }
   });
 };
-
 const geocodeAddress = async () => {
   if (!form.value.address) return;
-
   const selectedCity = referenceStore.cities.find((c) => c.id === parseInt(cityId.value));
   const cityName = selectedCity?.name || "";
   const addressWithCity = cityName ? `${form.value.address}, ${cityName}` : form.value.address;
-
   try {
     const response = await api.post("/api/polygons/geocode", {
       address: addressWithCity,
     });
-
     if (response.data.lat && response.data.lng) {
       form.value.latitude = response.data.lat;
       form.value.longitude = response.data.lng;
-
       if (branchMap) {
         branchMap.setView([response.data.lat, response.data.lng], 15);
-
         if (branchMarker) {
           branchMarker.setLatLng([response.data.lat, response.data.lng]);
         } else {
           branchMarker = L.marker([response.data.lat, response.data.lng], {
             draggable: true,
           }).addTo(branchMap);
-
           branchMarker.on("dragend", () => {
             const pos = branchMarker.getLatLng();
             form.value.latitude = pos.lat;
@@ -396,7 +359,6 @@ const geocodeAddress = async () => {
     showErrorNotification("Не удалось найти адрес на карте");
   }
 };
-
 const addWorkingDay = () => {
   const nextDay = getNextAvailableDay();
   if (!nextDay) {
@@ -409,11 +371,9 @@ const addWorkingDay = () => {
     close: "21:00",
   });
 };
-
 const removeWorkingDay = (index) => {
   form.value.working_hours.splice(index, 1);
 };
-
 const closeModal = () => {
   showModal.value = false;
   editing.value = null;
@@ -423,27 +383,23 @@ const closeModal = () => {
     branchMarker = null;
   }
 };
-
 const formatTimeValue = (value) => {
   const time = Number(value || 0);
   if (!time) return "—";
   return `${time} мин`;
 };
-
 const submitBranch = async () => {
   try {
     if (!areWorkingDaysUnique()) {
       showErrorNotification("Дни недели в графике должны быть уникальными");
       return;
     }
-
     const workingHours = {};
     form.value.working_hours.forEach((schedule) => {
       if (schedule.day && schedule.open && schedule.close) {
         workingHours[schedule.day] = `${schedule.open}-${schedule.close}`;
       }
     });
-
     const payload = {
       name: form.value.name,
       address: form.value.address,
@@ -455,13 +411,11 @@ const submitBranch = async () => {
       assembly_time: form.value.assembly_time || 0,
       is_active: form.value.is_active,
     };
-
     if (editing.value) {
       await api.put(`/api/cities/admin/${cityId.value}/branches/${editing.value.id}`, payload);
     } else {
       await api.post(`/api/cities/admin/${cityId.value}/branches`, payload);
     }
-
     await loadBranches();
     closeModal();
   } catch (error) {
@@ -469,7 +423,6 @@ const submitBranch = async () => {
     showErrorNotification(error.response?.data?.error || "Ошибка сохранения филиала");
   }
 };
-
 const deleteBranch = async (branch) => {
   if (!confirm(`Удалить филиал "${branch.name}"?`)) return;
   try {
@@ -480,11 +433,9 @@ const deleteBranch = async (branch) => {
     showErrorNotification(error.response?.data?.error || "Ошибка удаления филиала");
   }
 };
-
 onMounted(() => {
   referenceStore.loadCities();
 });
-
 const days = [
   { value: "monday", label: "Понедельник" },
   { value: "tuesday", label: "Вторник" },
@@ -494,15 +445,12 @@ const days = [
   { value: "saturday", label: "Суббота" },
   { value: "sunday", label: "Воскресенье" },
 ];
-
 const isDayTaken = (day, index) => form.value.working_hours.some((schedule, idx) => idx !== index && schedule.day === day);
-
 const getNextAvailableDay = () => {
   const used = new Set(form.value.working_hours.map((schedule) => schedule.day));
   const next = days.find((day) => !used.has(day.value));
   return next?.value || "";
 };
-
 const areWorkingDaysUnique = () => {
   const used = new Set();
   for (const schedule of form.value.working_hours) {

@@ -56,7 +56,6 @@
         </div>
       </CardContent>
     </Card>
-
     <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
       <Card>
         <CardContent class="space-y-3">
@@ -73,12 +72,13 @@
             <span class="text-muted-foreground">к прошлому периоду</span>
           </div>
           <div class="flex gap-3 text-xs text-muted-foreground">
-            <span class="flex items-center gap-1 text-emerald-600"><CheckCircle2 :size="14" /> {{ formatNumber(stats?.orders?.completed_orders || 0) }}</span>
+            <span class="flex items-center gap-1 text-emerald-600"
+              ><CheckCircle2 :size="14" /> {{ formatNumber(stats?.orders?.completed_orders || 0) }}</span
+            >
             <span class="flex items-center gap-1 text-red-600"><XCircle :size="14" /> {{ formatNumber(stats?.orders?.cancelled_orders || 0) }}</span>
           </div>
         </CardContent>
       </Card>
-
       <Card>
         <CardContent class="space-y-3">
           <div class="flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -96,7 +96,6 @@
           <div class="text-xs text-muted-foreground">Средний чек: {{ formatCurrency(stats?.orders?.avg_order_value) }}</div>
         </CardContent>
       </Card>
-
       <Card>
         <CardContent class="space-y-3">
           <div class="flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -117,7 +116,6 @@
           </div>
         </CardContent>
       </Card>
-
       <Card>
         <CardContent class="space-y-3">
           <div class="flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -135,7 +133,6 @@
           <div class="text-xs text-muted-foreground">Сумма списанных бонусов</div>
         </CardContent>
       </Card>
-
       <Card>
         <CardContent class="space-y-3">
           <div class="flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -143,7 +140,9 @@
             <Activity :size="16" />
           </div>
           <div class="text-3xl font-semibold text-foreground">
-            {{ formatNumber((stats?.orders?.pending_orders || 0) + (stats?.orders?.preparing_orders || 0) + (stats?.orders?.delivering_orders || 0)) }}
+            {{
+              formatNumber((stats?.orders?.pending_orders || 0) + (stats?.orders?.preparing_orders || 0) + (stats?.orders?.delivering_orders || 0))
+            }}
           </div>
           <div class="flex flex-col gap-1 text-xs text-muted-foreground">
             <span>Ожидают: {{ formatNumber(stats?.orders?.pending_orders || 0) }}</span>
@@ -152,7 +151,6 @@
         </CardContent>
       </Card>
     </div>
-
     <Card>
       <CardHeader>
         <CardTitle>Динамика продаж</CardTitle>
@@ -165,10 +163,7 @@
             <div v-for="point in seriesPoints" :key="point.period" class="flex w-16 flex-col items-center gap-2">
               <div class="text-[11px] font-medium text-muted-foreground">{{ formatSeriesValue(point) }}</div>
               <div class="flex h-36 w-full items-end rounded-md bg-muted/50">
-                <div
-                  class="w-full rounded-md bg-primary/70"
-                  :style="{ height: barHeight(point) }"
-                ></div>
+                <div class="w-full rounded-md bg-primary/70" :style="{ height: barHeight(point) }"></div>
               </div>
               <div class="text-[10px] uppercase text-muted-foreground">{{ formatSeriesLabel(point.period) }}</div>
             </div>
@@ -176,14 +171,17 @@
         </div>
       </CardContent>
     </Card>
-
     <div class="grid gap-4 lg:grid-cols-2">
       <Card>
         <CardHeader>
           <CardTitle>Способы получения</CardTitle>
         </CardHeader>
         <CardContent class="space-y-3">
-          <div v-for="type in stats?.orderTypes" :key="type.order_type" class="flex items-center justify-between rounded-lg border border-border/60 bg-muted/40 p-3">
+          <div
+            v-for="type in stats?.orderTypes"
+            :key="type.order_type"
+            class="flex items-center justify-between rounded-lg border border-border/60 bg-muted/40 p-3"
+          >
             <div class="flex items-center gap-3">
               <div class="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary">
                 <Truck v-if="type.order_type === 'delivery'" :size="18" />
@@ -200,13 +198,16 @@
           </div>
         </CardContent>
       </Card>
-
       <Card>
         <CardHeader>
           <CardTitle>Способы оплаты</CardTitle>
         </CardHeader>
         <CardContent class="space-y-3">
-          <div v-for="method in stats?.paymentMethods" :key="method.payment_method" class="flex items-center justify-between rounded-lg border border-border/60 bg-muted/40 p-3">
+          <div
+            v-for="method in stats?.paymentMethods"
+            :key="method.payment_method"
+            class="flex items-center justify-between rounded-lg border border-border/60 bg-muted/40 p-3"
+          >
             <div class="flex items-center gap-3">
               <div class="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary">
                 <Banknote v-if="method.payment_method === 'cash'" :size="18" />
@@ -224,13 +225,16 @@
         </CardContent>
       </Card>
     </div>
-
     <Card>
       <CardHeader>
         <CardTitle>Популярные позиции</CardTitle>
       </CardHeader>
       <CardContent class="space-y-3">
-        <div v-for="(item, index) in stats?.topItems?.slice(0, 10)" :key="item.name" class="flex items-center justify-between rounded-lg border border-border/60 bg-muted/40 p-3">
+        <div
+          v-for="(item, index) in stats?.topItems?.slice(0, 10)"
+          :key="item.name"
+          class="flex items-center justify-between rounded-lg border border-border/60 bg-muted/40 p-3"
+        >
           <div class="flex items-center gap-3">
             <div class="flex h-9 w-9 items-center justify-center rounded-full bg-secondary text-sm font-semibold text-foreground">
               {{ index + 1 }}
@@ -246,7 +250,6 @@
     </Card>
   </div>
 </template>
-
 <script setup>
 import { computed, onMounted, ref, watch } from "vue";
 import {
@@ -281,7 +284,6 @@ import CardTitle from "../components/ui/CardTitle.vue";
 import Select from "../components/ui/Select.vue";
 import Tabs from "../components/ui/Tabs.vue";
 import RangeCalendar from "../components/ui/RangeCalendar.vue";
-
 const referenceStore = useReferenceStore();
 const authStore = useAuthStore();
 const stats = ref(null);
@@ -289,21 +291,18 @@ const branches = ref([]);
 const branchesRequestId = ref(0);
 const loadTimer = ref(null);
 const activeTab = ref(0);
-
 const toDateString = (date) => {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 };
-
 const parseDate = (value) => {
   if (!value) return null;
   const [year, month, day] = value.split("-").map(Number);
   if (!year || !month || !day) return null;
   return new Date(year, month - 1, day);
 };
-
 const todayString = toDateString(new Date());
 const filters = ref({
   period: "day",
@@ -313,53 +312,43 @@ const filters = ref({
   city_id: "",
   branch_id: "",
 });
-
 const chartTabs = ["Выручка", "Заказы", "Средний чек"];
-
 const isCustomPeriod = computed(() => filters.value.period === "custom");
 const isManager = computed(() => authStore.role === "manager");
 const managerBranches = computed(() => authStore.user?.branches || []);
 const managerBranchIds = computed(() => authStore.user?.branch_ids || []);
 const isLocationLocked = computed(() => isManager.value && managerBranches.value.length === 1);
-
 const seriesPoints = computed(() => stats.value?.series?.points || []);
 const seriesGroupBy = computed(() => stats.value?.series?.group_by || "day");
-
 const formatRangeDate = (date) =>
   date.toLocaleDateString("ru-RU", {
     day: "2-digit",
     month: "2-digit",
     year: "2-digit",
   });
-
 const addDays = (date, days) => {
   const result = new Date(date);
   result.setDate(result.getDate() + days);
   return result;
 };
-
 const addMonths = (date, months) => {
   const result = new Date(date);
   result.setMonth(result.getMonth() + months);
   return result;
 };
-
 const addYears = (date, years) => {
   const result = new Date(date);
   result.setFullYear(result.getFullYear() + years);
   return result;
 };
-
 const getRangeForPeriod = () => {
   if (filters.value.period === "custom") {
     const fromDate = parseDate(filters.value.date_from);
     const toDate = parseDate(filters.value.date_to);
     return { start: fromDate, end: toDate };
   }
-
   const baseDate = parseDate(filters.value.base_date) || new Date();
   const baseStart = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate());
-
   if (filters.value.period === "week") {
     const weekday = baseStart.getDay();
     const diffToMonday = (weekday + 6) % 7;
@@ -367,22 +356,18 @@ const getRangeForPeriod = () => {
     const end = addDays(start, 6);
     return { start, end };
   }
-
   if (filters.value.period === "month") {
     const start = new Date(baseStart.getFullYear(), baseStart.getMonth(), 1);
     const end = new Date(baseStart.getFullYear(), baseStart.getMonth() + 1, 0);
     return { start, end };
   }
-
   if (filters.value.period === "year") {
     const start = new Date(baseStart.getFullYear(), 0, 1);
     const end = new Date(baseStart.getFullYear(), 11, 31);
     return { start, end };
   }
-
   return { start: baseStart, end: baseStart };
 };
-
 const periodRangeLabel = computed(() => {
   const { start, end } = getRangeForPeriod();
   if (!start || !end) return "—";
@@ -391,9 +376,7 @@ const periodRangeLabel = computed(() => {
   }
   return `${formatRangeDate(start)} - ${formatRangeDate(end)}`;
 });
-
 const periodButtonVariant = (periodKey) => (filters.value.period === periodKey ? "secondary" : "ghost");
-
 const setPeriod = (periodKey) => {
   const wasCustom = filters.value.period === "custom";
   filters.value.period = periodKey;
@@ -405,18 +388,15 @@ const setPeriod = (periodKey) => {
     }
   }
 };
-
 const activateCustomPeriod = () => {
   const { start, end } = getRangeForPeriod();
   filters.value.period = "custom";
   filters.value.date_from = start ? toDateString(start) : "";
   filters.value.date_to = end ? toDateString(end) : "";
 };
-
 const shiftPeriod = (direction) => {
   if (filters.value.period === "custom") return;
   const baseDate = parseDate(filters.value.base_date) || new Date();
-
   let nextDate = baseDate;
   if (filters.value.period === "week") {
     nextDate = addDays(baseDate, direction * 7);
@@ -427,47 +407,39 @@ const shiftPeriod = (direction) => {
   } else {
     nextDate = addDays(baseDate, direction);
   }
-
   filters.value.base_date = toDateString(nextDate);
 };
-
 const formatPercent = (value) => {
   if (value === null || value === undefined) return "—";
   return `${Math.abs(value).toFixed(1)}%`;
 };
-
 const comparisonClass = (comparison) => {
   if (!comparison || comparison.percent === null) return "text-muted-foreground";
   if (comparison.change > 0) return "text-emerald-600";
   if (comparison.change < 0) return "text-red-600";
   return "text-muted-foreground";
 };
-
 const comparisonIcon = (comparison) => {
   if (!comparison || comparison.percent === null) return null;
   if (comparison.change > 0) return ArrowUpRight;
   if (comparison.change < 0) return ArrowDownRight;
   return Minus;
 };
-
 const seriesMetricKey = computed(() => {
   if (activeTab.value === 1) return "orders_count";
   if (activeTab.value === 2) return "avg_order_value";
   return "revenue";
 });
-
 const seriesMax = computed(() => {
   if (seriesPoints.value.length === 0) return 0;
   return Math.max(...seriesPoints.value.map((point) => Number(point[seriesMetricKey.value]) || 0));
 });
-
 const barHeight = (point) => {
   if (!seriesMax.value) return "0%";
   const value = Number(point[seriesMetricKey.value]) || 0;
   const height = Math.max((value / seriesMax.value) * 100, 2);
   return `${height}%`;
 };
-
 const formatSeriesValue = (point) => {
   if (seriesMetricKey.value === "orders_count") {
     return formatNumber(point.orders_count || 0);
@@ -477,7 +449,6 @@ const formatSeriesValue = (point) => {
   }
   return formatCurrency(point.revenue || 0);
 };
-
 const formatSeriesLabel = (periodValue) => {
   if (seriesGroupBy.value === "hour") {
     const date = new Date(periodValue);
@@ -485,22 +456,18 @@ const formatSeriesLabel = (periodValue) => {
       return date.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
     }
   }
-
   if (seriesGroupBy.value === "day") {
     const date = new Date(periodValue);
     if (!Number.isNaN(date.getTime())) {
       return date.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" });
     }
   }
-
   return String(periodValue);
 };
-
 const loadDashboard = async () => {
   if (filters.value.period === "custom" && (!filters.value.date_from || !filters.value.date_to)) {
     return;
   }
-
   try {
     const params = { period: filters.value.period };
     if (filters.value.period === "custom") {
@@ -511,21 +478,18 @@ const loadDashboard = async () => {
     }
     if (filters.value.city_id) params.city_id = filters.value.city_id;
     if (filters.value.branch_id) params.branch_id = filters.value.branch_id;
-
     const response = await api.get("/api/analytics/dashboard", { params });
     stats.value = response.data;
   } catch (error) {
     console.error("Ошибка загрузки дашборда:", error);
   }
 };
-
 const scheduleLoad = () => {
   if (loadTimer.value) {
     clearTimeout(loadTimer.value);
   }
   loadTimer.value = setTimeout(loadDashboard, 200);
 };
-
 const onCityChange = async () => {
   const requestId = ++branchesRequestId.value;
   filters.value.branch_id = "";
@@ -551,51 +515,44 @@ const onCityChange = async () => {
   }
   scheduleLoad();
 };
-
 watch(
   () => filters.value.period,
   () => {
     scheduleLoad();
-  }
+  },
 );
-
 watch(
   () => filters.value.base_date,
   () => {
     if (!isCustomPeriod.value) {
       scheduleLoad();
     }
-  }
+  },
 );
-
 watch(
   () => filters.value.date_from,
   () => {
     if (filters.value.period === "custom") {
       scheduleLoad();
     }
-  }
+  },
 );
-
 watch(
   () => filters.value.date_to,
   () => {
     if (filters.value.period === "custom") {
       scheduleLoad();
     }
-  }
+  },
 );
-
 watch(
   () => filters.value.branch_id,
   () => {
     scheduleLoad();
-  }
+  },
 );
-
 onMounted(async () => {
   await referenceStore.loadCities();
-
   if (isManager.value && managerBranches.value.length > 0) {
     const [firstBranch] = managerBranches.value;
     filters.value.city_id = firstBranch?.city_id || "";
@@ -606,7 +563,6 @@ onMounted(async () => {
       branches.value = loadedBranches.filter((branch) => allowed.has(branch.id));
     }
   }
-
   await loadDashboard();
 });
 </script>

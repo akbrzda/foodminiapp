@@ -19,22 +19,17 @@
     </div>
   </div>
 </template>
-
 <script setup>
 import { computed } from "vue";
 import { X } from "lucide-vue-next";
-
 const props = defineProps({
   open: { type: Boolean, default: null },
   title: { type: String, default: "" },
   subtitle: { type: String, default: "" },
-  size: { type: String, default: "md" }, // sm, md, lg, large, xl
+  size: { type: String, default: "md" },
 });
-
 const emit = defineEmits(["update:open", "close"]);
-
 const isOpen = computed(() => (props.open === null ? true : props.open));
-
 const sizeClasses = computed(() => {
   const sizes = {
     sm: "max-w-md",
@@ -45,7 +40,6 @@ const sizeClasses = computed(() => {
   };
   return sizes[props.size] || sizes.md;
 });
-
 const close = () => {
   emit("update:open", false);
   emit("close");

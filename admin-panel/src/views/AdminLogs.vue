@@ -52,19 +52,16 @@
         </div>
       </CardContent>
     </Card>
-
     <Card v-if="loading">
       <CardContent class="py-12 text-center">
         <div class="text-muted-foreground">Загрузка...</div>
       </CardContent>
     </Card>
-
     <Card v-else-if="logs.length === 0">
       <CardContent class="py-12 text-center">
         <div class="text-muted-foreground">Логи не найдены</div>
       </CardContent>
     </Card>
-
     <Card v-else>
       <CardHeader>
         <CardTitle>Записи</CardTitle>
@@ -113,7 +110,6 @@
         </Table>
       </CardContent>
     </Card>
-
     <Card v-if="pagination.total > pagination.limit">
       <CardContent class="py-4">
         <div class="flex items-center justify-between">
@@ -130,8 +126,6 @@
         </div>
       </CardContent>
     </Card>
-
-    <!-- Модальное окно деталей -->
     <BaseModal v-model:open="detailsModal.open" :title="`Детали действия #${detailsModal.log?.id || ''}`">
       <div v-if="detailsModal.log" class="space-y-4">
         <div>
@@ -165,7 +159,6 @@
     </BaseModal>
   </div>
 </template>
-
 <script setup>
 import { onMounted, reactive, ref, watch } from "vue";
 import { Eye, RotateCcw } from "lucide-vue-next";
@@ -188,13 +181,11 @@ import TableCell from "../components/ui/TableCell.vue";
 import TableHead from "../components/ui/TableHead.vue";
 import TableHeader from "../components/ui/TableHeader.vue";
 import TableRow from "../components/ui/TableRow.vue";
-
 const logs = ref([]);
 const admins = ref([]);
 const loading = ref(false);
 const { showErrorNotification } = useNotifications();
 const loadTimer = ref(null);
-
 const filters = reactive({
   admin_id: "",
   action_type: "",
@@ -202,18 +193,15 @@ const filters = reactive({
   date_from: "",
   date_to: "",
 });
-
 const pagination = reactive({
   page: 1,
   limit: 50,
   total: 0,
 });
-
 const detailsModal = reactive({
   open: false,
   log: null,
 });
-
 const loadLogs = async () => {
   loading.value = true;
   try {
@@ -233,14 +221,12 @@ const loadLogs = async () => {
     loading.value = false;
   }
 };
-
 const scheduleLoad = () => {
   if (loadTimer.value) {
     clearTimeout(loadTimer.value);
   }
   loadTimer.value = setTimeout(loadLogs, 300);
 };
-
 const loadAdmins = async () => {
   try {
     const response = await api.get("/api/admin/users/admins");
@@ -251,7 +237,6 @@ const loadAdmins = async () => {
     showErrorNotification(`Ошибка загрузки администраторов: ${message}`);
   }
 };
-
 const resetFilters = () => {
   Object.assign(filters, {
     admin_id: "",
@@ -263,26 +248,22 @@ const resetFilters = () => {
   pagination.page = 1;
   scheduleLoad();
 };
-
 const prevPage = () => {
   if (pagination.page > 1) {
     pagination.page--;
     loadLogs();
   }
 };
-
 const nextPage = () => {
   if (pagination.page < Math.ceil(pagination.total / pagination.limit)) {
     pagination.page++;
     loadLogs();
   }
 };
-
 const showDetails = (log) => {
   detailsModal.log = log;
   detailsModal.open = true;
 };
-
 const getActionLabel = (action) => {
   const labels = {
     create: "Создание",
@@ -291,7 +272,6 @@ const getActionLabel = (action) => {
   };
   return labels[action] || action;
 };
-
 const getActionVariant = (action) => {
   const variants = {
     create: "success",
@@ -300,7 +280,6 @@ const getActionVariant = (action) => {
   };
   return variants[action] || "default";
 };
-
 const getObjectLabel = (objectType) => {
   const labels = {
     category: "Категория",
@@ -315,7 +294,6 @@ const getObjectLabel = (objectType) => {
   };
   return labels[objectType] || objectType;
 };
-
 const formatJSON = (json) => {
   if (typeof json === "string") {
     try {
@@ -326,17 +304,15 @@ const formatJSON = (json) => {
   }
   return JSON.stringify(json, null, 2);
 };
-
 onMounted(async () => {
   await Promise.all([loadAdmins(), loadLogs()]);
 });
-
 watch(
   filters,
   () => {
     pagination.page = 1;
     scheduleLoad();
   },
-  { deep: true }
+  { deep: true },
 );
 </script>

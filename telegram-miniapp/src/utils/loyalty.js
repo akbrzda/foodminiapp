@@ -1,6 +1,5 @@
 export const LOYALTY_WINDOW_DAYS = 60;
 export const MAX_BONUS_REDEEM_PERCENT = 0.2;
-
 export const LOYALTY_LEVELS = [
   {
     id: "starter",
@@ -24,7 +23,6 @@ export const LOYALTY_LEVELS = [
     max: Number.POSITIVE_INFINITY,
   },
 ];
-
 export function normalizeSpend(value) {
   const parsedValue = Number(value);
   if (!Number.isFinite(parsedValue)) {
@@ -32,15 +30,10 @@ export function normalizeSpend(value) {
   }
   return Math.max(0, parsedValue);
 }
-
 export function getLoyaltyLevel(spend) {
   const value = normalizeSpend(spend);
-  return (
-    LOYALTY_LEVELS.find((level) => value >= level.min && value <= level.max) ||
-    LOYALTY_LEVELS[0]
-  );
+  return LOYALTY_LEVELS.find((level) => value >= level.min && value <= level.max) || LOYALTY_LEVELS[0];
 }
-
 export function getNextLoyaltyLevel(spend) {
   const current = getLoyaltyLevel(spend);
   const currentIndex = LOYALTY_LEVELS.findIndex((level) => level.id === current.id);
@@ -49,7 +42,6 @@ export function getNextLoyaltyLevel(spend) {
   }
   return LOYALTY_LEVELS[currentIndex + 1];
 }
-
 export function getAmountToNextLevel(spend) {
   const next = getNextLoyaltyLevel(spend);
   if (!next) {
@@ -58,7 +50,6 @@ export function getAmountToNextLevel(spend) {
   const value = normalizeSpend(spend);
   return Math.max(0, next.min - value);
 }
-
 export function getProgressToNextLevel(spend) {
   const current = getLoyaltyLevel(spend);
   const next = getNextLoyaltyLevel(spend);

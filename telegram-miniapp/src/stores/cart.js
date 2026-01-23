@@ -1,37 +1,29 @@
 import { defineStore } from "pinia";
-
 export const useCartStore = defineStore("cart", {
   state: () => ({
     items: JSON.parse(localStorage.getItem("cart") || "[]"),
     bonusUsage: JSON.parse(localStorage.getItem("cart_bonus_usage") || '{"useBonuses":false,"bonusToUse":0}'),
   }),
-
   getters: {
     itemsCount: (state) => state.items.reduce((sum, item) => sum + item.quantity, 0),
-
     totalPrice: (state) =>
       state.items.reduce((sum, item) => {
-        // item.price уже включает цену варианта и всех модификаторов
         const itemTotal = (parseFloat(item.price) || 0) * (item.quantity || 1);
         return sum + itemTotal;
       }, 0),
   },
-
   actions: {
     refreshPricesFromMenu(menuItems) {
       if (!Array.isArray(menuItems) || menuItems.length === 0) return;
       const itemsById = new Map(menuItems.map((item) => [item.id, item]));
-
       this.items = this.items.map((cartItem) => {
         const menuItem = itemsById.get(cartItem.id);
         if (!menuItem) return cartItem;
-
         const variant = cartItem.variant_id ? menuItem.variants?.find((v) => v.id === cartItem.variant_id) : null;
         let basePrice = variant ? parseFloat(variant.price) : parseFloat(menuItem.price);
         if (!Number.isFinite(basePrice)) {
           basePrice = parseFloat(cartItem.price) || 0;
         }
-
         let modifiersTotal = 0;
         const updatedModifiers = Array.isArray(cartItem.modifiers)
           ? cartItem.modifiers.map((mod) => {
@@ -40,7 +32,6 @@ export const useCartStore = defineStore("cart", {
               const group = menuItem.modifier_groups?.find((g) => g.modifiers?.some((m) => m.id === modifierId));
               const modifier = group?.modifiers?.find((m) => m.id === modifierId);
               if (!modifier) return mod;
-
               let price = parseFloat(modifier.price) || 0;
               if (variant && Array.isArray(modifier.variant_prices)) {
                 const match = modifier.variant_prices.find((p) => p.variant_id === variant.id);
@@ -49,12 +40,10 @@ export const useCartStore = defineStore("cart", {
                 }
               }
               modifiersTotal += price;
-
               if (typeof mod === "number") return mod;
               return { ...mod, price };
             })
           : cartItem.modifiers;
-
         const updatedPrice = basePrice + modifiersTotal;
         return {
           ...cartItem,
@@ -62,46 +51,36 @@ export const useCartStore = defineStore("cart", {
           modifiers: updatedModifiers,
         };
       });
-
       this.saveToLocalStorage();
     },
     replaceItems(items) {
       this.items = Array.isArray(items) ? items : [];
       this.saveToLocalStorage();
     },
-
     addItem(item) {
-      // Ищем существующий товар с теми же параметрами (id, variant_id, модификаторы)
       const existingIndex = this.items.findIndex((i) => {
         const sameId = i.id === item.id;
         const sameVariant = (i.variant_id || null) === (item.variant_id || null);
         const sameModifiers = JSON.stringify(i.modifiers || []) === JSON.stringify(item.modifiers || []);
         return sameId && sameVariant && sameModifiers;
       });
-
-      // Убеждаемся, что цена - число
       const price = parseFloat(item.price) || 0;
-
       if (existingIndex >= 0) {
         this.items[existingIndex].quantity += item.quantity || 1;
-        // Обновляем цену на случай, если она изменилась
         this.items[existingIndex].price = price;
       } else {
-        this.items.push({ 
-          ...item, 
+        this.items.push({
+          ...item,
           price: price,
-          quantity: item.quantity || 1 
+          quantity: item.quantity || 1,
         });
       }
-
       this.saveToLocalStorage();
     },
-
     removeItem(index) {
       this.items.splice(index, 1);
       this.saveToLocalStorage();
     },
-
     updateQuantity(index, quantity) {
       if (index < 0 || index >= this.items.length) {
         console.error("Invalid index for updateQuantity:", index);
@@ -114,17 +93,14 @@ export const useCartStore = defineStore("cart", {
         this.saveToLocalStorage();
       }
     },
-
     clearCart() {
       this.items = [];
       this.saveToLocalStorage();
       this.resetBonusUsage();
     },
-
     saveToLocalStorage() {
       localStorage.setItem("cart", JSON.stringify(this.items));
     },
-
     setUseBonuses(value) {
       this.bonusUsage.useBonuses = Boolean(value);
       if (!this.bonusUsage.useBonuses) {
@@ -132,18 +108,15 @@ export const useCartStore = defineStore("cart", {
       }
       this.saveBonusUsage();
     },
-
     setBonusToUse(value) {
       const parsedValue = Number(value);
       this.bonusUsage.bonusToUse = Number.isFinite(parsedValue) ? Math.max(0, Math.floor(parsedValue)) : 0;
       this.saveBonusUsage();
     },
-
     resetBonusUsage() {
       this.bonusUsage = { useBonuses: false, bonusToUse: 0 };
       this.saveBonusUsage();
     },
-
     saveBonusUsage() {
       localStorage.setItem("cart_bonus_usage", JSON.stringify(this.bonusUsage));
     },

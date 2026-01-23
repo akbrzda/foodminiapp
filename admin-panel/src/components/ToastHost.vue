@@ -5,10 +5,7 @@
         <div
           v-for="toastItem in toasts"
           :key="toastItem.id"
-          :class="[
-            'flex items-start gap-3 rounded-lg border p-4 shadow-soft',
-            variantClasses[toastItem.variant] || variantClasses.default,
-          ]"
+          :class="['flex items-start gap-3 rounded-lg border p-4 shadow-soft', variantClasses[toastItem.variant] || variantClasses.default]"
         >
           <div class="flex-1">
             <div class="text-sm font-semibold">{{ toastItem.title }}</div>
@@ -20,26 +17,21 @@
     </div>
   </Teleport>
 </template>
-
 <script setup>
 import { TransitionGroup } from "vue";
 import { useToast } from "../composables/useToast.js";
-
 const { toasts, dismiss } = useToast();
-
 const variantClasses = {
   default: "border-border bg-background text-foreground",
   success: "border-emerald-200 bg-emerald-50 text-emerald-900",
   error: "border-red-200 bg-red-50 text-red-900",
 };
 </script>
-
 <style scoped>
 .toast-enter-active,
 .toast-leave-active {
   transition: all 0.2s ease;
 }
-
 .toast-enter-from,
 .toast-leave-to {
   opacity: 0;

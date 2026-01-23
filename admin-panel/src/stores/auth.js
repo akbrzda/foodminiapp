@@ -1,9 +1,7 @@
 import { defineStore } from "pinia";
 import api from "../api/client.js";
-
 const STORAGE_TOKEN = "admin_token";
 const STORAGE_USER = "admin_user";
-
 export const useAuthStore = defineStore("auth", {
   state: () => ({
     token: localStorage.getItem(STORAGE_TOKEN) || "",

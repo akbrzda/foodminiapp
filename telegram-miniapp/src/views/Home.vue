@@ -1,7 +1,6 @@
 <template>
   <div class="home">
     <AppHeader @toggleMenu="showMenu = true" />
-
     <div class="location-bar">
       <div class="location-tabs">
         <button @click="setDeliveryType('delivery')" class="pill-tab" :class="{ active: locationStore.isDelivery }">Доставка</button>
@@ -13,7 +12,6 @@
         </button>
       </div>
     </div>
-    <!-- Активные заказы -->
     <div v-if="activeOrders.length > 0" class="active-orders-container">
       <div class="active-orders" :class="{ 'has-scroll': activeOrders.length > 1 }">
         <div v-for="order in activeOrders" :key="order.id" class="active-order" @click="router.push(`/order/${order.id}`)">
@@ -51,7 +49,6 @@
       </div>
       <div v-if="activeOrders.length > 1" class="scroll-hint">← Пролистайте →</div>
     </div>
-    <!-- Меню с категориями -->
     <div class="menu-section" v-if="locationStore.selectedCity">
       <div class="categories-sticky" v-if="menuStore.categories.length">
         <div class="categories" ref="categoriesRef">
@@ -70,7 +67,6 @@
           </button>
         </div>
       </div>
-
       <div v-if="availableTags.length > 0" class="tags-filter">
         <button :class="['tag-pill', { active: selectedTagId === null }]" @click="selectTag(null)">Все</button>
         <button v-for="tag in availableTags" :key="tag.id" :class="['tag-pill', { active: selectedTagId === tag.id }]" @click="selectTag(tag.id)">
@@ -78,7 +74,6 @@
           {{ tag.name }}
         </button>
       </div>
-
       <div class="menu-content" v-if="!menuStore.loading">
         <div v-for="category in menuStore.categories" :key="category.id" :id="`category-${category.id}`" class="category-section">
           <h2 class="category-title">{{ category.name }}</h2>
@@ -120,11 +115,9 @@
           </div>
         </div>
       </div>
-
       <div class="loading" v-if="menuStore.loading">Меню загружается...</div>
       <div class="empty" v-if="!menuStore.loading && menuStore.categories.length === 0">Меню загружается...</div>
     </div>
-
     <button v-if="cartStore.itemsCount > 0" class="floating-cart" :class="{ 'hidden-on-keyboard': isKeyboardOpen }" @click="goToCart">
       <span class="cart-left">
         <span class="cart-icon">
@@ -137,7 +130,6 @@
     </button>
   </div>
 </template>
-
 <script setup>
 import { ref, computed, onMounted, watch, onUnmounted, nextTick } from "vue";
 import { useRouter, useRoute } from "vue-router";
@@ -152,7 +144,6 @@ import { hapticFeedback } from "../services/telegram";
 import { wsService } from "../services/websocket";
 import AppHeader from "../components/AppHeader.vue";
 import { formatPrice, normalizeImageUrl } from "../utils/format";
-
 const router = useRouter();
 const route = useRoute();
 const authStore = useAuthStore();
@@ -160,7 +151,6 @@ const locationStore = useLocationStore();
 const cartStore = useCartStore();
 const menuStore = useMenuStore();
 const { isKeyboardOpen } = useKeyboardHandler();
-
 const categoriesRef = ref(null);
 const categoryRefs = ref({});
 const showMenu = ref(false);
@@ -170,39 +160,29 @@ const activeOrders = ref([]);
 const selectedTagId = ref(null);
 let observer = null;
 let orderStatusHandler = null;
-
 const cityName = computed(() => locationStore.selectedCity?.name || "Когалым");
 const actionButtonText = computed(() => {
   if (locationStore.isDelivery) {
     return locationStore.deliveryAddress ? truncateText(locationStore.deliveryAddress, 48) : "Укажите адрес";
   }
-
   if (locationStore.isPickup) {
     return locationStore.selectedBranch ? truncateText(locationStore.selectedBranch.name, 22) : "Выбрать филиал";
   }
-
   return "Укажите адрес";
 });
-
 onMounted(async () => {
   if (route.query.openCity === "1") {
     window.dispatchEvent(new CustomEvent("open-city-popup"));
     router.replace({ query: {} });
   }
-
-  // Загружаем меню если город выбран
   if (locationStore.selectedCity) {
     await loadMenu();
   }
-
-  // Загружаем активный заказ
   if (authStore.isAuthenticated) {
     await loadActiveOrder();
     setupOrderStatusListener();
   }
 });
-
-// Загружаем меню при изменении города
 watch(
   () => locationStore.selectedCity,
   async (newCity) => {
@@ -211,7 +191,6 @@ watch(
     }
   },
 );
-
 watch(
   () => authStore.isAuthenticated,
   async (isAuth) => {
@@ -223,7 +202,6 @@ watch(
     setupOrderStatusListener();
   },
 );
-
 watch(
   () => [locationStore.deliveryType, locationStore.selectedBranch?.id],
   async () => {
@@ -232,7 +210,6 @@ watch(
     }
   },
 );
-
 onUnmounted(() => {
   if (observer) {
     observer.disconnect();
@@ -241,7 +218,6 @@ onUnmounted(() => {
     wsService.off("order-status-updated", orderStatusHandler);
   }
 });
-
 watch(
   () => activeCategory.value,
   async (categoryId) => {
@@ -250,19 +226,16 @@ watch(
     scrollCategoryIntoView(categoryId);
   },
 );
-
 async function loadActiveOrder() {
   try {
     const response = await ordersAPI.getMyOrders();
     const orders = response.data.orders || [];
-    // Ищем все активные заказы (не завершенные и не отмененные)
     const active = orders.filter((order) => order.status !== "completed" && order.status !== "cancelled");
     activeOrders.value = active;
   } catch (error) {
     console.error("Failed to load active order:", error);
   }
 }
-
 function setupOrderStatusListener() {
   if (orderStatusHandler) return;
   orderStatusHandler = (data) => {
@@ -270,21 +243,17 @@ function setupOrderStatusListener() {
     const orderId = String(data.orderId);
     const index = activeOrders.value.findIndex((order) => String(order.id) === orderId);
     if (index === -1) return;
-
     if (["completed", "cancelled"].includes(data.newStatus)) {
       activeOrders.value = activeOrders.value.filter((order) => order.id !== data.orderId);
       return;
     }
-
     const updated = { ...activeOrders.value[index], status: data.newStatus };
     activeOrders.value = [...activeOrders.value.slice(0, index), updated, ...activeOrders.value.slice(index + 1)];
   };
   wsService.on("order-status-updated", orderStatusHandler);
 }
-
 function getStatusText(status, orderType) {
   const isDelivery = orderType === "delivery";
-
   const deliveryStatuses = {
     pending: "Ожидает подтверждения",
     confirmed: "Принят",
@@ -294,7 +263,6 @@ function getStatusText(status, orderType) {
     completed: "Доставлен",
     cancelled: "Отменён",
   };
-
   const pickupStatuses = {
     pending: "Ожидает подтверждения",
     confirmed: "Принят",
@@ -303,11 +271,9 @@ function getStatusText(status, orderType) {
     completed: "Выдан",
     cancelled: "Отменён",
   };
-
   const statuses = isDelivery ? deliveryStatuses : pickupStatuses;
   return statuses[status] || status;
 }
-
 function getStatusClass(status) {
   if (["pending"].includes(status)) return "status-pending";
   if (["confirmed", "preparing"].includes(status)) return "status-preparing";
@@ -316,11 +282,9 @@ function getStatusClass(status) {
   if (["cancelled"].includes(status)) return "status-cancelled";
   return "";
 }
-
 function openCitySelector() {
   window.dispatchEvent(new CustomEvent("open-city-popup"));
 }
-
 function openDeliverySelector() {
   if (!locationStore.selectedCity) {
     window.dispatchEvent(new CustomEvent("open-city-popup"));
@@ -332,32 +296,25 @@ function openDeliverySelector() {
   }
   router.push("/delivery-map");
 }
-
 function setDeliveryType(type) {
   locationStore.setDeliveryType(type);
 }
-
 const deliveryCost = computed(() => {
   if (locationStore.deliveryType !== "delivery") return 0;
   return parseFloat(locationStore.deliveryZone?.delivery_cost || 0);
 });
-
 const cartTotalWithDelivery = computed(() => {
   return cartStore.totalPrice + deliveryCost.value;
 });
-
 function truncateText(text, maxLength) {
   if (!text) return "";
   if (text.length <= maxLength) return text;
   return `${text.slice(0, maxLength - 1)}…`;
 }
-
 async function loadMenu() {
   if (!locationStore.selectedCity) return;
-
   const fulfillmentType = locationStore.isPickup ? "pickup" : "delivery";
   const branchId = locationStore.selectedBranch?.id || null;
-
   if (
     menuStore.cityId === locationStore.selectedCity.id &&
     menuStore.fulfillmentType === fulfillmentType &&
@@ -369,15 +326,12 @@ async function loadMenu() {
     setupIntersectionObserver();
     return;
   }
-
   try {
     menuStore.setLoading(true);
-
     const menuResponse = await menuAPI.getMenu(locationStore.selectedCity.id, { fulfillmentType, branchId });
     const categories = menuResponse.data.categories || [];
     menuStore.setCategories(categories);
     const allItems = categories.flatMap((category) => category.items || []);
-
     menuStore.setMenuData({
       cityId: locationStore.selectedCity.id,
       fulfillmentType,
@@ -387,13 +341,9 @@ async function loadMenu() {
     });
     selectedTagId.value = null;
     cartStore.refreshPricesFromMenu(allItems);
-
-    // Устанавливаем первую категорию как активную
     if (categories.length > 0) {
       activeCategory.value = categories[0].id;
     }
-
-    // Настраиваем Intersection Observer после загрузки
     await nextTick();
     setupIntersectionObserver();
   } catch (error) {
@@ -403,17 +353,14 @@ async function loadMenu() {
     menuStore.setLoading(false);
   }
 }
-
 function getItemsByCategory(categoryId) {
   const items = menuStore.getItemsByCategory(categoryId);
   if (selectedTagId.value === null) return items;
   return items.filter((item) => item.tags && item.tags.some((tag) => tag.id === selectedTagId.value));
 }
-
 function hasRequiredOptions(item) {
   return (item.variants && item.variants.length > 0) || (item.modifier_groups && item.modifier_groups.some((group) => group.is_required));
 }
-
 function getCartItem(item) {
   if (!hasRequiredOptions(item)) {
     return cartStore.items.find((cartItem) => {
@@ -422,17 +369,13 @@ function getCartItem(item) {
   }
   return null;
 }
-
 function handleItemAction(item) {
   hapticFeedback("light");
-
   if (isItemUnavailable(item)) return;
-
   if (hasRequiredOptions(item)) {
     openItem(item);
     return;
   }
-
   cartStore.addItem({
     id: item.id,
     name: item.name,
@@ -446,15 +389,12 @@ function handleItemAction(item) {
     modifiers: [],
     image_url: item.image_url,
   });
-
   hapticFeedback("success");
 }
-
 function formatWeight(value) {
   if (!value) return "";
   return String(value);
 }
-
 function getUnitLabel(unit) {
   const units = {
     g: "г",
@@ -465,7 +405,6 @@ function getUnitLabel(unit) {
   };
   return units[unit] || "";
 }
-
 function formatWeightValue(value, unit) {
   const parsedValue = Number(value);
   if (!Number.isFinite(parsedValue) || parsedValue <= 0 || !unit) {
@@ -475,7 +414,6 @@ function formatWeightValue(value, unit) {
   if (!unitLabel) return "";
   return `${formatPrice(parsedValue)} ${unitLabel}`;
 }
-
 function getDisplayWeight(item) {
   if (!item) return "";
   if (item.variants && item.variants.length > 0) {
@@ -488,7 +426,6 @@ function getDisplayWeight(item) {
   if (itemWeight) return itemWeight;
   return formatWeight(item.weight);
 }
-
 function increaseItemQuantity(item) {
   hapticFeedback("light");
   const cartItem = getCartItem(item);
@@ -496,7 +433,6 @@ function increaseItemQuantity(item) {
     cartStore.updateQuantity(cartStore.items.indexOf(cartItem), cartItem.quantity + 1);
   }
 }
-
 function decreaseItemQuantity(item) {
   hapticFeedback("light");
   const cartItem = getCartItem(item);
@@ -509,21 +445,17 @@ function decreaseItemQuantity(item) {
     }
   }
 }
-
 function setupIntersectionObserver() {
   if (observer) {
     observer.disconnect();
   }
-
   const options = {
     root: null,
     rootMargin: "-100px 0px -50% 0px",
     threshold: 0,
   };
-
   observer = new IntersectionObserver((entries) => {
     if (isScrolling.value) return;
-
     for (const entry of entries) {
       if (entry.isIntersecting) {
         const categoryId = parseInt(entry.target.id.replace("category-", ""));
@@ -533,8 +465,6 @@ function setupIntersectionObserver() {
       }
     }
   }, options);
-
-  // Наблюдаем за всеми секциями категорий
   menuStore.categories.forEach((category) => {
     const element = document.getElementById(`category-${category.id}`);
     if (element) {
@@ -542,30 +472,25 @@ function setupIntersectionObserver() {
     }
   });
 }
-
 function scrollToCategory(categoryId) {
   hapticFeedback("light");
   isScrolling.value = true;
   activeCategory.value = categoryId;
-
   const element = document.getElementById(`category-${categoryId}`);
   if (element) {
     const categoriesSticky = document.querySelector(".categories-sticky");
     const offset = categoriesSticky ? categoriesSticky.offsetHeight : 0;
     const elementPosition = element.getBoundingClientRect().top + window.pageYOffset;
     const offsetPosition = elementPosition - offset - 20;
-
     window.scrollTo({
       top: offsetPosition,
       behavior: "smooth",
     });
-
     setTimeout(() => {
       isScrolling.value = false;
     }, 1000);
   }
 }
-
 function getItemPrice(item) {
   if (item.variants && item.variants.length > 0) {
     const prices = item.variants
@@ -586,17 +511,14 @@ function getItemPrice(item) {
   }
   return `${formatPrice(item.price || 0)} ₽`;
 }
-
 function handleItemCardClick(item) {
   if (isItemUnavailable(item)) return;
   openItem(item);
 }
-
 function openItem(item) {
   hapticFeedback("light");
   router.push(`/item/${item.id}`);
 }
-
 const availableTags = computed(() => {
   const tagsMap = new Map();
   menuStore.items.forEach((item) => {
@@ -610,11 +532,9 @@ const availableTags = computed(() => {
   });
   return Array.from(tagsMap.values()).sort((a, b) => a.name.localeCompare(b.name));
 });
-
 function selectTag(tagId) {
   selectedTagId.value = tagId;
 }
-
 function isItemUnavailable(item) {
   if (item.in_stop_list) return true;
   if (item.variants && item.variants.length > 0) {
@@ -622,30 +542,24 @@ function isItemUnavailable(item) {
   }
   return false;
 }
-
 function scrollCategoryIntoView(categoryId) {
   if (!categoriesRef.value || !categoryRefs.value[categoryId]) return;
-
   const categoryBtn = categoryRefs.value[categoryId];
   const categoriesContainer = categoriesRef.value;
   const containerWidth = categoriesContainer.clientWidth;
   const btnLeft = categoryBtn.offsetLeft;
   const btnWidth = categoryBtn.offsetWidth;
   const currentScroll = categoriesContainer.scrollLeft;
-
   const categoryIndex = menuStore.categories.findIndex((category) => category.id === categoryId);
   const isStartGroup = categoryIndex <= 1;
   const maxScroll = Math.max(0, categoriesContainer.scrollWidth - containerWidth);
-
   let targetScroll = 0;
-
   if (isStartGroup) {
     targetScroll = 0;
   } else {
     targetScroll = btnLeft - containerWidth / 2 + btnWidth / 2;
     targetScroll = Math.max(0, Math.min(targetScroll, maxScroll));
   }
-
   if (Math.abs(currentScroll - targetScroll) > 5) {
     categoriesContainer.scrollTo({
       left: targetScroll,
@@ -653,7 +567,6 @@ function scrollCategoryIntoView(categoryId) {
     });
   }
 }
-
 function goToCart() {
   router.push("/cart");
 }
@@ -664,11 +577,9 @@ function goToCart() {
   padding-bottom: 96px;
   background: var(--color-background);
 }
-
 .active-orders-container {
   padding: 12px 0;
 }
-
 .active-orders {
   display: flex;
   gap: 12px;
@@ -678,15 +589,12 @@ function goToCart() {
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
 }
-
 .active-orders::-webkit-scrollbar {
   display: none;
 }
-
 .active-orders.has-scroll {
   padding-right: 12px;
 }
-
 .active-order {
   min-width: 320px;
   padding: 16px;
@@ -700,12 +608,10 @@ function goToCart() {
   scroll-snap-align: start;
   flex-shrink: 0;
 }
-
 .active-order:active {
   opacity: 0.8;
   transform: scale(0.98);
 }
-
 .scroll-hint {
   text-align: center;
   font-size: var(--font-size-small);
@@ -713,7 +619,6 @@ function goToCart() {
   margin-top: 4px;
   animation: fadeIn 0.3s ease-in-out;
 }
-
 @keyframes fadeIn {
   from {
     opacity: 0;
@@ -722,13 +627,11 @@ function goToCart() {
     opacity: 1;
   }
 }
-
 .order-status {
   display: flex;
   align-items: center;
   gap: 10px;
 }
-
 .order-type-icon {
   width: 32px;
   height: 32px;
@@ -739,11 +642,9 @@ function goToCart() {
   border-radius: var(--border-radius-md);
   flex-shrink: 0;
 }
-
 .order-type-icon svg {
   color: var(--color-text-primary);
 }
-
 .status-indicator {
   width: 12px;
   height: 12px;
@@ -751,27 +652,21 @@ function goToCart() {
   animation: pulse 2s infinite;
   flex-shrink: 0;
 }
-
 .status-pending {
   background: #fbbf24;
 }
-
 .status-preparing {
   background: #3b82f6;
 }
-
 .status-ready {
   background: #10b981;
 }
-
 .status-delivered {
   background: #6b7280;
 }
-
 .status-cancelled {
   background: #ef4444;
 }
-
 @keyframes pulse {
   0%,
   100% {
@@ -781,35 +676,29 @@ function goToCart() {
     opacity: 0.5;
   }
 }
-
 .order-info {
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
-
 .order-title {
   font-size: var(--font-size-body);
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-primary);
 }
-
 .order-subtitle {
   font-size: var(--font-size-small);
   color: var(--color-text-secondary);
 }
-
 .location-bar {
   padding: 12px;
   background: var(--color-background);
 }
-
 .location-tabs {
   display: flex;
   gap: 10px;
   margin-bottom: 12px;
 }
-
 .pill-tab {
   width: 100%;
   padding: 8px 18px;
@@ -822,23 +711,19 @@ function goToCart() {
   cursor: pointer;
   transition: all var(--transition-duration) var(--transition-easing);
 }
-
 .pill-tab.active {
   background: var(--color-text-primary);
   border-color: var(--color-text-primary);
   color: var(--color-background);
 }
-
 .pill-tab:hover:not(.active) {
   background: var(--color-background-secondary);
 }
-
 .location-actions {
   display: flex;
   align-items: center;
   gap: 10px;
 }
-
 .action-pill {
   width: 100%;
   padding: 8px 14px;
@@ -852,7 +737,6 @@ function goToCart() {
   white-space: nowrap;
   transition: background-color var(--transition-duration) var(--transition-easing);
 }
-
 .action-text {
   display: inline-block;
   max-width: 300px;
@@ -860,26 +744,21 @@ function goToCart() {
   text-overflow: ellipsis;
   vertical-align: bottom;
 }
-
 .action-pill:hover {
   background: var(--color-primary-hover);
 }
-
 .action-pill:active {
   transform: scale(0.98);
 }
-
 .quick-order {
   padding: 16px 12px;
 }
-
 .quick-order h3 {
   margin-bottom: 12px;
   font-size: var(--font-size-h2);
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-primary);
 }
-
 .order-card {
   display: flex;
   justify-content: space-between;
@@ -891,27 +770,22 @@ function goToCart() {
   cursor: pointer;
   transition: box-shadow var(--transition-duration) var(--transition-easing);
 }
-
 .order-card:hover {
   box-shadow: 0px 4px 12px rgba(0, 0, 0, 0.12);
 }
-
 .order-info {
   flex: 1;
 }
-
 .order-number {
   font-weight: var(--font-weight-semibold);
   font-size: var(--font-size-h3);
   color: var(--color-text-primary);
   margin-bottom: 4px;
 }
-
 .order-items {
   font-size: var(--font-size-caption);
   color: var(--color-text-secondary);
 }
-
 .repeat-btn {
   padding: 8px 16px;
   border: none;
@@ -923,11 +797,9 @@ function goToCart() {
   cursor: pointer;
   transition: background-color var(--transition-duration) var(--transition-easing);
 }
-
 .repeat-btn:hover {
   background: var(--color-primary-hover);
 }
-
 .categories-sticky {
   position: sticky;
   top: 0;
@@ -935,23 +807,19 @@ function goToCart() {
   background: var(--color-background);
   border-bottom: 1px solid var(--color-border);
 }
-
 .categories {
   display: flex;
   gap: 6px;
   padding: 12px;
   overflow-x: auto;
 }
-
 .categories::-webkit-scrollbar {
   display: none;
 }
-
 .categories {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
-
 .category-btn {
   padding: 8px 16px;
   border: 1px solid var(--color-border);
@@ -964,22 +832,18 @@ function goToCart() {
   color: var(--color-text-primary);
   transition: all var(--transition-duration) var(--transition-easing);
 }
-
 .category-btn.active {
   background: var(--color-text-primary);
   color: var(--color-background);
   border-color: var(--color-text-primary);
   font-weight: var(--font-weight-semibold);
 }
-
 .category-btn:hover:not(.active) {
   background: var(--color-background-secondary);
 }
-
 .menu-content {
   padding: 0 12px 12px;
 }
-
 .tags-filter {
   display: flex;
   gap: 8px;
@@ -987,11 +851,9 @@ function goToCart() {
   overflow-x: auto;
   scrollbar-width: none;
 }
-
 .tags-filter::-webkit-scrollbar {
   display: none;
 }
-
 .tag-pill {
   background: #f0f3f7;
   border: 1px solid var(--color-border);
@@ -1003,21 +865,17 @@ function goToCart() {
   white-space: nowrap;
   transition: all 0.2s ease;
 }
-
 .tag-pill.active {
   background: var(--color-primary);
   color: var(--color-text-primary);
   border-color: var(--color-primary);
 }
-
 .tag-icon {
   margin-right: 4px;
 }
-
 .category-section {
   scroll-margin-top: 80px;
 }
-
 .category-title {
   font-size: var(--font-size-h2);
   font-weight: var(--font-weight-bold);
@@ -1025,13 +883,11 @@ function goToCart() {
   margin: 0 0 12px 0;
   padding-top: 12px;
 }
-
 .items {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
-
 .item-card {
   display: flex;
   gap: 8px;
@@ -1041,16 +897,13 @@ function goToCart() {
   cursor: pointer;
   transition: box-shadow var(--transition-duration) var(--transition-easing);
 }
-
 .item-card.disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
-
 .item-card:hover {
   box-shadow: 0px 4px 12px rgba(0, 0, 0, 0.12);
 }
-
 .item-image {
   border-radius: 16px;
   overflow: hidden;
@@ -1058,13 +911,11 @@ function goToCart() {
   max-height: 128px;
   flex-shrink: 0;
 }
-
 .item-image img {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
-
 .item-info {
   flex: 1;
   display: flex;
@@ -1072,39 +923,33 @@ function goToCart() {
   justify-content: space-between;
   min-width: 0;
 }
-
 .item-text {
   flex: 1;
   min-width: 0;
 }
-
 .item-text h3 {
   font-size: var(--font-size-body);
   font-weight: var(--font-weight-regular);
   color: var(--color-text-primary);
   margin-bottom: 4px;
 }
-
 .description {
   font-size: var(--font-size-caption);
   color: var(--color-text-secondary);
   margin-bottom: 8px;
   flex: 1;
 }
-
 .item-weight {
   font-size: var(--font-size-caption);
   color: var(--color-text-muted);
   margin: 0;
 }
-
 .item-tags {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   margin: 6px 0;
 }
-
 .item-tag {
   background: #eef2f6;
   border-radius: 999px;
@@ -1112,19 +957,16 @@ function goToCart() {
   font-size: 11px;
   color: var(--color-text-secondary);
 }
-
 .item-unavailable {
   margin-top: 6px;
   font-size: 11px;
   color: #c0392b;
 }
-
 .item-footer {
   display: flex;
   justify-content: flex-end;
   align-items: center;
 }
-
 .add-btn {
   padding: 8px 16px;
   border: none;
@@ -1137,16 +979,13 @@ function goToCart() {
   transition: background-color var(--transition-duration) var(--transition-easing);
   white-space: nowrap;
 }
-
 .add-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
-
 .add-btn:hover {
   background: var(--color-primary-hover);
 }
-
 .quantity-controls {
   display: flex;
   align-items: center;
@@ -1155,7 +994,6 @@ function goToCart() {
   border-radius: var(--border-radius-md);
   padding: 4px;
 }
-
 .qty-btn {
   width: 26px;
   height: 26px;
@@ -1171,11 +1009,9 @@ function goToCart() {
   justify-content: center;
   transition: background-color var(--transition-duration) var(--transition-easing);
 }
-
 .qty-btn:hover {
   background: rgba(0, 0, 0, 0.1);
 }
-
 .qty-value {
   font-size: var(--font-size-body);
   font-weight: var(--font-weight-bold);
@@ -1183,7 +1019,6 @@ function goToCart() {
   min-width: 24px;
   text-align: center;
 }
-
 .loading,
 .empty {
   text-align: center;
@@ -1191,7 +1026,6 @@ function goToCart() {
   color: var(--color-text-secondary);
   font-size: var(--font-size-body);
 }
-
 .floating-cart {
   position: fixed;
   left: 12px;
@@ -1212,17 +1046,14 @@ function goToCart() {
     background-color var(--transition-duration) var(--transition-easing),
     transform 0.15s ease;
 }
-
 .floating-cart:active {
   transform: scale(0.98);
 }
-
 .cart-left {
   display: flex;
   align-items: center;
   gap: 10px;
 }
-
 .cart-icon {
   position: relative;
   width: 32px;
@@ -1233,7 +1064,6 @@ function goToCart() {
   align-items: center;
   justify-content: center;
 }
-
 .cart-count {
   position: absolute;
   top: -6px;
@@ -1250,12 +1080,10 @@ function goToCart() {
   align-items: center;
   justify-content: center;
 }
-
 .cart-text {
   font-size: var(--font-size-h3);
   font-weight: var(--font-weight-semibold);
 }
-
 .cart-total {
   font-size: var(--font-size-h3);
   font-weight: var(--font-weight-bold);

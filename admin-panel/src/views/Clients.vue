@@ -11,12 +11,7 @@
             <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Поиск</label>
             <div class="relative">
               <Search class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" :size="16" />
-              <Input
-                v-model="filters.search"
-                class="pl-9"
-                placeholder="Имя или телефон"
-                @keyup.enter="loadClients"
-              />
+              <Input v-model="filters.search" class="pl-9" placeholder="Имя или телефон" @keyup.enter="loadClients" />
             </div>
           </div>
           <div class="space-y-2">
@@ -29,7 +24,6 @@
         </div>
       </CardContent>
     </Card>
-
     <Card>
       <CardHeader>
         <CardTitle>Список клиентов</CardTitle>
@@ -70,7 +64,6 @@
     </Card>
   </div>
 </template>
-
 <script setup>
 import { onMounted, reactive, ref, watch } from "vue";
 import { useRouter } from "vue-router";
@@ -93,44 +86,37 @@ import TableCell from "../components/ui/TableCell.vue";
 import TableHead from "../components/ui/TableHead.vue";
 import TableHeader from "../components/ui/TableHeader.vue";
 import TableRow from "../components/ui/TableRow.vue";
-
 const referenceStore = useReferenceStore();
 const router = useRouter();
 const clients = ref([]);
 const loadTimer = ref(null);
-
 const filters = reactive({
   search: "",
   city_id: "",
 });
-
 const loadClients = async () => {
   const params = Object.fromEntries(Object.entries(filters).filter(([, value]) => value));
   const response = await api.get("/api/admin/clients", { params });
   clients.value = response.data.clients || [];
 };
-
 const scheduleLoad = () => {
   if (loadTimer.value) {
     clearTimeout(loadTimer.value);
   }
   loadTimer.value = setTimeout(loadClients, 300);
 };
-
 const openClient = (clientId) => {
   router.push(`/clients/${clientId}`);
 };
-
 onMounted(async () => {
   await referenceStore.loadCities();
   await loadClients();
 });
-
 watch(
   filters,
   () => {
     scheduleLoad();
   },
-  { deep: true }
+  { deep: true },
 );
 </script>

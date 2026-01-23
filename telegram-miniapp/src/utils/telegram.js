@@ -17,43 +17,34 @@ import {
   hapticFeedbackImpactOccurred,
   hapticFeedbackNotificationOccurred,
 } from "@telegram-apps/sdk";
-
 let launchParams = null;
 let isInitialized = false;
-
 export function initTelegramSDK() {
   try {
     if (!isInitialized) {
       init();
       isInitialized = true;
     }
-
     mountMiniAppSync();
     launchParams = retrieveLaunchParams();
-
     setMiniAppHeaderColor("#FFFFFF");
     setMiniAppBackgroundColor("#F5F5F5");
     miniAppReady();
-
     return { launchParams };
   } catch (error) {
     console.error("Failed to initialize Telegram SDK:", error);
     return { launchParams: null };
   }
 }
-
 export function getLaunchParams() {
   return launchParams;
 }
-
 export function getInitData() {
   return launchParams?.initDataRaw || "";
 }
-
 export function getTelegramUser() {
   return launchParams?.initData?.user || null;
 }
-
 export function showBackButton(onClick) {
   try {
     if (!isBackButtonMounted()) {
@@ -67,7 +58,6 @@ export function showBackButton(onClick) {
     console.error("Failed to show back button:", error);
   }
 }
-
 export function hideBackButton() {
   try {
     if (isBackButtonMounted()) {
@@ -77,7 +67,6 @@ export function hideBackButton() {
     console.error("Failed to hide back button:", error);
   }
 }
-
 export function showMainButton(text, onClick) {
   try {
     if (!isMainButtonMounted()) {
@@ -91,7 +80,6 @@ export function showMainButton(text, onClick) {
     console.error("Failed to show main button:", error);
   }
 }
-
 export function hideMainButton() {
   try {
     if (isMainButtonMounted()) {
@@ -101,7 +89,6 @@ export function hideMainButton() {
     console.error("Failed to hide main button:", error);
   }
 }
-
 export function hapticFeedback(type = "light") {
   try {
     switch (type) {

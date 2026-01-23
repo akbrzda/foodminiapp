@@ -14,7 +14,6 @@
         </div>
       </CardContent>
     </Card>
-
     <Card>
       <CardHeader>
         <CardTitle>Список тегов</CardTitle>
@@ -62,7 +61,6 @@
         </div>
       </CardContent>
     </Card>
-
     <BaseModal v-if="showModal" :title="modalTitle" :subtitle="modalSubtitle" @close="closeModal">
       <form class="space-y-4" @submit.prevent="submitTag">
         <div class="space-y-2">
@@ -90,7 +88,6 @@
     </BaseModal>
   </div>
 </template>
-
 <script setup>
 import { computed, onMounted, ref } from "vue";
 import { Plus, Pencil, Trash2, Save } from "lucide-vue-next";
@@ -110,26 +107,20 @@ import TableHeader from "../components/ui/TableHeader.vue";
 import TableRow from "../components/ui/TableRow.vue";
 import { useNotifications } from "../composables/useNotifications";
 import api from "../api/client";
-
 const { showErrorNotification, showSuccessNotification } = useNotifications();
-
 const tags = ref([]);
 const showModal = ref(false);
 const editingTag = ref(null);
-
 const form = ref({
   name: "",
   icon: "",
   color: "",
 });
-
 const modalTitle = computed(() => (editingTag.value ? "Редактировать тег" : "Новый тег"));
 const modalSubtitle = computed(() => (editingTag.value ? "Изменение тега" : "Создание нового тега"));
-
 onMounted(() => {
   loadTags();
 });
-
 async function loadTags() {
   try {
     const response = await api.get("/api/menu/admin/tags");
@@ -139,7 +130,6 @@ async function loadTags() {
     console.error("Failed to load tags:", error);
   }
 }
-
 function openModal(tag = null) {
   editingTag.value = tag;
   if (tag) {
@@ -157,7 +147,6 @@ function openModal(tag = null) {
   }
   showModal.value = true;
 }
-
 function closeModal() {
   showModal.value = false;
   editingTag.value = null;
@@ -167,7 +156,6 @@ function closeModal() {
     color: "",
   };
 }
-
 async function submitTag() {
   try {
     const payload = {
@@ -175,7 +163,6 @@ async function submitTag() {
       icon: form.value.icon.trim() || null,
       color: form.value.color.trim() || null,
     };
-
     if (editingTag.value) {
       await api.put(`/api/menu/admin/tags/${editingTag.value.id}`, payload);
       showSuccessNotification("Тег успешно обновлен");
@@ -183,7 +170,6 @@ async function submitTag() {
       await api.post("/api/menu/admin/tags", payload);
       showSuccessNotification("Тег успешно создан");
     }
-
     closeModal();
     loadTags();
   } catch (error) {
@@ -195,12 +181,10 @@ async function submitTag() {
     console.error("Failed to save tag:", error);
   }
 }
-
 async function deleteTag(tag) {
   if (!confirm(`Удалить тег "${tag.name}"? Это действие необратимо.`)) {
     return;
   }
-
   try {
     await api.delete(`/api/menu/admin/tags/${tag.id}`);
     showSuccessNotification("Тег удален");

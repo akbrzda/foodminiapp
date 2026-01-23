@@ -14,7 +14,6 @@
         </div>
       </CardContent>
     </Card>
-
     <Card>
       <CardHeader>
         <CardTitle>Список категорий</CardTitle>
@@ -54,7 +53,6 @@
         </Table>
       </CardContent>
     </Card>
-
     <BaseModal v-if="showModal" :title="modalTitle" :subtitle="modalSubtitle" @close="closeModal">
       <form class="space-y-4" @submit.prevent="submitCategory">
         <div class="space-y-2">
@@ -86,12 +84,7 @@
           <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Доступность по городам</label>
           <div class="grid gap-2 md:grid-cols-2">
             <label v-for="city in referenceStore.cities" :key="city.id" class="flex items-center gap-2 text-sm text-foreground">
-              <input
-                v-model="form.city_ids"
-                type="checkbox"
-                :value="city.id"
-                class="h-4 w-4 rounded border-border text-primary focus:ring-primary"
-              />
+              <input v-model="form.city_ids" type="checkbox" :value="city.id" class="h-4 w-4 rounded border-border text-primary focus:ring-primary" />
               {{ city.name }}
             </label>
           </div>
@@ -104,7 +97,6 @@
     </BaseModal>
   </div>
 </template>
-
 <script setup>
 import { computed, onMounted, ref } from "vue";
 import { Pencil, Plus, Save, Trash2 } from "lucide-vue-next";
@@ -129,15 +121,12 @@ import Textarea from "../components/ui/Textarea.vue";
 import { useNotifications } from "../composables/useNotifications.js";
 import { formatNumber } from "../utils/format.js";
 import { useReferenceStore } from "../stores/reference.js";
-
 const referenceStore = useReferenceStore();
 const { showErrorNotification } = useNotifications();
-
 const categories = ref([]);
 const showModal = ref(false);
 const editing = ref(null);
 const saving = ref(false);
-
 const form = ref({
   name: "",
   description: "",
@@ -146,10 +135,8 @@ const form = ref({
   is_active: true,
   city_ids: [],
 });
-
 const modalTitle = computed(() => (editing.value ? "Редактировать категорию" : "Новая категория"));
 const modalSubtitle = computed(() => (editing.value ? "Измените параметры категории" : "Создайте категорию меню"));
-
 const loadCategories = async () => {
   try {
     const response = await api.get("/api/menu/admin/all-categories");
@@ -159,7 +146,6 @@ const loadCategories = async () => {
     showErrorNotification("Ошибка при загрузке категорий");
   }
 };
-
 const openModal = async (category = null) => {
   editing.value = category;
   form.value = category
@@ -179,7 +165,6 @@ const openModal = async (category = null) => {
         is_active: true,
         city_ids: referenceStore.cities.map((city) => city.id),
       };
-
   if (category) {
     try {
       const response = await api.get(`/api/menu/admin/categories/${category.id}/cities`);
@@ -192,11 +177,9 @@ const openModal = async (category = null) => {
   }
   showModal.value = true;
 };
-
 const closeModal = () => {
   showModal.value = false;
 };
-
 const submitCategory = async () => {
   saving.value = true;
   try {
@@ -215,7 +198,6 @@ const submitCategory = async () => {
     saving.value = false;
   }
 };
-
 const deleteCategory = async (category) => {
   if (!confirm(`Удалить категорию "${category.name}"?`)) return;
   try {
@@ -226,7 +208,6 @@ const deleteCategory = async (category) => {
     showErrorNotification(`Ошибка при удалении категории: ${error.response?.data?.error || error.message}`);
   }
 };
-
 onMounted(async () => {
   await referenceStore.loadCities();
   await loadCategories();

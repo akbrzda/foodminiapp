@@ -53,7 +53,6 @@
         </Table>
       </CardContent>
     </Card>
-
     <BaseModal v-if="showModal" title="Добавить в стоп-лист" subtitle="Временно сделать позицию недоступной" @close="closeModal">
       <form class="space-y-4" @submit.prevent="submitStopList">
         <div class="space-y-2">
@@ -63,7 +62,6 @@
             <option v-for="branch in referenceStore.branches" :key="branch.id" :value="branch.id">{{ branch.name }}</option>
           </Select>
         </div>
-
         <div class="space-y-2">
           <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Тип *</label>
           <Select v-model="form.entity_type" @change="loadEntities" required>
@@ -73,7 +71,6 @@
             <option value="modifier">Модификатор</option>
           </Select>
         </div>
-
         <div v-if="form.entity_type" class="space-y-2">
           <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             {{ form.entity_type === "item" ? "Позиция" : form.entity_type === "variant" ? "Вариант" : "Модификатор" }} *
@@ -83,7 +80,6 @@
             <option v-for="entity in entities" :key="entity.id" :value="entity.id">{{ entity.name }}</option>
           </Select>
         </div>
-
         <div class="space-y-2">
           <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Причина</label>
           <Select v-model="form.reason">
@@ -91,7 +87,6 @@
             <option v-for="reason in reasons" :key="reason.id" :value="reason.name">{{ reason.name }}</option>
           </Select>
         </div>
-
         <Button class="w-full" type="submit" :disabled="saving">
           <Save :size="16" />
           {{ saving ? "Добавление..." : "Добавить в стоп-лист" }}
@@ -100,7 +95,6 @@
     </BaseModal>
   </div>
 </template>
-
 <script setup>
 import { computed, onMounted, ref } from "vue";
 import { Plus, Save, Trash2 } from "lucide-vue-next";
@@ -123,27 +117,22 @@ import TableRow from "../components/ui/TableRow.vue";
 import { useNotifications } from "../composables/useNotifications.js";
 import { formatDate } from "../utils/date.js";
 import { useReferenceStore } from "../stores/reference.js";
-
 const referenceStore = useReferenceStore();
 const { showErrorNotification } = useNotifications();
-
 const stopList = ref([]);
 const entities = ref([]);
 const reasons = ref([]);
 const showModal = ref(false);
 const saving = ref(false);
-
 const form = ref({
   branch_id: "",
   entity_type: "",
   entity_id: "",
   reason: "",
 });
-
 const getBranchName = (branchId) => {
   return referenceStore.branches.find((b) => b.id === branchId)?.name || "Неизвестно";
 };
-
 const loadStopList = async () => {
   try {
     const response = await api.get("/api/menu/admin/stop-list");
@@ -153,7 +142,6 @@ const loadStopList = async () => {
     showErrorNotification("Ошибка при загрузке стоп-листа");
   }
 };
-
 const loadReasons = async () => {
   try {
     const response = await api.get("/api/menu/admin/stop-list-reasons");
@@ -163,7 +151,6 @@ const loadReasons = async () => {
     reasons.value = [];
   }
 };
-
 const loadEntities = async () => {
   if (!form.value.entity_type) return;
   try {
@@ -182,17 +169,14 @@ const loadEntities = async () => {
     entities.value = [];
   }
 };
-
 const openModal = () => {
   form.value = { branch_id: "", entity_type: "", entity_id: "", reason: "" };
   entities.value = [];
   showModal.value = true;
 };
-
 const closeModal = () => {
   showModal.value = false;
 };
-
 const submitStopList = async () => {
   saving.value = true;
   try {
@@ -206,7 +190,6 @@ const submitStopList = async () => {
     saving.value = false;
   }
 };
-
 const removeFromStopList = async (item) => {
   if (!confirm(`Удалить "${item.entity_name}" из стоп-листа?`)) return;
   try {
@@ -217,7 +200,6 @@ const removeFromStopList = async (item) => {
     showErrorNotification(`Ошибка: ${error.response?.data?.error || error.message}`);
   }
 };
-
 onMounted(async () => {
   await referenceStore.fetchCitiesAndBranches();
   await loadReasons();

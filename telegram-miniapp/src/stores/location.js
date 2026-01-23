@@ -1,5 +1,4 @@
 import { defineStore } from "pinia";
-
 export const useLocationStore = defineStore("location", {
   state: () => ({
     selectedCity: JSON.parse(localStorage.getItem("selectedCity") || "null"),
@@ -8,7 +7,7 @@ export const useLocationStore = defineStore("location", {
     cities: [],
     branches: [],
     userLocation: null,
-    deliveryType: localStorage.getItem("deliveryType") || "delivery", // 'delivery' or 'pickup'
+    deliveryType: localStorage.getItem("deliveryType") || "delivery",
     deliveryAddressByCity: JSON.parse(localStorage.getItem("deliveryAddressByCity") || "{}"),
     deliveryAddress: (() => {
       const storedCity = JSON.parse(localStorage.getItem("selectedCity") || "null");
@@ -49,18 +48,15 @@ export const useLocationStore = defineStore("location", {
       return raw ? JSON.parse(raw) : null;
     })(),
   }),
-
   getters: {
     hasCitySelected: (state) => !!state.selectedCity,
     hasBranchSelected: (state) => !!state.selectedBranch,
     isDelivery: (state) => state.deliveryType === "delivery",
     isPickup: (state) => state.deliveryType === "pickup",
   },
-
   actions: {
     setCity(city) {
       const previousCityId = this.selectedCity?.id;
-
       if (previousCityId) {
         this.deliveryAddressByCity[previousCityId] = this.deliveryAddress || "";
         localStorage.setItem("deliveryAddressByCity", JSON.stringify(this.deliveryAddressByCity));
@@ -73,7 +69,6 @@ export const useLocationStore = defineStore("location", {
         this.selectedBranchByCity[previousCityId] = this.selectedBranch || null;
         localStorage.setItem("selectedBranchByCity", JSON.stringify(this.selectedBranchByCity));
       }
-
       this.selectedCity = city;
       if (city) {
         localStorage.setItem("selectedCity", JSON.stringify(city));
@@ -105,7 +100,6 @@ export const useLocationStore = defineStore("location", {
         localStorage.removeItem("selectedBranch");
       }
     },
-
     setBranch(branch) {
       this.selectedBranch = branch;
       if (branch) {
@@ -118,24 +112,19 @@ export const useLocationStore = defineStore("location", {
         localStorage.setItem("selectedBranchByCity", JSON.stringify(this.selectedBranchByCity));
       }
     },
-
     setCities(cities) {
       this.cities = cities;
     },
-
     setBranches(branches) {
       this.branches = branches;
     },
-
     setUserLocation(location) {
       this.userLocation = location;
     },
-
     setDeliveryType(type) {
       this.deliveryType = type;
       localStorage.setItem("deliveryType", type);
     },
-
     setDeliveryAddress(address) {
       const normalized = address || "";
       const isChanged = normalized !== (this.deliveryAddress || "");
@@ -152,7 +141,6 @@ export const useLocationStore = defineStore("location", {
         }
       }
     },
-
     setDeliveryCoords(coords) {
       this.deliveryCoords = coords;
       localStorage.setItem("deliveryCoords", JSON.stringify(coords || null));
@@ -161,7 +149,6 @@ export const useLocationStore = defineStore("location", {
         localStorage.setItem("deliveryCoordsByCity", JSON.stringify(this.deliveryCoordsByCity));
       }
     },
-
     setDeliveryDetails(details) {
       this.deliveryDetails = details;
       localStorage.setItem("deliveryDetails", JSON.stringify(details || null));
@@ -170,7 +157,6 @@ export const useLocationStore = defineStore("location", {
         localStorage.setItem("deliveryDetailsByCity", JSON.stringify(this.deliveryDetailsByCity));
       }
     },
-
     setDeliveryZone(zone) {
       this.deliveryZone = zone;
       localStorage.setItem("deliveryZone", JSON.stringify(zone || null));
@@ -179,14 +165,12 @@ export const useLocationStore = defineStore("location", {
         localStorage.setItem("deliveryZoneByCity", JSON.stringify(this.deliveryZoneByCity));
       }
     },
-
     async detectUserLocation() {
       return new Promise((resolve, reject) => {
         if (!navigator.geolocation) {
           reject(new Error("Geolocation not supported"));
           return;
         }
-
         navigator.geolocation.getCurrentPosition(
           (position) => {
             const location = {
@@ -199,20 +183,17 @@ export const useLocationStore = defineStore("location", {
           (error) => {
             console.error("Geolocation error:", error);
             reject(error);
-          }
+          },
         );
       });
     },
-
     findNearestCity(cities) {
       if (!this.userLocation || !cities || cities.length === 0) {
         return null;
       }
-
       const calculateDistance = (lat1, lon1, lat2, lon2) => {
         if (!lat2 || !lon2) return Infinity;
-
-        const R = 6371; // Радиус Земли в км
+        const R = 6371;
         const dLat = this.deg2rad(lat2 - lat1);
         const dLon = this.deg2rad(lon2 - lon1);
         const a =
@@ -221,22 +202,17 @@ export const useLocationStore = defineStore("location", {
         const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
         return R * c;
       };
-
       let nearestCity = null;
       let minDistance = Infinity;
-
       cities.forEach((city) => {
         const distance = calculateDistance(this.userLocation.lat, this.userLocation.lon, city.latitude, city.longitude);
-
         if (distance < minDistance) {
           minDistance = distance;
           nearestCity = { ...city, distance };
         }
       });
-
       return nearestCity;
     },
-
     deg2rad(deg) {
       return deg * (Math.PI / 180);
     },

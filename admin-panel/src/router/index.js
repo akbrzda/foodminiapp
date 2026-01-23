@@ -21,7 +21,6 @@ import AdminUsers from "../views/AdminUsers.vue";
 import AdminLogs from "../views/AdminLogs.vue";
 import OrderDetail from "../views/OrderDetail.vue";
 import NotFound from "../views/NotFound.vue";
-
 const router = createRouter({
   history: createWebHistory(),
   routes: [
@@ -105,7 +104,6 @@ const router = createRouter({
     { path: "/:pathMatch(.*)*", name: "not-found", component: NotFound },
   ],
 });
-
 router.beforeEach((to) => {
   const authStore = useAuthStore();
   const tokenValid = authStore.validateToken();
@@ -120,5 +118,4 @@ router.beforeEach((to) => {
   }
   return true;
 });
-
 export default router;

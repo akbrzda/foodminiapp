@@ -59,7 +59,6 @@
     </Card>
   </div>
 </template>
-
 <script setup>
 import { onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
@@ -80,18 +79,15 @@ import TableHeader from "../components/ui/TableHeader.vue";
 import TableRow from "../components/ui/TableRow.vue";
 import { useNotifications } from "../composables/useNotifications.js";
 import { formatCurrency } from "../utils/format.js";
-
 const router = useRouter();
 const items = ref([]);
 const { showErrorNotification } = useNotifications();
-
 const normalizeImageUrl = (url) => {
   if (!url) return "";
   if (url.startsWith("http://") || url.startsWith("https://")) return url;
   const base = (import.meta.env.VITE_UPLOADS_URL || import.meta.env.VITE_API_URL || window.location.origin).replace(/\/$/, "");
   return url.startsWith("/") ? `${base}${url}` : `${base}/${url}`;
 };
-
 const loadItems = async () => {
   try {
     const response = await api.get("/api/menu/admin/items");
@@ -101,15 +97,12 @@ const loadItems = async () => {
     showErrorNotification(`Ошибка при загрузке позиций: ${error.response?.data?.error || error.message}`);
   }
 };
-
 const createItem = () => {
   router.push({ name: "menu-item-form", params: { id: "new" } });
 };
-
 const editItem = (item) => {
   router.push({ name: "menu-item-form", params: { id: item.id } });
 };
-
 const deleteItem = async (item) => {
   if (!confirm(`Удалить позицию "${item.name}"?`)) return;
   try {
@@ -120,6 +113,5 @@ const deleteItem = async (item) => {
     showErrorNotification(`Ошибка: ${error.response?.data?.error || error.message}`);
   }
 };
-
 onMounted(loadItems);
 </script>
