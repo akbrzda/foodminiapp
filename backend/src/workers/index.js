@@ -1,5 +1,6 @@
 import { createTelegramWorker } from "./telegram.worker.js";
 import { createImageWorker } from "./image.worker.js";
+import { createOrderAutoStatusWorker } from "./orderAutoStatus.worker.js";
 import IORedis from "ioredis";
 import dotenv from "dotenv";
 import { logger } from "../utils/logger.js";
@@ -12,10 +13,13 @@ const redisConnection = new IORedis({
 });
 let telegramWorker;
 let imageWorker;
+let orderAutoStatusWorker;
 export async function startWorkers() {
   try {
     telegramWorker = createTelegramWorker(redisConnection);
     imageWorker = createImageWorker(redisConnection);
+    orderAutoStatusWorker = createOrderAutoStatusWorker();
+    orderAutoStatusWorker.start();
     logger.system.startup("Background workers started");
     return {
       telegramWorker,
@@ -35,6 +39,9 @@ export async function stopWorkers() {
     }
     if (imageWorker) {
       promises.push(imageWorker.close());
+    }
+    if (orderAutoStatusWorker) {
+      orderAutoStatusWorker.stop();
     }
     await Promise.all(promises);
     logger.system.shutdown("Background workers stopped");

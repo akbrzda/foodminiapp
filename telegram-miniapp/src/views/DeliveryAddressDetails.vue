@@ -9,6 +9,9 @@
         <input v-model="details.floor" class="input" placeholder="Этаж" @focus="onInputFocus" />
         <input v-model="details.apartment" class="input" placeholder="Квартира" @focus="onInputFocus" />
       </div>
+      <div v-if="deliveryZoneError" class="error-message">
+        {{ deliveryZoneError }}
+      </div>
       <textarea v-model="details.comment" class="textarea" placeholder="Комментарий к адресу" @focus="onInputFocus"></textarea>
       <button class="primary-btn" @click="save">Сохранить</button>
     </div>
@@ -24,6 +27,7 @@ const router = useRouter();
 const locationStore = useLocationStore();
 const address = ref(locationStore.deliveryAddress || "");
 const lastAddress = ref(address.value);
+const deliveryZoneError = ref("");
 const details = reactive({
   entrance: locationStore.deliveryDetails?.entrance || "",
   doorCode: locationStore.deliveryDetails?.doorCode || "",
@@ -42,36 +46,47 @@ function onInputFocus(event) {
     });
   }, 300);
 }
-function save() {
+async function save() {
+  deliveryZoneError.value = "";
   if (!address.value.trim()) {
+    hapticFeedback("error");
+    return;
+  }
+  if (!locationStore.selectedCity?.id) {
+    deliveryZoneError.value = "Сначала выберите город";
+    hapticFeedback("error");
+    return;
+  }
+  let coords = locationStore.deliveryCoords;
+  if (!coords) {
+    try {
+      const geo = await geocodeAPI.geocode(address.value.trim());
+      coords = { lat: geo.data.lat, lng: geo.data.lng };
+      locationStore.setDeliveryCoords(coords);
+    } catch (error) {
+      console.error("Failed to geocode address:", error);
+      deliveryZoneError.value = "Не удалось определить адрес";
+      hapticFeedback("error");
+      return;
+    }
+  }
+  try {
+    const response = await addressesAPI.checkDeliveryZone(coords.lat, coords.lng, locationStore.selectedCity.id);
+    if (!response?.data?.available || !response?.data?.polygon) {
+      deliveryZoneError.value = "Адрес не входит в зону доставки";
+      locationStore.setDeliveryZone(null);
+      hapticFeedback("error");
+      return;
+    }
+    locationStore.setDeliveryZone(response.data.polygon);
+  } catch (error) {
+    console.error("Failed to update delivery zone:", error);
+    deliveryZoneError.value = "Не удалось проверить зону доставки";
     hapticFeedback("error");
     return;
   }
   locationStore.setDeliveryAddress(address.value.trim());
   locationStore.setDeliveryDetails({ ...details });
-  if (locationStore.deliveryCoords && locationStore.selectedCity?.id) {
-    addressesAPI
-      .checkDeliveryZone(locationStore.deliveryCoords.lat, locationStore.deliveryCoords.lng, locationStore.selectedCity.id)
-      .then((response) => {
-        if (response.data?.available && response.data?.polygon) {
-          locationStore.setDeliveryZone(response.data.polygon);
-        }
-      })
-      .catch((error) => console.error("Failed to update delivery zone:", error));
-  } else if (locationStore.selectedCity?.id) {
-    geocodeAPI
-      .geocode(address.value.trim())
-      .then((geo) => {
-        locationStore.setDeliveryCoords({ lat: geo.data.lat, lng: geo.data.lng });
-        return addressesAPI.checkDeliveryZone(geo.data.lat, geo.data.lng, locationStore.selectedCity.id);
-      })
-      .then((response) => {
-        if (response?.data?.available && response?.data?.polygon) {
-          locationStore.setDeliveryZone(response.data.polygon);
-        }
-      })
-      .catch((error) => console.error("Failed to update delivery zone:", error));
-  }
   hapticFeedback("success");
   router.push("/");
 }
@@ -83,6 +98,7 @@ watch(address, (value) => {
     details.apartment = "";
     details.comment = "";
     lastAddress.value = value;
+    deliveryZoneError.value = "";
   }
 });
 </script>
@@ -123,6 +139,14 @@ watch(address, (value) => {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
+}
+.error-message {
+  padding: 10px 12px;
+  border-radius: var(--border-radius-md);
+  background: #ffebee;
+  color: #c62828;
+  font-size: var(--font-size-caption);
+  font-weight: var(--font-weight-semibold);
 }
 .textarea {
   width: 100%;

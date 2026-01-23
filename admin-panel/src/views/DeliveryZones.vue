@@ -134,7 +134,7 @@
         </div>
         <div v-if="blockForm.blockType === 'temporary'" class="space-y-2">
           <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Период</label>
-          <RangeCalendar v-model:from="blockForm.blocked_from" v-model:to="blockForm.blocked_until" :allow-future="true" />
+          <RangeCalendar v-model:from="blockForm.blocked_from" v-model:to="blockForm.blocked_until" :allow-future="true" :months="2" inline />
         </div>
         <div class="space-y-2">
           <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Причина блокировки</label>

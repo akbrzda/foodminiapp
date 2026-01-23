@@ -56,6 +56,9 @@
           </button>
         </div>
       </div>
+      <div v-if="deliveryZoneError" class="error-message">
+        {{ deliveryZoneError }}
+      </div>
       <div class="details-grid">
         <input v-model="deliveryDetails.apartment" class="detail-input" placeholder="Квартира" />
         <input v-model="deliveryDetails.entrance" class="detail-input" placeholder="Подъезд" />
@@ -91,6 +94,7 @@ const deliveryDetails = reactive({
 });
 const lastAddress = ref(deliveryAddress.value);
 const isAddressFocused = ref(false);
+const deliveryZoneError = ref("");
 const lastManualInputAt = ref(0);
 const suppressReverseUntil = ref(0);
 const GEO_PERMISSION_KEY = "geoPermission";
@@ -148,6 +152,7 @@ function onAddressInput() {
   selectedLocation.value = null;
   showSuggestions.value = true;
   lastManualInputAt.value = Date.now();
+  deliveryZoneError.value = "";
   if (reverseTimeout) {
     clearTimeout(reverseTimeout);
   }
@@ -242,6 +247,7 @@ function selectAddress(address) {
   deliveryAddress.value = address.label;
   selectedLocation.value = { lat: address.lat, lon: address.lon };
   lastManualInputAt.value = Date.now();
+  deliveryZoneError.value = "";
   suppressReverseUntil.value = Date.now() + 800;
   setMapCenter(address.lat, address.lon);
   showSuggestions.value = false;
@@ -251,9 +257,11 @@ function clearAddress() {
   addressSuggestions.value = [];
   selectedLocation.value = null;
   lastManualInputAt.value = Date.now();
+  deliveryZoneError.value = "";
   suppressReverseUntil.value = Date.now() + 800;
 }
 async function confirmAddress() {
+  deliveryZoneError.value = "";
   if (!deliveryAddress.value.trim()) {
     hapticFeedback("error");
     return;
@@ -279,26 +287,36 @@ async function confirmAddress() {
     selectedLocation.value = { lat: resolved.lat, lon: resolved.lon };
     setMapCenter(resolved.lat, resolved.lon);
   }
-  locationStore.setDeliveryAddress(deliveryAddress.value);
-  locationStore.setDeliveryDetails({ ...deliveryDetails });
+  if (!locationStore.selectedCity?.id) {
+    deliveryZoneError.value = "Сначала выберите город";
+    hapticFeedback("error");
+    return;
+  }
   if (selectedLocation.value) {
-    locationStore.setDeliveryCoords({
-      lat: selectedLocation.value.lat,
-      lng: selectedLocation.value.lng ?? selectedLocation.value.lon,
-      lon: selectedLocation.value.lng ?? selectedLocation.value.lon,
-    });
-    if (locationStore.selectedCity?.id) {
-      try {
-        const lngValue = selectedLocation.value.lng ?? selectedLocation.value.lon;
-        const response = await addressesAPI.checkDeliveryZone(selectedLocation.value.lat, lngValue, locationStore.selectedCity.id);
-        if (response.data?.available && response.data?.polygon) {
-          locationStore.setDeliveryZone(response.data.polygon);
-        }
-      } catch (error) {
-        console.error("Failed to update delivery zone:", error);
+    try {
+      const lngValue = selectedLocation.value.lng ?? selectedLocation.value.lon;
+      const response = await addressesAPI.checkDeliveryZone(selectedLocation.value.lat, lngValue, locationStore.selectedCity.id);
+      if (!response.data?.available || !response.data?.polygon) {
+        deliveryZoneError.value = "Адрес не входит в зону доставки";
+        locationStore.setDeliveryZone(null);
+        hapticFeedback("error");
+        return;
       }
+      locationStore.setDeliveryZone(response.data.polygon);
+    } catch (error) {
+      console.error("Failed to update delivery zone:", error);
+      deliveryZoneError.value = "Не удалось проверить зону доставки";
+      hapticFeedback("error");
+      return;
     }
   }
+  locationStore.setDeliveryAddress(deliveryAddress.value);
+  locationStore.setDeliveryDetails({ ...deliveryDetails });
+  locationStore.setDeliveryCoords({
+    lat: selectedLocation.value.lat,
+    lng: selectedLocation.value.lng ?? selectedLocation.value.lon,
+    lon: selectedLocation.value.lng ?? selectedLocation.value.lon,
+  });
   if (window.history.length > 1) {
     router.back();
   } else {
@@ -741,6 +759,15 @@ watch(deliveryAddress, (value) => {
 }
 .suggestion:hover {
   background: var(--color-border);
+}
+.error-message {
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border-radius: var(--border-radius-md);
+  background: #ffebee;
+  color: #c62828;
+  font-size: var(--font-size-caption);
+  font-weight: var(--font-weight-semibold);
 }
 .primary-btn {
   width: 100%;

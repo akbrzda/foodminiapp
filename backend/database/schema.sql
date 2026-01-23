@@ -235,6 +235,8 @@ CREATE TABLE IF NOT EXISTS orders (
     -- Время
     desired_time DATETIME,
     completed_at DATETIME,
+    user_timezone_offset INT DEFAULT 0,
+    auto_status_date DATE,
     -- Синхронизация
     sync_status ENUM('pending', 'synced', 'failed') DEFAULT 'pending',
     sync_attempts INT DEFAULT 0,

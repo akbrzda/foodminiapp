@@ -397,6 +397,7 @@ async function submitOrder() {
     const orderData = {
       city_id: locationStore.selectedCity.id,
       order_type: orderType.value,
+      timezone_offset: new Date().getTimezoneOffset(),
       items: cartStore.items.map((item) => ({
         item_id: item.id,
         variant_id: item.variant_id || null,

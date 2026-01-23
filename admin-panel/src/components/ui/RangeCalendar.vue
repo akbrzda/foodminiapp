@@ -1,6 +1,7 @@
 <template>
   <div ref="rootRef" :class="cn('relative w-full', props.class)">
     <button
+      v-if="!props.inline"
       type="button"
       class="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
       @click="toggleOpen"
@@ -8,9 +9,9 @@
       <span :class="rangeLabelClass">{{ rangeLabel }}</span>
       <CalendarIcon class="text-muted-foreground" :size="16" />
     </button>
-    <div v-if="open" class="absolute right-0 z-20 mt-2 w-[680px] max-w-[calc(100vw-2rem)] rounded-md border border-border bg-card p-3 shadow-lg">
-      <div class="grid gap-4 sm:grid-cols-2">
-        <div>
+    <div v-if="isOpen" :class="cn(panelPositionClass, panelWidthClass, 'rounded-md border border-border bg-card p-3 shadow-lg')">
+      <div :class="calendarGridClass">
+        <div v-if="showTwoMonths">
           <div class="mb-2 flex items-center justify-between">
             <button class="rounded-md p-1 text-muted-foreground hover:bg-accent/40" type="button" @click="shiftMonth(-1)">
               <ChevronLeft :size="16" />
@@ -72,11 +73,23 @@ const props = defineProps({
   from: { type: String, default: "" },
   to: { type: String, default: "" },
   allowFuture: { type: Boolean, default: false },
+  months: { type: Number, default: 2 },
+  inline: { type: Boolean, default: false },
   class: { type: String, default: "" },
 });
 const emit = defineEmits(["update:from", "update:to"]);
 const open = ref(false);
 const rootRef = ref(null);
+const isOpen = computed(() => (props.inline ? true : open.value));
+const showTwoMonths = computed(() => props.months === 2);
+const panelWidthClass = computed(() => {
+  if (props.inline) return "w-full";
+  return props.months === 1 ? "w-[360px]" : "w-[680px]";
+});
+const calendarGridClass = computed(() => (showTwoMonths.value ? "grid gap-4 sm:grid-cols-2" : "grid gap-4"));
+const panelPositionClass = computed(() =>
+  props.inline ? "mt-2" : "absolute right-0 z-20 mt-2 max-w-[calc(100vw-2rem)]",
+);
 const parseDate = (value) => {
   if (!value) return null;
   const [year, month, day] = value.split("-").map(Number);
@@ -195,7 +208,9 @@ const selectDate = (date) => {
     return;
   }
   emit("update:to", formatISO(date));
-  open.value = false;
+  if (!props.inline) {
+    open.value = false;
+  }
 };
 const clearRange = () => {
   emit("update:from", "");
@@ -210,10 +225,11 @@ const shiftMonth = (amount) => {
   currentMonth.value = next;
 };
 const toggleOpen = () => {
+  if (props.inline) return;
   open.value = !open.value;
 };
 const handleClickOutside = (event) => {
-  if (!open.value || !rootRef.value) return;
+  if (props.inline || !open.value || !rootRef.value) return;
   if (!rootRef.value.contains(event.target)) {
     open.value = false;
   }

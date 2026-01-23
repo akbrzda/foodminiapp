@@ -156,7 +156,7 @@ async function calculateOrderCost(items, { cityId, fulfillmentType, bonusToUse =
 }
 router.post("/calculate", authenticateToken, async (req, res, next) => {
   try {
-    const { items, bonus_to_use = 0, delivery_cost = 0, order_type, delivery_polygon_id, city_id } = req.body;
+    const { items, bonus_to_use = 0, delivery_cost = 0, order_type, delivery_polygon_id, city_id, timezone_offset } = req.body;
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: "Items are required" });
     }
@@ -308,14 +308,16 @@ router.post("/", authenticateToken, async (req, res, next) => {
     const loyaltyLevel = userData[0]?.loyalty_level || 1;
     const earnedBonuses = calculateEarnedBonuses(finalTotal, loyaltyLevel);
     const orderNumber = await generateOrderNumber();
+    const timezoneOffset = Number.isFinite(Number(timezone_offset)) ? Number(timezone_offset) : 0;
+    const normalizedTimezoneOffset = Math.max(-840, Math.min(840, Math.trunc(timezoneOffset)));
     const [orderResult] = await connection.query(
       `INSERT INTO orders 
        (order_number, user_id, city_id, branch_id, order_type, status, 
         delivery_address_id, delivery_street, delivery_house, delivery_entrance, delivery_floor,
         delivery_apartment, delivery_intercom, delivery_comment, 
         payment_method, change_from, subtotal, delivery_cost, bonus_used, total, 
-        comment, desired_time)
-       VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        comment, desired_time, user_timezone_offset)
+       VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         orderNumber,
         req.user.id,
@@ -338,6 +340,7 @@ router.post("/", authenticateToken, async (req, res, next) => {
         finalTotal,
         comment || null,
         desired_time || null,
+        normalizedTimezoneOffset,
       ],
     );
     const orderId = orderResult.insertId;

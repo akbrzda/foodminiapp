@@ -219,7 +219,7 @@ import TableRow from "../components/ui/TableRow.vue";
 import { useNotifications } from "../composables/useNotifications.js";
 const route = useRoute();
 const router = useRouter();
-const { showErrorNotification } = useNotifications();
+const { showErrorNotification, showSuccessNotification } = useNotifications();
 const order = ref(null);
 const statusUpdate = ref("");
 const statusOrder = {
@@ -281,6 +281,7 @@ const updateStatus = async () => {
     });
     await loadOrder();
     statusUpdate.value = "";
+    showSuccessNotification("Статус заказа обновлен");
   } catch (error) {
     console.error("Failed to update status:", error);
     showErrorNotification("Ошибка при обновлении статуса");

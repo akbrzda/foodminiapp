@@ -18,6 +18,7 @@ const lastSyncedPayload = ref("");
 let syncTimer = null;
 let blurListenersAttached = false;
 let blurScrollHandler = null;
+let blurTouchHandler = null;
 const stateToSync = computed(() => ({
   selected_city_id: locationStore.selectedCity?.id || null,
   selected_branch_id: locationStore.selectedBranch?.id || null,
@@ -66,6 +67,8 @@ async function loadRemoteState() {
       cartStore.replaceItems(state.cart);
     }
     lastSyncedPayload.value = JSON.stringify(stateToSync.value);
+  } catch (error) {
+    console.error("Failed to load user state:", error);
   } finally {
     isHydrated.value = true;
   }
@@ -88,7 +91,11 @@ function scheduleSync() {
   }, 600);
 }
 onMounted(async () => {
-  await loadRemoteState();
+  try {
+    await loadRemoteState();
+  } catch (error) {
+    console.error("Failed to initialize app state:", error);
+  }
   setupWebSocket();
   attachBlurListeners();
 });
