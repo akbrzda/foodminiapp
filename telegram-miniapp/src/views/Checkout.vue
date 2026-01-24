@@ -225,7 +225,23 @@ const summarySubtotal = computed(() => {
 });
 const bonusesToEarn = computed(() => {
   if (!bonusesEnabled.value) return 0;
-  return Math.floor(finalTotalPrice.value * loyaltyStore.rate);
+
+  // Более точный расчет с учетом настроек
+  let baseAmount = summarySubtotal.value;
+
+  // Учитываем списанные бонусы если настройка включена
+  const calculateAfterBonus = loyaltyStore.settings?.calculate_from_amount_after_bonus !== false;
+  if (calculateAfterBonus && appliedBonusToUse.value > 0) {
+    baseAmount -= appliedBonusToUse.value;
+  }
+
+  // Учитываем доставку если настройка включена
+  const includeDelivery = loyaltyStore.settings?.include_delivery_in_earn === true;
+  if (includeDelivery && orderType.value === "delivery") {
+    baseAmount += deliveryCostForSummary.value;
+  }
+
+  return Math.floor(Math.max(0, baseAmount) * loyaltyStore.rate);
 });
 const estimatedFulfillmentTime = computed(() => {
   if (!orderType.value) return null;
@@ -298,7 +314,7 @@ onMounted(async () => {
     }
   }
   if (bonusesEnabled.value) {
-    loyaltyStore.refreshFromOrders();
+    loyaltyStore.refreshFromProfile();
   }
 });
 watch(

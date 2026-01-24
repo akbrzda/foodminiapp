@@ -20,14 +20,14 @@ const shouldRunNow = () => {
 async function recalcLevels() {
   const settings = await getLoyaltySettings();
   const periodDays = Math.max(1, Number(settings.level_calculation_period_days) || 60);
-  const includeDelivery = Boolean(settings.level_calculation_include_delivery);
-  const deliveryExpression = includeDelivery ? "0" : "delivery_cost";
+
+  // Доставка НЕ учитывается в сумме заказов для определения уровня
   await db.query(
     `UPDATE user_loyalty_stats us
      LEFT JOIN (
        SELECT
          user_id,
-         SUM(GREATEST(0, (total - bonus_used - ${deliveryExpression}))) AS total_spent_60_days
+         SUM(GREATEST(0, (total - bonus_used - delivery_cost))) AS total_spent_60_days
        FROM orders
        WHERE status = 'completed'
          AND created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)

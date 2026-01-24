@@ -5,12 +5,7 @@
       <div v-if="!ordersEnabled" class="order-disabled">Прием заказов временно отключен</div>
       <template v-else>
         <div class="location-tabs" v-if="deliveryEnabled || pickupEnabled">
-          <button
-            v-if="deliveryEnabled"
-            @click="setDeliveryType('delivery')"
-            class="pill-tab"
-            :class="{ active: locationStore.isDelivery }"
-          >
+          <button v-if="deliveryEnabled" @click="setDeliveryType('delivery')" class="pill-tab" :class="{ active: locationStore.isDelivery }">
             Доставка
           </button>
           <button v-if="pickupEnabled" @click="setDeliveryType('pickup')" class="pill-tab" :class="{ active: locationStore.isPickup }">
@@ -113,7 +108,12 @@
                   <div v-if="isItemUnavailable(item)" class="item-unavailable">Временно недоступно</div>
                 </div>
                 <div class="item-footer">
-                  <button v-if="!getCartItem(item)" class="add-btn" :disabled="isItemUnavailable(item) || !canOrder" @click.stop="handleItemAction(item)">
+                  <button
+                    v-if="!getCartItem(item)"
+                    class="add-btn"
+                    :disabled="isItemUnavailable(item) || !canOrder"
+                    @click.stop="handleItemAction(item)"
+                  >
                     {{ getAddButtonLabel(item) }}
                   </button>
                   <div v-else class="quantity-controls">
@@ -431,6 +431,7 @@ function handleItemAction(item) {
   if (!canOrder.value) return;
   cartStore.addItem({
     id: item.id,
+    category_id: item.category_id,
     name: item.name,
     price: item.price || 0,
     weight: item.weight || null,

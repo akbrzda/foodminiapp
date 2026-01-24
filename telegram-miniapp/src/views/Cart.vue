@@ -41,6 +41,26 @@
         <div v-if="showBonusInfo" class="bonus-tooltip">
           У вас {{ formatPrice(bonusBalance) }} бонусов, можно списать до {{ maxRedeemPercentLabel }}% от суммы заказа.
         </div>
+
+        <!-- Предупреждения об исключениях -->
+        <div v-if="excludedItems.length > 0 && exclusionData" class="bonus-exclusion-warning">
+          <div class="exclusion-icon">⚠️</div>
+          <div class="exclusion-text">
+            <template v-if="exclusionData.eligible_amount === 0">
+              <strong>Бонусы недоступны для списания</strong>
+              <p>Все товары в корзине исключены из программы лояльности</p>
+            </template>
+            <template v-else>
+              <strong>Частичное ограничение</strong>
+              <p>Некоторые товары исключены из программы лояльности ({{ formatPrice(exclusionData.excluded_amount) }} ₽)</p>
+              <p class="exclusion-detail">
+                Доступно к списанию: до {{ formatPrice(exclusionData.max_usable_for_order) }} бонусов от
+                {{ formatPrice(exclusionData.eligible_amount) }} ₽
+              </p>
+            </template>
+          </div>
+        </div>
+
         <div class="bonus-hint" v-if="maxBonusToUse === 0">Добавьте товары, чтобы использовать бонусы</div>
         <button class="bonus-action" type="button" @click="enableBonusUsage" :disabled="maxBonusToUse === 0">Списать частично</button>
       </div>
@@ -110,6 +130,12 @@ const bonusBalance = ref(0);
 const showBonusInfo = ref(false);
 const showPartialModal = ref(false);
 const partialBonusInput = ref("");
+
+// Данные об исключениях
+const exclusionData = ref(null);
+const excludedItems = ref([]);
+const loadingExclusions = ref(false);
+
 const bonusesEnabled = computed(() => settingsStore.bonusesEnabled);
 const ordersEnabled = computed(() => settingsStore.ordersEnabled);
 const useBonuses = computed({
@@ -122,6 +148,13 @@ const bonusToUse = computed({
 });
 const maxBonusToUse = computed(() => {
   if (!bonusesEnabled.value) return 0;
+
+  // Если есть данные об исключениях, используем их
+  if (exclusionData.value?.available_to_use !== undefined) {
+    return Math.min(bonusBalance.value, Math.floor(exclusionData.value.available_to_use));
+  }
+
+  // Иначе используем старый расчет
   const maxAllowed = Math.floor(cartStore.totalPrice * loyaltyStore.maxRedeemPercent);
   return Math.min(bonusBalance.value, maxAllowed);
 });
@@ -277,8 +310,53 @@ async function loadBonusBalance() {
   try {
     const response = await bonusesAPI.getBalance();
     bonusBalance.value = response.data.balance || 0;
+
+    // Загружаем данные об исключениях только если корзина не пуста
+    if (cartStore.items.length > 0) {
+      await loadExclusionData();
+    }
   } catch (error) {
     console.error("Failed to load bonus balance:", error);
+  }
+}
+
+// Загрузка данных об исключениях для корзины
+async function loadExclusionData() {
+  if (!bonusesEnabled.value || cartStore.items.length === 0) {
+    exclusionData.value = null;
+    excludedItems.value = [];
+    return;
+  }
+
+  loadingExclusions.value = true;
+
+  try {
+    // Формируем items для API, фильтруем только валидные элементы
+    const orderItems = cartStore.items
+      .filter((item) => item.id && item.category_id && item.price !== undefined && item.quantity)
+      .map((item) => ({
+        product_id: item.id,
+        category_id: item.category_id,
+        price: parseFloat(item.price) || 0,
+        quantity: parseInt(item.quantity) || 1,
+      }));
+
+    // Если нет валидных элементов, не делаем запрос
+    if (orderItems.length === 0) {
+      exclusionData.value = null;
+      excludedItems.value = [];
+      return;
+    }
+
+    const response = await bonusesAPI.calculateUsable(orderItems);
+    exclusionData.value = response.data;
+    excludedItems.value = response.data.excluded_items || [];
+  } catch (error) {
+    console.error("Failed to load exclusion data:", error);
+    exclusionData.value = null;
+    excludedItems.value = [];
+  } finally {
+    loadingExclusions.value = false;
   }
 }
 function onBonusToggle() {
@@ -315,6 +393,17 @@ watch(
     bonusBalance.value = 0;
     showPartialModal.value = false;
   },
+);
+
+// Пересчитываем исключения при изменении корзины
+watch(
+  () => [cartStore.items.length, cartStore.totalPrice],
+  async () => {
+    if (bonusesEnabled.value && cartStore.items.length > 0) {
+      await loadExclusionData();
+    }
+  },
+  { deep: true },
 );
 </script>
 <style scoped>
@@ -530,6 +619,45 @@ watch(
   font-size: var(--font-size-caption);
   color: var(--color-text-primary);
 }
+
+/* Предупреждения об исключениях */
+.bonus-exclusion-warning {
+  display: flex;
+  gap: 12px;
+  padding: 12px;
+  margin-bottom: 12px;
+  background: #fff3cd;
+  border-radius: var(--border-radius-md);
+  border: 1px solid #ffc107;
+}
+
+.exclusion-icon {
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+.exclusion-text {
+  flex: 1;
+  font-size: var(--font-size-caption);
+  color: #856404;
+}
+
+.exclusion-text strong {
+  display: block;
+  font-weight: var(--font-weight-bold);
+  margin-bottom: 4px;
+}
+
+.exclusion-text p {
+  margin: 4px 0 0 0;
+}
+
+.exclusion-detail {
+  margin-top: 8px !important;
+  font-weight: var(--font-weight-semibold);
+  color: #665400;
+}
+
 .bonus-action {
   width: 100%;
   margin-top: 12px;

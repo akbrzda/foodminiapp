@@ -379,6 +379,7 @@ function increaseQuantity() {
   const finalPrice = parseFloat(totalPrice.value) || 0;
   cartStore.addItem({
     id: item.value.id,
+    category_id: item.value.category_id,
     name: item.value.name,
     price: finalPrice,
     weight: item.value.weight || null,
@@ -488,6 +489,7 @@ function addToCart() {
   const finalPrice = totalPrice.value;
   cartStore.addItem({
     id: item.value.id,
+    category_id: item.value.category_id,
     name: item.value.name,
     price: finalPrice,
     weight: item.value.weight || null,

@@ -16,6 +16,7 @@ export const useLoyaltyStore = defineStore("loyalty", {
     updatedAt: null,
     levels: LOYALTY_LEVELS,
     fallbackRedeemPercent: MAX_BONUS_REDEEM_PERCENT,
+    settings: null, // Настройки лояльности
   }),
   getters: {
     currentLevel: (state) => getLoyaltyLevel(state.totalSpent, state.levels),
@@ -38,6 +39,10 @@ export const useLoyaltyStore = defineStore("loyalty", {
     },
     applySettings(settings, levelsFromApi = []) {
       const data = settings || {};
+
+      // Сохраняем все настройки лояльности
+      this.settings = data;
+
       const fallbackRedeemPercent = Number(data.bonus_max_redeem_percent) || MAX_BONUS_REDEEM_PERCENT;
       if (Array.isArray(levelsFromApi) && levelsFromApi.length > 0) {
         const normalized = levelsFromApi

@@ -152,34 +152,8 @@ export async function invalidateBonusCache(userId) {
     console.error("Не удалось инвалидировать кеш бонусов:", error);
   }
 }
-export function getLoyaltyLevelsFromSettings(settings = {}) {
-  const level2Threshold = normalizeNumber(settings.loyalty_level_2_threshold, DEFAULT_LOYALTY_LEVELS[2].threshold);
-  const level3Threshold = normalizeNumber(settings.loyalty_level_3_threshold, DEFAULT_LOYALTY_LEVELS[3].threshold);
-  const fallbackRedeemPercent = getMaxUsePercentFromSettings(settings);
-  return {
-    1: {
-      level_number: 1,
-      name: normalizeString(settings.loyalty_level_1_name, DEFAULT_LOYALTY_LEVELS[1].name),
-      earnRate: normalizeNumber(settings.loyalty_level_1_rate, DEFAULT_LOYALTY_LEVELS[1].earnRate),
-      redeemPercent: normalizeNumber(settings.loyalty_level_1_redeem_percent, fallbackRedeemPercent),
-      threshold: 0,
-    },
-    2: {
-      level_number: 2,
-      name: normalizeString(settings.loyalty_level_2_name, DEFAULT_LOYALTY_LEVELS[2].name),
-      earnRate: normalizeNumber(settings.loyalty_level_2_rate, DEFAULT_LOYALTY_LEVELS[2].earnRate),
-      redeemPercent: normalizeNumber(settings.loyalty_level_2_redeem_percent, fallbackRedeemPercent),
-      threshold: Math.max(0, level2Threshold),
-    },
-    3: {
-      level_number: 3,
-      name: normalizeString(settings.loyalty_level_3_name, DEFAULT_LOYALTY_LEVELS[3].name),
-      earnRate: normalizeNumber(settings.loyalty_level_3_rate, DEFAULT_LOYALTY_LEVELS[3].earnRate),
-      redeemPercent: normalizeNumber(settings.loyalty_level_3_redeem_percent, fallbackRedeemPercent),
-      threshold: Math.max(0, level3Threshold),
-    },
-  };
-}
+
+// Получение активных уровней лояльности из БД
 export async function getLoyaltyLevelsFromDb(connection = null) {
   const executor = connection || db;
   const [rows] = await executor.query(
@@ -325,31 +299,71 @@ export async function spendBonuses(order, connection = null) {
   await invalidateBonusCache(order.user_id);
   return { id: txId, amount: bonusUsed, balance_after: newBalance };
 }
+// Начисление бонусов за заказ с защитой от дублирования
 export async function earnBonuses(order, connection = null, levels = DEFAULT_LOYALTY_LEVELS, loyaltySettings = null) {
   const executor = connection || db;
+
+  // Проверка: если уже есть начисление, вернуть его
   const existing = await getLoyaltyTransaction(executor, order.id, "earn");
   if (existing) {
     return existing;
   }
+
+  // Блокировка строки заказа для проверки флага bonus_earn_locked
+  const [lockedOrders] = await executor.query("SELECT id, bonus_earn_locked, bonus_earn_amount FROM orders WHERE id = ? FOR UPDATE", [order.id]);
+
+  if (!lockedOrders.length) {
+    throw new Error("Заказ не найден");
+  }
+
+  const lockedOrder = lockedOrders[0];
+
+  // Если bonus_earn_locked = TRUE, значит начисление уже в процессе/завершено
+  if (lockedOrder.bonus_earn_locked) {
+    console.log(`Начисление за заказ ${order.id} уже заблокировано, пропуск дублирования`);
+    return null;
+  }
+
+  // Устанавливаем флаг блокировки
+  const [updateResult] = await executor.query("UPDATE orders SET bonus_earn_locked = TRUE WHERE id = ? AND bonus_earn_locked = FALSE", [order.id]);
+
+  if (updateResult.affectedRows === 0) {
+    console.log(`Не удалось установить блокировку для заказа ${order.id}, возможно другой процесс уже обработал`);
+    return null;
+  }
+
   const settings = loyaltySettings || (await getLoyaltySettings());
+
   const selectUserSql = connection
     ? "SELECT loyalty_level, bonus_balance, total_spent FROM users WHERE id = ? FOR UPDATE"
     : "SELECT loyalty_level, bonus_balance, total_spent FROM users WHERE id = ?";
   const [users] = await executor.query(selectUserSql, [order.user_id]);
+
   if (users.length === 0) {
-    throw new Error("User not found");
+    throw new Error("Пользователь не найден");
   }
+
   const loyaltyLevel = users[0].loyalty_level || 1;
   const orderTotal = parseFloat(order.total) || 0;
+
   const baseAmount = getEarnBaseAmount(order, settings);
   const amount = calculateEarnedBonuses(baseAmount, loyaltyLevel, levels);
+
   if (amount <= 0) {
+    // Сохраняем 0 в bonus_earn_amount для истории
+    await executor.query("UPDATE orders SET bonus_earn_amount = 0 WHERE id = ?", [order.id]);
     return null;
   }
+
   const balanceBefore = Math.round(parseFloat(users[0].bonus_balance) || 0);
   const newBalance = balanceBefore + Math.round(amount);
   const newTotalSpent = (parseFloat(users[0].total_spent) || 0) + orderTotal;
+
   await executor.query("UPDATE users SET bonus_balance = ?, total_spent = ? WHERE id = ?", [newBalance, newTotalSpent, order.user_id]);
+
+  // Сохраняем начисленную сумму в заказе для повторных доставок
+  await executor.query("UPDATE orders SET bonus_earn_amount = ? WHERE id = ?", [Math.round(amount), order.id]);
+
   const expiresAt = getExpiryDateFromSettings(settings);
   const txId = await insertLoyaltyTransaction(executor, {
     user_id: order.user_id,
@@ -360,12 +374,25 @@ export async function earnBonuses(order, connection = null, levels = DEFAULT_LOY
     expires_at: expiresAt,
     status: "completed",
   });
+
   await updateUserLoyaltyStats(executor, order.user_id, {
     balance: newBalance,
     earned: Math.round(amount),
   });
+
   const levelUp = await checkLevelUp(order.user_id, levels, executor);
   await invalidateBonusCache(order.user_id);
+
+  await logLoyaltyEvent({
+    eventType: "bonus_earn",
+    severity: "info",
+    userId: order.user_id,
+    orderId: order.id,
+    transactionId: txId,
+    message: `Начислено ${Math.round(amount)} бонусов за заказ`,
+    metadata: { loyalty_level: loyaltyLevel, base_amount: baseAmount },
+  });
+
   try {
     const { wsServer } = await import("../index.js");
     wsServer.notifyBonusUpdate(order.user_id, newBalance, {
@@ -377,6 +404,7 @@ export async function earnBonuses(order, connection = null, levels = DEFAULT_LOY
   } catch (wsError) {
     console.error("Failed to send WebSocket notification:", wsError);
   }
+
   return {
     id: txId,
     amount,
@@ -385,23 +413,34 @@ export async function earnBonuses(order, connection = null, levels = DEFAULT_LOY
   };
 }
 
+// Откат начисленных бонусов (при смене статуса delivered → другой)
 export async function removeEarnedBonuses(order, connection = null, levels = DEFAULT_LOYALTY_LEVELS) {
   const executor = connection || db;
+
+  // Проверяем, было ли начисление
   const earnTx = await getLoyaltyTransaction(executor, order.id, "earn");
   if (!earnTx) return null;
+
   const selectUserSql = connection
     ? "SELECT bonus_balance, total_spent FROM users WHERE id = ? FOR UPDATE"
     : "SELECT bonus_balance, total_spent FROM users WHERE id = ?";
   const [users] = await executor.query(selectUserSql, [order.user_id]);
+
   if (users.length === 0) {
-    throw new Error("User not found");
+    throw new Error("Пользователь не найден");
   }
+
   const currentBalance = parseFloat(users[0].bonus_balance) || 0;
   const earnedAmount = parseFloat(earnTx.amount) || 0;
   const newBalance = Math.max(0, currentBalance - earnedAmount);
   const newTotalSpent = Math.max(0, (parseFloat(users[0].total_spent) || 0) - (parseFloat(order.total) || 0));
+
   await executor.query("UPDATE users SET bonus_balance = ?, total_spent = ? WHERE id = ?", [newBalance, newTotalSpent, order.user_id]);
+
+  // Отменяем транзакцию начисления
   await executor.query("UPDATE loyalty_transactions SET status = 'cancelled' WHERE id = ?", [earnTx.id]);
+
+  // Создаём транзакцию отмены
   const refundId = await insertLoyaltyTransaction(executor, {
     user_id: order.user_id,
     order_id: order.id,
@@ -410,24 +449,107 @@ export async function removeEarnedBonuses(order, connection = null, levels = DEF
     earned_at: new Date(),
     expires_at: null,
     status: "completed",
-    description: "Отмена начисления",
+    description: "Отмена начисления при смене статуса",
     metadata: { cancels_transaction_id: earnTx.id },
   });
+
   await updateUserLoyaltyStats(executor, order.user_id, {
     balance: newBalance,
     earned: -Math.round(earnedAmount),
   });
+
+  // Сбрасываем флаг блокировки для повторного начисления
+  await executor.query("UPDATE orders SET bonus_earn_locked = FALSE WHERE id = ?", [order.id]);
+
   await logLoyaltyEvent({
-    eventType: "cron_execution",
+    eventType: "bonus_refund",
     severity: "info",
     userId: order.user_id,
     orderId: order.id,
     transactionId: refundId,
-    message: "Отмена начисления при смене статуса",
+    message: `Отменено начисление ${Math.round(earnedAmount)} бонусов`,
   });
+
   await invalidateBonusCache(order.user_id);
   await checkLevelUp(order.user_id, levels, executor);
+
   return { id: earnTx.id, amount: earnedAmount, balance_after: newBalance };
+}
+
+// Повторное начисление бонусов (при повторной доставке)
+// Использует сохранённую сумму из bonus_earn_amount
+export async function redeliveryEarnBonuses(order, connection = null, levels = DEFAULT_LOYALTY_LEVELS) {
+  const executor = connection || db;
+
+  // Проверяем, есть ли сохранённая сумма начисления
+  const [orders] = await executor.query("SELECT bonus_earn_amount FROM orders WHERE id = ?", [order.id]);
+
+  if (!orders.length || !orders[0].bonus_earn_amount) {
+    console.log(`Нет сохранённой суммы начисления для заказа ${order.id}, пропуск`);
+    return null;
+  }
+
+  const savedAmount = parseFloat(orders[0].bonus_earn_amount);
+  if (savedAmount <= 0) return null;
+
+  const selectUserSql = connection ? "SELECT bonus_balance FROM users WHERE id = ? FOR UPDATE" : "SELECT bonus_balance FROM users WHERE id = ?";
+  const [users] = await executor.query(selectUserSql, [order.user_id]);
+
+  if (users.length === 0) {
+    throw new Error("Пользователь не найден");
+  }
+
+  const balanceBefore = Math.round(parseFloat(users[0].bonus_balance) || 0);
+  const newBalance = balanceBefore + Math.round(savedAmount);
+
+  await executor.query("UPDATE users SET bonus_balance = ? WHERE id = ?", [newBalance, order.user_id]);
+
+  const settings = await getLoyaltySettings();
+  const expiresAt = getExpiryDateFromSettings(settings);
+
+  const txId = await insertLoyaltyTransaction(executor, {
+    user_id: order.user_id,
+    order_id: order.id,
+    type: "earn",
+    amount: Math.round(savedAmount),
+    earned_at: new Date(),
+    expires_at: expiresAt,
+    status: "completed",
+    description: "Повторное начисление при повторной доставке",
+  });
+
+  await updateUserLoyaltyStats(executor, order.user_id, {
+    balance: newBalance,
+    earned: Math.round(savedAmount),
+  });
+
+  await logLoyaltyEvent({
+    eventType: "bonus_earn",
+    severity: "info",
+    userId: order.user_id,
+    orderId: order.id,
+    transactionId: txId,
+    message: `Повторное начисление ${Math.round(savedAmount)} бонусов`,
+  });
+
+  await invalidateBonusCache(order.user_id);
+
+  try {
+    const { wsServer } = await import("../index.js");
+    wsServer.notifyBonusUpdate(order.user_id, newBalance, {
+      type: "earn",
+      amount: savedAmount,
+      orderId: order.id,
+    });
+  } catch (wsError) {
+    console.error("Failed to send WebSocket notification:", wsError);
+  }
+
+  return {
+    id: txId,
+    amount: savedAmount,
+    balance_after: newBalance,
+  };
 }
 
 export async function cancelOrderBonuses(order, connection = null, levels = DEFAULT_LOYALTY_LEVELS) {
@@ -510,6 +632,108 @@ export async function cancelOrderBonuses(order, connection = null, levels = DEFA
   await checkLevelUp(order.user_id, levels, executor);
   return { spent: spentAmount, earned: earnedAmount, balance_after: newBalance };
 }
+
+// Корректировка бонусов при изменении заказа после доставки
+export async function adjustOrderBonuses(order, newTotal, connection = null, levels = DEFAULT_LOYALTY_LEVELS, loyaltySettings = null) {
+  const executor = connection || db;
+
+  // Проверяем, было ли начисление
+  const earnTx = await getLoyaltyTransaction(executor, order.id, "earn");
+  if (!earnTx) {
+    console.log(`Нет начисления для заказа ${order.id}, корректировка не требуется`);
+    return null;
+  }
+
+  const settings = loyaltySettings || (await getLoyaltySettings());
+
+  const selectUserSql = connection
+    ? "SELECT loyalty_level, bonus_balance FROM users WHERE id = ? FOR UPDATE"
+    : "SELECT loyalty_level, bonus_balance FROM users WHERE id = ?";
+  const [users] = await executor.query(selectUserSql, [order.user_id]);
+
+  if (users.length === 0) {
+    throw new Error("Пользователь не найден");
+  }
+
+  const loyaltyLevel = users[0].loyalty_level || 1;
+
+  // Создаём временный объект заказа с новой суммой для расчёта
+  const adjustedOrder = { ...order, total: newTotal };
+  const newBaseAmount = getEarnBaseAmount(adjustedOrder, settings);
+  const newEarnAmount = calculateEarnedBonuses(newBaseAmount, loyaltyLevel, levels);
+
+  const oldEarnAmount = parseFloat(earnTx.amount) || 0;
+  const delta = Math.round(newEarnAmount - oldEarnAmount);
+
+  if (delta === 0) {
+    console.log(`Корректировка не требуется для заказа ${order.id}, разница = 0`);
+    return null;
+  }
+
+  const currentBalance = parseFloat(users[0].bonus_balance) || 0;
+  const newBalance = Math.max(0, currentBalance + delta);
+
+  await executor.query("UPDATE users SET bonus_balance = ? WHERE id = ?", [newBalance, order.user_id]);
+
+  // Обновляем bonus_earn_amount в заказе
+  await executor.query("UPDATE orders SET bonus_earn_amount = ? WHERE id = ?", [Math.round(newEarnAmount), order.id]);
+
+  // Создаём транзакцию корректировки
+  const txId = await insertLoyaltyTransaction(executor, {
+    user_id: order.user_id,
+    order_id: order.id,
+    type: "adjustment",
+    amount: delta, // может быть отрицательным
+    earned_at: new Date(),
+    expires_at: null,
+    status: "completed",
+    description: delta > 0 ? "Доначисление при изменении заказа" : "Списание при изменении заказа",
+    metadata: {
+      old_amount: oldEarnAmount,
+      new_amount: newEarnAmount,
+      old_total: order.total,
+      new_total: newTotal,
+    },
+  });
+
+  await updateUserLoyaltyStats(executor, order.user_id, {
+    balance: newBalance,
+    earned: delta > 0 ? delta : 0,
+    spent: delta < 0 ? Math.abs(delta) : 0,
+  });
+
+  await logLoyaltyEvent({
+    eventType: "bonus_adjustment",
+    severity: "info",
+    userId: order.user_id,
+    orderId: order.id,
+    transactionId: txId,
+    message: `Корректировка начисления: ${delta > 0 ? "+" : ""}${delta} бонусов`,
+    metadata: { old_amount: oldEarnAmount, new_amount: newEarnAmount },
+  });
+
+  await invalidateBonusCache(order.user_id);
+
+  try {
+    const { wsServer } = await import("../index.js");
+    wsServer.notifyBonusUpdate(order.user_id, newBalance, {
+      type: "adjustment",
+      amount: delta,
+      orderId: order.id,
+    });
+  } catch (wsError) {
+    console.error("Failed to send WebSocket notification:", wsError);
+  }
+
+  return {
+    id: txId,
+    delta,
+    old_amount: oldEarnAmount,
+    new_amount: newEarnAmount,
+    balance_after: newBalance,
+  };
+}
+
 export async function applyManualBonusAdjustment({ userId, delta, connection = null, loyaltySettings = null }) {
   const executor = connection || db;
   const settings = loyaltySettings || (await getLoyaltySettings());
@@ -640,14 +864,15 @@ export async function grantRegistrationBonus(userId, connection = null, loyaltyS
 export default {
   calculateEarnedBonuses,
   calculateMaxUsableBonuses,
-  getLoyaltyLevelsFromSettings,
   getLoyaltyLevelsFromDb,
   getMaxUsePercentFromSettings,
   getRedeemPercentForLevel,
   validateBonusUsage,
   earnBonuses,
+  redeliveryEarnBonuses,
   spendBonuses,
   removeEarnedBonuses,
+  adjustOrderBonuses,
   cancelOrderBonuses,
   applyManualBonusAdjustment,
   getBonusHistory,

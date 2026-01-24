@@ -72,6 +72,14 @@ export const bonusesAPI = {
       },
     }));
   },
+  // Расчет доступных для списания бонусов с учетом исключений
+  calculateUsable(items) {
+    return api.post("/bonuses/calculate-usable", { items });
+  },
+  // Получение истекающих бонусов
+  getExpiring(daysThreshold = 14) {
+    return api.get("/bonuses/expiring", { params: { days: daysThreshold } });
+  },
 };
 export const addressesAPI = {
   getAddresses() {

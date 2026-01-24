@@ -28,16 +28,23 @@
 - Бонусы имеют срок действия и списываются по FIFO.
 - Уровни пересчитываются по сумме заказов за 60 дней.
 - Автоматическое повышение и понижение уровней.
+- Защита от дублирования транзакций через `bonus_earn_locked`.
+- Фиксация суммы начисления в `bonus_earn_amount` для повторных доставок.
 
 ### Таблицы
 
-- **loyalty_settings** — настройки лояльности.
-- **loyalty_levels** — уровни и их условия.
-- **loyalty_transactions** — транзакции начислений/списаний/возвратов.
+- **loyalty_settings** — глобальные настройки (сроки, бонусы за регистрацию/день рождения, параметры расчета начисления).
+  - `include_delivery_in_earn` — включать ли доставку в сумму для расчёта начисляемых бонусов.
+  - `level_calculation_period_days` — период (дней) для расчёта суммы заказов при определении уровня.
+  - **Важно:** Доставка НЕ учитывается в сумме заказов для определения уровня лояльности (жестко закодировано).
+- **loyalty_levels** — уровни лояльности с порогами, процентами начисления и списания.
+- **loyalty_transactions** — транзакции (типы: earn, spend, refund_earn, refund_spend, expire, adjustment, birthday_bonus).
+- **loyalty_exclusions** — исключения для списания бонусов (категории и товары).
 - **user_loyalty_stats** — агрегированная статистика клиента.
 - **user_loyalty_levels** — история смены уровней.
 - **loyalty_logs** — аудит и системные события.
 - **users** — поля `bonus_balance`, `current_loyalty_level_id` и связанные поля.
+- **orders** — поля `bonus_earn_amount`, `bonus_earn_locked` для управления начислениями.
 
 ### Эндпоинты (backend)
 
@@ -46,30 +53,73 @@
 - `GET /api/loyalty-settings` — публичные настройки.
 - `GET /api/loyalty-settings/admin` — административные настройки.
 - `PUT /api/loyalty-settings/admin` — обновление настроек.
+- `GET /api/loyalty-settings/exclusions` — список исключений для списания бонусов.
+- `POST /api/loyalty-settings/exclusions` — создание исключения (тип: category/product).
+- `DELETE /api/loyalty-settings/exclusions/:id` — удаление исключения.
+- `GET /api/loyalty-settings/logs?limit=50&offset=0` — логи лояльности с пагинацией.
+- `GET /api/loyalty-settings/audit/duplicates` — поиск дублей транзакций.
+- `GET /api/loyalty-settings/audit/mismatches` — расхождения балансов.
+- `GET /api/loyalty-settings/users/:userId/stats` — статистика пользователя.
 
-**Админ‑управление**
+**Управление уровнями лояльности**
 
 - `GET /api/admin/loyalty/levels` — список уровней.
 - `POST /api/admin/loyalty/levels` — создание уровня.
 - `PUT /api/admin/loyalty/levels/:id` — обновление уровня.
 - `DELETE /api/admin/loyalty/levels/:id` — удаление уровня.
-- `GET /api/admin/loyalty/logs` — логи лояльности.
-- `GET /api/admin/loyalty/audit/duplicates` — аудит дублей.
-- `GET /api/admin/loyalty/audit/mismatches` — аудит расхождений.
-- `GET /api/admin/loyalty/users/:id/stats` — статистика клиента.
-- `GET /api/admin/loyalty/users/:id/levels` — история уровней клиента.
 
-### Автоматические процессы
+**Бонусные операции**
 
-- **bonusExpiry** — истечение бонусов.
-- **levelRecalc** — пересчет уровней.
-- **levelDegradation** — понижение уровней.
-- **balanceReconcile** — сверка балансов.
-- **birthdayBonus** — бонус ко дню рождения.
+- `POST /api/bonuses/calculate-usable` — расчет доступной суммы для списания с учетом исключений.
+
+### Бизнес-логика (backend/src/utils/bonuses.js)
+
+**Основные функции:**
+
+- `earnBonuses(order, connection, levels, loyaltySettings)` — начисление бонусов с защитой от дублирования через `bonus_earn_locked`. Устанавливает `bonus_earn_amount` для фиксации суммы.
+- `redeliveryEarnBonuses(order, connection, levels)` — повторное начисление при повторной доставке, использует сохранённое значение `bonus_earn_amount`.
+- `removeEarnedBonuses(order, connection, levels)` — откат начисленных бонусов при смене статуса (delivered → other). Сбрасывает флаг `bonus_earn_locked`.
+- `adjustOrderBonuses(order, newTotal, connection, levels, loyaltySettings)` — корректировка бонусов при изменении суммы заказа после доставки. Создаёт транзакцию типа `adjustment`.
+- `spendBonuses(userId, amount, orderId, connection)` — списание бонусов по FIFO.
+- `cancelOrderBonuses(order, connection, levels)` — отмена всех транзакций заказа (earn + spend).
+
+**Защита от race conditions:**
+
+- `SELECT ... FOR UPDATE` на таблицу orders для проверки `bonus_earn_locked`.
+- Проверка `affected_rows` после `UPDATE bonus_earn_locked = TRUE`.
+- Атомарность операций внутри транзакции.
+
+### Автоматические процессы (backend/src/workers)
+
+- **bonusExpiry.worker.js** — истечение бонусов (каждые 24 часа).
+- **levelRecalc.worker.js** — пересчет уровней пользователей (в 02:00 ежедневно).
+- **levelDegradation.worker.js** — понижение уровней при неактивности (в 01:00 ежедневно).
+- **balanceReconcile.worker.js** — сверка балансов (ежедневно).
+- **birthdayBonus.worker.js** — начисление бонуса ко дню рождения (в 06:00 ежедневно).
 
 ### Админ‑интерфейс
 
-- **LoyaltyAdmin**: уровни, настройки, логи и аудит.
-- **ClientDetail**: статистика лояльности клиента и история уровней.
+**LoyaltyAdmin (5 вкладок):**
+
+1. **Уровни** — CRUD уровней лояльности с настройкой порогов и процентов.
+2. **Настройки** — глобальные параметры начислений, списаний, сроков, бонусов за регистрацию и день рождения.
+3. **Исключения** — управление категориями и товарами, для которых нельзя списывать бонусы. Фильтры по типу и поиск.
+4. **Логи** — системные события бонусной программы с пагинацией (50 записей на страницу).
+5. **Аудит** — проверка дублей транзакций и расхождений балансов с действиями просмотра.
+
+**ClientDetail:**
+
+- Секция "Лояльность" с текущим уровнем, статистикой за 60 дней и всё время.
+- Отображение начисленных/списанных/сгоревших бонусов.
+- История уровней с причинами изменений.
+- История бонусных транзакций.
+
+**OrderDetail:**
+
+- Секция "Бонусы по заказу" с отображением:
+  - Статус начисления (зафиксировано/не зафиксировано).
+  - Сумма начисления `bonus_earn_amount`.
+  - Использованные бонусы `bonus_used`.
+  - Пояснения к статусу начисления.
 
 > Примечание: проценты в админке вводятся целыми числами (например, 5 = 5%).

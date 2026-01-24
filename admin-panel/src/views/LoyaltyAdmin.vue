@@ -117,11 +117,70 @@
 
       <div v-else-if="activeTab === 2" class="space-y-6">
         <Card>
+          <CardHeader class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div>
+              <CardTitle>Исключения для списания бонусов</CardTitle>
+              <CardDescription>Категории и товары, на которые нельзя списывать бонусы</CardDescription>
+            </div>
+            <Button @click="openExclusionModal()">
+              <Plus :size="16" />
+              Добавить исключение
+            </Button>
+          </CardHeader>
+          <CardContent class="pt-0 space-y-4">
+            <!-- Фильтры -->
+            <div class="flex flex-wrap gap-3">
+              <Select v-model="exclusionFilters.type" class="w-40">
+                <option value="">Все типы</option>
+                <option value="category">Категории</option>
+                <option value="product">Товары</option>
+              </Select>
+              <Input v-model="exclusionFilters.search" placeholder="Поиск по названию..." class="w-60" />
+              <Button variant="outline" size="sm" @click="resetExclusionFilters"> Сбросить </Button>
+            </div>
+
+            <Table v-if="filteredExclusions.length">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Тип</TableHead>
+                  <TableHead>Название</TableHead>
+                  <TableHead>Причина</TableHead>
+                  <TableHead>Создано</TableHead>
+                  <TableHead class="text-right">Действия</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                <TableRow v-for="exclusion in filteredExclusions" :key="exclusion.id">
+                  <TableCell>
+                    <Badge :variant="exclusion.type === 'category' ? 'secondary' : 'outline'">
+                      {{ exclusion.type === "category" ? "Категория" : "Товар" }}
+                    </Badge>
+                  </TableCell>
+                  <TableCell class="font-medium">{{ exclusion.entity_name || `ID: ${exclusion.entity_id}` }}</TableCell>
+                  <TableCell class="text-muted-foreground">{{ exclusion.reason || "—" }}</TableCell>
+                  <TableCell class="text-muted-foreground">{{ formatDateTime(exclusion.created_at) }}</TableCell>
+                  <TableCell class="text-right">
+                    <Button variant="ghost" size="icon" @click="deleteExclusion(exclusion)">
+                      <Trash2 :size="16" class="text-red-600" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+            <div v-else class="py-8 text-center text-sm text-muted-foreground">
+              {{ exclusions.length === 0 ? "Исключения не найдены" : "Нет результатов по фильтрам" }}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div v-else-if="activeTab === 3" class="space-y-6">
+        <Card>
           <CardHeader>
             <CardTitle>Логи лояльности</CardTitle>
             <CardDescription>Системные события бонусной программы</CardDescription>
           </CardHeader>
-          <CardContent class="pt-0">
+          <CardContent class="pt-0 space-y-4">
             <Table v-if="logs.length">
               <TableHeader>
                 <TableRow>
@@ -134,22 +193,41 @@
               <TableBody>
                 <TableRow v-for="log in logs" :key="log.id">
                   <TableCell>{{ log.event_type }}</TableCell>
-                  <TableCell>{{ log.severity }}</TableCell>
+                  <TableCell>
+                    <Badge :variant="log.severity === 'error' ? 'destructive' : log.severity === 'warning' ? 'secondary' : 'outline'">
+                      {{ log.severity }}
+                    </Badge>
+                  </TableCell>
                   <TableCell class="text-muted-foreground">{{ log.message }}</TableCell>
                   <TableCell class="text-muted-foreground">{{ formatDateTime(log.created_at) }}</TableCell>
                 </TableRow>
               </TableBody>
             </Table>
             <div v-else class="py-8 text-center text-sm text-muted-foreground">Логи не найдены</div>
+
+            <!-- Пагинация -->
+            <div v-if="logs.length" class="flex items-center justify-between border-t border-border pt-4">
+              <div class="text-sm text-muted-foreground">Показано {{ logs.length }} из {{ logsTotalCount }} записей</div>
+              <div class="flex gap-2">
+                <Button variant="outline" size="sm" :disabled="logsPage === 1" @click="previousLogsPage"> Назад </Button>
+                <Button variant="outline" size="sm" :disabled="logs.length < logsPageSize" @click="nextLogsPage"> Вперед </Button>
+              </div>
+            </div>
           </CardContent>
         </Card>
       </div>
 
       <div v-else class="space-y-6">
         <Card>
-          <CardHeader>
-            <CardTitle>Аудит</CardTitle>
-            <CardDescription>Проверка дублей и расхождений</CardDescription>
+          <CardHeader class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div>
+              <CardTitle>Аудит</CardTitle>
+              <CardDescription>Проверка дублей и расхождений</CardDescription>
+            </div>
+            <Button @click="loadAudit">
+              <RefreshCcw :size="16" />
+              Обновить
+            </Button>
           </CardHeader>
           <CardContent class="space-y-6">
             <div>
@@ -160,13 +238,19 @@
                     <TableHead>Заказ</TableHead>
                     <TableHead>Тип</TableHead>
                     <TableHead>Количество</TableHead>
+                    <TableHead class="text-right">Действия</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   <TableRow v-for="dup in duplicates" :key="`${dup.order_id}-${dup.type}`">
-                    <TableCell>#{{ dup.order_id }}</TableCell>
+                    <TableCell>
+                      <router-link :to="`/orders/${dup.order_id}`" class="text-primary hover:underline"> #{{ dup.order_id }} </router-link>
+                    </TableCell>
                     <TableCell>{{ dup.type }}</TableCell>
                     <TableCell>{{ dup.total }}</TableCell>
+                    <TableCell class="text-right">
+                      <Button variant="ghost" size="sm" @click="viewOrderDetails(dup.order_id)"> Просмотр </Button>
+                    </TableCell>
                   </TableRow>
                 </TableBody>
               </Table>
@@ -180,13 +264,19 @@
                     <TableHead>Пользователь</TableHead>
                     <TableHead>Баланс</TableHead>
                     <TableHead>Расчет</TableHead>
+                    <TableHead class="text-right">Действия</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   <TableRow v-for="row in mismatches" :key="row.user_id">
-                    <TableCell>{{ row.user_id }}</TableCell>
+                    <TableCell>
+                      <router-link :to="`/clients/${row.user_id}`" class="text-primary hover:underline"> #{{ row.user_id }} </router-link>
+                    </TableCell>
                     <TableCell>{{ formatNumber(row.user_balance) }}</TableCell>
                     <TableCell>{{ formatNumber(row.calculated_balance) }}</TableCell>
+                    <TableCell class="text-right">
+                      <Button variant="ghost" size="sm" @click="viewClientDetails(row.user_id)"> Просмотр </Button>
+                    </TableCell>
                   </TableRow>
                 </TableBody>
               </Table>
@@ -265,10 +355,54 @@
         </Button>
       </form>
     </BaseModal>
+
+    <BaseModal v-if="showExclusionModal" :title="'Новое исключение'" @close="closeExclusionModal">
+      <form class="space-y-4" @submit.prevent="saveExclusion">
+        <div class="space-y-2">
+          <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Тип исключения</label>
+          <Select v-model="exclusionForm.type" @change="onExclusionTypeChange">
+            <option value="">Выберите тип</option>
+            <option value="category">Категория</option>
+            <option value="product">Товар</option>
+          </Select>
+        </div>
+
+        <div v-if="exclusionForm.type === 'category'" class="space-y-2">
+          <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Категория</label>
+          <Select v-model.number="exclusionForm.entity_id" required>
+            <option :value="null">Выберите категорию</option>
+            <option v-for="category in categories" :key="category.id" :value="category.id">
+              {{ category.name }}
+            </option>
+          </Select>
+        </div>
+
+        <div v-if="exclusionForm.type === 'product'" class="space-y-2">
+          <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Товар</label>
+          <Select v-model.number="exclusionForm.entity_id" required>
+            <option :value="null">Выберите товар</option>
+            <option v-for="product in products" :key="product.id" :value="product.id">
+              {{ product.name }}
+            </option>
+          </Select>
+        </div>
+
+        <div class="space-y-2">
+          <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Причина (необязательно)</label>
+          <Input v-model="exclusionForm.reason" placeholder="Причина добавления в исключения" />
+        </div>
+
+        <Button class="w-full" type="submit" :disabled="savingExclusion || !exclusionForm.type || !exclusionForm.entity_id">
+          <Save :size="16" />
+          {{ savingExclusion ? "Сохранение..." : "Добавить" }}
+        </Button>
+      </form>
+    </BaseModal>
   </div>
 </template>
 <script setup>
 import { computed, onMounted, ref } from "vue";
+import { useRouter } from "vue-router";
 import { Pencil, Plus, RefreshCcw, Save, Trash2 } from "lucide-vue-next";
 import api from "../api/client.js";
 import BaseModal from "../components/BaseModal.vue";
@@ -291,10 +425,17 @@ import Tabs from "../components/ui/Tabs.vue";
 import { useNotifications } from "../composables/useNotifications.js";
 import { formatDateTime, formatNumber } from "../utils/format.js";
 
-const tabs = ["Уровни", "Настройки", "Логи", "Аудит"];
+const router = useRouter();
+const tabs = ["Уровни", "Настройки", "Исключения", "Логи", "Аудит"];
 const activeTab = ref(0);
 const levels = ref([]);
+const exclusions = ref([]);
+const categories = ref([]);
+const products = ref([]);
 const logs = ref([]);
+const logsPage = ref(1);
+const logsPageSize = 50;
+const logsTotalCount = ref(0);
 const duplicates = ref([]);
 const mismatches = ref([]);
 const loyaltyItems = ref([]);
@@ -303,6 +444,15 @@ const loyaltyLoading = ref(false);
 const loyaltySaving = ref(false);
 const showLevelModal = ref(false);
 const savingLevel = ref(false);
+const showExclusionModal = ref(false);
+const savingExclusion = ref(false);
+
+// Фильтры для исключений
+const exclusionFilters = ref({
+  type: "",
+  search: "",
+});
+
 const levelForm = ref({
   id: null,
   name: "",
@@ -313,18 +463,36 @@ const levelForm = ref({
   is_active: true,
   sort_order: 0,
 });
-const percentKeys = new Set([
-  "bonus_max_redeem_percent",
-  "loyalty_level_1_redeem_percent",
-  "loyalty_level_2_redeem_percent",
-  "loyalty_level_3_redeem_percent",
-  "loyalty_level_1_rate",
-  "loyalty_level_2_rate",
-  "loyalty_level_3_rate",
-]);
+const exclusionForm = ref({
+  type: "",
+  entity_id: null,
+  reason: "",
+});
+
+// Удалены настройки уровней из percentKeys - теперь управляются через вкладку "Уровни"
+const percentKeys = new Set([]);
+
 const { showErrorNotification, showSuccessNotification } = useNotifications();
 
 const levelModalTitle = computed(() => (levelForm.value.id ? "Редактировать уровень" : "Новый уровень"));
+
+// Фильтрация исключений
+const filteredExclusions = computed(() => {
+  let result = exclusions.value;
+
+  if (exclusionFilters.value.type) {
+    result = result.filter((ex) => ex.type === exclusionFilters.value.type);
+  }
+
+  if (exclusionFilters.value.search) {
+    const search = exclusionFilters.value.search.toLowerCase();
+    result = result.filter(
+      (ex) => (ex.entity_name && ex.entity_name.toLowerCase().includes(search)) || (ex.reason && ex.reason.toLowerCase().includes(search)),
+    );
+  }
+
+  return result;
+});
 
 const formatPercent = (value) => `${Math.round(Number(value) * 100)}%`;
 
@@ -365,6 +533,11 @@ const hydrateForm = (list, targetForm) => {
     acc[item.key] = toFormValue(item);
     return acc;
   }, {});
+};
+
+const resetExclusionFilters = () => {
+  exclusionFilters.value.type = "";
+  exclusionFilters.value.search = "";
 };
 
 const loadLevels = async () => {
@@ -411,14 +584,32 @@ const saveLoyaltySettings = async () => {
 };
 
 const loadLogs = async () => {
-  const response = await api.get("/api/admin/loyalty/logs", { params: { limit: 50 } });
+  const response = await api.get("/api/loyalty-settings/logs", {
+    params: {
+      limit: logsPageSize,
+      offset: (logsPage.value - 1) * logsPageSize,
+    },
+  });
   logs.value = response.data.logs || [];
+  logsTotalCount.value = response.data.total || logs.value.length;
+};
+
+const nextLogsPage = async () => {
+  logsPage.value++;
+  await loadLogs();
+};
+
+const previousLogsPage = async () => {
+  if (logsPage.value > 1) {
+    logsPage.value--;
+    await loadLogs();
+  }
 };
 
 const loadAudit = async () => {
   const [dupResponse, mismatchResponse] = await Promise.all([
-    api.get("/api/admin/loyalty/audit/duplicates"),
-    api.get("/api/admin/loyalty/audit/mismatches"),
+    api.get("/api/loyalty-settings/audit/duplicates"),
+    api.get("/api/loyalty-settings/audit/mismatches"),
   ]);
   duplicates.value = dupResponse.data.duplicates || [];
   mismatches.value = mismatchResponse.data.mismatches || [];
@@ -480,7 +671,83 @@ const deleteLevel = async (level) => {
   await loadLevels();
 };
 
+// Методы для работы с исключениями
+const loadExclusions = async () => {
+  const response = await api.get("/api/loyalty-settings/exclusions");
+  exclusions.value = response.data.exclusions || [];
+};
+
+const loadCategories = async () => {
+  const response = await api.get("/api/menu/admin/all-categories");
+  categories.value = response.data.categories || [];
+};
+
+const loadProducts = async () => {
+  const response = await api.get("/api/menu/admin/items");
+  products.value = response.data.items || [];
+};
+
+const openExclusionModal = () => {
+  exclusionForm.value = {
+    type: "",
+    entity_id: null,
+    reason: "",
+  };
+  showExclusionModal.value = true;
+};
+
+const closeExclusionModal = () => {
+  showExclusionModal.value = false;
+};
+
+const onExclusionTypeChange = async () => {
+  exclusionForm.value.entity_id = null;
+  if (exclusionForm.value.type === "category" && categories.value.length === 0) {
+    await loadCategories();
+  } else if (exclusionForm.value.type === "product" && products.value.length === 0) {
+    await loadProducts();
+  }
+};
+
+const saveExclusion = async () => {
+  savingExclusion.value = true;
+  try {
+    await api.post("/api/loyalty-settings/exclusions", exclusionForm.value);
+    await loadExclusions();
+    closeExclusionModal();
+    showSuccessNotification("Исключение добавлено");
+  } catch (error) {
+    console.error("Failed to save exclusion:", error);
+    const message = error.response?.data?.error || "Ошибка при добавлении исключения";
+    showErrorNotification(message);
+  } finally {
+    savingExclusion.value = false;
+  }
+};
+
+const deleteExclusion = async (exclusion) => {
+  const typeName = exclusion.type === "category" ? "категории" : "товара";
+  if (!confirm(`Удалить исключение для ${typeName} "${exclusion.entity_name}"?`)) return;
+
+  try {
+    await api.delete(`/api/loyalty-settings/exclusions/${exclusion.id}`);
+    await loadExclusions();
+    showSuccessNotification("Исключение удалено");
+  } catch (error) {
+    console.error("Failed to delete exclusion:", error);
+    showErrorNotification("Ошибка при удалении исключения");
+  }
+};
+
+const viewOrderDetails = (orderId) => {
+  router.push(`/orders/${orderId}`);
+};
+
+const viewClientDetails = (userId) => {
+  router.push(`/clients/${userId}`);
+};
+
 onMounted(async () => {
-  await Promise.all([loadLevels(), loadLoyaltySettings(), loadLogs(), loadAudit()]);
+  await Promise.all([loadLevels(), loadLoyaltySettings(), loadExclusions(), loadLogs(), loadAudit()]);
 });
 </script>

@@ -156,22 +156,47 @@
             </div>
           </CardContent>
         </Card>
-        <Card v-if="order.payment_method === 'cash' && order.change_from">
+        <Card>
           <CardHeader>
-            <CardTitle>Оплата наличными</CardTitle>
+            <CardTitle>Бонусы по заказу</CardTitle>
           </CardHeader>
-          <CardContent class="space-y-2 text-sm">
+          <CardContent class="space-y-3 text-sm">
             <div class="flex items-center justify-between">
-              <span class="text-muted-foreground">Сдача с</span>
-              <span>{{ formatCurrency(order.change_from) }}</span>
+              <span class="text-muted-foreground">Статус начисления</span>
+              <Badge :variant="order.bonus_earn_locked ? 'secondary' : 'outline'">
+                {{ order.bonus_earn_locked ? "Зафиксировано" : "Не зафиксировано" }}
+              </Badge>
             </div>
-            <div class="flex items-center justify-between">
-              <span class="text-muted-foreground">Сдача</span>
-              <span>{{ formatCurrency(getChangeAmount(order)) }}</span>
+            <div v-if="order.bonus_earn_amount" class="flex items-center justify-between">
+              <span class="text-muted-foreground">Сумма начисления</span>
+              <span class="font-medium text-emerald-600">+{{ formatNumber(order.bonus_earn_amount) }}</span>
+            </div>
+            <div v-if="order.bonus_used > 0" class="flex items-center justify-between">
+              <span class="text-muted-foreground">Использовано</span>
+              <span class="font-medium text-red-600">-{{ formatNumber(order.bonus_used) }}</span>
+            </div>
+            <div class="text-xs text-muted-foreground">
+              <div v-if="!order.bonus_earn_locked">Начисление будет зафиксировано при переводе в статус "Доставлен"</div>
+              <div v-else-if="order.bonus_earn_amount && order.bonus_earn_amount > 0">Бонусы начислены и зафиксированы</div>
             </div>
           </CardContent>
         </Card>
       </div>
+      <Card v-if="order.payment_method === 'cash' && order.change_from">
+        <CardHeader>
+          <CardTitle>Оплата наличными</CardTitle>
+        </CardHeader>
+        <CardContent class="space-y-2 text-sm">
+          <div class="flex items-center justify-between">
+            <span class="text-muted-foreground">Сдача с</span>
+            <span>{{ formatCurrency(order.change_from) }}</span>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="text-muted-foreground">Сдача</span>
+            <span>{{ formatCurrency(getChangeAmount(order)) }}</span>
+          </div>
+        </CardContent>
+      </Card>
       <Card>
         <CardHeader>
           <CardTitle>Управление заказом</CardTitle>
