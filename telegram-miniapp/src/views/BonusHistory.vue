@@ -7,14 +7,18 @@
         <div class="loyalty-card">
           <div class="loyalty-card-header">
             <div class="loyalty-balance">
-              <div class="loyalty-icon">Б</div>
+              <div class="loyalty-icon">
+                <Award :size="20" />
+              </div>
               <div class="loyalty-amount">{{ formatPrice(bonusBalance) }}</div>
             </div>
             <div class="loyalty-status">
               <div class="loyalty-rate">Ваш статус {{ currentRateLabel }}%</div>
               <div class="loyalty-tier">
                 {{ currentLevel.name }}
-                <button class="info-button" type="button" @click="showRulesModal = true">!</button>
+                <button class="info-button" type="button" @click="showRulesModal = true" aria-label="Правила программы">
+                  <Info :size="14" />
+                </button>
               </div>
             </div>
           </div>
@@ -48,7 +52,9 @@
 
           <!-- Карточка следующего уровня -->
           <div v-if="nextLevel" class="next-level-card">
-            <div class="next-level-icon dimmed">🏆</div>
+            <div class="next-level-icon dimmed">
+              <Trophy :size="18" />
+            </div>
             <div class="next-level-info">
               <div class="next-level-name">{{ nextLevel.name }}</div>
               <div class="next-level-benefits">
@@ -63,7 +69,9 @@
         <!-- Секция 4: Скоро сгорят -->
         <div v-if="expiringBonuses.length > 0" class="expiring-section">
           <div class="expiring-alert">
-            <div class="expiring-icon">⚠️</div>
+            <div class="expiring-icon">
+              <AlertTriangle :size="16" />
+            </div>
             <div class="expiring-text">
               <strong>{{ formatPrice(totalExpiring) }} бонусов</strong> сгорят в ближайшие {{ expiringDaysThreshold }} дней
             </div>
@@ -146,7 +154,7 @@
 </template>
 <script setup>
 import { computed, ref, onMounted } from "vue";
-import { X, Plus, Minus } from "lucide-vue-next";
+import { X, Plus, Minus, Award, Trophy, AlertTriangle, Info } from "lucide-vue-next";
 import { bonusesAPI } from "../api/endpoints";
 import { formatPrice } from "../utils/format";
 import { useLoyaltyStore } from "../stores/loyalty";

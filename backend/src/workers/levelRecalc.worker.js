@@ -36,6 +36,16 @@ async function recalcLevels() {
      SET us.total_spent_60_days = COALESCE(calc.total_spent_60_days, 0)`,
     [periodDays],
   );
+  await db.query(
+    `UPDATE user_loyalty_stats us
+     LEFT JOIN (
+       SELECT user_id, MAX(created_at) AS last_order_at
+       FROM orders
+       WHERE status = 'completed'
+       GROUP BY user_id
+     ) last_orders ON last_orders.user_id = us.user_id
+     SET us.last_order_at = last_orders.last_order_at`,
+  );
   const levels = await getLoyaltyLevelsFromDb();
   const sorted = Object.values(levels).sort((a, b) => b.threshold - a.threshold);
   if (!sorted.length) return;

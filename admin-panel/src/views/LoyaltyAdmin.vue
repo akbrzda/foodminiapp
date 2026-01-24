@@ -41,7 +41,7 @@
                       <Button variant="ghost" size="icon" @click="openLevelModal(level)">
                         <Pencil :size="16" />
                       </Button>
-                      <Button variant="ghost" size="icon" @click="deleteLevel(level)">
+                      <Button variant="ghost" size="icon" :disabled="level.user_count > 0" @click="deleteLevel(level)">
                         <Trash2 :size="16" class="text-red-600" />
                       </Button>
                     </div>
@@ -469,8 +469,8 @@ const exclusionForm = ref({
   reason: "",
 });
 
-// Удалены настройки уровней из percentKeys - теперь управляются через вкладку "Уровни"
-const percentKeys = new Set([]);
+// Процентные настройки, которые нужно отображать в целых значениях
+const percentKeys = new Set(["bonus_max_redeem_percent"]);
 
 const { showErrorNotification, showSuccessNotification } = useNotifications();
 
@@ -666,6 +666,10 @@ const saveLevel = async () => {
 };
 
 const deleteLevel = async (level) => {
+  if (level.user_count > 0) {
+    showErrorNotification(`Невозможно удалить уровень. На нем ${level.user_count} пользователей`);
+    return;
+  }
   if (!confirm(`Удалить уровень ${level.name}?`)) return;
   await api.delete(`/api/admin/loyalty/levels/${level.id}`);
   await loadLevels();

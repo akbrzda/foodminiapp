@@ -26,6 +26,13 @@ export const LOYALTY_SETTINGS_SCHEMA = {
     group: "Уровни",
     type: "number",
   },
+  bonus_max_redeem_percent: {
+    default: 0.2,
+    label: "Максимальный процент списания",
+    description: "Глобальный лимит списания бонусов от суммы заказа (в процентах)",
+    group: "Начисление",
+    type: "number",
+  },
   level_degradation_enabled: {
     default: true,
     label: "Деградация уровня",

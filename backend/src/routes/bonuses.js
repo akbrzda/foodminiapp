@@ -63,11 +63,12 @@ router.post("/calculate-usable", authenticateToken, async (req, res, next) => {
   try {
     if (!(await ensureBonusesEnabled(res))) return;
     const userId = req.user.id;
-    const { order_items } = req.body;
+    const { order_items, items } = req.body;
+    const payloadItems = Array.isArray(order_items) && order_items.length > 0 ? order_items : items;
 
-    if (!order_items || !Array.isArray(order_items) || order_items.length === 0) {
+    if (!payloadItems || !Array.isArray(payloadItems) || payloadItems.length === 0) {
       return res.status(400).json({
-        error: "order_items is required and must be a non-empty array",
+        error: "items/order_items обязательны и должны быть непустым массивом",
       });
     }
 
@@ -93,7 +94,7 @@ router.post("/calculate-usable", authenticateToken, async (req, res, next) => {
     let excludedAmount = 0;
     const excludedItems = [];
 
-    for (const item of order_items) {
+    for (const item of payloadItems) {
       const itemTotal = (item.price || 0) * (item.quantity || 1);
       orderSubtotal += itemTotal;
 

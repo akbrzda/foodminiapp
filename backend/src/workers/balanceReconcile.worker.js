@@ -26,8 +26,20 @@ async function reconcileBalances() {
      LEFT JOIN (
        SELECT
          user_id,
-         SUM(CASE WHEN type IN ('earn', 'register_bonus', 'birthday_bonus') THEN amount ELSE 0 END) AS total_earned,
-         SUM(CASE WHEN type = 'spend' THEN amount ELSE 0 END) AS total_spent,
+         SUM(
+           CASE
+             WHEN type IN ('earn', 'register_bonus', 'birthday_bonus', 'refund_spend') THEN amount
+             WHEN type = 'adjustment' AND amount > 0 THEN amount
+             ELSE 0
+           END
+         ) AS total_earned,
+         SUM(
+           CASE
+             WHEN type IN ('spend', 'refund_earn') THEN amount
+             WHEN type = 'adjustment' AND amount < 0 THEN ABS(amount)
+             ELSE 0
+           END
+         ) AS total_spent,
          SUM(CASE WHEN type = 'expire' THEN amount ELSE 0 END) AS total_expired
        FROM loyalty_transactions
        WHERE status = 'completed'
@@ -35,7 +47,7 @@ async function reconcileBalances() {
      ) t ON t.user_id = u.id`,
   );
   for (const row of rows) {
-    const calculated = Math.max(0, Number(row.total_earned) - Number(row.total_spent) - Number(row.total_expired));
+    const calculated = Number(row.total_earned) - Number(row.total_spent) - Number(row.total_expired);
     const userBalance = Number(row.user_balance) || 0;
     const statsBalance = Number(row.stats_balance) || 0;
     if (userBalance !== calculated || statsBalance !== calculated) {

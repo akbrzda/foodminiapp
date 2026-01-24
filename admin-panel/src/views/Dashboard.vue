@@ -6,7 +6,7 @@
         <CardDescription>Сводка по заказам и клиентам</CardDescription>
       </CardHeader>
       <CardContent>
-        <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-start">
           <div class="flex flex-wrap items-center gap-3">
             <div class="inline-flex items-center gap-1 rounded-md border border-border bg-muted/40 p-1">
               <Button size="sm" :variant="periodButtonVariant('day')" @click="setPeriod('day')">Д</Button>

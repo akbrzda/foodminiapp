@@ -36,9 +36,10 @@
 - **loyalty_settings** — глобальные настройки (сроки, бонусы за регистрацию/день рождения, параметры расчета начисления).
   - `include_delivery_in_earn` — включать ли доставку в сумму для расчёта начисляемых бонусов.
   - `level_calculation_period_days` — период (дней) для расчёта суммы заказов при определении уровня.
+  - `bonus_max_redeem_percent` — глобальный лимит списания бонусов от суммы заказа (в процентах).
   - **Важно:** Доставка НЕ учитывается в сумме заказов для определения уровня лояльности (жестко закодировано).
-- **loyalty_levels** — уровни лояльности с порогами, процентами начисления и списания.
-- **loyalty_transactions** — транзакции (типы: earn, spend, refund_earn, refund_spend, expire, adjustment, birthday_bonus).
+- **loyalty_levels** — уровни лояльности с порогами, процентами начисления и списания (soft delete через `deleted_at`).
+- **loyalty_transactions** — транзакции (типы в БД: earn, spend, refund_earn, refund_spend, expire, register_bonus, birthday_bonus). В логике корректировок используется тип `adjustment` (см. `adjustOrderBonuses`).
 - **loyalty_exclusions** — исключения для списания бонусов (категории и товары).
 - **user_loyalty_stats** — агрегированная статистика клиента.
 - **user_loyalty_levels** — история смены уровней.
@@ -56,7 +57,7 @@
 - `GET /api/loyalty-settings/exclusions` — список исключений для списания бонусов.
 - `POST /api/loyalty-settings/exclusions` — создание исключения (тип: category/product).
 - `DELETE /api/loyalty-settings/exclusions/:id` — удаление исключения.
-- `GET /api/loyalty-settings/logs?limit=50&offset=0` — логи лояльности с пагинацией.
+- `GET /api/loyalty-settings/logs?limit=50&event_type=&severity=` — логи лояльности (без offset, только limit).
 - `GET /api/loyalty-settings/audit/duplicates` — поиск дублей транзакций.
 - `GET /api/loyalty-settings/audit/mismatches` — расхождения балансов.
 - `GET /api/loyalty-settings/users/:userId/stats` — статистика пользователя.
@@ -70,7 +71,16 @@
 
 **Бонусные операции**
 
+- `GET /api/bonuses/balance` — текущий баланс бонусов.
+- `GET /api/bonuses/history` — история бонусных транзакций пользователя.
+- `GET /api/bonuses/expiring?days=14` — истекающие бонусы.
 - `POST /api/bonuses/calculate-usable` — расчет доступной суммы для списания с учетом исключений.
+
+**Админские данные по клиентам**
+
+- `GET /api/admin/clients/:id/bonuses` — бонусные транзакции клиента.
+- `GET /api/admin/loyalty/users/:id/stats` — статистика пользователя.
+- `GET /api/admin/loyalty/users/:id/levels` — история уровней пользователя.
 
 ### Бизнес-логика (backend/src/utils/bonuses.js)
 
@@ -80,7 +90,7 @@
 - `redeliveryEarnBonuses(order, connection, levels)` — повторное начисление при повторной доставке, использует сохранённое значение `bonus_earn_amount`.
 - `removeEarnedBonuses(order, connection, levels)` — откат начисленных бонусов при смене статуса (delivered → other). Сбрасывает флаг `bonus_earn_locked`.
 - `adjustOrderBonuses(order, newTotal, connection, levels, loyaltySettings)` — корректировка бонусов при изменении суммы заказа после доставки. Создаёт транзакцию типа `adjustment`.
-- `spendBonuses(userId, amount, orderId, connection)` — списание бонусов по FIFO.
+- `spendBonuses(order, connection)` — списание бонусов по FIFO при создании заказа.
 - `cancelOrderBonuses(order, connection, levels)` — отмена всех транзакций заказа (earn + spend).
 
 **Защита от race conditions:**

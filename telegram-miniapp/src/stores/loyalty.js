@@ -43,7 +43,12 @@ export const useLoyaltyStore = defineStore("loyalty", {
       // Сохраняем все настройки лояльности
       this.settings = data;
 
-      const fallbackRedeemPercent = Number(data.bonus_max_redeem_percent) || MAX_BONUS_REDEEM_PERCENT;
+      const rawMaxRedeem = Number(data.bonus_max_redeem_percent);
+      const fallbackRedeemPercent = Number.isFinite(rawMaxRedeem)
+        ? rawMaxRedeem > 1
+          ? rawMaxRedeem / 100
+          : rawMaxRedeem
+        : MAX_BONUS_REDEEM_PERCENT;
       if (Array.isArray(levelsFromApi) && levelsFromApi.length > 0) {
         const normalized = levelsFromApi
           .filter((level) => level && (level.is_active === undefined || level.is_active))

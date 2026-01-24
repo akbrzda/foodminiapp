@@ -315,7 +315,21 @@ router.get("/clients/:id/bonuses", requireRole("admin", "manager", "ceo"), async
 router.get("/loyalty/levels", requireRole("admin", "ceo"), async (req, res, next) => {
   try {
     const [levels] = await db.query(
-      "SELECT id, name, level_number, threshold_amount, earn_percent, max_spend_percent, is_active, sort_order FROM loyalty_levels ORDER BY sort_order ASC, level_number ASC",
+      `SELECT 
+         ll.id,
+         ll.name,
+         ll.level_number,
+         ll.threshold_amount,
+         ll.earn_percent,
+         ll.max_spend_percent,
+         ll.is_active,
+         ll.sort_order,
+         COUNT(DISTINCT u.id) as user_count
+       FROM loyalty_levels ll
+       LEFT JOIN users u ON u.current_loyalty_level_id = ll.id
+       WHERE ll.deleted_at IS NULL
+       GROUP BY ll.id
+       ORDER BY ll.sort_order ASC, ll.level_number ASC`,
     );
     res.json({ levels });
   } catch (error) {
@@ -356,7 +370,7 @@ router.put("/loyalty/levels/:id", requireRole("admin", "ceo"), async (req, res, 
     await db.query(
       `UPDATE loyalty_levels
        SET name = ?, level_number = ?, threshold_amount = ?, earn_percent = ?, max_spend_percent = ?, is_active = ?, sort_order = ?
-       WHERE id = ?`,
+       WHERE id = ? AND deleted_at IS NULL`,
       [
         name,
         Number(level_number),
@@ -381,7 +395,11 @@ router.delete("/loyalty/levels/:id", requireRole("admin", "ceo"), async (req, re
     if (inUse.length > 0) {
       return res.status(400).json({ error: "Нельзя удалить уровень с активными пользователями" });
     }
-    await db.query("DELETE FROM loyalty_levels WHERE id = ?", [levelId]);
+    const [history] = await db.query("SELECT id FROM user_loyalty_levels WHERE level_id = ? LIMIT 1", [levelId]);
+    if (history.length > 0) {
+      return res.status(400).json({ error: "Нельзя удалить уровень с историей пользователей" });
+    }
+    await db.query("UPDATE loyalty_levels SET deleted_at = NOW(), is_active = FALSE WHERE id = ?", [levelId]);
     await logLoyaltyEvent({ eventType: "cron_execution", severity: "warning", message: "Удален уровень лояльности" });
     res.json({ success: true });
   } catch (error) {
@@ -446,8 +464,20 @@ router.get("/loyalty/audit/mismatches", requireRole("admin", "ceo"), async (req,
        LEFT JOIN (
          SELECT
            user_id,
-           SUM(CASE WHEN type IN ('earn', 'register_bonus', 'birthday_bonus') THEN amount ELSE 0 END) AS total_earned,
-           SUM(CASE WHEN type = 'spend' THEN amount ELSE 0 END) AS total_spent,
+           SUM(
+             CASE
+               WHEN type IN ('earn', 'register_bonus', 'birthday_bonus', 'refund_spend') THEN amount
+               WHEN type = 'adjustment' AND amount > 0 THEN amount
+               ELSE 0
+             END
+           ) AS total_earned,
+           SUM(
+             CASE
+               WHEN type IN ('spend', 'refund_earn') THEN amount
+               WHEN type = 'adjustment' AND amount < 0 THEN ABS(amount)
+               ELSE 0
+             END
+           ) AS total_spent,
            SUM(CASE WHEN type = 'expire' THEN amount ELSE 0 END) AS total_expired
          FROM loyalty_transactions
          WHERE status = 'completed'

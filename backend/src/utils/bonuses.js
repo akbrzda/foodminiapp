@@ -7,7 +7,7 @@ const DEFAULT_LOYALTY_LEVELS = {
   2: { level_number: 2, name: "Серебро", earnRate: 0.05, redeemPercent: 0.3, threshold: 10000 },
   3: { level_number: 3, name: "Золото", earnRate: 0.07, redeemPercent: 0.3, threshold: 20000 },
 };
-const DEFAULT_MAX_USE_PERCENT = 0.3;
+const DEFAULT_MAX_USE_PERCENT = 0.2;
 const getBonusCacheKey = (userId) => `bonuses:user_${userId}`;
 const getLoyaltyTransaction = async (executor, orderId, type) => {
   const [rows] = await executor.query(
@@ -157,7 +157,7 @@ export async function invalidateBonusCache(userId) {
 export async function getLoyaltyLevelsFromDb(connection = null) {
   const executor = connection || db;
   const [rows] = await executor.query(
-    "SELECT id, name, level_number, threshold_amount, earn_percent, max_spend_percent FROM loyalty_levels WHERE is_active = TRUE ORDER BY level_number ASC",
+    "SELECT id, name, level_number, threshold_amount, earn_percent, max_spend_percent FROM loyalty_levels WHERE is_active = TRUE AND deleted_at IS NULL ORDER BY level_number ASC",
   );
   if (!rows.length) {
     return DEFAULT_LOYALTY_LEVELS;
@@ -176,7 +176,9 @@ export async function getLoyaltyLevelsFromDb(connection = null) {
   return levels;
 }
 export function getMaxUsePercentFromSettings(settings = {}) {
-  return normalizeNumber(settings.bonus_max_redeem_percent, DEFAULT_MAX_USE_PERCENT);
+  const percent = normalizeNumber(settings.bonus_max_redeem_percent, DEFAULT_MAX_USE_PERCENT);
+  if (!Number.isFinite(percent)) return DEFAULT_MAX_USE_PERCENT;
+  return percent > 1 ? percent / 100 : percent;
 }
 export function getRedeemPercentForLevel(loyaltyLevel = 1, levels = DEFAULT_LOYALTY_LEVELS, fallback = DEFAULT_MAX_USE_PERCENT) {
   const level = levels[loyaltyLevel];
@@ -432,7 +434,7 @@ export async function removeEarnedBonuses(order, connection = null, levels = DEF
 
   const currentBalance = parseFloat(users[0].bonus_balance) || 0;
   const earnedAmount = parseFloat(earnTx.amount) || 0;
-  const newBalance = Math.max(0, currentBalance - earnedAmount);
+  const newBalance = currentBalance - earnedAmount;
   const newTotalSpent = Math.max(0, (parseFloat(users[0].total_spent) || 0) - (parseFloat(order.total) || 0));
 
   await executor.query("UPDATE users SET bonus_balance = ?, total_spent = ? WHERE id = ?", [newBalance, newTotalSpent, order.user_id]);
@@ -457,6 +459,16 @@ export async function removeEarnedBonuses(order, connection = null, levels = DEF
     balance: newBalance,
     earned: -Math.round(earnedAmount),
   });
+  if (newBalance < 0) {
+    await logLoyaltyEvent({
+      eventType: "negative_balance",
+      severity: "warning",
+      userId: order.user_id,
+      orderId: order.id,
+      message: "Отрицательный баланс после отката начисления",
+      details: { balance: newBalance, earned: earnedAmount },
+    });
+  }
 
   // Сбрасываем флаг блокировки для повторного начисления
   await executor.query("UPDATE orders SET bonus_earn_locked = FALSE WHERE id = ?", [order.id]);
@@ -573,7 +585,7 @@ export async function cancelOrderBonuses(order, connection = null, levels = DEFA
     await restoreEarnAmounts(executor, order.user_id, spentAmount, connection);
   }
   const currentBalance = parseFloat(users[0].bonus_balance) || 0;
-  const newBalance = Math.max(0, currentBalance + spentAmount - earnedAmount);
+  const newBalance = currentBalance + spentAmount - earnedAmount;
   const totalSpent = parseFloat(users[0].total_spent) || 0;
   const newTotalSpent = earnedAmount > 0 ? Math.max(0, totalSpent - (parseFloat(order.total) || 0)) : totalSpent;
   await executor.query("UPDATE users SET bonus_balance = ?, total_spent = ? WHERE id = ?", [newBalance, newTotalSpent, order.user_id]);
@@ -628,6 +640,16 @@ export async function cancelOrderBonuses(order, connection = null, levels = DEFA
     earned: -Math.round(earnedAmount),
     spent: -Math.round(spentAmount),
   });
+  if (newBalance < 0) {
+    await logLoyaltyEvent({
+      eventType: "negative_balance",
+      severity: "warning",
+      userId: order.user_id,
+      orderId: order.id,
+      message: "Отрицательный баланс после отмены заказа",
+      details: { balance: newBalance, spent: spentAmount, earned: earnedAmount },
+    });
+  }
   await invalidateBonusCache(order.user_id);
   await checkLevelUp(order.user_id, levels, executor);
   return { spent: spentAmount, earned: earnedAmount, balance_after: newBalance };
@@ -671,7 +693,7 @@ export async function adjustOrderBonuses(order, newTotal, connection = null, lev
   }
 
   const currentBalance = parseFloat(users[0].bonus_balance) || 0;
-  const newBalance = Math.max(0, currentBalance + delta);
+  const newBalance = currentBalance + delta;
 
   await executor.query("UPDATE users SET bonus_balance = ? WHERE id = ?", [newBalance, order.user_id]);
 
@@ -701,6 +723,17 @@ export async function adjustOrderBonuses(order, newTotal, connection = null, lev
     earned: delta > 0 ? delta : 0,
     spent: delta < 0 ? Math.abs(delta) : 0,
   });
+  if (newBalance < 0) {
+    await logLoyaltyEvent({
+      eventType: "negative_balance",
+      severity: "warning",
+      userId: order.user_id,
+      orderId: order.id,
+      transactionId: txId,
+      message: "Отрицательный баланс после корректировки",
+      details: { balance: newBalance, delta },
+    });
+  }
 
   await logLoyaltyEvent({
     eventType: "bonus_adjustment",

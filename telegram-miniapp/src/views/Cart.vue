@@ -35,7 +35,9 @@
           </label>
           <div class="bonus-title">
             Списать {{ formatPrice(displayBonusToUse) }} бонусов
-            <button class="bonus-info-icon" type="button" @click="toggleBonusInfo">!</button>
+            <button class="bonus-info-icon" type="button" @click="toggleBonusInfo" aria-label="Информация о списании">
+              <Info :size="14" />
+            </button>
           </div>
         </div>
         <div v-if="showBonusInfo" class="bonus-tooltip">
@@ -44,7 +46,9 @@
 
         <!-- Предупреждения об исключениях -->
         <div v-if="excludedItems.length > 0 && exclusionData" class="bonus-exclusion-warning">
-          <div class="exclusion-icon">⚠️</div>
+          <div class="exclusion-icon">
+            <AlertTriangle :size="16" />
+          </div>
           <div class="exclusion-text">
             <template v-if="exclusionData.eligible_amount === 0">
               <strong>Бонусы недоступны для списания</strong>
@@ -110,7 +114,7 @@
 </template>
 <script setup>
 import { computed, onMounted, ref, watch } from "vue";
-import { X } from "lucide-vue-next";
+import { X, Info, AlertTriangle } from "lucide-vue-next";
 import { useRouter } from "vue-router";
 import { useCartStore } from "../stores/cart";
 import { useLoyaltyStore } from "../stores/loyalty";

@@ -14,6 +14,7 @@ router.get("/levels", authenticateToken, requireRole("admin", "manager", "ceo"),
         COUNT(DISTINCT u.id) as user_count
       FROM loyalty_levels ll
       LEFT JOIN users u ON u.current_loyalty_level_id = ll.id
+      WHERE ll.deleted_at IS NULL
       GROUP BY ll.id
       ORDER BY ll.sort_order ASC, ll.threshold_amount ASC
     `);
@@ -47,18 +48,18 @@ router.post("/levels", authenticateToken, requireRole("admin", "ceo"), async (re
     }
 
     // Проверка уникальности порога
-    const [existing] = await db.query("SELECT id FROM loyalty_levels WHERE threshold_amount = ?", [threshold_amount]);
+    const [existing] = await db.query("SELECT id FROM loyalty_levels WHERE threshold_amount = ? AND deleted_at IS NULL", [threshold_amount]);
 
     if (existing.length > 0) {
       return res.status(409).json({ error: "Уровень с таким порогом уже существует" });
     }
 
     // Определяем level_number - следующий по порядку
-    const [maxLevel] = await db.query("SELECT MAX(level_number) as max_num FROM loyalty_levels");
+    const [maxLevel] = await db.query("SELECT MAX(level_number) as max_num FROM loyalty_levels WHERE deleted_at IS NULL");
     const levelNumber = (maxLevel[0]?.max_num || 0) + 1;
 
     // Определяем sort_order по порогу
-    const [allLevels] = await db.query("SELECT threshold_amount FROM loyalty_levels ORDER BY threshold_amount");
+    const [allLevels] = await db.query("SELECT threshold_amount FROM loyalty_levels WHERE deleted_at IS NULL ORDER BY threshold_amount");
     let sortOrder = 1;
     for (const level of allLevels) {
       if (threshold_amount > level.threshold_amount) {
@@ -103,6 +104,9 @@ router.put("/levels/:id", authenticateToken, requireRole("admin", "ceo"), async 
     if (existing.length === 0) {
       return res.status(404).json({ error: "Уровень не найден" });
     }
+    if (existing[0].deleted_at) {
+      return res.status(404).json({ error: "Уровень удален" });
+    }
 
     // Валидация
     if (name !== undefined && name.trim() === "") {
@@ -111,7 +115,10 @@ router.put("/levels/:id", authenticateToken, requireRole("admin", "ceo"), async 
 
     // Проверка уникальности порога (если изменяется)
     if (threshold_amount !== undefined && threshold_amount !== existing[0].threshold_amount) {
-      const [duplicate] = await db.query("SELECT id FROM loyalty_levels WHERE threshold_amount = ? AND id != ?", [threshold_amount, id]);
+      const [duplicate] = await db.query("SELECT id FROM loyalty_levels WHERE threshold_amount = ? AND id != ? AND deleted_at IS NULL", [
+        threshold_amount,
+        id,
+      ]);
       if (duplicate.length > 0) {
         return res.status(409).json({ error: "Уровень с таким порогом уже существует" });
       }
@@ -177,6 +184,9 @@ router.delete("/levels/:id", authenticateToken, requireRole("admin", "ceo"), asy
     if (existing.length === 0) {
       return res.status(404).json({ error: "Уровень не найден" });
     }
+    if (existing[0].deleted_at) {
+      return res.status(404).json({ error: "Уровень удален" });
+    }
 
     // Проверка наличия пользователей на уровне
     const [users] = await db.query("SELECT COUNT(*) as count FROM users WHERE current_loyalty_level_id = ?", [id]);
@@ -197,7 +207,7 @@ router.delete("/levels/:id", authenticateToken, requireRole("admin", "ceo"), asy
     }
 
     // Удаление
-    await db.query("DELETE FROM loyalty_levels WHERE id = ?", [id]);
+    await db.query("UPDATE loyalty_levels SET deleted_at = NOW(), is_active = FALSE WHERE id = ?", [id]);
 
     await logger.admin.action(req.user.id, "delete_loyalty_level", "loyalty_levels", id, JSON.stringify(existing[0]), req);
 

@@ -9,6 +9,7 @@ import {
   spendBonuses,
   cancelOrderBonuses,
   removeEarnedBonuses,
+  redeliveryEarnBonuses,
   getLoyaltyLevelsFromDb,
   getMaxUsePercentFromSettings,
   getRedeemPercentForLevel,
@@ -46,6 +47,36 @@ async function generateOrderNumber() {
   }
   throw new Error("Failed to generate unique order number");
 }
+const sumSubtotal = (items) => items.reduce((sum, item) => sum + (parseFloat(item.subtotal) || 0), 0);
+async function getBonusExclusions(validatedItems) {
+  const [exclusions] = await db.query("SELECT type, entity_id FROM loyalty_exclusions");
+  if (!exclusions.length) {
+    const subtotal = sumSubtotal(validatedItems);
+    return { excludedAmount: 0, eligibleSubtotal: subtotal, excludedItems: [] };
+  }
+  const excludedCategories = new Set(exclusions.filter((entry) => entry.type === "category").map((entry) => entry.entity_id));
+  const excludedProducts = new Set(exclusions.filter((entry) => entry.type === "product").map((entry) => entry.entity_id));
+  let excludedAmount = 0;
+  const excludedItems = [];
+  for (const item of validatedItems) {
+    const itemTotal = parseFloat(item.subtotal) || 0;
+    if (excludedProducts.has(item.item_id)) {
+      excludedAmount += itemTotal;
+      excludedItems.push({ item_id: item.item_id, reason: "product_excluded" });
+      continue;
+    }
+    if (excludedCategories.has(item.category_id)) {
+      excludedAmount += itemTotal;
+      excludedItems.push({ item_id: item.item_id, reason: "category_excluded" });
+    }
+  }
+  const subtotal = sumSubtotal(validatedItems);
+  return {
+    excludedAmount,
+    eligibleSubtotal: Math.max(0, subtotal - excludedAmount),
+    excludedItems,
+  };
+}
 async function calculateOrderCost(items, { cityId, fulfillmentType, bonusToUse = 0 } = {}) {
   let subtotal = 0;
   const validatedItems = [];
@@ -54,7 +85,7 @@ async function calculateOrderCost(items, { cityId, fulfillmentType, bonusToUse =
     if (!item_id || !quantity || quantity <= 0) {
       throw new Error("Invalid item data");
     }
-    const [menuItems] = await db.query("SELECT id, name, price, is_active FROM menu_items WHERE id = ?", [item_id]);
+    const [menuItems] = await db.query("SELECT id, name, price, is_active, category_id FROM menu_items WHERE id = ?", [item_id]);
     if (menuItems.length === 0 || !menuItems[0].is_active) {
       throw new Error(`Item ${item_id} not found or inactive`);
     }
@@ -163,6 +194,7 @@ async function calculateOrderCost(items, { cityId, fulfillmentType, bonusToUse =
     subtotal += itemSubtotal;
     validatedItems.push({
       item_id: menuItem.id,
+      category_id: menuItem.category_id,
       item_name: menuItem.name,
       variant_id: variant_id || null,
       variant_name: variantName,
@@ -203,11 +235,17 @@ router.post("/calculate", authenticateToken, async (req, res, next) => {
     if (!ensureOrderAccess(settings, orderType, res)) return;
     const effectiveBonusToUse = settings.bonuses_enabled ? bonus_to_use : 0;
     const fulfillmentType = orderType;
-    const { subtotal, bonusUsed, total, validatedItems } = await calculateOrderCost(items, {
+    let { subtotal, bonusUsed, total, validatedItems } = await calculateOrderCost(items, {
       cityId: city_id,
       fulfillmentType,
       bonusToUse: effectiveBonusToUse,
     });
+    const { excludedAmount, eligibleSubtotal, excludedItems } = await getBonusExclusions(validatedItems);
+    const adjustedBonusUsed = Math.min(bonusUsed, eligibleSubtotal);
+    if (adjustedBonusUsed !== bonusUsed) {
+      bonusUsed = adjustedBonusUsed;
+      total = subtotal - bonusUsed;
+    }
     if (orderType === "delivery" && delivery_polygon_id) {
       const [polygons] = await db.query("SELECT min_order_amount FROM delivery_polygons WHERE id = ?", [delivery_polygon_id]);
       const minOrderAmount = parseFloat(polygons[0]?.min_order_amount) || 0;
@@ -218,7 +256,10 @@ router.post("/calculate", authenticateToken, async (req, res, next) => {
       }
     }
     if (settings.bonuses_enabled && effectiveBonusToUse > 0) {
-      const bonusValidation = await validateBonusUsage(req.user.id, effectiveBonusToUse, subtotal, maxUsePercent);
+      if (eligibleSubtotal <= 0) {
+        return res.status(400).json({ error: "Бонусы недоступны для списания на данные позиции" });
+      }
+      const bonusValidation = await validateBonusUsage(req.user.id, effectiveBonusToUse, eligibleSubtotal, maxUsePercent);
       if (!bonusValidation.valid) {
         return res.status(400).json({ error: bonusValidation.error });
       }
@@ -244,6 +285,9 @@ router.post("/calculate", authenticateToken, async (req, res, next) => {
       total: finalTotal,
       bonuses_to_earn: earnedBonuses,
       items: validatedItems,
+      excluded_amount: excludedAmount,
+      eligible_amount: eligibleSubtotal,
+      excluded_items: excludedItems,
     });
   } catch (error) {
     next(error);
@@ -350,11 +394,17 @@ router.post("/", authenticateToken, async (req, res, next) => {
     }
     const fulfillmentType = order_type === "pickup" ? "pickup" : "delivery";
     const effectiveBonusToUse = settings.bonuses_enabled ? bonus_to_use : 0;
-    const { subtotal, bonusUsed, total, validatedItems } = await calculateOrderCost(items, {
+    let { subtotal, bonusUsed, total, validatedItems } = await calculateOrderCost(items, {
       cityId: city_id,
       fulfillmentType,
       bonusToUse: effectiveBonusToUse,
     });
+    const { eligibleSubtotal } = await getBonusExclusions(validatedItems);
+    const adjustedBonusUsed = Math.min(bonusUsed, eligibleSubtotal);
+    if (adjustedBonusUsed !== bonusUsed) {
+      bonusUsed = adjustedBonusUsed;
+      total = subtotal - bonusUsed;
+    }
     if (order_type === "delivery" && deliveryPolygon) {
       const minOrderAmount = parseFloat(deliveryPolygon.min_order_amount) || 0;
       if (minOrderAmount > 0 && subtotal < minOrderAmount) {
@@ -365,7 +415,11 @@ router.post("/", authenticateToken, async (req, res, next) => {
       }
     }
     if (settings.bonuses_enabled && effectiveBonusToUse > 0) {
-      const bonusValidation = await validateBonusUsage(req.user.id, effectiveBonusToUse, subtotal, maxUsePercent);
+      if (eligibleSubtotal <= 0) {
+        await connection.rollback();
+        return res.status(400).json({ error: "Бонусы недоступны для списания на данные позиции" });
+      }
+      const bonusValidation = await validateBonusUsage(req.user.id, effectiveBonusToUse, eligibleSubtotal, maxUsePercent);
       if (!bonusValidation.valid) {
         await connection.rollback();
         return res.status(400).json({ error: bonusValidation.error });
@@ -374,8 +428,16 @@ router.post("/", authenticateToken, async (req, res, next) => {
     const finalTotal = total + deliveryCost;
     let earnedBonuses = 0;
     if (settings.bonuses_enabled) {
-      const amountForBonus = Math.max(0, subtotal - bonusUsed);
-      earnedBonuses = calculateEarnedBonuses(amountForBonus, loyaltyLevel, loyaltyLevels);
+      const includeDelivery = Boolean(loyaltySettings.include_delivery_in_earn);
+      const calculateAfterBonus = loyaltySettings.calculate_from_amount_after_bonus !== false;
+      let baseAmount = finalTotal;
+      if (calculateAfterBonus) {
+        baseAmount -= bonusUsed;
+      }
+      if (!includeDelivery) {
+        baseAmount -= deliveryCost;
+      }
+      earnedBonuses = calculateEarnedBonuses(Math.max(0, baseAmount), loyaltyLevel, loyaltyLevels);
     }
     const orderNumber = await generateOrderNumber();
     const timezoneOffset = Number.isFinite(Number(timezone_offset)) ? Number(timezone_offset) : 0;
@@ -746,7 +808,7 @@ router.put(
         });
       }
       const [oldOrderData] = await connection.query(
-        "SELECT status, user_id, total, subtotal, delivery_cost, bonus_used, order_number, order_type FROM orders WHERE id = ?",
+        "SELECT status, user_id, total, subtotal, delivery_cost, bonus_used, order_number, order_type, bonus_earn_amount FROM orders WHERE id = ?",
         [orderId],
       );
       const oldStatus = oldOrderData[0]?.status;
@@ -755,6 +817,7 @@ router.put(
       const subtotal = parseFloat(oldOrderData[0]?.subtotal) || 0;
       const deliveryCost = parseFloat(oldOrderData[0]?.delivery_cost) || 0;
       const bonusUsed = parseFloat(oldOrderData[0]?.bonus_used) || 0;
+      const bonusEarnAmount = parseFloat(oldOrderData[0]?.bonus_earn_amount) || 0;
       const orderNumber = oldOrderData[0]?.order_number;
       const statusOrder = {
         pending: 0,
@@ -773,13 +836,8 @@ router.put(
           error: "Invalid status transition",
         });
       }
-      if (status !== "cancelled" && oldStatus !== status) {
-        if (oldStatus === "completed") {
-          await connection.rollback();
-          return res.status(400).json({
-            error: "Cannot change status of a completed order",
-          });
-        }
+      if (status !== "cancelled" && oldStatus !== status && oldStatus === "completed") {
+        // Откат статуса после завершения разрешён согласно требованиям бонусной системы
       }
       const settings = await getSystemSettings();
       const loyaltySettings = await getLoyaltySettings();
@@ -792,6 +850,7 @@ router.put(
         subtotal,
         delivery_cost: deliveryCost,
         bonus_used: bonusUsed,
+        bonus_earn_amount: bonusEarnAmount,
       };
       await connection.query("UPDATE orders SET status = ?, completed_at = ? WHERE id = ?", [
         status,
@@ -812,7 +871,12 @@ router.put(
             "UPDATE loyalty_transactions SET status = 'completed' WHERE order_id = ? AND type = 'spend' AND status = 'pending'",
             [orderId],
           );
-          await earnBonuses(orderData, connection, loyaltyLevels, loyaltySettings);
+          if (orderData.bonus_earn_amount && orderData.bonus_earn_amount > 0) {
+            await redeliveryEarnBonuses(orderData, connection, loyaltyLevels);
+          } else {
+            await earnBonuses(orderData, connection, loyaltyLevels, loyaltySettings);
+          }
+          await connection.query("UPDATE user_loyalty_stats SET last_order_at = NOW() WHERE user_id = ?", [userId]);
         } catch (bonusError) {
           console.error("Failed to earn bonuses:", bonusError);
         }

@@ -10,7 +10,7 @@ router.get("/", async (req, res, next) => {
   try {
     const settings = await getLoyaltySettings();
     const [levels] = await db.query(
-      "SELECT id, name, level_number, threshold_amount, earn_percent, max_spend_percent, is_active, sort_order FROM loyalty_levels WHERE is_active = TRUE ORDER BY sort_order ASC, level_number ASC",
+      "SELECT id, name, level_number, threshold_amount, earn_percent, max_spend_percent, is_active, sort_order FROM loyalty_levels WHERE is_active = TRUE AND deleted_at IS NULL ORDER BY sort_order ASC, level_number ASC",
     );
     res.json({ settings, levels });
   } catch (error) {
@@ -22,7 +22,7 @@ router.get("/admin", authenticateToken, requireRole("admin", "ceo"), async (req,
   try {
     const settings = await getLoyaltySettings();
     const [levels] = await db.query(
-      "SELECT id, name, level_number, threshold_amount, earn_percent, max_spend_percent, is_active, sort_order FROM loyalty_levels ORDER BY sort_order ASC, level_number ASC",
+      "SELECT id, name, level_number, threshold_amount, earn_percent, max_spend_percent, is_active, sort_order FROM loyalty_levels WHERE deleted_at IS NULL ORDER BY sort_order ASC, level_number ASC",
     );
     res.json({
       settings,
@@ -47,7 +47,7 @@ router.put("/admin", authenticateToken, requireRole("admin", "ceo"), async (req,
 
     const settings = await getLoyaltySettings();
     const [levels] = await db.query(
-      "SELECT id, name, level_number, threshold_amount, earn_percent, max_spend_percent, is_active, sort_order FROM loyalty_levels ORDER BY sort_order ASC, level_number ASC",
+      "SELECT id, name, level_number, threshold_amount, earn_percent, max_spend_percent, is_active, sort_order FROM loyalty_levels WHERE deleted_at IS NULL ORDER BY sort_order ASC, level_number ASC",
     );
     res.json({ settings, items: getLoyaltySettingsList(settings), levels });
   } catch (error) {
@@ -198,7 +198,7 @@ router.delete("/exclusions/:id", authenticateToken, requireRole("admin", "ceo"),
 // Получение логов лояльности
 router.get("/logs", authenticateToken, requireRole("admin", "ceo"), async (req, res, next) => {
   try {
-    const { limit = 50, event_type, severity } = req.query;
+    const { limit = 50, offset = 0, event_type, severity } = req.query;
 
     let query = "SELECT * FROM loyalty_logs WHERE 1=1";
     const params = [];
@@ -213,12 +213,14 @@ router.get("/logs", authenticateToken, requireRole("admin", "ceo"), async (req, 
       params.push(severity);
     }
 
-    query += " ORDER BY created_at DESC LIMIT ?";
-    params.push(parseInt(limit));
+    const countQuery = query.replace("SELECT *", "SELECT COUNT(*) as total");
+    query += " ORDER BY created_at DESC LIMIT ? OFFSET ?";
+    params.push(parseInt(limit), parseInt(offset));
 
     const [logs] = await db.query(query, params);
+    const [counts] = await db.query(countQuery, params.slice(0, params.length - 2));
 
-    res.json({ logs });
+    res.json({ logs, total: counts[0]?.total || logs.length });
   } catch (error) {
     next(error);
   }
@@ -258,8 +260,9 @@ router.get("/audit/mismatches", authenticateToken, requireRole("admin", "ceo"), 
         COALESCE(
           (SELECT SUM(
             CASE 
-              WHEN type IN ('earn', 'register_bonus', 'birthday_bonus') THEN amount
-              WHEN type IN ('spend', 'expire', 'adjustment') THEN -amount
+              WHEN type IN ('earn', 'register_bonus', 'birthday_bonus', 'refund_spend') THEN amount
+              WHEN type IN ('spend', 'expire', 'refund_earn') THEN -amount
+              WHEN type = 'adjustment' THEN amount
               ELSE 0
             END
           )
@@ -271,8 +274,9 @@ router.get("/audit/mismatches", authenticateToken, requireRole("admin", "ceo"), 
       WHERE u.bonus_balance != COALESCE(
         (SELECT SUM(
           CASE 
-            WHEN type IN ('earn', 'register_bonus', 'birthday_bonus') THEN amount
-            WHEN type IN ('spend', 'expire', 'adjustment') THEN -amount
+            WHEN type IN ('earn', 'register_bonus', 'birthday_bonus', 'refund_spend') THEN amount
+            WHEN type IN ('spend', 'expire', 'refund_earn') THEN -amount
+            WHEN type = 'adjustment' THEN amount
             ELSE 0
           END
         )

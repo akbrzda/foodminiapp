@@ -30,7 +30,7 @@ async function processExpiredBonuses() {
           continue;
         }
         const currentBalance = parseFloat(users[0].bonus_balance) || 0;
-        const newBalance = Math.max(0, currentBalance - expiredTotal);
+        const newBalance = currentBalance - expiredTotal;
         const [expiredEarns] = await connection.query(
           "SELECT id, amount, expires_at FROM loyalty_transactions WHERE user_id = ? AND type = 'earn' AND status = 'completed' AND expires_at <= NOW() AND amount > 0",
           [userId],

@@ -57,6 +57,7 @@ ON DUPLICATE KEY UPDATE
     include_delivery_in_earn BOOLEAN NOT NULL DEFAULT FALSE,
     calculate_from_amount_after_bonus BOOLEAN NOT NULL DEFAULT TRUE,
     level_calculation_period_days INT NOT NULL DEFAULT 60,
+    bonus_max_redeem_percent DECIMAL(6, 4) NOT NULL DEFAULT 0.2,
     level_degradation_enabled BOOLEAN NOT NULL DEFAULT TRUE,
     level_degradation_period_days INT NOT NULL DEFAULT 180,
     registration_bonus_enabled BOOLEAN NOT NULL DEFAULT TRUE,
@@ -76,6 +77,7 @@ ON DUPLICATE KEY UPDATE
     include_delivery_in_earn,
     calculate_from_amount_after_bonus,
     level_calculation_period_days,
+    bonus_max_redeem_percent,
     level_degradation_enabled,
     level_degradation_period_days,
     registration_bonus_enabled,
@@ -91,6 +93,7 @@ ON DUPLICATE KEY UPDATE
     FALSE,
     TRUE,
     60,
+    0.2,
     TRUE,
     180,
     TRUE,
@@ -105,6 +108,7 @@ ON DUPLICATE KEY UPDATE
     include_delivery_in_earn = VALUES(include_delivery_in_earn),
     calculate_from_amount_after_bonus = VALUES(calculate_from_amount_after_bonus),
     level_calculation_period_days = VALUES(level_calculation_period_days),
+    bonus_max_redeem_percent = VALUES(bonus_max_redeem_percent),
     level_degradation_enabled = VALUES(level_degradation_enabled),
     level_degradation_period_days = VALUES(level_degradation_period_days),
     registration_bonus_enabled = VALUES(registration_bonus_enabled),
@@ -128,8 +132,11 @@ CREATE TABLE IF NOT EXISTS loyalty_levels (
     sort_order INT DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted_at DATETIME NULL,
     UNIQUE KEY uniq_loyalty_level_number (level_number),
-    INDEX idx_loyalty_threshold (threshold_amount)
+    UNIQUE KEY uniq_loyalty_threshold_deleted (threshold_amount, deleted_at),
+    INDEX idx_loyalty_threshold (threshold_amount),
+    INDEX idx_loyalty_levels_deleted_at (deleted_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
 
 INSERT INTO loyalty_levels (name, level_number, threshold_amount, earn_percent, max_spend_percent, is_active, sort_order)
@@ -183,7 +190,17 @@ CREATE TABLE IF NOT EXISTS user_loyalty_stats (
 -- Таблица логов лояльности
 CREATE TABLE IF NOT EXISTS loyalty_logs (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    event_type ENUM('balance_mismatch', 'duplicate_transaction', 'cron_execution', 'error', 'race_condition') NOT NULL,
+    event_type ENUM(
+      'balance_mismatch',
+      'duplicate_transaction',
+      'cron_execution',
+      'error',
+      'race_condition',
+      'bonus_earn',
+      'bonus_refund',
+      'bonus_adjustment',
+      'negative_balance'
+    ) NOT NULL,
     severity ENUM('info', 'warning', 'error', 'critical') NOT NULL DEFAULT 'info',
     user_id INT NULL,
     order_id INT NULL,
@@ -500,7 +517,7 @@ CREATE TABLE IF NOT EXISTS loyalty_transactions (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
   user_id INT NOT NULL,
   order_id INT NULL,
-  type ENUM('earn', 'spend', 'refund_earn', 'refund_spend', 'expire', 'register_bonus', 'birthday_bonus') NOT NULL,
+  type ENUM('earn', 'spend', 'refund_earn', 'refund_spend', 'expire', 'register_bonus', 'birthday_bonus', 'adjustment') NOT NULL,
   amount INT NOT NULL,
   earned_at DATETIME NULL,
   expires_at DATETIME NULL,

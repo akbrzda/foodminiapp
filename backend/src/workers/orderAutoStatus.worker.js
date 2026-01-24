@@ -65,6 +65,7 @@ async function updateOrderStatus(order, localDate) {
           order.id,
         ]);
         await earnBonuses(order, null, loyaltyLevels, loyaltySettings);
+        await db.query("UPDATE user_loyalty_stats SET last_order_at = NOW() WHERE user_id = ?", [order.user_id]);
       } catch (bonusError) {
         console.error("Failed to earn bonuses:", bonusError);
       }
