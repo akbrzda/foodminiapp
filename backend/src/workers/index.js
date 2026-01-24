@@ -1,6 +1,11 @@
 import { createTelegramWorker } from "./telegram.worker.js";
 import { createImageWorker } from "./image.worker.js";
 import { createOrderAutoStatusWorker } from "./orderAutoStatus.worker.js";
+import { createBonusExpiryWorker } from "./bonusExpiry.worker.js";
+import { createLevelRecalcWorker } from "./levelRecalc.worker.js";
+import { createLevelDegradationWorker } from "./levelDegradation.worker.js";
+import { createBalanceReconcileWorker } from "./balanceReconcile.worker.js";
+import { createBirthdayBonusWorker } from "./birthdayBonus.worker.js";
 import IORedis from "ioredis";
 import dotenv from "dotenv";
 import { logger } from "../utils/logger.js";
@@ -14,12 +19,27 @@ const redisConnection = new IORedis({
 let telegramWorker;
 let imageWorker;
 let orderAutoStatusWorker;
+let bonusExpiryWorker;
+let levelRecalcWorker;
+let levelDegradationWorker;
+let balanceReconcileWorker;
+let birthdayBonusWorker;
 export async function startWorkers() {
   try {
     telegramWorker = createTelegramWorker(redisConnection);
     imageWorker = createImageWorker(redisConnection);
     orderAutoStatusWorker = createOrderAutoStatusWorker();
+    bonusExpiryWorker = createBonusExpiryWorker();
+    levelRecalcWorker = createLevelRecalcWorker();
+    levelDegradationWorker = createLevelDegradationWorker();
+    balanceReconcileWorker = createBalanceReconcileWorker();
+    birthdayBonusWorker = createBirthdayBonusWorker();
     orderAutoStatusWorker.start();
+    bonusExpiryWorker.start();
+    levelRecalcWorker.start();
+    levelDegradationWorker.start();
+    balanceReconcileWorker.start();
+    birthdayBonusWorker.start();
     logger.system.startup("Background workers started");
     return {
       telegramWorker,
@@ -42,6 +62,21 @@ export async function stopWorkers() {
     }
     if (orderAutoStatusWorker) {
       orderAutoStatusWorker.stop();
+    }
+    if (bonusExpiryWorker) {
+      bonusExpiryWorker.stop();
+    }
+    if (levelRecalcWorker) {
+      levelRecalcWorker.stop();
+    }
+    if (levelDegradationWorker) {
+      levelDegradationWorker.stop();
+    }
+    if (balanceReconcileWorker) {
+      balanceReconcileWorker.stop();
+    }
+    if (birthdayBonusWorker) {
+      birthdayBonusWorker.stop();
     }
     await Promise.all(promises);
     logger.system.shutdown("Background workers stopped");

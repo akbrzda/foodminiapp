@@ -161,9 +161,9 @@
 ### 5.1 Логика бонусной программы
 
 - LoyaltyService.calculateBonuses(total, level)
-  - Уровень 1 (Бронза): 5% от суммы
-  - Уровень 2 (Серебро): 7% от суммы
-  - Уровень 3 (Золото): 10% от суммы
+  - Уровень 1 (Бронза): 3% от суммы
+  - Уровень 2 (Серебро): 5% от суммы
+  - Уровень 3 (Золото): 7% от суммы
   - Возвращает: количество бонусов к начислению
 - LoyaltyService.earnBonuses(userId, amount, orderId)
   - Начисление бонусов после завершения заказа
@@ -173,14 +173,14 @@
 - LoyaltyService.spendBonuses(userId, amount, orderId)
   - Списание бонусов при создании заказа
   - Проверка: amount <= bonus_balance
-  - Проверка: amount <= order_total \* 0.25 (макс. 25%)
+  - Проверка: amount <= order_total \* 0.20 (макс. 20%)
   - Запись в loyalty_transactions (type: "spent")
   - Обновление bonus_balance
   - Инвалидация кеша
 - LoyaltyService.checkLevelUp(userId)
   - Проверка total_spent пользователя
   - Если total_spent >= 10,000₽ → уровень 2
-  - Если total_spent >= 50,000₽ → уровень 3
+  - Если total_spent >= 20,000₽ → уровень 3
   - Обновление loyalty_level в таблице users
 
 ### 5.2 API бонусов

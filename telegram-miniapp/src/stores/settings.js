@@ -38,6 +38,7 @@ const normalizeNumber = (value, fallback) => {
 export const useSettingsStore = defineStore("settings", {
   state: () => ({
     ...DEFAULT_SETTINGS,
+    loyaltyLevels: [],
     loaded: false,
   }),
   getters: {
@@ -66,10 +67,16 @@ export const useSettingsStore = defineStore("settings", {
     },
     async loadSettings() {
       try {
-        const response = await settingsAPI.getSettings();
-        this.applySettings(response.data?.settings || {});
+        const [systemResponse, loyaltyResponse] = await Promise.all([settingsAPI.getSettings(), settingsAPI.getLoyaltySettings()]);
+        this.loyaltyLevels = loyaltyResponse.data?.levels || [];
+        const combined = {
+          ...(systemResponse.data?.settings || {}),
+          ...(loyaltyResponse.data?.settings || {}),
+        };
+        this.applySettings(combined);
       } catch (error) {
         console.error("Failed to load settings:", error);
+        this.loyaltyLevels = [];
         this.applySettings({});
       }
     },

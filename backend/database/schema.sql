@@ -20,10 +20,16 @@ CREATE TABLE IF NOT EXISTS users (
     bonus_balance DECIMAL(10, 2) DEFAULT 0.00,
     loyalty_level INT DEFAULT 1 COMMENT '1=Бронза, 2=Серебро, 3=Золото',
     total_spent DECIMAL(10, 2) DEFAULT 0.00 COMMENT 'Общая сумма всех заказов для расчета уровня лояльности',
+    current_loyalty_level_id INT,
+    loyalty_registered_at DATETIME,
+    registration_bonus_granted BOOLEAN DEFAULT FALSE,
+    birthday_bonus_last_granted_year INT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_phone (phone),
-    INDEX idx_telegram_id (telegram_id)
+    INDEX idx_telegram_id (telegram_id),
+    INDEX idx_birth_date (date_of_birth),
+    INDEX idx_current_loyalty_level (current_loyalty_level_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
 -- Таблица системных настроек
 CREATE TABLE IF NOT EXISTS system_settings (
@@ -37,25 +43,213 @@ CREATE TABLE IF NOT EXISTS system_settings (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
 INSERT INTO system_settings (`key`, value, description)
 VALUES
-    ('bonuses_enabled', CAST('true' AS JSON), 'Бонусная система'),
-    ('loyalty_level_1_name', CAST('"Бронза"' AS JSON), 'Название первого уровня лояльности'),
-    ('loyalty_level_2_name', CAST('"Серебро"' AS JSON), 'Название второго уровня лояльности'),
-    ('loyalty_level_3_name', CAST('"Золото"' AS JSON), 'Название третьего уровня лояльности'),
-    ('bonus_max_redeem_percent', CAST('0.2' AS JSON), 'Доля от суммы заказа, доступная к списанию бонусами'),
-    ('loyalty_level_1_redeem_percent', CAST('0.2' AS JSON), 'Максимальная доля списания бонусами для уровня 1'),
-    ('loyalty_level_2_redeem_percent', CAST('0.25' AS JSON), 'Максимальная доля списания бонусами для уровня 2'),
-    ('loyalty_level_3_redeem_percent', CAST('0.3' AS JSON), 'Максимальная доля списания бонусами для уровня 3'),
-    ('loyalty_level_1_rate', CAST('0.03' AS JSON), 'Начисление бонусов для уровня 1'),
-    ('loyalty_level_2_rate', CAST('0.05' AS JSON), 'Начисление бонусов для уровня 2'),
-    ('loyalty_level_3_rate', CAST('0.07' AS JSON), 'Начисление бонусов для уровня 3'),
-    ('loyalty_level_2_threshold', CAST('10000' AS JSON), 'Сумма заказов для перехода на уровень 2'),
-    ('loyalty_level_3_threshold', CAST('20000' AS JSON), 'Сумма заказов для перехода на уровень 3'),
+  ('bonuses_enabled', CAST('true' AS JSON), 'Бонусная система'),
     ('orders_enabled', CAST('true' AS JSON), 'Прием заказов'),
     ('delivery_enabled', CAST('true' AS JSON), 'Оформление заказов с доставкой'),
     ('pickup_enabled', CAST('true' AS JSON), 'Оформление заказов на самовывоз')
 ON DUPLICATE KEY UPDATE
     value = VALUES(value),
     description = VALUES(description);
+
+  -- Таблица настроек программы лояльности
+  CREATE TABLE IF NOT EXISTS loyalty_settings (
+    id INT PRIMARY KEY,
+    bonus_max_redeem_percent DECIMAL(6, 4) NOT NULL DEFAULT 0.3,
+    loyalty_level_1_name VARCHAR(50) NOT NULL DEFAULT 'Бронза',
+    loyalty_level_2_name VARCHAR(50) NOT NULL DEFAULT 'Серебро',
+    loyalty_level_3_name VARCHAR(50) NOT NULL DEFAULT 'Золото',
+    loyalty_level_1_rate DECIMAL(6, 4) NOT NULL DEFAULT 0.03,
+    loyalty_level_2_rate DECIMAL(6, 4) NOT NULL DEFAULT 0.05,
+    loyalty_level_3_rate DECIMAL(6, 4) NOT NULL DEFAULT 0.07,
+    loyalty_level_1_redeem_percent DECIMAL(6, 4) NOT NULL DEFAULT 0.3,
+    loyalty_level_2_redeem_percent DECIMAL(6, 4) NOT NULL DEFAULT 0.3,
+    loyalty_level_3_redeem_percent DECIMAL(6, 4) NOT NULL DEFAULT 0.3,
+    loyalty_level_2_threshold INT NOT NULL DEFAULT 10000,
+    loyalty_level_3_threshold INT NOT NULL DEFAULT 20000,
+    include_delivery_in_earn BOOLEAN NOT NULL DEFAULT FALSE,
+    calculate_from_amount_after_bonus BOOLEAN NOT NULL DEFAULT TRUE,
+    level_calculation_period_days INT NOT NULL DEFAULT 60,
+    level_calculation_include_delivery BOOLEAN NOT NULL DEFAULT FALSE,
+    level_degradation_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    level_degradation_period_days INT NOT NULL DEFAULT 180,
+    registration_bonus_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    registration_bonus_amount INT NOT NULL DEFAULT 1000,
+    registration_bonus_expires_days INT NOT NULL DEFAULT 30,
+    birthday_bonus_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    birthday_bonus_amount INT NOT NULL DEFAULT 500,
+    birthday_bonus_days_before INT NOT NULL DEFAULT 3,
+    birthday_bonus_days_after INT NOT NULL DEFAULT 7,
+    default_bonus_expires_days INT NOT NULL DEFAULT 60,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
+
+  INSERT INTO loyalty_settings (
+    id,
+    bonus_max_redeem_percent,
+    loyalty_level_1_name,
+    loyalty_level_2_name,
+    loyalty_level_3_name,
+    loyalty_level_1_rate,
+    loyalty_level_2_rate,
+    loyalty_level_3_rate,
+    loyalty_level_1_redeem_percent,
+    loyalty_level_2_redeem_percent,
+    loyalty_level_3_redeem_percent,
+    loyalty_level_2_threshold,
+    loyalty_level_3_threshold,
+    include_delivery_in_earn,
+    calculate_from_amount_after_bonus,
+    level_calculation_period_days,
+    level_calculation_include_delivery,
+    level_degradation_enabled,
+    level_degradation_period_days,
+    registration_bonus_enabled,
+    registration_bonus_amount,
+    registration_bonus_expires_days,
+    birthday_bonus_enabled,
+    birthday_bonus_amount,
+    birthday_bonus_days_before,
+    birthday_bonus_days_after,
+    default_bonus_expires_days
+  ) VALUES (
+    1,
+    0.3,
+    'Бронза',
+    'Серебро',
+    'Золото',
+    0.03,
+    0.05,
+    0.07,
+    0.3,
+    0.3,
+    0.3,
+    10000,
+    20000,
+    FALSE,
+    TRUE,
+    60,
+    FALSE,
+    TRUE,
+    180,
+    TRUE,
+    1000,
+    30,
+    TRUE,
+    500,
+    3,
+    7,
+    60
+  ) ON DUPLICATE KEY UPDATE
+    bonus_max_redeem_percent = VALUES(bonus_max_redeem_percent),
+    loyalty_level_1_name = VALUES(loyalty_level_1_name),
+    loyalty_level_2_name = VALUES(loyalty_level_2_name),
+    loyalty_level_3_name = VALUES(loyalty_level_3_name),
+    loyalty_level_1_rate = VALUES(loyalty_level_1_rate),
+    loyalty_level_2_rate = VALUES(loyalty_level_2_rate),
+    loyalty_level_3_rate = VALUES(loyalty_level_3_rate),
+    loyalty_level_1_redeem_percent = VALUES(loyalty_level_1_redeem_percent),
+    loyalty_level_2_redeem_percent = VALUES(loyalty_level_2_redeem_percent),
+    loyalty_level_3_redeem_percent = VALUES(loyalty_level_3_redeem_percent),
+    loyalty_level_2_threshold = VALUES(loyalty_level_2_threshold),
+    loyalty_level_3_threshold = VALUES(loyalty_level_3_threshold),
+    include_delivery_in_earn = VALUES(include_delivery_in_earn),
+    calculate_from_amount_after_bonus = VALUES(calculate_from_amount_after_bonus),
+    level_calculation_period_days = VALUES(level_calculation_period_days),
+    level_calculation_include_delivery = VALUES(level_calculation_include_delivery),
+    level_degradation_enabled = VALUES(level_degradation_enabled),
+    level_degradation_period_days = VALUES(level_degradation_period_days),
+    registration_bonus_enabled = VALUES(registration_bonus_enabled),
+    registration_bonus_amount = VALUES(registration_bonus_amount),
+    registration_bonus_expires_days = VALUES(registration_bonus_expires_days),
+    birthday_bonus_enabled = VALUES(birthday_bonus_enabled),
+    birthday_bonus_amount = VALUES(birthday_bonus_amount),
+    birthday_bonus_days_before = VALUES(birthday_bonus_days_before),
+    birthday_bonus_days_after = VALUES(birthday_bonus_days_after),
+    default_bonus_expires_days = VALUES(default_bonus_expires_days);
+
+-- Таблица уровней лояльности
+CREATE TABLE IF NOT EXISTS loyalty_levels (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(50) NOT NULL,
+    level_number INT NOT NULL,
+    threshold_amount INT NOT NULL DEFAULT 0,
+    earn_percent DECIMAL(6, 4) NOT NULL DEFAULT 0.0,
+    max_spend_percent INT NOT NULL DEFAULT 0,
+    is_active BOOLEAN DEFAULT TRUE,
+    sort_order INT DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uniq_loyalty_level_number (level_number),
+    INDEX idx_loyalty_threshold (threshold_amount)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
+
+INSERT INTO loyalty_levels (name, level_number, threshold_amount, earn_percent, max_spend_percent, is_active, sort_order)
+VALUES
+  ('Бронза', 1, 0, 0.03, 20, TRUE, 1),
+  ('Серебро', 2, 10000, 0.05, 25, TRUE, 2),
+  ('Золото', 3, 20000, 0.07, 30, TRUE, 3)
+ON DUPLICATE KEY UPDATE
+  name = VALUES(name),
+  threshold_amount = VALUES(threshold_amount),
+  earn_percent = VALUES(earn_percent),
+  max_spend_percent = VALUES(max_spend_percent),
+  is_active = VALUES(is_active),
+  sort_order = VALUES(sort_order);
+
+-- Таблица истории уровней пользователей
+CREATE TABLE IF NOT EXISTS user_loyalty_levels (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    level_id INT NOT NULL,
+    reason ENUM('initial', 'threshold_reached', 'degradation') NOT NULL,
+    triggered_by_order_id INT NULL,
+    total_spent_amount INT NOT NULL DEFAULT 0,
+    started_at DATETIME NOT NULL,
+    ended_at DATETIME NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_user_current_level (user_id, ended_at),
+    INDEX idx_user_level_period (user_id, started_at, ended_at),
+    INDEX idx_level_id (level_id),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (level_id) REFERENCES loyalty_levels(id) ON DELETE RESTRICT,
+    FOREIGN KEY (triggered_by_order_id) REFERENCES orders(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
+
+-- Таблица статистики лояльности пользователей
+CREATE TABLE IF NOT EXISTS user_loyalty_stats (
+    user_id INT PRIMARY KEY,
+    bonus_balance INT NOT NULL DEFAULT 0,
+    total_spent_60_days INT NOT NULL DEFAULT 0,
+    total_spent_all_time INT NOT NULL DEFAULT 0,
+    last_order_at DATETIME NULL,
+    last_level_check_at DATETIME NULL,
+    last_balance_reconciliation_at DATETIME NULL,
+    total_earned INT NOT NULL DEFAULT 0,
+    total_spent INT NOT NULL DEFAULT 0,
+    total_expired INT NOT NULL DEFAULT 0,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
+
+-- Таблица логов лояльности
+CREATE TABLE IF NOT EXISTS loyalty_logs (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    event_type ENUM('balance_mismatch', 'duplicate_transaction', 'cron_execution', 'error', 'race_condition') NOT NULL,
+    severity ENUM('info', 'warning', 'error', 'critical') NOT NULL DEFAULT 'info',
+    user_id INT NULL,
+    order_id INT NULL,
+    transaction_id BIGINT NULL,
+    message TEXT NOT NULL,
+    details JSON NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_loyalty_event (event_type),
+    INDEX idx_loyalty_severity (severity),
+    INDEX idx_loyalty_user (user_id),
+    INDEX idx_loyalty_created (created_at),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
+    FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
 -- Таблица городов
 CREATE TABLE IF NOT EXISTS cities (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -260,9 +454,6 @@ CREATE TABLE IF NOT EXISTS orders (
     subtotal DECIMAL(10, 2) NOT NULL,
     delivery_cost DECIMAL(10, 2) DEFAULT 0.00,
     bonus_used DECIMAL(10, 2) DEFAULT 0.00,
-    bonus_earned DECIMAL(10, 2) DEFAULT 0.00,
-    bonus_earn_transaction_id INT NULL,
-    bonus_spend_transaction_id INT NULL,
     total DECIMAL(10, 2) NOT NULL,
     -- Комментарий
     comment TEXT,
@@ -340,20 +531,26 @@ CREATE TABLE IF NOT EXISTS bonus_history (
     INDEX idx_created_at (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
 CREATE TABLE IF NOT EXISTS loyalty_transactions (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    user_id INT NOT NULL,
-    order_id INT NULL,
-    type ENUM('earn', 'spend', 'refund', 'cancel_earn') NOT NULL,
-    amount DECIMAL(10, 2) NOT NULL,
-    balance_before DECIMAL(10, 2) NOT NULL,
-    balance_after DECIMAL(10, 2) NOT NULL,
-    description VARCHAR(255),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_loyalty_user (user_id),
-    INDEX idx_loyalty_order (order_id),
-    INDEX idx_loyalty_type (type),
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  order_id INT NULL,
+  type ENUM('earn', 'spend', 'refund_earn', 'refund_spend', 'expire', 'register_bonus', 'birthday_bonus') NOT NULL,
+  amount INT NOT NULL,
+  earned_at DATETIME NULL,
+  expires_at DATETIME NULL,
+  status ENUM('pending', 'completed', 'cancelled') NOT NULL DEFAULT 'completed',
+  cancels_transaction_id BIGINT NULL,
+  description VARCHAR(500) NULL,
+  metadata JSON NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_loyalty_user_status (user_id, status),
+  INDEX idx_loyalty_user_expires (user_id, expires_at, status),
+  INDEX idx_loyalty_order (order_id),
+  INDEX idx_loyalty_type_status (type, status),
+  INDEX idx_loyalty_created (created_at),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
 -- Таблица администраторов/менеджеров
 CREATE TABLE IF NOT EXISTS admin_users (

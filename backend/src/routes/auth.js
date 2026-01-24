@@ -5,6 +5,9 @@ import crypto from "crypto";
 import db from "../config/database.js";
 import { parseTelegramUser, validateTelegramData } from "../utils/telegram.js";
 import { normalizePhone } from "../utils/phone.js";
+import { getSystemSettings } from "../utils/settings.js";
+import { getLoyaltySettings } from "../utils/loyaltySettings.js";
+import { grantRegistrationBonus } from "../utils/bonuses.js";
 const router = express.Router();
 function verifyTelegramAuth(data, botToken) {
   const { hash, ...userData } = data;
@@ -54,7 +57,7 @@ router.post("/telegram", async (req, res, next) => {
       return res.status(403).json({ error: "Auth data is too old" });
     }
     const [users] = await db.query(
-      "SELECT id, telegram_id, phone, first_name, last_name, email, date_of_birth, bonus_balance FROM users WHERE telegram_id = ?",
+      "SELECT id, telegram_id, phone, first_name, last_name, email, date_of_birth, bonus_balance, loyalty_level, total_spent FROM users WHERE telegram_id = ?",
       [id],
     );
     let userId;
@@ -76,7 +79,7 @@ router.post("/telegram", async (req, res, next) => {
         values.push(userId);
         await db.query(`UPDATE users SET ${updates.join(", ")} WHERE id = ?`, values);
         const [updatedUsers] = await db.query(
-          "SELECT id, telegram_id, phone, first_name, last_name, email, date_of_birth, bonus_balance FROM users WHERE id = ?",
+          "SELECT id, telegram_id, phone, first_name, last_name, email, date_of_birth, bonus_balance, loyalty_level, total_spent FROM users WHERE id = ?",
           [userId],
         );
         user = updatedUsers[0];
@@ -97,10 +100,19 @@ router.post("/telegram", async (req, res, next) => {
       ]);
       userId = result.insertId;
       const [newUser] = await db.query(
-        "SELECT id, telegram_id, phone, first_name, last_name, email, date_of_birth, bonus_balance FROM users WHERE id = ?",
+        "SELECT id, telegram_id, phone, first_name, last_name, email, date_of_birth, bonus_balance, loyalty_level, total_spent FROM users WHERE id = ?",
         [userId],
       );
       user = newUser[0];
+    }
+    try {
+      const systemSettings = await getSystemSettings();
+      if (systemSettings.bonuses_enabled) {
+        const loyaltySettings = await getLoyaltySettings();
+        await grantRegistrationBonus(userId, null, loyaltySettings);
+      }
+    } catch (bonusError) {
+      console.error("Failed to grant registration bonus:", bonusError);
     }
     const token = jwt.sign(
       {

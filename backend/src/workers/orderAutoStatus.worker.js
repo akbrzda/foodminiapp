@@ -1,6 +1,7 @@
 import db from "../config/database.js";
-import { earnBonuses, refundBonuses, cancelEarnedBonuses, getLoyaltyLevelsFromSettings } from "../utils/bonuses.js";
+import { earnBonuses, cancelOrderBonuses, getLoyaltyLevelsFromDb } from "../utils/bonuses.js";
 import { getSystemSettings } from "../utils/settings.js";
+import { getLoyaltySettings } from "../utils/loyaltySettings.js";
 import { logger } from "../utils/logger.js";
 
 const AUTO_STATUS_INTERVAL_MS = 60 * 1000;
@@ -27,8 +28,7 @@ const getUtcMidnightForLocalDate = ({ year, month, day }, offsetMinutes) =>
   new Date(Date.UTC(year, month - 1, day, 0, 0, 0) + offsetMinutes * 60 * 1000);
 
 async function rollbackBonuses(order, loyaltyLevels) {
-  await cancelEarnedBonuses(order, null, loyaltyLevels);
-  await refundBonuses(order);
+  await cancelOrderBonuses(order, null, loyaltyLevels);
 }
 
 async function notifyStatusChange(orderId, userId, oldStatus, newStatus, orderType, orderNumber) {
@@ -53,19 +53,18 @@ async function notifyStatusChange(orderId, userId, oldStatus, newStatus, orderTy
 async function updateOrderStatus(order, localDate) {
   const newStatus = order.status === "pending" ? "cancelled" : "completed";
   const completedAt = newStatus === "completed" ? new Date() : null;
-  await db.query("UPDATE orders SET status = ?, completed_at = ?, auto_status_date = ? WHERE id = ?", [
-    newStatus,
-    completedAt,
-    localDate,
-    order.id,
-  ]);
+  await db.query("UPDATE orders SET status = ?, completed_at = ?, auto_status_date = ? WHERE id = ?", [newStatus, completedAt, localDate, order.id]);
   if (newStatus === "completed") {
     const orderTotal = parseFloat(order.total) || 0;
     const settings = await getSystemSettings();
-    const loyaltyLevels = getLoyaltyLevelsFromSettings(settings);
+    const loyaltySettings = await getLoyaltySettings();
+    const loyaltyLevels = await getLoyaltyLevelsFromDb();
     if (settings.bonuses_enabled && orderTotal > 0) {
       try {
-        await earnBonuses(order, null, loyaltyLevels);
+        await db.query("UPDATE loyalty_transactions SET status = 'completed' WHERE order_id = ? AND type = 'spend' AND status = 'pending'", [
+          order.id,
+        ]);
+        await earnBonuses(order, null, loyaltyLevels, loyaltySettings);
       } catch (bonusError) {
         console.error("Failed to earn bonuses:", bonusError);
       }
@@ -73,7 +72,8 @@ async function updateOrderStatus(order, localDate) {
   } else if (newStatus === "cancelled") {
     try {
       const settings = await getSystemSettings();
-      const loyaltyLevels = getLoyaltyLevelsFromSettings(settings);
+      const loyaltySettings = await getLoyaltySettings();
+      const loyaltyLevels = await getLoyaltyLevelsFromDb();
       await rollbackBonuses(order, loyaltyLevels);
     } catch (bonusError) {
       console.error("Failed to rollback bonuses for cancelled order:", bonusError);
@@ -91,7 +91,7 @@ async function processOffset(offsetMinutes, nowUtc) {
   const localDate = buildLocalDateString(localParts);
   const utcMidnight = getUtcMidnightForLocalDate(localParts, offsetMinutes);
   const [orders] = await db.query(
-    `SELECT id, status, user_id, total, subtotal, delivery_cost, bonus_used, bonus_earned, order_number, order_type
+    `SELECT id, status, user_id, total, subtotal, delivery_cost, bonus_used, order_number, order_type
      FROM orders
      WHERE status IN (?)
        AND user_timezone_offset = ?

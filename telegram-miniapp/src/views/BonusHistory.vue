@@ -20,7 +20,7 @@
         </div>
         <div class="progress-card">
           <div class="progress-values">
-            <span>{{ formatPrice(spendLast60Days) }} ₽</span>
+            <span>{{ formatPrice(totalSpent) }} ₽</span>
             <span>/</span>
             <span v-if="nextLevel">{{ formatPrice(nextLevel.min) }} ₽</span>
             <span v-else>∞</span>
@@ -46,6 +46,7 @@
               <div class="transaction-info">
                 <div class="transaction-title">{{ getTransactionTitle(transaction) }}</div>
                 <div class="transaction-date">{{ formatDate(transaction.created_at) }}</div>
+                <div v-if="isActiveEarn(transaction)" class="transaction-expire">Действует до {{ formatDateShort(transaction.expires_at) }}</div>
               </div>
               <div class="transaction-amount" :class="isEarnType(transaction.type) ? 'earn' : 'spend'">
                 {{ isEarnType(transaction.type) ? "+" : "−" }}{{ formatPrice(Math.abs(transaction.amount)) }} ₽
@@ -65,10 +66,10 @@
         </div>
         <div class="modal-body">
           <p>
-            Статус зависит от суммы заказов за последние {{ loyaltyWindowDays }} дней и пересчитывается автоматически. Уровень может повышаться или
-            понижаться. Можно списывать до {{ maxRedeemPercentLabel }}% от суммы заказа (1 бонус = 1 ₽).
+            Статус зависит от суммы всех завершённых заказов и пересчитывается автоматически. Уровень может только повышаться. Можно списывать до
+            {{ maxRedeemPercentLabel }}% от суммы заказа (1 бонус = 1 ₽).
           </p>
-          <p>Бонусы начисляются через 24 часа после оформления заказа и доступны в течение {{ bonusLifetimeDays }} дней.</p>
+          <p>Бонусы начисляются после завершения заказа и доступны в течение {{ bonusLifetimeDays }} дней.</p>
           <div class="levels-table-header">
             <span>Уровень</span>
             <span>Начисление</span>
@@ -104,12 +105,11 @@ const showRulesModal = ref(false);
 const bonusesEnabled = computed(() => settingsStore.bonusesEnabled);
 const currentLevel = computed(() => loyaltyStore.currentLevel);
 const nextLevel = computed(() => loyaltyStore.nextLevel);
-const spendLast60Days = computed(() => loyaltyStore.spendLast60Days);
+const totalSpent = computed(() => loyaltyStore.totalSpent);
 const currentRateLabel = computed(() => Math.round(currentLevel.value.rate * 100));
 const maxRedeemPercentLabel = computed(() => Math.round(loyaltyStore.maxRedeemPercent * 100));
 const progressPercent = computed(() => Math.round(loyaltyStore.progressToNextLevel * 100));
 const amountToNextLevel = computed(() => loyaltyStore.amountToNextLevel);
-const loyaltyWindowDays = 60;
 const bonusLifetimeDays = 60;
 const formattedLevels = computed(() =>
   loyaltyStore.levels.map((level) => ({
@@ -124,7 +124,7 @@ onMounted(async () => {
     loading.value = false;
     return;
   }
-  await Promise.all([loadData(), loyaltyStore.refreshFromOrders()]);
+  await Promise.all([loadData(), loyaltyStore.refreshFromProfile()]);
 });
 async function loadData() {
   loading.value = true;
@@ -138,20 +138,17 @@ async function loadData() {
     loading.value = false;
   }
 }
-const isEarnType = (type) => type === "earn" || type === "refund" || type === "earned";
+const isEarnType = (type) => type === "earn";
+const isActiveEarn = (transaction) => {
+  if (!isEarnType(transaction.type)) return false;
+  if (!transaction.expires_at) return false;
+  return new Date(transaction.expires_at) > new Date();
+};
 function getTransactionTitle(transaction) {
-  if (transaction.type === "earn" || transaction.type === "earned") {
+  if (transaction.type === "earn") {
     return `Начислено за заказ #${transaction.order_number || transaction.order_id}`;
-  } else if (transaction.type === "spend" || transaction.type === "used") {
+  } else if (transaction.type === "spend") {
     return `Списано в заказе #${transaction.order_number || transaction.order_id}`;
-  } else if (transaction.type === "refund") {
-    return `Возврат бонусов за заказ #${transaction.order_number || transaction.order_id}`;
-  } else if (transaction.type === "cancel_earn") {
-    return `Отмена начисления за заказ #${transaction.order_number || transaction.order_id}`;
-  } else if (transaction.type === "manual" && transaction.description) {
-    return transaction.description;
-  } else if (transaction.type === "expired") {
-    return "Бонусы сгорели";
   }
   return "Операция";
 }
@@ -169,6 +166,10 @@ function formatDate(dateString) {
   } else {
     return date.toLocaleDateString("ru-RU", { day: "numeric", month: "short" });
   }
+}
+function formatDateShort(dateString) {
+  if (!dateString) return "";
+  return new Date(dateString).toLocaleDateString("ru-RU", { day: "numeric", month: "short" });
 }
 </script>
 <style scoped>
@@ -443,6 +444,10 @@ function formatDate(dateString) {
   color: var(--color-text-secondary);
 }
 .transaction-date {
+  font-size: var(--font-size-caption);
+  color: var(--color-text-secondary);
+}
+.transaction-expire {
   font-size: var(--font-size-caption);
   color: var(--color-text-secondary);
 }

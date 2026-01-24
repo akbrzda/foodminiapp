@@ -44,6 +44,64 @@
     </Card>
     <Card>
       <CardHeader>
+        <CardTitle>Лояльность</CardTitle>
+        <CardDescription>Уровень, статистика и история</CardDescription>
+      </CardHeader>
+      <CardContent class="space-y-6">
+        <div class="grid gap-4 md:grid-cols-3">
+          <div class="rounded-xl border border-border/60 bg-background px-4 py-3">
+            <div class="text-xs text-muted-foreground">Текущий уровень</div>
+            <div class="text-base font-semibold text-foreground">{{ loyaltyStats?.level_name || "—" }}</div>
+          </div>
+          <div class="rounded-xl border border-border/60 bg-background px-4 py-3">
+            <div class="text-xs text-muted-foreground">Сумма за 60 дней</div>
+            <div class="text-base font-semibold text-foreground">{{ formatNumber(loyaltyStats?.total_spent_60_days || 0) }}</div>
+          </div>
+          <div class="rounded-xl border border-border/60 bg-background px-4 py-3">
+            <div class="text-xs text-muted-foreground">Всего заказов</div>
+            <div class="text-base font-semibold text-foreground">{{ formatNumber(loyaltyStats?.total_spent_all_time || 0) }}</div>
+          </div>
+        </div>
+        <div class="grid gap-4 md:grid-cols-3">
+          <div class="rounded-xl border border-border/60 bg-background px-4 py-3">
+            <div class="text-xs text-muted-foreground">Начислено</div>
+            <div class="text-base font-semibold text-foreground">{{ formatNumber(loyaltyStats?.total_earned || 0) }}</div>
+          </div>
+          <div class="rounded-xl border border-border/60 bg-background px-4 py-3">
+            <div class="text-xs text-muted-foreground">Списано</div>
+            <div class="text-base font-semibold text-foreground">{{ formatNumber(loyaltyStats?.total_spent || 0) }}</div>
+          </div>
+          <div class="rounded-xl border border-border/60 bg-background px-4 py-3">
+            <div class="text-xs text-muted-foreground">Сгорело</div>
+            <div class="text-base font-semibold text-foreground">{{ formatNumber(loyaltyStats?.total_expired || 0) }}</div>
+          </div>
+        </div>
+        <div>
+          <div class="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">История уровней</div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Уровень</TableHead>
+                <TableHead>Период</TableHead>
+                <TableHead>Причина</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow v-for="level in loyaltyHistory" :key="level.id">
+                <TableCell>{{ level.level_name }}</TableCell>
+                <TableCell class="text-muted-foreground">
+                  {{ formatDateTime(level.started_at) }}
+                  <span v-if="level.ended_at">→ {{ formatDateTime(level.ended_at) }}</span>
+                </TableCell>
+                <TableCell class="text-muted-foreground">{{ formatLevelReason(level.reason) }}</TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </div>
+      </CardContent>
+    </Card>
+    <Card>
+      <CardHeader>
         <CardTitle>История заказов</CardTitle>
       </CardHeader>
       <CardContent class="pt-0">
@@ -122,6 +180,8 @@ const clientId = route.params.id;
 const client = ref(null);
 const orders = ref([]);
 const bonuses = ref([]);
+const loyaltyStats = ref(null);
+const loyaltyHistory = ref([]);
 const ordersLoading = ref(false);
 const bonusesLoading = ref(false);
 const saving = ref(false);
@@ -134,12 +194,20 @@ const form = reactive({
 const formatBonusStatus = (type) => {
   if (type === "earn" || type === "earned") return "Начислено";
   if (type === "spend" || type === "used") return "Списано";
-  if (type === "refund") return "Возврат";
-  if (type === "cancel_earn") return "Отмена начисления";
-  if (type === "expired") return "Сгорело";
+  if (type === "refund_spend") return "Возврат списания";
+  if (type === "refund_earn") return "Отмена начисления";
+  if (type === "expire") return "Сгорело";
+  if (type === "register_bonus") return "Бонус за регистрацию";
+  if (type === "birthday_bonus") return "Бонус ко дню рождения";
   return "Корректировка";
 };
-const isSpendType = (type) => type === "spend" || type === "used" || type === "cancel_earn";
+const isSpendType = (type) => type === "spend" || type === "used" || type === "refund_earn";
+const formatLevelReason = (reason) => {
+  if (reason === "initial") return "Начальный";
+  if (reason === "threshold_reached") return "Повышение";
+  if (reason === "degradation") return "Понижение";
+  return "—";
+};
 const loadClient = async () => {
   const response = await api.get(`/api/admin/clients/${clientId}`);
   client.value = response.data.user;
@@ -168,6 +236,14 @@ const loadBonuses = async () => {
     bonusesLoading.value = false;
   }
 };
+const loadLoyalty = async () => {
+  const [statsResponse, historyResponse] = await Promise.all([
+    api.get(`/api/admin/loyalty/users/${clientId}/stats`),
+    api.get(`/api/admin/loyalty/users/${clientId}/levels`),
+  ]);
+  loyaltyStats.value = statsResponse.data.stats || null;
+  loyaltyHistory.value = historyResponse.data.levels || [];
+};
 const saveClient = async () => {
   saving.value = true;
   try {
@@ -184,6 +260,6 @@ const goBack = () => {
   router.push("/clients");
 };
 onMounted(async () => {
-  await Promise.all([loadClient(), loadOrders(), loadBonuses()]);
+  await Promise.all([loadClient(), loadOrders(), loadBonuses(), loadLoyalty()]);
 });
 </script>

@@ -1,11 +1,11 @@
 export const LOYALTY_WINDOW_DAYS = 60;
-export const MAX_BONUS_REDEEM_PERCENT = 0.2;
+export const MAX_BONUS_REDEEM_PERCENT = 0.3;
 export const LOYALTY_LEVELS = [
   {
     id: "starter",
     name: "Бронза",
     rate: 0.03,
-    redeemPercent: 0.2,
+    redeemPercent: 0.3,
     min: 0,
     max: 9999,
   },
@@ -13,14 +13,14 @@ export const LOYALTY_LEVELS = [
     id: "growth",
     name: "Серебро",
     rate: 0.05,
-    redeemPercent: 0.25,
+    redeemPercent: 0.3,
     min: 10000,
     max: 19999,
   },
   {
     id: "prime",
     name: "Золото",
-    rate: 0.07  ,
+    rate: 0.07,
     redeemPercent: 0.3,
     min: 20000,
     max: Number.POSITIVE_INFINITY,

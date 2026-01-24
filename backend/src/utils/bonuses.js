@@ -1,15 +1,14 @@
 import db from "../config/database.js";
+import redis from "../config/redis.js";
+import { getLoyaltySettings } from "./loyaltySettings.js";
+import { logLoyaltyEvent } from "./loyaltyLogs.js";
 const DEFAULT_LOYALTY_LEVELS = {
-  1: { name: "Бронза", earnRate: 0.03, redeemPercent: 0.2, threshold: 0 },
-  2: { name: "Серебро", earnRate: 0.05, redeemPercent: 0.25, threshold: 10000 },
-  3: { name: "Золото", earnRate: 0.07, redeemPercent: 0.3, threshold: 20000 },
+  1: { level_number: 1, name: "Бронза", earnRate: 0.03, redeemPercent: 0.3, threshold: 0 },
+  2: { level_number: 2, name: "Серебро", earnRate: 0.05, redeemPercent: 0.3, threshold: 10000 },
+  3: { level_number: 3, name: "Золото", earnRate: 0.07, redeemPercent: 0.3, threshold: 20000 },
 };
-const DEFAULT_MAX_USE_PERCENT = 0.5;
-const MANUAL_PREFIX = {
-  rollback: "[CANCEL_ROLLBACK]",
-  refund: "[CANCEL_REFUND]",
-  reapply: "[CANCEL_REAPPLY]",
-};
+const DEFAULT_MAX_USE_PERCENT = 0.3;
+const getBonusCacheKey = (userId) => `bonuses:user_${userId}`;
 const getLoyaltyTransaction = async (executor, orderId, type) => {
   const [rows] = await executor.query(
     `SELECT id, amount
@@ -25,126 +24,182 @@ const getLoyaltyTransaction = async (executor, orderId, type) => {
 const insertLoyaltyTransaction = async (executor, payload) => {
   const [result] = await executor.query(
     `INSERT INTO loyalty_transactions
-     (user_id, order_id, type, amount, balance_before, balance_after, description)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+     (user_id, order_id, type, amount, earned_at, expires_at, status, description, metadata)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       payload.user_id,
       payload.order_id,
       payload.type,
       payload.amount,
-      payload.balance_before,
-      payload.balance_after,
-      payload.description,
+      payload.earned_at || null,
+      payload.expires_at || null,
+      payload.status || "completed",
+      payload.description || null,
+      payload.metadata ? JSON.stringify(payload.metadata) : null,
     ],
   );
   return result.insertId;
 };
-const updateLoyaltyTransaction = async (executor, id, payload) => {
+const updateLoyaltyTransactionAmount = async (executor, id, amount) => {
+  await executor.query("UPDATE loyalty_transactions SET amount = ? WHERE id = ?", [amount, id]);
+};
+const updateUserLoyaltyStats = async (executor, userId, { balance, earned = 0, spent = 0, expired = 0 } = {}) => {
   await executor.query(
-    `UPDATE loyalty_transactions
-     SET amount = ?, balance_before = ?, balance_after = ?, description = ?
-     WHERE id = ?`,
-    [payload.amount, payload.balance_before, payload.balance_after, payload.description, id],
+    `INSERT INTO user_loyalty_stats
+     (user_id, bonus_balance, total_earned, total_spent, total_expired)
+     VALUES (?, ?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE
+      bonus_balance = VALUES(bonus_balance),
+      total_earned = total_earned + VALUES(total_earned),
+      total_spent = total_spent + VALUES(total_spent),
+      total_expired = total_expired + VALUES(total_expired)`,
+    [userId, balance, earned, spent, expired],
   );
-};
-const getManualEntry = async (executor, orderId, prefix, legacyPrefix) => {
-  const [rows] = await executor.query(
-    `SELECT id, amount
-     FROM bonus_history
-     WHERE order_id = ?
-       AND type = 'manual'
-       AND (
-         description LIKE ? OR description LIKE ?
-       )
-     ORDER BY id DESC
-     LIMIT 1`,
-    [orderId, `${prefix}%`, `${legacyPrefix}%`],
-  );
-  return rows[0] || null;
-};
-const setManualEntryAmount = async (executor, { userId, orderId, entry, prefix, label, amount, balanceAfter }) => {
-  const description = `${prefix} ${label}`;
-  if (entry) {
-    await executor.query("UPDATE bonus_history SET amount = ?, balance_after = ?, description = ? WHERE id = ?", [
-      amount,
-      balanceAfter,
-      description,
-      entry.id,
-    ]);
-    return entry.id;
-  }
-  if (amount <= 0) return null;
-  const [result] = await executor.query(
-    `INSERT INTO bonus_history (user_id, order_id, type, amount, balance_after, description)
-     VALUES (?, ?, 'manual', ?, ?, ?)`,
-    [userId, orderId, amount, balanceAfter, description],
-  );
-  return result.insertId;
-};
-const getEarnedEntry = async (executor, orderId) => {
-  const [rows] = await executor.query(
-    `SELECT id
-     FROM bonus_history
-     WHERE order_id = ?
-       AND type = 'earned'
-     ORDER BY id DESC
-     LIMIT 1`,
-    [orderId],
-  );
-  return rows[0] || null;
-};
-const upsertEarnedEntry = async (executor, { userId, orderId, amount, balanceAfter, description }) => {
-  const entry = await getEarnedEntry(executor, orderId);
-  if (entry) {
-    await executor.query("UPDATE bonus_history SET amount = ?, balance_after = ?, description = ? WHERE id = ?", [
-      amount,
-      balanceAfter,
-      description,
-      entry.id,
-    ]);
-    return entry.id;
-  }
-  const [result] = await executor.query(
-    `INSERT INTO bonus_history (user_id, order_id, type, amount, balance_after, description)
-     VALUES (?, ?, 'earned', ?, ?, ?)`,
-    [userId, orderId, amount, balanceAfter, description],
-  );
-  return result.insertId;
 };
 const normalizeNumber = (value, fallback) => {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return fallback;
   return parsed;
 };
+const normalizeBoolean = (value, fallback) => {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    if (value.toLowerCase() === "true") return true;
+    if (value.toLowerCase() === "false") return false;
+  }
+  if (value === 1) return true;
+  if (value === 0) return false;
+  return fallback;
+};
 const normalizeString = (value, fallback) => {
   if (typeof value !== "string") return fallback;
   const trimmed = value.trim();
   return trimmed ? trimmed : fallback;
 };
+const getSelectEarnForUpdateSql = (connection) =>
+  connection
+    ? "SELECT id, amount, expires_at FROM loyalty_transactions WHERE user_id = ? AND type = 'earn' AND status = 'completed' AND amount > 0 ORDER BY expires_at ASC, id ASC FOR UPDATE"
+    : "SELECT id, amount, expires_at FROM loyalty_transactions WHERE user_id = ? AND type = 'earn' AND status = 'completed' AND amount > 0 ORDER BY expires_at ASC, id ASC";
+const getSelectActiveEarnForUpdateSql = (connection) =>
+  connection
+    ? "SELECT id, amount, expires_at FROM loyalty_transactions WHERE user_id = ? AND type = 'earn' AND status = 'completed' AND amount > 0 AND expires_at > NOW() ORDER BY expires_at ASC, id ASC FOR UPDATE"
+    : "SELECT id, amount, expires_at FROM loyalty_transactions WHERE user_id = ? AND type = 'earn' AND status = 'completed' AND amount > 0 AND expires_at > NOW() ORDER BY expires_at ASC, id ASC";
+const getExpiryDateFromSettings = (settings = {}) => {
+  const days = Math.max(1, normalizeNumber(settings.default_bonus_expires_days, 60));
+  return new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+};
+const getEarnBaseAmount = (order, settings = {}) => {
+  const total = normalizeNumber(order.total, 0);
+  const deliveryCost = normalizeNumber(order.delivery_cost, 0);
+  const bonusUsed = normalizeNumber(order.bonus_used, 0);
+  const includeDelivery = normalizeBoolean(settings.include_delivery_in_earn, false);
+  const calculateAfterBonus = normalizeBoolean(settings.calculate_from_amount_after_bonus, true);
+  let base = total;
+  if (calculateAfterBonus) {
+    base -= bonusUsed;
+  }
+  if (!includeDelivery) {
+    base -= deliveryCost;
+  }
+  return Math.max(0, base);
+};
+const consumeEarnAmounts = async (executor, userId, amount, connection = null) => {
+  if (amount <= 0) return;
+  const [earns] = await executor.query(getSelectActiveEarnForUpdateSql(connection), [userId]);
+  let remaining = amount;
+  for (const earn of earns) {
+    if (remaining <= 0) break;
+    const available = parseFloat(earn.amount) || 0;
+    if (available <= 0) continue;
+    const delta = Math.min(available, remaining);
+    const newAmount = Math.max(0, available - delta);
+    await updateLoyaltyTransactionAmount(executor, earn.id, newAmount);
+    remaining -= delta;
+  }
+  if (remaining > 0) {
+    throw new Error("Недостаточно активных бонусов для списания");
+  }
+};
+const restoreEarnAmounts = async (executor, userId, amount, connection = null) => {
+  if (amount <= 0) return;
+  const [earns] = await executor.query(getSelectEarnForUpdateSql(connection), [userId]);
+  let remaining = amount;
+  for (const earn of earns) {
+    if (remaining <= 0) break;
+    const currentAmount = parseFloat(earn.amount) || 0;
+    const add = remaining;
+    const newAmount = currentAmount + add;
+    await updateLoyaltyTransactionAmount(executor, earn.id, newAmount);
+    remaining = 0;
+  }
+  if (remaining > 0) {
+    await insertLoyaltyTransaction(executor, {
+      user_id: userId,
+      order_id: null,
+      type: "earn",
+      amount: remaining,
+      earned_at: new Date(),
+      expires_at: getExpiryDateFromSettings(),
+      status: "completed",
+      description: "Восстановление бонусов",
+    });
+  }
+};
+export async function invalidateBonusCache(userId) {
+  try {
+    await redis.del(getBonusCacheKey(userId));
+  } catch (error) {
+    console.error("Не удалось инвалидировать кеш бонусов:", error);
+  }
+}
 export function getLoyaltyLevelsFromSettings(settings = {}) {
   const level2Threshold = normalizeNumber(settings.loyalty_level_2_threshold, DEFAULT_LOYALTY_LEVELS[2].threshold);
   const level3Threshold = normalizeNumber(settings.loyalty_level_3_threshold, DEFAULT_LOYALTY_LEVELS[3].threshold);
   const fallbackRedeemPercent = getMaxUsePercentFromSettings(settings);
   return {
     1: {
+      level_number: 1,
       name: normalizeString(settings.loyalty_level_1_name, DEFAULT_LOYALTY_LEVELS[1].name),
       earnRate: normalizeNumber(settings.loyalty_level_1_rate, DEFAULT_LOYALTY_LEVELS[1].earnRate),
       redeemPercent: normalizeNumber(settings.loyalty_level_1_redeem_percent, fallbackRedeemPercent),
       threshold: 0,
     },
     2: {
+      level_number: 2,
       name: normalizeString(settings.loyalty_level_2_name, DEFAULT_LOYALTY_LEVELS[2].name),
       earnRate: normalizeNumber(settings.loyalty_level_2_rate, DEFAULT_LOYALTY_LEVELS[2].earnRate),
       redeemPercent: normalizeNumber(settings.loyalty_level_2_redeem_percent, fallbackRedeemPercent),
       threshold: Math.max(0, level2Threshold),
     },
     3: {
+      level_number: 3,
       name: normalizeString(settings.loyalty_level_3_name, DEFAULT_LOYALTY_LEVELS[3].name),
       earnRate: normalizeNumber(settings.loyalty_level_3_rate, DEFAULT_LOYALTY_LEVELS[3].earnRate),
       redeemPercent: normalizeNumber(settings.loyalty_level_3_redeem_percent, fallbackRedeemPercent),
       threshold: Math.max(0, level3Threshold),
     },
   };
+}
+export async function getLoyaltyLevelsFromDb(connection = null) {
+  const executor = connection || db;
+  const [rows] = await executor.query(
+    "SELECT id, name, level_number, threshold_amount, earn_percent, max_spend_percent FROM loyalty_levels WHERE is_active = TRUE ORDER BY level_number ASC",
+  );
+  if (!rows.length) {
+    return DEFAULT_LOYALTY_LEVELS;
+  }
+  const levels = {};
+  for (const row of rows) {
+    levels[row.level_number] = {
+      id: row.id,
+      name: row.name,
+      level_number: row.level_number,
+      earnRate: Number(row.earn_percent),
+      redeemPercent: Number(row.max_spend_percent) / 100,
+      threshold: Number(row.threshold_amount),
+    };
+  }
+  return levels;
 }
 export function getMaxUsePercentFromSettings(settings = {}) {
   return normalizeNumber(settings.bonus_max_redeem_percent, DEFAULT_MAX_USE_PERCENT);
@@ -155,9 +210,9 @@ export function getRedeemPercentForLevel(loyaltyLevel = 1, levels = DEFAULT_LOYA
   if (!Number.isFinite(value)) return fallback;
   return value;
 }
-export function calculateEarnedBonuses(orderTotal, loyaltyLevel = 1, levels = DEFAULT_LOYALTY_LEVELS) {
+export function calculateEarnedBonuses(baseAmount, loyaltyLevel = 1, levels = DEFAULT_LOYALTY_LEVELS) {
   const level = levels[loyaltyLevel] || levels[1];
-  return Math.floor(orderTotal * level.earnRate);
+  return Math.floor(baseAmount * level.earnRate);
 }
 export function calculateMaxUsableBonuses(orderSubtotal, maxUsePercent = DEFAULT_MAX_USE_PERCENT) {
   return Math.floor(orderSubtotal * maxUsePercent);
@@ -186,146 +241,135 @@ export async function validateBonusUsage(userId, bonusToUse, orderSubtotal, maxU
   }
   return { valid: true, amount: bonusToUse };
 }
-export async function checkLevelUp(userId, levels = DEFAULT_LOYALTY_LEVELS, connection = null) {
+export async function checkLevelUp(userId, levels = null, connection = null) {
   const executor = connection || db;
-  const [users] = await executor.query("SELECT loyalty_level, total_spent FROM users WHERE id = ?", [userId]);
+  const activeLevels = levels || (await getLoyaltyLevelsFromDb(executor));
+  const [users] = await executor.query("SELECT loyalty_level, current_loyalty_level_id FROM users WHERE id = ?", [userId]);
   if (users.length === 0) {
     return null;
   }
   const currentLevel = users[0].loyalty_level || 1;
-  const totalSpent = parseFloat(users[0].total_spent) || 0;
-  let newLevel = 1;
-  if (totalSpent >= levels[3].threshold) {
-    newLevel = 3;
-  } else if (totalSpent >= levels[2].threshold) {
-    newLevel = 2;
+  const currentLevelId = users[0].current_loyalty_level_id;
+  const [statsRows] = await executor.query("SELECT total_spent_60_days FROM user_loyalty_stats WHERE user_id = ?", [userId]);
+  const totalSpent = parseFloat(statsRows[0]?.total_spent_60_days) || 0;
+  const sortedLevels = Object.values(activeLevels).sort((a, b) => b.threshold - a.threshold);
+  let newLevel = sortedLevels.length ? sortedLevels[sortedLevels.length - 1].level_number : 1;
+  for (const level of sortedLevels) {
+    if (totalSpent >= level.threshold) {
+      newLevel = level.level_number || newLevel;
+      break;
+    }
   }
   if (newLevel !== currentLevel) {
-    await executor.query("UPDATE users SET loyalty_level = ? WHERE id = ?", [newLevel, userId]);
+    const newLevelId = activeLevels[newLevel]?.id || currentLevelId;
+    await executor.query("UPDATE users SET loyalty_level = ?, current_loyalty_level_id = ? WHERE id = ?", [newLevel, newLevelId, userId]);
+    await executor.query("UPDATE user_loyalty_levels SET ended_at = NOW() WHERE user_id = ? AND ended_at IS NULL", [userId]);
+    await executor.query(
+      `INSERT INTO user_loyalty_levels (user_id, level_id, reason, triggered_by_order_id, total_spent_amount, started_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [userId, newLevelId, "threshold_reached", null, Math.round(totalSpent), new Date()],
+    );
+    await executor.query("UPDATE user_loyalty_stats SET last_level_check_at = NOW() WHERE user_id = ?", [userId]);
+    await logLoyaltyEvent({
+      eventType: "cron_execution",
+      severity: "info",
+      userId,
+      message: `Изменение уровня: ${currentLevel} → ${newLevel}`,
+    });
     try {
       const { wsServer } = await import("../index.js");
-      wsServer.notifyLevelUp(userId, newLevel, levels[newLevel].name);
+      wsServer.notifyLevelUp(userId, newLevel, activeLevels[newLevel].name);
     } catch (wsError) {
       console.error("Failed to send WebSocket notification:", wsError);
     }
     return {
       old_level: currentLevel,
       new_level: newLevel,
-      level_name: levels[newLevel].name,
+      level_name: activeLevels[newLevel].name,
     };
   }
   return null;
 }
 export async function spendBonuses(order, connection = null) {
   const executor = connection || db;
-  const bonusUsed = parseFloat(order.bonus_used) || 0;
+  const bonusUsed = Math.round(parseFloat(order.bonus_used) || 0);
   if (bonusUsed <= 0) return null;
-  const [users] = await executor.query("SELECT bonus_balance FROM users WHERE id = ?", [order.user_id]);
+  const spendTx = await getLoyaltyTransaction(executor, order.id, "spend");
+  if (spendTx) {
+    return spendTx;
+  }
+  const selectBalanceSql = connection ? "SELECT bonus_balance FROM users WHERE id = ? FOR UPDATE" : "SELECT bonus_balance FROM users WHERE id = ?";
+  const [users] = await executor.query(selectBalanceSql, [order.user_id]);
   if (users.length === 0) {
     throw new Error("User not found");
   }
-  const currentBalance = parseFloat(users[0].bonus_balance) || 0;
+  const currentBalance = Math.round(parseFloat(users[0].bonus_balance) || 0);
   if (currentBalance < bonusUsed) {
     throw new Error("Недостаточно бонусов на балансе");
   }
-  const spendTx = await getLoyaltyTransaction(executor, order.id, "spend");
-  const refundTx = await getLoyaltyTransaction(executor, order.id, "refund");
-  const refundedAmount = parseFloat(refundTx?.amount) || 0;
-  if (spendTx && refundedAmount <= 0) {
-    return spendTx;
-  }
-  if (spendTx && refundedAmount > 0) {
-    const reapplyAmount = Math.min(refundedAmount, bonusUsed);
-    const newBalance = currentBalance - reapplyAmount;
-    await executor.query("UPDATE users SET bonus_balance = ? WHERE id = ?", [newBalance, order.user_id]);
-    await updateLoyaltyTransaction(executor, refundTx.id, {
-      amount: Math.max(0, refundedAmount - reapplyAmount),
-      balance_before: currentBalance,
-      balance_after: newBalance,
-      description: `Возврат списанных бонусов за отменённый заказ #${order.order_number}`,
-    });
-    return spendTx;
-  }
+  await consumeEarnAmounts(executor, order.user_id, bonusUsed, connection);
   const newBalance = currentBalance - bonusUsed;
   await executor.query("UPDATE users SET bonus_balance = ? WHERE id = ?", [newBalance, order.user_id]);
   const txId = await insertLoyaltyTransaction(executor, {
     user_id: order.user_id,
     order_id: order.id,
     type: "spend",
-    amount: -bonusUsed,
-    balance_before: currentBalance,
-    balance_after: newBalance,
-    description: `Списание бонусов за заказ #${order.order_number}`,
+    amount: bonusUsed,
+    expires_at: null,
+    status: "pending",
   });
-  await executor.query("UPDATE orders SET bonus_spend_transaction_id = ? WHERE id = ?", [txId, order.id]);
-  return { id: txId, amount: -bonusUsed, balance_after: newBalance };
+  await updateUserLoyaltyStats(executor, order.user_id, {
+    balance: newBalance,
+    spent: bonusUsed,
+  });
+  await invalidateBonusCache(order.user_id);
+  return { id: txId, amount: bonusUsed, balance_after: newBalance };
 }
-export async function earnBonuses(order, connection = null, levels = DEFAULT_LOYALTY_LEVELS) {
+export async function earnBonuses(order, connection = null, levels = DEFAULT_LOYALTY_LEVELS, loyaltySettings = null) {
   const executor = connection || db;
-  const [users] = await executor.query("SELECT loyalty_level, bonus_balance, total_spent FROM users WHERE id = ?", [order.user_id]);
+  const existing = await getLoyaltyTransaction(executor, order.id, "earn");
+  if (existing) {
+    return existing;
+  }
+  const settings = loyaltySettings || (await getLoyaltySettings());
+  const selectUserSql = connection
+    ? "SELECT loyalty_level, bonus_balance, total_spent FROM users WHERE id = ? FOR UPDATE"
+    : "SELECT loyalty_level, bonus_balance, total_spent FROM users WHERE id = ?";
+  const [users] = await executor.query(selectUserSql, [order.user_id]);
   if (users.length === 0) {
     throw new Error("User not found");
   }
   const loyaltyLevel = users[0].loyalty_level || 1;
-  const amountForBonus = Math.max(0, (parseFloat(order.subtotal) || 0) - (parseFloat(order.bonus_used) || 0));
-  const amount = calculateEarnedBonuses(amountForBonus, loyaltyLevel, levels);
+  const orderTotal = parseFloat(order.total) || 0;
+  const baseAmount = getEarnBaseAmount(order, settings);
+  const amount = calculateEarnedBonuses(baseAmount, loyaltyLevel, levels);
   if (amount <= 0) {
     return null;
   }
-  const existing = await getLoyaltyTransaction(executor, order.id, "earn");
-  const cancelTx = await getLoyaltyTransaction(executor, order.id, "cancel_earn");
-  const cancelledAmount = Math.abs(parseFloat(cancelTx?.amount) || 0);
-  if (existing && cancelledAmount > 0) {
-    const restoreAmount = Math.min(cancelledAmount, amount);
-    if (restoreAmount <= 0) return existing;
-    const balanceBefore = parseFloat(users[0].bonus_balance) || 0;
-    const newBalance = balanceBefore + restoreAmount;
-    await executor.query("UPDATE users SET bonus_balance = ?, total_spent = ? WHERE id = ?", [
-      newBalance,
-      (parseFloat(users[0].total_spent) || 0) + (parseFloat(order.total) || 0),
-      order.user_id,
-    ]);
-    await updateLoyaltyTransaction(executor, cancelTx.id, {
-      amount: -(cancelledAmount - restoreAmount),
-      balance_before: balanceBefore,
-      balance_after: newBalance,
-      description: `Отмена начисления бонусов за заказ #${order.order_number}`,
-    });
-    await updateLoyaltyTransaction(executor, existing.id, {
-      amount,
-      balance_before: balanceBefore,
-      balance_after: newBalance,
-      description: `Начисление бонусов за заказ #${order.order_number}`,
-    });
-    await executor.query("UPDATE orders SET bonus_earned = ?, bonus_earn_transaction_id = ? WHERE id = ?", [amount, existing.id, order.id]);
-    const levelUp = await checkLevelUp(order.user_id, levels, executor);
-    return { id: existing.id, amount, balance_after: newBalance, level_up: levelUp };
-  }
-  if (existing) {
-    return existing;
-  }
-  const balanceBefore = parseFloat(users[0].bonus_balance) || 0;
-  const newBalance = balanceBefore + amount;
-  await executor.query("UPDATE users SET bonus_balance = ?, total_spent = ? WHERE id = ?", [
-    newBalance,
-    (parseFloat(users[0].total_spent) || 0) + (parseFloat(order.total) || 0),
-    order.user_id,
-  ]);
+  const balanceBefore = Math.round(parseFloat(users[0].bonus_balance) || 0);
+  const newBalance = balanceBefore + Math.round(amount);
+  const newTotalSpent = (parseFloat(users[0].total_spent) || 0) + orderTotal;
+  await executor.query("UPDATE users SET bonus_balance = ?, total_spent = ? WHERE id = ?", [newBalance, newTotalSpent, order.user_id]);
+  const expiresAt = getExpiryDateFromSettings(settings);
   const txId = await insertLoyaltyTransaction(executor, {
     user_id: order.user_id,
     order_id: order.id,
     type: "earn",
-    amount,
-    balance_before: balanceBefore,
-    balance_after: newBalance,
-    description: `Начисление бонусов за заказ #${order.order_number}`,
+    amount: Math.round(amount),
+    earned_at: new Date(),
+    expires_at: expiresAt,
+    status: "completed",
   });
-  await executor.query("UPDATE orders SET bonus_earned = ?, bonus_earn_transaction_id = ? WHERE id = ?", [amount, txId, order.id]);
+  await updateUserLoyaltyStats(executor, order.user_id, {
+    balance: newBalance,
+    earned: Math.round(amount),
+  });
   const levelUp = await checkLevelUp(order.user_id, levels, executor);
+  await invalidateBonusCache(order.user_id);
   try {
     const { wsServer } = await import("../index.js");
     wsServer.notifyBonusUpdate(order.user_id, newBalance, {
-      type: "earned",
+      type: "earn",
       amount,
       orderId: order.id,
       level_up: levelUp,
@@ -341,229 +385,185 @@ export async function earnBonuses(order, connection = null, levels = DEFAULT_LOY
   };
 }
 
-export async function refundBonuses(order, connection = null) {
+export async function removeEarnedBonuses(order, connection = null, levels = DEFAULT_LOYALTY_LEVELS) {
   const executor = connection || db;
-  const bonusUsed = parseFloat(order.bonus_used) || 0;
-  if (bonusUsed <= 0) return null;
-  const spendTx = await getLoyaltyTransaction(executor, order.id, "spend");
-  if (!spendTx) return null;
-  const existingRefund = await getLoyaltyTransaction(executor, order.id, "refund");
-  const [users] = await executor.query("SELECT bonus_balance FROM users WHERE id = ?", [order.user_id]);
-  if (users.length === 0) {
-    throw new Error("User not found");
-  }
-  const currentBalance = parseFloat(users[0].bonus_balance) || 0;
-  const desiredRefund = bonusUsed;
-  const currentRefund = parseFloat(existingRefund?.amount) || 0;
-  const delta = desiredRefund - currentRefund;
-  if (delta === 0) return existingRefund;
-  const balanceBefore = currentBalance;
-  const newBalance = currentBalance + delta;
-  await executor.query("UPDATE users SET bonus_balance = ? WHERE id = ?", [newBalance, order.user_id]);
-  const payload = {
-    amount: desiredRefund,
-    balance_before: balanceBefore,
-    balance_after: newBalance,
-    description: `Возврат списанных бонусов за отменённый заказ #${order.order_number}`,
-  };
-  let txId = existingRefund?.id || null;
-  if (txId) {
-    await updateLoyaltyTransaction(executor, txId, payload);
-  } else {
-    txId = await insertLoyaltyTransaction(executor, {
-      user_id: order.user_id,
-      order_id: order.id,
-      type: "refund",
-      ...payload,
-    });
-  }
-  return { id: txId, amount: desiredRefund, balance_after: newBalance };
-}
-
-export async function cancelEarnedBonuses(order, connection = null, levels = DEFAULT_LOYALTY_LEVELS) {
-  const executor = connection || db;
-  const earnedAmount = parseFloat(order.bonus_earned) || 0;
-  if (earnedAmount <= 0) return null;
   const earnTx = await getLoyaltyTransaction(executor, order.id, "earn");
   if (!earnTx) return null;
-  const existingCancel = await getLoyaltyTransaction(executor, order.id, "cancel_earn");
-  const [users] = await executor.query("SELECT bonus_balance, total_spent FROM users WHERE id = ?", [order.user_id]);
+  const selectUserSql = connection
+    ? "SELECT bonus_balance, total_spent FROM users WHERE id = ? FOR UPDATE"
+    : "SELECT bonus_balance, total_spent FROM users WHERE id = ?";
+  const [users] = await executor.query(selectUserSql, [order.user_id]);
   if (users.length === 0) {
     throw new Error("User not found");
   }
   const currentBalance = parseFloat(users[0].bonus_balance) || 0;
-  const currentTotalSpent = parseFloat(users[0].total_spent) || 0;
-  const desiredCancel = -earnedAmount;
-  const currentCancel = parseFloat(existingCancel?.amount) || 0;
-  const delta = desiredCancel - currentCancel;
-  if (delta === 0) return existingCancel;
-  const balanceBefore = currentBalance;
-  const newBalance = currentBalance + delta;
-  if (newBalance < 0) {
-    throw new Error("Невозможно отменить начисление: недостаточно бонусов на балансе");
-  }
-  await executor.query("UPDATE users SET bonus_balance = ?, total_spent = ? WHERE id = ?", [
-    newBalance,
-    Math.max(0, currentTotalSpent - (parseFloat(order.total) || 0)),
-    order.user_id,
-  ]);
-  const payload = {
-    amount: desiredCancel,
-    balance_before: balanceBefore,
-    balance_after: newBalance,
-    description: `Отмена начисления бонусов за заказ #${order.order_number}`,
-  };
-  let txId = existingCancel?.id || null;
-  if (txId) {
-    await updateLoyaltyTransaction(executor, txId, payload);
-  } else {
-    txId = await insertLoyaltyTransaction(executor, {
-      user_id: order.user_id,
-      order_id: order.id,
-      type: "cancel_earn",
-      ...payload,
-    });
-  }
-  await executor.query("UPDATE orders SET bonus_earned = 0, bonus_earn_transaction_id = NULL WHERE id = ?", [order.id]);
+  const earnedAmount = parseFloat(earnTx.amount) || 0;
+  const newBalance = Math.max(0, currentBalance - earnedAmount);
+  const newTotalSpent = Math.max(0, (parseFloat(users[0].total_spent) || 0) - (parseFloat(order.total) || 0));
+  await executor.query("UPDATE users SET bonus_balance = ?, total_spent = ? WHERE id = ?", [newBalance, newTotalSpent, order.user_id]);
+  await executor.query("UPDATE loyalty_transactions SET status = 'cancelled' WHERE id = ?", [earnTx.id]);
+  const refundId = await insertLoyaltyTransaction(executor, {
+    user_id: order.user_id,
+    order_id: order.id,
+    type: "refund_earn",
+    amount: Math.round(earnedAmount),
+    earned_at: new Date(),
+    expires_at: null,
+    status: "completed",
+    description: "Отмена начисления",
+    metadata: { cancels_transaction_id: earnTx.id },
+  });
+  await updateUserLoyaltyStats(executor, order.user_id, {
+    balance: newBalance,
+    earned: -Math.round(earnedAmount),
+  });
+  await logLoyaltyEvent({
+    eventType: "cron_execution",
+    severity: "info",
+    userId: order.user_id,
+    orderId: order.id,
+    transactionId: refundId,
+    message: "Отмена начисления при смене статуса",
+  });
+  await invalidateBonusCache(order.user_id);
   await checkLevelUp(order.user_id, levels, executor);
-  return { id: txId, amount: desiredCancel, balance_after: newBalance };
+  return { id: earnTx.id, amount: earnedAmount, balance_after: newBalance };
 }
-export async function rollbackOrderBonuses({
-  userId,
-  orderId,
-  orderNumber,
-  bonusUsed = 0,
-  orderTotal = 0,
-  connection = null,
-  levels = DEFAULT_LOYALTY_LEVELS,
-}) {
+
+export async function cancelOrderBonuses(order, connection = null, levels = DEFAULT_LOYALTY_LEVELS) {
   const executor = connection || db;
-  const selectBalanceSql = connection
+  const selectUserSql = connection
     ? "SELECT bonus_balance, total_spent FROM users WHERE id = ? FOR UPDATE"
     : "SELECT bonus_balance, total_spent FROM users WHERE id = ?";
-  const [users] = await executor.query(selectBalanceSql, [userId]);
-  const currentBalance = parseFloat(users[0]?.bonus_balance) || 0;
-  const currentTotalSpent = parseFloat(users[0]?.total_spent) || 0;
-  let balanceAfter = currentBalance;
-  if (bonusUsed > 0) {
-    const refundEntry = await getManualEntry(executor, orderId, MANUAL_PREFIX.refund, "Возврат бонусов за отмену заказа");
-    const refundedTotal = parseFloat(refundEntry?.amount) || 0;
-    const desiredRefund = Math.max(0, bonusUsed);
-    const refundDelta = desiredRefund - refundedTotal;
-    if (refundDelta !== 0) {
-      balanceAfter = currentBalance + refundDelta;
-      await executor.query("UPDATE users SET bonus_balance = ? WHERE id = ?", [balanceAfter, userId]);
-      await setManualEntryAmount(executor, {
-        userId,
-        orderId,
-        entry: refundEntry,
-        prefix: MANUAL_PREFIX.refund,
-        label: `Возврат бонусов за отмену заказа #${orderNumber}`,
-        amount: desiredRefund,
-        balanceAfter,
+  const [users] = await executor.query(selectUserSql, [order.user_id]);
+  if (users.length === 0) {
+    throw new Error("User not found");
+  }
+  const [transactions] = await executor.query("SELECT id, type, amount, status FROM loyalty_transactions WHERE order_id = ?", [order.id]);
+  if (transactions.length === 0) return null;
+  const earnedAmount = transactions
+    .filter((tx) => tx.type === "earn" && tx.status !== "cancelled")
+    .reduce((sum, tx) => sum + (parseFloat(tx.amount) || 0), 0);
+  const spentAmount = transactions
+    .filter((tx) => tx.type === "spend" && tx.status !== "cancelled")
+    .reduce((sum, tx) => sum + (parseFloat(tx.amount) || 0), 0);
+  if (spentAmount > 0) {
+    await restoreEarnAmounts(executor, order.user_id, spentAmount, connection);
+  }
+  const currentBalance = parseFloat(users[0].bonus_balance) || 0;
+  const newBalance = Math.max(0, currentBalance + spentAmount - earnedAmount);
+  const totalSpent = parseFloat(users[0].total_spent) || 0;
+  const newTotalSpent = earnedAmount > 0 ? Math.max(0, totalSpent - (parseFloat(order.total) || 0)) : totalSpent;
+  await executor.query("UPDATE users SET bonus_balance = ?, total_spent = ? WHERE id = ?", [newBalance, newTotalSpent, order.user_id]);
+  for (const tx of transactions) {
+    if (tx.status === "cancelled") continue;
+    await executor.query("UPDATE loyalty_transactions SET status = 'cancelled' WHERE id = ?", [tx.id]);
+    if (tx.type === "spend") {
+      const refundId = await insertLoyaltyTransaction(executor, {
+        user_id: order.user_id,
+        order_id: order.id,
+        type: "refund_spend",
+        amount: Math.round(parseFloat(tx.amount) || 0),
+        earned_at: new Date(),
+        expires_at: null,
+        status: "completed",
+        description: "Возврат списанных бонусов",
+        metadata: { cancels_transaction_id: tx.id },
+      });
+      await logLoyaltyEvent({
+        eventType: "cron_execution",
+        severity: "info",
+        userId: order.user_id,
+        orderId: order.id,
+        transactionId: refundId,
+        message: "Возврат списания при отмене заказа",
+      });
+    }
+    if (tx.type === "earn") {
+      const refundId = await insertLoyaltyTransaction(executor, {
+        user_id: order.user_id,
+        order_id: order.id,
+        type: "refund_earn",
+        amount: Math.round(parseFloat(tx.amount) || 0),
+        earned_at: new Date(),
+        expires_at: null,
+        status: "completed",
+        description: "Отмена начисления",
+        metadata: { cancels_transaction_id: tx.id },
+      });
+      await logLoyaltyEvent({
+        eventType: "cron_execution",
+        severity: "info",
+        userId: order.user_id,
+        orderId: order.id,
+        transactionId: refundId,
+        message: "Отмена начисления при отмене заказа",
       });
     }
   }
-  const earnedEntry = await getEarnedEntry(executor, orderId);
-  const earnedTotal = parseFloat(earnedEntry?.amount) || 0;
-  if (earnedTotal > 0) {
-    const rollbackEntry = await getManualEntry(executor, orderId, MANUAL_PREFIX.rollback, "Аннулирование бонусов за отмену заказа");
-    const rolledBackTotal = parseFloat(rollbackEntry?.amount) || 0;
-    const desiredRollback = Math.max(0, earnedTotal);
-    const rollbackDelta = desiredRollback - rolledBackTotal;
-    if (rollbackDelta !== 0) {
-      balanceAfter = Math.max(0, balanceAfter - rollbackDelta);
-      const spendDelta = desiredRollback > 0 ? orderTotal * (rollbackDelta / desiredRollback) : 0;
-      const updatedTotalSpent = Math.max(0, currentTotalSpent - spendDelta);
-      await executor.query("UPDATE users SET bonus_balance = ?, total_spent = ? WHERE id = ?", [balanceAfter, updatedTotalSpent, userId]);
-      await setManualEntryAmount(executor, {
-        userId,
-        orderId,
-        entry: rollbackEntry,
-        prefix: MANUAL_PREFIX.rollback,
-        label: `Аннулирование бонусов за отмену заказа #${orderNumber}`,
-        amount: desiredRollback,
-        balanceAfter,
-      });
-    }
-  }
-  await checkLevelUp(userId, levels, executor);
-}
-export async function reapplyOrderBonuses({ userId, orderId, orderNumber, bonusUsed = 0, connection = null }) {
-  if (bonusUsed <= 0) return;
-  const executor = connection || db;
-  const refundEntry = await getManualEntry(executor, orderId, MANUAL_PREFIX.refund, "Возврат бонусов за отмену заказа");
-  const refundedTotal = parseFloat(refundEntry?.amount) || 0;
-  const amountToReapply = Math.max(0, Math.min(bonusUsed, refundedTotal));
-  if (amountToReapply <= 0) return;
-  const selectBalanceSql = connection ? "SELECT bonus_balance FROM users WHERE id = ? FOR UPDATE" : "SELECT bonus_balance FROM users WHERE id = ?";
-  const [users] = await executor.query(selectBalanceSql, [userId]);
-  const currentBalance = parseFloat(users[0]?.bonus_balance) || 0;
-  if (amountToReapply > currentBalance) {
-    throw new Error("Недостаточно бонусов для восстановления заказа");
-  }
-  const newBalance = currentBalance - amountToReapply;
-  await executor.query("UPDATE users SET bonus_balance = ? WHERE id = ?", [newBalance, userId]);
-  const updatedRefund = Math.max(0, refundedTotal - amountToReapply);
-  await setManualEntryAmount(executor, {
-    userId,
-    orderId,
-    entry: refundEntry,
-    prefix: MANUAL_PREFIX.refund,
-    label: `Возврат бонусов за отмену заказа #${orderNumber}`,
-    amount: updatedRefund,
-    balanceAfter: newBalance,
+  await updateUserLoyaltyStats(executor, order.user_id, {
+    balance: newBalance,
+    earned: -Math.round(earnedAmount),
+    spent: -Math.round(spentAmount),
   });
+  await invalidateBonusCache(order.user_id);
+  await checkLevelUp(order.user_id, levels, executor);
+  return { spent: spentAmount, earned: earnedAmount, balance_after: newBalance };
 }
-export async function useBonuses(userId, orderId, amount, description = null, connection = null) {
-  if (amount <= 0) {
-    return null;
-  }
+export async function applyManualBonusAdjustment({ userId, delta, connection = null, loyaltySettings = null }) {
   const executor = connection || db;
-  const maxAttempts = 3;
-  const selectBalanceSql = connection ? "SELECT bonus_balance FROM users WHERE id = ? FOR UPDATE" : "SELECT bonus_balance FROM users WHERE id = ?";
-  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    try {
-      const [users] = await executor.query(selectBalanceSql, [userId]);
-      if (users.length === 0) {
-        throw new Error("User not found");
-      }
-      const currentBalance = parseFloat(users[0].bonus_balance);
-      if (amount > currentBalance) {
-        throw new Error("Insufficient bonus balance");
-      }
-      const newBalance = currentBalance - amount;
-      await executor.query("UPDATE users SET bonus_balance = ? WHERE id = ?", [newBalance, userId]);
-      const [result] = await executor.query(
-        `INSERT INTO bonus_history 
-         (user_id, order_id, type, amount, balance_after, description)
-         VALUES (?, ?, 'used', ?, ?, ?)`,
-        [userId, orderId, amount, newBalance, description || "Списание бонусов"],
-      );
-      try {
-        const { wsServer } = await import("../index.js");
-        wsServer.notifyBonusUpdate(userId, newBalance, {
-          type: "used",
-          amount,
-          orderId,
-        });
-      } catch (wsError) {
-        console.error("Failed to send WebSocket notification:", wsError);
-      }
-      return {
-        id: result.insertId,
-        amount,
-        balance_after: newBalance,
-      };
-    } catch (error) {
-      const isLockError = error?.code === "ER_LOCK_WAIT_TIMEOUT" || error?.code === "ER_LOCK_DEADLOCK";
-      if (!isLockError || attempt === maxAttempts) {
-        throw error;
-      }
-      await new Promise((resolve) => setTimeout(resolve, 100 * attempt));
-    }
+  const settings = loyaltySettings || (await getLoyaltySettings());
+  const selectUserSql = connection ? "SELECT bonus_balance FROM users WHERE id = ? FOR UPDATE" : "SELECT bonus_balance FROM users WHERE id = ?";
+  const [users] = await executor.query(selectUserSql, [userId]);
+  if (users.length === 0) {
+    throw new Error("User not found");
   }
-  return null;
+  const currentBalance = Math.round(parseFloat(users[0].bonus_balance) || 0);
+  if (delta === 0) {
+    return { balance: currentBalance };
+  }
+  if (delta > 0) {
+    const newBalance = currentBalance + Math.round(delta);
+    await executor.query("UPDATE users SET bonus_balance = ? WHERE id = ?", [newBalance, userId]);
+    await insertLoyaltyTransaction(executor, {
+      user_id: userId,
+      order_id: null,
+      type: "earn",
+      amount: Math.round(delta),
+      earned_at: new Date(),
+      expires_at: getExpiryDateFromSettings(settings),
+      status: "completed",
+      description: "Ручная корректировка",
+    });
+    await updateUserLoyaltyStats(executor, userId, {
+      balance: newBalance,
+      earned: Math.round(delta),
+    });
+    await invalidateBonusCache(userId);
+    return { balance: newBalance };
+  }
+  const spendAmount = Math.abs(Math.round(delta));
+  if (currentBalance < spendAmount) {
+    throw new Error("Недостаточно бонусов на балансе");
+  }
+  await consumeEarnAmounts(executor, userId, spendAmount, connection);
+  const newBalance = currentBalance - spendAmount;
+  await executor.query("UPDATE users SET bonus_balance = ? WHERE id = ?", [newBalance, userId]);
+  await insertLoyaltyTransaction(executor, {
+    user_id: userId,
+    order_id: null,
+    type: "spend",
+    amount: spendAmount,
+    expires_at: null,
+    status: "completed",
+    description: "Ручная корректировка",
+  });
+  await updateUserLoyaltyStats(executor, userId, {
+    balance: newBalance,
+    spent: spendAmount,
+  });
+  await invalidateBonusCache(userId);
+  return { balance: newBalance };
 }
 export async function getBonusHistory(userId, limit = 50, offset = 0) {
   const [rows] = await db.query(
@@ -573,8 +573,7 @@ export async function getBonusHistory(userId, limit = 50, offset = 0) {
       o.order_number,
       lt.type,
       lt.amount,
-      lt.balance_after,
-      lt.description,
+      lt.expires_at,
       lt.created_at
      FROM loyalty_transactions lt
      LEFT JOIN orders o ON lt.order_id = o.id
@@ -585,17 +584,74 @@ export async function getBonusHistory(userId, limit = 50, offset = 0) {
   );
   return rows;
 }
+export async function grantRegistrationBonus(userId, connection = null, loyaltySettings = null) {
+  const executor = connection || db;
+  const settings = loyaltySettings || (await getLoyaltySettings());
+  if (!normalizeBoolean(settings.registration_bonus_enabled, true)) {
+    return null;
+  }
+  const amount = Math.max(0, Math.round(normalizeNumber(settings.registration_bonus_amount, 0)));
+  if (amount <= 0) {
+    return null;
+  }
+  const selectSql = connection
+    ? "SELECT bonus_balance, registration_bonus_granted, loyalty_registered_at FROM users WHERE id = ? FOR UPDATE"
+    : "SELECT bonus_balance, registration_bonus_granted, loyalty_registered_at FROM users WHERE id = ?";
+  const [users] = await executor.query(selectSql, [userId]);
+  if (users.length === 0) {
+    throw new Error("User not found");
+  }
+  if (users[0].registration_bonus_granted) {
+    return null;
+  }
+  const currentBalance = Math.round(parseFloat(users[0].bonus_balance) || 0);
+  const newBalance = currentBalance + amount;
+  const expiresDays = Math.max(1, normalizeNumber(settings.registration_bonus_expires_days, 30));
+  const expiresAt = new Date(Date.now() + expiresDays * 24 * 60 * 60 * 1000);
+  await executor.query(
+    "UPDATE users SET bonus_balance = ?, registration_bonus_granted = TRUE, loyalty_registered_at = COALESCE(loyalty_registered_at, NOW()) WHERE id = ?",
+    [newBalance, userId],
+  );
+  const txId = await insertLoyaltyTransaction(executor, {
+    user_id: userId,
+    order_id: null,
+    type: "register_bonus",
+    amount,
+    earned_at: new Date(),
+    expires_at: expiresAt,
+    status: "completed",
+    description: "Бонус за регистрацию",
+  });
+  await updateUserLoyaltyStats(executor, userId, {
+    balance: newBalance,
+    earned: amount,
+  });
+  await logLoyaltyEvent({
+    eventType: "cron_execution",
+    severity: "info",
+    userId,
+    transactionId: txId,
+    message: "Начислен бонус за регистрацию",
+    details: { amount },
+  });
+  await invalidateBonusCache(userId);
+  return { id: txId, amount, balance_after: newBalance };
+}
 export default {
   calculateEarnedBonuses,
   calculateMaxUsableBonuses,
   getLoyaltyLevelsFromSettings,
+  getLoyaltyLevelsFromDb,
   getMaxUsePercentFromSettings,
   getRedeemPercentForLevel,
   validateBonusUsage,
   earnBonuses,
   spendBonuses,
-  refundBonuses,
-  cancelEarnedBonuses,
+  removeEarnedBonuses,
+  cancelOrderBonuses,
+  applyManualBonusAdjustment,
   getBonusHistory,
+  grantRegistrationBonus,
   checkLevelUp,
+  invalidateBonusCache,
 };

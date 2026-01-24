@@ -96,4 +96,7 @@ export const settingsAPI = {
   getSettings() {
     return api.get("/settings");
   },
+  getLoyaltySettings() {
+    return api.get("/loyalty-settings");
+  },
 };

@@ -17,6 +17,7 @@ import MenuModifiers from "../views/MenuModifiers.vue";
 import MenuTags from "../views/MenuTags.vue";
 import MenuStopList from "../views/MenuStopList.vue";
 import SystemSettings from "../views/SystemSettings.vue";
+import LoyaltyAdmin from "../views/LoyaltyAdmin.vue";
 import AdminUsers from "../views/AdminUsers.vue";
 import AdminLogs from "../views/AdminLogs.vue";
 import OrderDetail from "../views/OrderDetail.vue";
@@ -91,6 +92,12 @@ const router = createRouter({
           name: "system-settings",
           component: SystemSettings,
           meta: { title: "Настройки системы", subtitle: "Модули и функциональные блоки", roles: ["admin", "ceo"] },
+        },
+        {
+          path: "loyalty",
+          name: "loyalty-admin",
+          component: LoyaltyAdmin,
+          meta: { title: "Лояльность", subtitle: "Уровни, аудит и логи", roles: ["admin", "ceo"] },
         },
         {
           path: "admin-users",

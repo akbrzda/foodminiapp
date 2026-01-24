@@ -1,8 +1,7 @@
 import { defineStore } from "pinia";
-import { ordersAPI } from "../api/endpoints";
+import { authAPI } from "../api/endpoints";
 import {
   LOYALTY_LEVELS,
-  LOYALTY_WINDOW_DAYS,
   MAX_BONUS_REDEEM_PERCENT,
   getLoyaltyLevel,
   getNextLoyaltyLevel,
@@ -12,20 +11,20 @@ import {
 } from "../utils/loyalty";
 export const useLoyaltyStore = defineStore("loyalty", {
   state: () => ({
-    spendLast60Days: 0,
+    totalSpent: 0,
     loading: false,
     updatedAt: null,
     levels: LOYALTY_LEVELS,
     fallbackRedeemPercent: MAX_BONUS_REDEEM_PERCENT,
   }),
   getters: {
-    currentLevel: (state) => getLoyaltyLevel(state.spendLast60Days, state.levels),
-    nextLevel: (state) => getNextLoyaltyLevel(state.spendLast60Days, state.levels),
-    rate: (state) => getLoyaltyLevel(state.spendLast60Days, state.levels).rate,
-    amountToNextLevel: (state) => getAmountToNextLevel(state.spendLast60Days, state.levels),
-    progressToNextLevel: (state) => getProgressToNextLevel(state.spendLast60Days, state.levels),
+    currentLevel: (state) => getLoyaltyLevel(state.totalSpent, state.levels),
+    nextLevel: (state) => getNextLoyaltyLevel(state.totalSpent, state.levels),
+    rate: (state) => getLoyaltyLevel(state.totalSpent, state.levels).rate,
+    amountToNextLevel: (state) => getAmountToNextLevel(state.totalSpent, state.levels),
+    progressToNextLevel: (state) => getProgressToNextLevel(state.totalSpent, state.levels),
     maxRedeemPercent: (state) => {
-      const currentLevel = getLoyaltyLevel(state.spendLast60Days, state.levels);
+      const currentLevel = getLoyaltyLevel(state.totalSpent, state.levels);
       if (Number.isFinite(currentLevel?.redeemPercent)) {
         return currentLevel.redeemPercent;
       }
@@ -33,15 +32,44 @@ export const useLoyaltyStore = defineStore("loyalty", {
     },
   },
   actions: {
-    setSpend(amount) {
-      this.spendLast60Days = normalizeSpend(amount);
+    setTotalSpent(amount) {
+      this.totalSpent = normalizeSpend(amount);
       this.updatedAt = Date.now();
     },
-    applySettings(settings) {
+    applySettings(settings, levelsFromApi = []) {
       const data = settings || {};
+      const fallbackRedeemPercent = Number(data.bonus_max_redeem_percent) || MAX_BONUS_REDEEM_PERCENT;
+      if (Array.isArray(levelsFromApi) && levelsFromApi.length > 0) {
+        const normalized = levelsFromApi
+          .filter((level) => level && (level.is_active === undefined || level.is_active))
+          .map((level) => ({
+            id: level.id ?? level.level_number,
+            name: level.name,
+            threshold: Number(level.threshold_amount) || 0,
+            rate: Number(level.earn_percent) || 0,
+            redeemPercent: Number(level.max_spend_percent),
+            levelNumber: Number(level.level_number) || 0,
+          }))
+          .sort((a, b) => a.threshold - b.threshold || a.levelNumber - b.levelNumber);
+        this.levels = normalized.map((level, index) => {
+          const next = normalized[index + 1];
+          const min = Math.max(0, level.threshold);
+          const max = next ? Math.max(min, next.threshold - 1) : Number.POSITIVE_INFINITY;
+          const redeemPercent = Number.isFinite(level.redeemPercent) ? level.redeemPercent / 100 : fallbackRedeemPercent;
+          return {
+            id: String(level.id ?? index + 1),
+            name: level.name || `Уровень ${index + 1}`,
+            rate: level.rate,
+            redeemPercent,
+            min,
+            max,
+          };
+        });
+        this.fallbackRedeemPercent = fallbackRedeemPercent;
+        return;
+      }
       const level2Threshold = Number(data.loyalty_level_2_threshold);
       const level3Threshold = Number(data.loyalty_level_3_threshold);
-      const fallbackRedeemPercent = Number(data.bonus_max_redeem_percent) || MAX_BONUS_REDEEM_PERCENT;
       const level1RedeemPercent = Number(data.loyalty_level_1_redeem_percent);
       const level2RedeemPercent = Number(data.loyalty_level_2_redeem_percent);
       const level3RedeemPercent = Number(data.loyalty_level_3_redeem_percent);
@@ -76,26 +104,13 @@ export const useLoyaltyStore = defineStore("loyalty", {
       ];
       this.fallbackRedeemPercent = fallbackRedeemPercent;
     },
-    calculateSpendFromOrders(orders) {
-      const cutoff = new Date();
-      cutoff.setDate(cutoff.getDate() - LOYALTY_WINDOW_DAYS);
-      return (orders || []).reduce((total, order) => {
-        if (!order?.created_at) return total;
-        if (order.status === "cancelled") return total;
-        const createdAt = new Date(order.created_at);
-        if (createdAt < cutoff) return total;
-        const orderTotal = Number(order.total ?? order.total_amount) || 0;
-        return total + orderTotal;
-      }, 0);
-    },
-    async refreshFromOrders() {
+    async refreshFromProfile() {
       if (this.loading) return;
       this.loading = true;
       try {
-        const response = await ordersAPI.getMyOrders();
-        const orders = response.data.orders || [];
-        const spend = this.calculateSpendFromOrders(orders);
-        this.setSpend(spend);
+        const response = await authAPI.getProfile();
+        const totalSpent = response.data.user?.total_spent ?? 0;
+        this.setTotalSpent(totalSpent);
       } catch (error) {
         console.error("Failed to refresh loyalty data:", error);
       } finally {
