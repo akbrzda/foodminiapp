@@ -1,17 +1,15 @@
 <template>
   <div class="space-y-6">
     <Card>
-      <CardHeader>
-        <CardTitle>Теги меню</CardTitle>
-        <CardDescription>Управление тегами для фильтрации блюд</CardDescription>
-      </CardHeader>
       <CardContent>
-        <div class="flex justify-end">
-          <Button @click="openModal()">
-            <Plus :size="16" />
-            Добавить тег
-          </Button>
-        </div>
+        <PageHeader title="Теги меню" description="Управление тегами для фильтрации блюд">
+          <template #actions>
+            <Button @click="openModal()">
+              <Plus :size="16" />
+              Добавить тег
+            </Button>
+          </template>
+        </PageHeader>
       </CardContent>
     </Card>
     <Card>
@@ -95,10 +93,10 @@ import BaseModal from "../components/BaseModal.vue";
 import Button from "../components/ui/Button.vue";
 import Card from "../components/ui/Card.vue";
 import CardContent from "../components/ui/CardContent.vue";
-import CardDescription from "../components/ui/CardDescription.vue";
 import CardHeader from "../components/ui/CardHeader.vue";
 import CardTitle from "../components/ui/CardTitle.vue";
 import Input from "../components/ui/Input.vue";
+import PageHeader from "../components/PageHeader.vue";
 import Table from "../components/ui/Table.vue";
 import TableBody from "../components/ui/TableBody.vue";
 import TableCell from "../components/ui/TableCell.vue";

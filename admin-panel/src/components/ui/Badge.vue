@@ -1,30 +1,58 @@
 <template>
-  <span data-slot="badge" :class="classes" v-bind="attrs">
+  <span class="badge" :class="variantClass" v-bind="$attrs">
     <slot />
   </span>
 </template>
 <script setup>
-import { computed, useAttrs } from "vue";
-import { cn } from "../../lib/utils.js";
+import { computed } from "vue";
 defineOptions({ inheritAttrs: false });
 
-const attrs = useAttrs();
 const props = defineProps({
   variant: { type: String, default: "default" },
 });
 
-const variants = {
-  default: "border-transparent bg-primary text-primary-foreground hover:bg-primary/80",
-  secondary: "border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80",
-  destructive: "border-transparent bg-destructive text-destructive-foreground hover:bg-destructive/80",
-  outline: "text-foreground",
-};
-
-const classes = computed(() =>
-  cn(
-    "inline-flex w-fit items-center justify-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-    variants[props.variant] || variants.default,
-    attrs.class,
-  ),
-);
+const variantClass = computed(() => {
+  const map = {
+    default: "badge--default",
+    secondary: "badge--secondary",
+    destructive: "badge--destructive",
+    outline: "badge--outline",
+  };
+  return map[props.variant] || map.default;
+});
 </script>
+<style scoped>
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  user-select: none;
+  white-space: nowrap;
+}
+.badge--default {
+  background: #111827;
+  color: #ffffff;
+}
+.badge--secondary {
+  background: #f3f4f6;
+  color: #111827;
+  border-color: #e5e7eb;
+}
+.badge--destructive {
+  background: #fee2e2;
+  color: #991b1b;
+  border-color: #fecaca;
+}
+.badge--outline {
+  background: transparent;
+  color: #111827;
+  border-color: #d1d5db;
+}
+</style>

@@ -1,55 +1,53 @@
 <template>
   <div class="space-y-6">
     <Card>
-      <CardHeader>
-        <CardTitle>Действия администраторов</CardTitle>
-        <CardDescription>История изменений в системе</CardDescription>
-      </CardHeader>
       <CardContent class="space-y-4">
-        <div class="grid gap-4 lg:grid-cols-5">
-          <div class="space-y-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Администратор</label>
-            <Select v-model="filters.admin_id">
-              <option value="">Все</option>
-              <option v-for="admin in admins" :key="admin.id" :value="admin.id">{{ admin.first_name }} {{ admin.last_name }}</option>
-            </Select>
-          </div>
-          <div class="space-y-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Тип действия</label>
-            <Select v-model="filters.action_type">
-              <option value="">Все</option>
-              <option value="create">Создание</option>
-              <option value="update">Изменение</option>
-              <option value="delete">Удаление</option>
-            </Select>
-          </div>
-          <div class="space-y-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Объект</label>
-            <Select v-model="filters.object_type">
-              <option value="">Все</option>
-              <option value="category">Категория</option>
-              <option value="item">Товар</option>
-              <option value="modifier">Модификатор</option>
-              <option value="order">Заказ</option>
-              <option value="polygon">Полигон</option>
-              <option value="settings">Настройки</option>
-              <option value="user">Пользователь</option>
-              <option value="city">Город</option>
-              <option value="branch">Филиал</option>
-            </Select>
-          </div>
-          <div class="space-y-2 lg:col-span-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Период</label>
-            <RangeCalendar v-model:from="filters.date_from" v-model:to="filters.date_to" />
-          </div>
-        </div>
-        <div class="flex flex-wrap items-center gap-3">
-          <Button variant="outline" @click="resetFilters">
-            <RotateCcw :size="16" />
-            Сбросить
-          </Button>
-          <Badge variant="secondary">Всего: {{ formatNumber(pagination.total) }}</Badge>
-        </div>
+        <PageHeader title="Действия администраторов" description="История изменений в системе">
+          <template #filters>
+            <div class="min-w-[200px] space-y-1">
+              <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Администратор</label>
+              <Select v-model="filters.admin_id">
+                <option value="">Все</option>
+                <option v-for="admin in admins" :key="admin.id" :value="admin.id">{{ admin.first_name }} {{ admin.last_name }}</option>
+              </Select>
+            </div>
+            <div class="min-w-[180px] space-y-1">
+              <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Тип действия</label>
+              <Select v-model="filters.action_type">
+                <option value="">Все</option>
+                <option value="create">Создание</option>
+                <option value="update">Изменение</option>
+                <option value="delete">Удаление</option>
+              </Select>
+            </div>
+            <div class="min-w-[180px] space-y-1">
+              <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Объект</label>
+              <Select v-model="filters.object_type">
+                <option value="">Все</option>
+                <option value="category">Категория</option>
+                <option value="item">Товар</option>
+                <option value="modifier">Модификатор</option>
+                <option value="order">Заказ</option>
+                <option value="polygon">Полигон</option>
+                <option value="settings">Настройки</option>
+                <option value="user">Пользователь</option>
+                <option value="city">Город</option>
+                <option value="branch">Филиал</option>
+              </Select>
+            </div>
+            <div class="min-w-[220px] space-y-1">
+              <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Период</label>
+              <RangeCalendar v-model:from="filters.date_from" v-model:to="filters.date_to" />
+            </div>
+            <div class="ml-auto flex flex-wrap items-center gap-2">
+              <Button variant="outline" @click="resetFilters">
+                <RotateCcw :size="16" />
+                Сбросить
+              </Button>
+              <Badge variant="secondary">Всего: {{ formatNumber(pagination.total) }}</Badge>
+            </div>
+          </template>
+        </PageHeader>
       </CardContent>
     </Card>
     <Card v-if="loading">
@@ -63,10 +61,7 @@
       </CardContent>
     </Card>
     <Card v-else>
-      <CardHeader>
-        <CardTitle>Записи</CardTitle>
-      </CardHeader>
-      <CardContent class="pt-0">
+      <CardContent class="p-0">
         <Table>
           <TableHeader>
             <TableRow>
@@ -88,9 +83,9 @@
                 <div class="text-xs text-muted-foreground">{{ log.admin_email }}</div>
               </TableCell>
               <TableCell>
-              <Badge :variant="getActionVariant(log.action)" :class="getActionClass(log.action)">
-                {{ getActionLabel(log.action) }}
-              </Badge>
+                <Badge :variant="getActionVariant(log.action)" :class="getActionClass(log.action)">
+                  {{ getActionLabel(log.action) }}
+                </Badge>
               </TableCell>
               <TableCell>
                 <div class="text-sm">{{ getObjectLabel(log.object_type) }}</div>
@@ -160,8 +155,6 @@
   </div>
 </template>
 <script setup>
-import { onMounted, reactive, ref, watch } from "vue";
-import { Eye, RotateCcw } from "lucide-vue-next";
 import api from "../api/client.js";
 import BaseModal from "../components/BaseModal.vue";
 import { useNotifications } from "../composables/useNotifications.js";
@@ -170,9 +163,9 @@ import Badge from "../components/ui/Badge.vue";
 import Button from "../components/ui/Button.vue";
 import Card from "../components/ui/Card.vue";
 import CardContent from "../components/ui/CardContent.vue";
-import CardDescription from "../components/ui/CardDescription.vue";
 import CardHeader from "../components/ui/CardHeader.vue";
 import CardTitle from "../components/ui/CardTitle.vue";
+import PageHeader from "../components/PageHeader.vue";
 import RangeCalendar from "../components/ui/RangeCalendar.vue";
 import Select from "../components/ui/Select.vue";
 import Table from "../components/ui/Table.vue";
@@ -181,6 +174,8 @@ import TableCell from "../components/ui/TableCell.vue";
 import TableHead from "../components/ui/TableHead.vue";
 import TableHeader from "../components/ui/TableHeader.vue";
 import TableRow from "../components/ui/TableRow.vue";
+import { onMounted, reactive, ref, watch } from "vue";
+import { Eye, RotateCcw } from "lucide-vue-next";
 const logs = ref([]);
 const admins = ref([]);
 const loading = ref(false);
@@ -310,7 +305,12 @@ const formatJSON = (json) => {
   return JSON.stringify(json, null, 2);
 };
 onMounted(async () => {
-  await Promise.all([loadAdmins(), loadLogs()]);
+  try {
+    await Promise.all([loadAdmins(), loadLogs()]);
+  } catch (error) {
+    console.error("Ошибка загрузки логов:", error);
+    showErrorNotification("Ошибка загрузки логов");
+  }
 });
 watch(
   filters,

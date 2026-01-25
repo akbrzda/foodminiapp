@@ -9,11 +9,8 @@
           <h2 class="text-lg font-semibold text-foreground truncate">{{ polygon?.name || "Полигон" }}</h2>
           <p class="text-xs text-muted-foreground">{{ polygon?.branch_name || "Филиал не указан" }}</p>
         </div>
-        <button @click="$emit('close')" class="rounded-md p-1 hover:bg-muted transition-colors">
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="6" x2="6" y2="18"></line>
-            <line x1="6" y1="6" x2="18" y2="18"></line>
-          </svg>
+        <button @click="emit('close')" class="rounded-md p-1 hover:bg-muted transition-colors">
+          <X :size="20" />
         </button>
       </div>
       <div class="px-4 pt-3">
@@ -60,7 +57,7 @@
             <Input v-model.number="editForm.min_order_amount" type="number" min="0" step="10" class="max-w-[200px]" />
             <p class="text-xs text-muted-foreground mt-1">Нет</p>
           </div>
-          <Button class="w-full" variant="outline" @click="$emit('redraw', polygon)"> Перерисовать </Button>
+          <Button class="w-full" variant="outline" @click="emit('redraw', polygon)"> Перерисовать </Button>
         </div>
         <div v-else class="space-y-4">
           <div class="space-y-2">
@@ -84,24 +81,12 @@
         </div>
       </div>
       <div class="border-t border-border p-4 space-y-2 bg-muted/30">
-        <Button class="w-full" variant="outline" @click="$emit(isBlocked ? 'unblock' : 'block', polygon)">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
-            <path :d="isBlocked ? 'M7 11V7a5 5 0 0 1 9.9-1' : 'M7 11V7a5 5 0 0 1 10 0v4'" />
-          </svg>
+        <Button class="w-full" variant="outline" @click="emit(isBlocked ? 'unblock' : 'block', polygon)">
+          <Unlock v-if="isBlocked" :size="16" />
+          <Lock v-else :size="16" />
           {{ isBlocked ? "Разблокировать" : "Заблокировать" }}
         </Button>
-        <Button class="w-full" variant="destructive" @click="$emit('delete', polygon)">
+        <Button class="w-full" variant="destructive" @click="emit('delete', polygon)">
           <Trash2 :size="16" />
           Удалить полигон
         </Button>
@@ -111,7 +96,7 @@
 </template>
 <script setup>
 import { ref, computed, watch } from "vue";
-import { Save, Trash2 } from "lucide-vue-next";
+import { Lock, Save, Trash2, Unlock, X } from "lucide-vue-next";
 import Button from "./ui/Button.vue";
 import Input from "./ui/Input.vue";
 import Select from "./ui/Select.vue";

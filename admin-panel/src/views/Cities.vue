@@ -1,16 +1,17 @@
 <template>
   <div class="space-y-6">
     <Card>
-      <CardHeader class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-        <div>
-          <CardTitle>Города</CardTitle>
-          <CardDescription>Управление городами доставки</CardDescription>
-        </div>
-        <Button @click="openModal()">
-          <Plus :size="16" />
-          Добавить город
-        </Button>
-      </CardHeader>
+      <CardContent>
+        <PageHeader title="Города" description="Управление городами доставки">
+          <template #actions>
+            <Badge variant="secondary">Всего: {{ cities.length }}</Badge>
+            <Button @click="openModal()">
+              <Plus :size="16" />
+              Добавить город
+            </Button>
+          </template>
+        </PageHeader>
+      </CardContent>
     </Card>
     <Card>
       <CardHeader>
@@ -39,12 +40,12 @@
                 </div>
               </TableCell>
               <TableCell>
-              <Badge
-                variant="secondary"
-                :class="city.is_active ? 'bg-emerald-100 text-emerald-700 border-transparent' : 'bg-muted text-muted-foreground border-transparent'"
-              >
-                {{ city.is_active ? "Активен" : "Неактивен" }}
-              </Badge>
+                <Badge
+                  variant="secondary"
+                  :class="city.is_active ? 'bg-emerald-100 text-emerald-700 border-transparent' : 'bg-muted text-muted-foreground border-transparent'"
+                >
+                  {{ city.is_active ? "Активен" : "Неактивен" }}
+                </Badge>
               </TableCell>
               <TableCell class="text-right">
                 <div class="flex justify-end gap-2">
@@ -109,10 +110,10 @@ import { useReferenceStore } from "../stores/reference.js";
 import Badge from "../components/ui/Badge.vue";
 import Button from "../components/ui/Button.vue";
 import Card from "../components/ui/Card.vue";
-import CardContent from "../components/ui/CardContent.vue";
-import CardDescription from "../components/ui/CardDescription.vue";
 import CardHeader from "../components/ui/CardHeader.vue";
 import CardTitle from "../components/ui/CardTitle.vue";
+import CardContent from "../components/ui/CardContent.vue";
+import PageHeader from "../components/PageHeader.vue";
 import Input from "../components/ui/Input.vue";
 import Select from "../components/ui/Select.vue";
 import Table from "../components/ui/Table.vue";
@@ -124,6 +125,33 @@ import TableRow from "../components/ui/TableRow.vue";
 import { useNotifications } from "../composables/useNotifications.js";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+
+const patchLeafletTouchEvents = () => {
+  if (!L?.DomEvent || L.DomEvent.__touchleavePatched) return;
+  const sanitizeTypes = (types) => {
+    if (typeof types !== "string") return types;
+    return types
+      .split(/\s+/)
+      .filter((type) => type && type !== "touchleave")
+      .join(" ");
+  };
+  const originalOn = L.DomEvent.on;
+  const originalOff = L.DomEvent.off;
+  L.DomEvent.on = function (obj, types, fn, context) {
+    const safeTypes = sanitizeTypes(types);
+    if (!safeTypes) return this;
+    return originalOn.call(this, obj, safeTypes, fn, context);
+  };
+  L.DomEvent.off = function (obj, types, fn, context) {
+    const safeTypes = sanitizeTypes(types);
+    if (!safeTypes) return this;
+    return originalOff.call(this, obj, safeTypes, fn, context);
+  };
+  L.DomEvent.__touchleavePatched = true;
+};
+
+// Убираем предупреждения Leaflet о неверном событии touchleave.
+patchLeafletTouchEvents();
 const referenceStore = useReferenceStore();
 const { showErrorNotification } = useNotifications();
 const cities = ref([]);

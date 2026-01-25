@@ -1,15 +1,21 @@
 <template>
   <div class="space-y-6">
     <Card>
-      <CardHeader class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-        <div>
-          <CardTitle>Позиции меню</CardTitle>
-          <CardDescription>Управление товарами и их параметрами</CardDescription>
-        </div>
-        <Button @click="createItem">
-          <Plus :size="16" />
-          Добавить позицию
-        </Button>
+      <CardContent>
+        <PageHeader title="Позиции меню" description="Управление товарами и их параметрами">
+          <template #actions>
+            <Badge variant="secondary">Всего: {{ items.length }}</Badge>
+            <Button @click="createItem">
+              <Plus :size="16" />
+              Добавить позицию
+            </Button>
+          </template>
+        </PageHeader>
+      </CardContent>
+    </Card>
+    <Card>
+      <CardHeader>
+        <CardTitle>Список позиций</CardTitle>
       </CardHeader>
       <CardContent class="pt-0">
         <Table>
@@ -73,9 +79,9 @@ import Badge from "../components/ui/Badge.vue";
 import Button from "../components/ui/Button.vue";
 import Card from "../components/ui/Card.vue";
 import CardContent from "../components/ui/CardContent.vue";
-import CardDescription from "../components/ui/CardDescription.vue";
 import CardHeader from "../components/ui/CardHeader.vue";
 import CardTitle from "../components/ui/CardTitle.vue";
+import PageHeader from "../components/PageHeader.vue";
 import Table from "../components/ui/Table.vue";
 import TableBody from "../components/ui/TableBody.vue";
 import TableCell from "../components/ui/TableCell.vue";

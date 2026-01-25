@@ -2,134 +2,127 @@
 
 ## Описание
 
-Система управления заказами и контентом для доставки еды. Состоит из backend API, админ‑панели и Telegram Mini App.
+FoodMiniApp — система онлайн‑заказа еды с Telegram Mini App, админ‑панелью и backend API. Проект включает управление меню, заказами, доставкой, клиентами и многоуровневой программой лояльности.
 
 ## Архитектура
 
-- **Backend**: Node.js (Express), MySQL, Redis.
-- **Admin panel**: Vue 3 + Vite.
+- **Backend**: Node.js (Express), MySQL, Redis, WebSocket.
+- **Admin panel**: Vue 3 + Vite + Tailwind CSS.
 - **Telegram miniapp**: Vue 3 + Vite.
+- **Фоновые задачи**: отдельные воркеры для бонусов, уровней, аудита, уведомлений.
+
+## Структура репозитория
+
+- `backend/` — API, бизнес‑логика, воркеры, схемы БД.
+- `admin-panel/` — админ‑панель.
+- `telegram-miniapp/` — клиентское приложение.
+- `docs/` — техническая документация.
 
 ## Основные модули
 
-- **Заказы**: создание, статусы, начисление/списание бонусов.
-- **Меню**: категории, позиции, модификаторы, теги, стоп‑лист.
-- **Клиенты**: карточка клиента, история заказов и бонусов.
-- **Доставка**: зоны доставки, города, филиалы.
-- **Лояльность**: уровни, начисления, списания, автоматизация.
-- **Администрирование**: пользователи админ‑панели, системные настройки, логи.
+- **Авторизация и пользователи**: Telegram‑авторизация, профиль, адреса, состояния пользователя.
+- **Меню**: категории, позиции, варианты, модификаторы, стоп‑лист.
+- **Заказы**: создание, статусы, повтор заказа, история.
+- **Доставка**: города, филиалы, полигоны доставки, геокодирование.
+- **Лояльность**: уровни, начисления, списания, аудит.
+- **Настройки системы**: глобальные флаги и включение модуля лояльности.
+- **Логи и аудит**: логи админских действий, проверки целостности.
+- **Уведомления**: WebSocket‑события и Telegram‑уведомления.
+
+## Запуск
+
+### Требования
+
+- Node.js 18+
+- MySQL 8+
+- Redis
+
+### Быстрый старт
+
+- `docker-compose.yml` — окружение для сервисов.
+- `backend/database/schema.sql` — актуальная схема БД для чистого развёртывания.
+
+### Скрипты
+
+**Backend** (`backend/package.json`):
+- `npm run dev` — запуск API в режиме разработки.
+- `npm run start` — запуск API.
+- `npm run worker` — запуск фоновых воркеров.
+- `npm run init-db` — инициализация базы по `schema.sql`.
+
+**Admin panel** (`admin-panel/package.json`):
+- `npm run dev` — локальная разработка.
+- `npm run build` — сборка.
+
+**Telegram miniapp** (`telegram-miniapp/package.json`):
+- `npm run dev` — локальная разработка.
+- `npm run build` — сборка.
+
+## База данных
+
+Источник истины для чистого проекта — `backend/database/schema.sql`.
+
+### Ключевые таблицы
+
+- `users`, `user_states`, `delivery_addresses` — пользователи и их данные.
+- `cities`, `branches`, `delivery_polygons` — доставка.
+- `menu_categories`, `menu_items`, `item_variants`, `modifier_groups`, `modifiers`, `menu_modifiers` — меню.
+- `orders`, `order_items`, `order_item_modifiers` — заказы.
+- `loyalty_*` — система лояльности.
+- `admin_users`, `admin_user_cities`, `admin_user_branches`, `admin_action_logs` — админ‑панель и аудит.
 
 ## Лояльность
 
+Система лояльности реализуется по `docs/bonus.md` и использует 3 фиксированных уровня (Бронза, Серебро, Золото).
+
 ### Ключевые правила
 
-- Начисления зависят от уровня лояльности.
-- Списание ограничено максимальным процентом.
-- Бонусы имеют срок действия и списываются по FIFO.
-- Уровни пересчитываются по сумме заказов за 60 дней.
-- Автоматическое повышение и понижение уровней.
-- Защита от дублирования транзакций через `bonus_earn_locked`.
-- Фиксация суммы начисления в `bonus_earn_amount` для повторных доставок.
+- Проценты начисления: 3% / 5% / 7%, максимум списания: 25%.
+- Списание происходит при создании заказа, начисление — при первом `completed`.
+- Начисленная сумма фиксируется в `orders.bonus_earn_amount`.
+- Бонусы списываются по FIFO, округление всегда вниз.
+- Истечение бонусов и ДР‑начисления выполняются по расписанию.
 
-### Таблицы
+### Таблицы лояльности
 
-- **loyalty_settings** — глобальные настройки (сроки, бонусы за регистрацию/день рождения, параметры расчета начисления).
-  - `include_delivery_in_earn` — включать ли доставку в сумму для расчёта начисляемых бонусов.
-  - `level_calculation_period_days` — период (дней) для расчёта суммы заказов при определении уровня.
-  - `bonus_max_redeem_percent` — глобальный лимит списания бонусов от суммы заказа (в процентах).
-  - **Важно:** Доставка НЕ учитывается в сумме заказов для определения уровня лояльности (жестко закодировано).
-- **loyalty_levels** — уровни лояльности с порогами, процентами начисления и списания (soft delete через `deleted_at`).
-- **loyalty_transactions** — транзакции (типы в БД: earn, spend, refund_earn, refund_spend, expire, register_bonus, birthday_bonus). В логике корректировок используется тип `adjustment` (см. `adjustOrderBonuses`).
-- **loyalty_exclusions** — исключения для списания бонусов (категории и товары).
-- **user_loyalty_stats** — агрегированная статистика клиента.
-- **user_loyalty_levels** — история смены уровней.
-- **loyalty_logs** — аудит и системные события.
-- **users** — поля `bonus_balance`, `current_loyalty_level_id` и связанные поля.
-- **orders** — поля `bonus_earn_amount`, `bonus_earn_locked` для управления начислениями.
+- `loyalty_levels`, `loyalty_transactions`, `loyalty_logs`.
+- `user_loyalty_levels`.
 
-### Эндпоинты (backend)
+### Ключевые поля
 
-**Настройки лояльности**
+- `users.loyalty_balance`, `users.current_loyalty_level_id`, `users.loyalty_joined_at`.
+- `orders.bonus_spent`, `orders.bonus_earn_amount`, `orders.bonus_earn_locked`.
+- `loyalty_transactions.remaining_amount` для FIFO‑списания.
 
-- `GET /api/loyalty-settings` — публичные настройки.
-- `GET /api/loyalty-settings/admin` — административные настройки.
-- `PUT /api/loyalty-settings/admin` — обновление настроек.
-- `GET /api/loyalty-settings/exclusions` — список исключений для списания бонусов.
-- `POST /api/loyalty-settings/exclusions` — создание исключения (тип: category/product).
-- `DELETE /api/loyalty-settings/exclusions/:id` — удаление исключения.
-- `GET /api/loyalty-settings/logs?limit=50&event_type=&severity=` — логи лояльности (без offset, только limit).
-- `GET /api/loyalty-settings/audit/duplicates` — поиск дублей транзакций.
-- `GET /api/loyalty-settings/audit/mismatches` — расхождения балансов.
-- `GET /api/loyalty-settings/users/:userId/stats` — статистика пользователя.
+### Основные API‑эндпоинты
 
-**Управление уровнями лояльности**
+**Публичные и пользовательские**
+- `GET /api/client/loyalty/balance` — баланс, уровень, прогресс и истекающие бонусы.
+- `GET /api/client/loyalty/calculate-max-spend` — расчет максимального списания.
+- `GET /api/client/loyalty/history` — история транзакций.
+- `GET /api/client/loyalty/levels` — уровни и прогресс.
 
-- `GET /api/admin/loyalty/levels` — список уровней.
-- `POST /api/admin/loyalty/levels` — создание уровня.
-- `PUT /api/admin/loyalty/levels/:id` — обновление уровня.
-- `DELETE /api/admin/loyalty/levels/:id` — удаление уровня.
+**Административные**
+- `GET /api/admin/loyalty/status` — статус модуля.
+- `PUT /api/admin/loyalty/toggle` — включение/выключение.
+- `POST /api/admin/loyalty/adjust` — корректировка баланса.
+- `GET /api/admin/loyalty/users/:id/loyalty` — детали по бонусам пользователя.
 
-**Бонусные операции**
+## Админ‑панель
 
-- `GET /api/bonuses/balance` — текущий баланс бонусов.
-- `GET /api/bonuses/history` — история бонусных транзакций пользователя.
-- `GET /api/bonuses/expiring?days=14` — истекающие бонусы.
-- `POST /api/bonuses/calculate-usable` — расчет доступной суммы для списания с учетом исключений.
+- Управление меню, заказами, клиентами, городами и филиалами.
+- Контроль лояльности: уровни, включение модуля, исключения, аудит.
+- Логи админских действий и системные события.
 
-**Админские данные по клиентам**
+## Telegram Mini App
 
-- `GET /api/admin/clients/:id/bonuses` — бонусные транзакции клиента.
-- `GET /api/admin/loyalty/users/:id/stats` — статистика пользователя.
-- `GET /api/admin/loyalty/users/:id/levels` — история уровней пользователя.
+- Просмотр меню, корзина, оформление заказа.
+- Бонусы и уровни: баланс, прогресс, история транзакций, истечение.
+- История заказов и повтор заказа.
 
-### Бизнес-логика (backend/src/utils/bonuses.js)
+## Документация
 
-**Основные функции:**
-
-- `earnBonuses(order, connection, levels, loyaltySettings)` — начисление бонусов с защитой от дублирования через `bonus_earn_locked`. Устанавливает `bonus_earn_amount` для фиксации суммы.
-- `redeliveryEarnBonuses(order, connection, levels)` — повторное начисление при повторной доставке, использует сохранённое значение `bonus_earn_amount`.
-- `removeEarnedBonuses(order, connection, levels)` — откат начисленных бонусов при смене статуса (delivered → other). Сбрасывает флаг `bonus_earn_locked`.
-- `adjustOrderBonuses(order, newTotal, connection, levels, loyaltySettings)` — корректировка бонусов при изменении суммы заказа после доставки. Создаёт транзакцию типа `adjustment`.
-- `spendBonuses(order, connection)` — списание бонусов по FIFO при создании заказа.
-- `cancelOrderBonuses(order, connection, levels)` — отмена всех транзакций заказа (earn + spend).
-
-**Защита от race conditions:**
-
-- `SELECT ... FOR UPDATE` на таблицу orders для проверки `bonus_earn_locked`.
-- Проверка `affected_rows` после `UPDATE bonus_earn_locked = TRUE`.
-- Атомарность операций внутри транзакции.
-
-### Автоматические процессы (backend/src/workers)
-
-- **bonusExpiry.worker.js** — истечение бонусов (каждые 24 часа).
-- **levelRecalc.worker.js** — пересчет уровней пользователей (в 02:00 ежедневно).
-- **levelDegradation.worker.js** — понижение уровней при неактивности (в 01:00 ежедневно).
-- **balanceReconcile.worker.js** — сверка балансов (ежедневно).
-- **birthdayBonus.worker.js** — начисление бонуса ко дню рождения (в 06:00 ежедневно).
-
-### Админ‑интерфейс
-
-**LoyaltyAdmin (5 вкладок):**
-
-1. **Уровни** — CRUD уровней лояльности с настройкой порогов и процентов.
-2. **Настройки** — глобальные параметры начислений, списаний, сроков, бонусов за регистрацию и день рождения.
-3. **Исключения** — управление категориями и товарами, для которых нельзя списывать бонусы. Фильтры по типу и поиск.
-4. **Логи** — системные события бонусной программы с пагинацией (50 записей на страницу).
-5. **Аудит** — проверка дублей транзакций и расхождений балансов с действиями просмотра.
-
-**ClientDetail:**
-
-- Секция "Лояльность" с текущим уровнем, статистикой за 60 дней и всё время.
-- Отображение начисленных/списанных/сгоревших бонусов.
-- История уровней с причинами изменений.
-- История бонусных транзакций.
-
-**OrderDetail:**
-
-- Секция "Бонусы по заказу" с отображением:
-  - Статус начисления (зафиксировано/не зафиксировано).
-  - Сумма начисления `bonus_earn_amount`.
-  - Использованные бонусы `bonus_used`.
-  - Пояснения к статусу начисления.
-
-> Примечание: проценты в админке вводятся целыми числами (например, 5 = 5%).
+- `docs/bonus.md` — основная спецификация лояльности.
+- `docs/doc.md` — общее ТЗ проекта (ссылается на `bonus.md`).
+- `docs/menu.md` — спецификация меню.
+- `docs/roadmap.md` — план развития.

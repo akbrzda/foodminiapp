@@ -1,1087 +1,747 @@
--- ============================================
--- Схема базы данных Miniapp Panda
--- Версия: 2.0
--- Обновлено: Добавлены варианты позиций, группы модификаторов, поля программы лояльности
--- 
--- Примечание о геоданных:
--- Используется MySQL 8.0 Spatial Extensions для работы с полигонами доставки.
--- MySQL поддерживает типы GEOMETRY, POINT, POLYGON и функции ST_GeomFromText, ST_Contains, ST_AsGeoJSON.
--- Это обеспечивает необходимую функциональность для работы с зонами доставки без необходимости PostGIS.
--- ============================================
--- Таблица пользователей (клиентов)
-CREATE TABLE IF NOT EXISTS users (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    telegram_id BIGINT UNIQUE,
-    phone VARCHAR(20) UNIQUE,
-    first_name VARCHAR(100),
-    last_name VARCHAR(100),
-    email VARCHAR(100),
-    date_of_birth DATE,
-    bonus_balance DECIMAL(10, 2) DEFAULT 0.00,
-    loyalty_level INT DEFAULT 1 COMMENT '1=Бронза, 2=Серебро, 3=Золото',
-    total_spent DECIMAL(10, 2) DEFAULT 0.00 COMMENT 'Общая сумма всех заказов для расчета уровня лояльности',
-    current_loyalty_level_id INT,
-    loyalty_registered_at DATETIME,
-    registration_bonus_granted BOOLEAN DEFAULT FALSE,
-    birthday_bonus_last_granted_year INT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_phone (phone),
-    INDEX idx_telegram_id (telegram_id),
-    INDEX idx_birth_date (date_of_birth),
-    INDEX idx_current_loyalty_level (current_loyalty_level_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
--- Таблица системных настроек
-CREATE TABLE IF NOT EXISTS system_settings (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    `key` VARCHAR(100) NOT NULL,
-    value JSON NOT NULL,
-    description VARCHAR(255),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    UNIQUE KEY unique_setting_key (`key`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
-INSERT INTO system_settings (`key`, value, description)
-VALUES
-  ('bonuses_enabled', CAST('true' AS JSON), 'Бонусная система'),
-    ('orders_enabled', CAST('true' AS JSON), 'Прием заказов'),
-    ('delivery_enabled', CAST('true' AS JSON), 'Оформление заказов с доставкой'),
-    ('pickup_enabled', CAST('true' AS JSON), 'Оформление заказов на самовывоз')
-ON DUPLICATE KEY UPDATE
-    value = VALUES(value),
-    description = VALUES(description);
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `admin_action_logs` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `admin_user_id` int NOT NULL,
+  `action` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `entity_type` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `entity_id` int DEFAULT NULL,
+  `description` text COLLATE utf8mb4_unicode_ci,
+  `ip_address` varchar(45) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `user_agent` text COLLATE utf8mb4_unicode_ci,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_admin_user_id` (`admin_user_id`),
+  KEY `idx_created_at` (`created_at`),
+  CONSTRAINT `admin_action_logs_ibfk_1` FOREIGN KEY (`admin_user_id`) REFERENCES `admin_users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=90 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `admin_user_branches` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `admin_user_id` int NOT NULL,
+  `branch_id` int NOT NULL,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_admin_branch` (`admin_user_id`,`branch_id`),
+  KEY `branch_id` (`branch_id`),
+  CONSTRAINT `admin_user_branches_ibfk_1` FOREIGN KEY (`admin_user_id`) REFERENCES `admin_users` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `admin_user_branches_ibfk_2` FOREIGN KEY (`branch_id`) REFERENCES `branches` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb3;
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `admin_user_cities` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `admin_user_id` int NOT NULL,
+  `city_id` int NOT NULL,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_admin_city` (`admin_user_id`,`city_id`),
+  KEY `city_id` (`city_id`),
+  CONSTRAINT `admin_user_cities_ibfk_1` FOREIGN KEY (`admin_user_id`) REFERENCES `admin_users` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `admin_user_cities_ibfk_2` FOREIGN KEY (`city_id`) REFERENCES `cities` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `admin_users` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `email` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `password_hash` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `first_name` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `last_name` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `role` enum('admin','manager','ceo') COLLATE utf8mb4_unicode_ci NOT NULL,
+  `is_active` tinyint(1) DEFAULT '1',
+  `telegram_id` bigint DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `branch_id` int DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `email` (`email`),
+  KEY `idx_email` (`email`),
+  KEY `idx_role` (`role`),
+  KEY `idx_admin_users_branch_id` (`branch_id`),
+  CONSTRAINT `fk_admin_users_branch_id` FOREIGN KEY (`branch_id`) REFERENCES `branches` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `branches` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `city_id` int NOT NULL,
+  `name` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `address` text COLLATE utf8mb4_unicode_ci,
+  `latitude` decimal(10,8) DEFAULT NULL,
+  `longitude` decimal(11,8) DEFAULT NULL,
+  `phone` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `working_hours` json DEFAULT NULL,
+  `prep_time` int DEFAULT '0',
+  `assembly_time` int DEFAULT '0',
+  `is_active` tinyint(1) DEFAULT '1',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_city_active` (`city_id`,`is_active`),
+  CONSTRAINT `branches_ibfk_1` FOREIGN KEY (`city_id`) REFERENCES `cities` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=16 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `cities` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `name` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `latitude` decimal(10,8) DEFAULT NULL,
+  `longitude` decimal(11,8) DEFAULT NULL,
+  `is_active` tinyint(1) DEFAULT '1',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_active` (`is_active`)
+) ENGINE=InnoDB AUTO_INCREMENT=16 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `delivery_addresses` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `user_id` int NOT NULL,
+  `city_id` int NOT NULL,
+  `street` varchar(200) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `house` varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `entrance` varchar(10) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `apartment` varchar(10) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `intercom` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `comment` text COLLATE utf8mb4_unicode_ci,
+  `latitude` decimal(10,8) DEFAULT NULL,
+  `longitude` decimal(11,8) DEFAULT NULL,
+  `is_default` tinyint(1) DEFAULT '0',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `city_id` (`city_id`),
+  KEY `idx_user_id` (`user_id`),
+  CONSTRAINT `delivery_addresses_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `delivery_addresses_ibfk_2` FOREIGN KEY (`city_id`) REFERENCES `cities` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `delivery_polygons` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `branch_id` int NOT NULL,
+  `name` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `polygon` polygon NOT NULL,
+  `delivery_time` int DEFAULT '30',
+  `min_order_amount` decimal(10,2) DEFAULT '0.00',
+  `delivery_cost` decimal(10,2) DEFAULT '0.00',
+  `is_active` tinyint(1) DEFAULT '1',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `is_blocked` tinyint(1) DEFAULT '0' COMMENT 'Блокировка полигона (постоянная или временная)',
+  `blocked_from` datetime DEFAULT NULL COMMENT 'Начало периода блокировки (для временной блокировки)',
+  `blocked_until` datetime DEFAULT NULL COMMENT 'Конец периода блокировки (для временной блокировки)',
+  `block_reason` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'Причина блокировки',
+  `blocked_by` int DEFAULT NULL COMMENT 'ID пользователя, который заблокировал',
+  `blocked_at` timestamp NULL DEFAULT NULL COMMENT 'Время блокировки',
+  PRIMARY KEY (`id`),
+  SPATIAL KEY `idx_polygon` (`polygon`),
+  KEY `idx_branch_active` (`branch_id`,`is_active`),
+  KEY `idx_blocked` (`is_blocked`,`blocked_from`,`blocked_until`),
+  KEY `fk_polygon_blocked_by` (`blocked_by`),
+  CONSTRAINT `delivery_polygons_ibfk_1` FOREIGN KEY (`branch_id`) REFERENCES `branches` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_polygon_blocked_by` FOREIGN KEY (`blocked_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `item_modifier_groups` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `item_id` int NOT NULL,
+  `modifier_group_id` int NOT NULL,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_item_modifier_group` (`item_id`,`modifier_group_id`),
+  KEY `idx_item_id` (`item_id`),
+  KEY `idx_modifier_group_id` (`modifier_group_id`),
+  CONSTRAINT `item_modifier_groups_ibfk_1` FOREIGN KEY (`item_id`) REFERENCES `menu_items` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `item_modifier_groups_ibfk_2` FOREIGN KEY (`modifier_group_id`) REFERENCES `modifier_groups` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=55 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `item_variants` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `item_id` int NOT NULL,
+  `name` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'Название варианта (например: "Маленькая (25см)")',
+  `price` decimal(10,2) NOT NULL,
+  `weight_value` decimal(10,2) DEFAULT NULL,
+  `weight_unit` enum('g','kg','ml','l','pcs') COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `calories_per_100g` decimal(10,2) DEFAULT NULL COMMENT 'Калории на 100г',
+  `proteins_per_100g` decimal(10,2) DEFAULT NULL COMMENT 'Белки на 100г',
+  `fats_per_100g` decimal(10,2) DEFAULT NULL COMMENT 'Жиры на 100г',
+  `carbs_per_100g` decimal(10,2) DEFAULT NULL COMMENT 'Углеводы на 100г',
+  `calories_per_serving` decimal(10,2) DEFAULT NULL COMMENT 'Калории на порцию',
+  `proteins_per_serving` decimal(10,2) DEFAULT NULL COMMENT 'Белки на порцию',
+  `fats_per_serving` decimal(10,2) DEFAULT NULL COMMENT 'Жиры на порцию',
+  `carbs_per_serving` decimal(10,2) DEFAULT NULL COMMENT 'Углеводы на порцию',
+  `sort_order` int DEFAULT '0',
+  `is_active` tinyint(1) DEFAULT '1',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_item_active_sort` (`item_id`,`is_active`,`sort_order`),
+  CONSTRAINT `item_variants_ibfk_1` FOREIGN KEY (`item_id`) REFERENCES `menu_items` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=67 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `loyalty_levels` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `name` varchar(50) NOT NULL,
+  `threshold_amount` decimal(10,2) NOT NULL DEFAULT '0.00',
+  `earn_percentage` int NOT NULL,
+  `max_spend_percentage` int NOT NULL,
+  `is_enabled` tinyint(1) NOT NULL DEFAULT '1',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_loyalty_threshold` (`threshold_amount`)
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb3;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
-  -- Таблица настроек программы лояльности
-  CREATE TABLE IF NOT EXISTS loyalty_settings (
-    id INT PRIMARY KEY,
-    include_delivery_in_earn BOOLEAN NOT NULL DEFAULT FALSE,
-    calculate_from_amount_after_bonus BOOLEAN NOT NULL DEFAULT TRUE,
-    level_calculation_period_days INT NOT NULL DEFAULT 60,
-    bonus_max_redeem_percent DECIMAL(6, 4) NOT NULL DEFAULT 0.2,
-    level_degradation_enabled BOOLEAN NOT NULL DEFAULT TRUE,
-    level_degradation_period_days INT NOT NULL DEFAULT 180,
-    registration_bonus_enabled BOOLEAN NOT NULL DEFAULT TRUE,
-    registration_bonus_amount INT NOT NULL DEFAULT 1000,
-    registration_bonus_expires_days INT NOT NULL DEFAULT 30,
-    birthday_bonus_enabled BOOLEAN NOT NULL DEFAULT TRUE,
-    birthday_bonus_amount INT NOT NULL DEFAULT 500,
-    birthday_bonus_days_before INT NOT NULL DEFAULT 3,
-    birthday_bonus_days_after INT NOT NULL DEFAULT 7,
-    default_bonus_expires_days INT NOT NULL DEFAULT 60,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-  ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
+-- Базовые уровни лояльности
+INSERT INTO `loyalty_levels` (`id`, `name`, `threshold_amount`, `earn_percentage`, `max_spend_percentage`, `is_enabled`) VALUES
+(1, 'Бронза', 0.00, 3, 25, 1),
+(2, 'Серебро', 10000.00, 5, 25, 1),
+(3, 'Золото', 20000.00, 7, 25, 1);
 
-  INSERT INTO loyalty_settings (
-    id,
-    include_delivery_in_earn,
-    calculate_from_amount_after_bonus,
-    level_calculation_period_days,
-    bonus_max_redeem_percent,
-    level_degradation_enabled,
-    level_degradation_period_days,
-    registration_bonus_enabled,
-    registration_bonus_amount,
-    registration_bonus_expires_days,
-    birthday_bonus_enabled,
-    birthday_bonus_amount,
-    birthday_bonus_days_before,
-    birthday_bonus_days_after,
-    default_bonus_expires_days
-  ) VALUES (
-    1,
-    FALSE,
-    TRUE,
-    60,
-    0.2,
-    TRUE,
-    180,
-    TRUE,
-    1000,
-    30,
-    TRUE,
-    500,
-    3,
-    7,
-    60
-  ) ON DUPLICATE KEY UPDATE
-    include_delivery_in_earn = VALUES(include_delivery_in_earn),
-    calculate_from_amount_after_bonus = VALUES(calculate_from_amount_after_bonus),
-    level_calculation_period_days = VALUES(level_calculation_period_days),
-    bonus_max_redeem_percent = VALUES(bonus_max_redeem_percent),
-    level_degradation_enabled = VALUES(level_degradation_enabled),
-    level_degradation_period_days = VALUES(level_degradation_period_days),
-    registration_bonus_enabled = VALUES(registration_bonus_enabled),
-    registration_bonus_amount = VALUES(registration_bonus_amount),
-    registration_bonus_expires_days = VALUES(registration_bonus_expires_days),
-    birthday_bonus_enabled = VALUES(birthday_bonus_enabled),
-    birthday_bonus_amount = VALUES(birthday_bonus_amount),
-    birthday_bonus_days_before = VALUES(birthday_bonus_days_before),
-    birthday_bonus_days_after = VALUES(birthday_bonus_days_after),
-    default_bonus_expires_days = VALUES(default_bonus_expires_days);
-
--- Таблица уровней лояльности
-CREATE TABLE IF NOT EXISTS loyalty_levels (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(50) NOT NULL,
-    level_number INT NOT NULL,
-    threshold_amount INT NOT NULL DEFAULT 0,
-    earn_percent DECIMAL(6, 4) NOT NULL DEFAULT 0.0,
-    max_spend_percent INT NOT NULL DEFAULT 0,
-    is_active BOOLEAN DEFAULT TRUE,
-    sort_order INT DEFAULT 0,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    deleted_at DATETIME NULL,
-    UNIQUE KEY uniq_loyalty_level_number (level_number),
-    UNIQUE KEY uniq_loyalty_threshold_deleted (threshold_amount, deleted_at),
-    INDEX idx_loyalty_threshold (threshold_amount),
-    INDEX idx_loyalty_levels_deleted_at (deleted_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
-
-INSERT INTO loyalty_levels (name, level_number, threshold_amount, earn_percent, max_spend_percent, is_active, sort_order)
-VALUES
-  ('Бронза', 1, 0, 0.03, 20, TRUE, 1),
-  ('Серебро', 2, 10000, 0.05, 25, TRUE, 2),
-  ('Золото', 3, 20000, 0.07, 30, TRUE, 3)
-ON DUPLICATE KEY UPDATE
-  name = VALUES(name),
-  threshold_amount = VALUES(threshold_amount),
-  earn_percent = VALUES(earn_percent),
-  max_spend_percent = VALUES(max_spend_percent),
-  is_active = VALUES(is_active),
-  sort_order = VALUES(sort_order);
-
--- Таблица истории уровней пользователей
-CREATE TABLE IF NOT EXISTS user_loyalty_levels (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    user_id INT NOT NULL,
-    level_id INT NOT NULL,
-    reason ENUM('initial', 'threshold_reached', 'degradation') NOT NULL,
-    triggered_by_order_id INT NULL,
-    total_spent_amount INT NOT NULL DEFAULT 0,
-    started_at DATETIME NOT NULL,
-    ended_at DATETIME NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_user_current_level (user_id, ended_at),
-    INDEX idx_user_level_period (user_id, started_at, ended_at),
-    INDEX idx_level_id (level_id),
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (level_id) REFERENCES loyalty_levels(id) ON DELETE RESTRICT,
-    FOREIGN KEY (triggered_by_order_id) REFERENCES orders(id) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
-
--- Таблица статистики лояльности пользователей
-CREATE TABLE IF NOT EXISTS user_loyalty_stats (
-    user_id INT PRIMARY KEY,
-    bonus_balance INT NOT NULL DEFAULT 0,
-    total_spent_60_days INT NOT NULL DEFAULT 0,
-    total_spent_all_time INT NOT NULL DEFAULT 0,
-    last_order_at DATETIME NULL,
-    last_level_check_at DATETIME NULL,
-    last_balance_reconciliation_at DATETIME NULL,
-    total_earned INT NOT NULL DEFAULT 0,
-    total_spent INT NOT NULL DEFAULT 0,
-    total_expired INT NOT NULL DEFAULT 0,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
-
--- Таблица логов лояльности
-CREATE TABLE IF NOT EXISTS loyalty_logs (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    event_type ENUM(
-      'balance_mismatch',
-      'duplicate_transaction',
-      'cron_execution',
-      'error',
-      'race_condition',
-      'bonus_earn',
-      'bonus_refund',
-      'bonus_adjustment',
-      'negative_balance'
-    ) NOT NULL,
-    severity ENUM('info', 'warning', 'error', 'critical') NOT NULL DEFAULT 'info',
-    user_id INT NULL,
-    order_id INT NULL,
-    transaction_id BIGINT NULL,
-    message TEXT NOT NULL,
-    details JSON NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_loyalty_event (event_type),
-    INDEX idx_loyalty_severity (severity),
-    INDEX idx_loyalty_user (user_id),
-    INDEX idx_loyalty_created (created_at),
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
-    FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
-
--- Таблица исключений для списания бонусов
-CREATE TABLE IF NOT EXISTS loyalty_exclusions (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    type ENUM('category', 'product') NOT NULL COMMENT 'Тип исключения: категория или товар',
-    entity_id INT NOT NULL COMMENT 'ID категории или товара',
-    reason VARCHAR(255) NULL COMMENT 'Причина добавления в исключения',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    created_by INT NULL COMMENT 'ID администратора, создавшего исключение',
-    
-    UNIQUE KEY unique_exclusion (type, entity_id),
-    INDEX idx_type_entity (type, entity_id),
-    FOREIGN KEY (created_by) REFERENCES admin_users(id) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
-
--- Таблица городов
-CREATE TABLE IF NOT EXISTS cities (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(100) NOT NULL,
-    latitude DECIMAL(10, 8),
-    longitude DECIMAL(11, 8),
-    is_active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_active (is_active)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
--- Таблица филиалов (ресторанов)
-CREATE TABLE IF NOT EXISTS branches (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    city_id INT NOT NULL,
-    name VARCHAR(100) NOT NULL,
-    address TEXT,
-    latitude DECIMAL(10, 8),
-    longitude DECIMAL(11, 8),
-    phone VARCHAR(20),
-    working_hours JSON,
-    prep_time INT DEFAULT 0,
-    assembly_time INT DEFAULT 0,
-    is_active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (city_id) REFERENCES cities(id) ON DELETE CASCADE,
-    INDEX idx_city_active (city_id, is_active)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
--- Таблица адресов доставки
-CREATE TABLE IF NOT EXISTS delivery_addresses (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    user_id INT NOT NULL,
-    city_id INT NOT NULL,
-    street VARCHAR(200) NOT NULL,
-    house VARCHAR(20) NOT NULL,
-    entrance VARCHAR(10),
-    apartment VARCHAR(10),
-    intercom VARCHAR(50),
-    comment TEXT,
-    latitude DECIMAL(10, 8),
-    longitude DECIMAL(11, 8),
-    is_default BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (city_id) REFERENCES cities(id) ON DELETE CASCADE,
-    INDEX idx_user_id (user_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
--- Состояние пользователя (синхронизация между устройствами)
-CREATE TABLE IF NOT EXISTS user_states (
-    user_id INT PRIMARY KEY,
-    selected_city_id INT,
-    selected_branch_id INT,
-    delivery_type VARCHAR(20) DEFAULT 'delivery',
-    delivery_address TEXT,
-    delivery_coords JSON,
-    delivery_details JSON,
-    cart JSON,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (selected_city_id) REFERENCES cities(id) ON DELETE SET NULL,
-    FOREIGN KEY (selected_branch_id) REFERENCES branches(id) ON DELETE SET NULL,
-    INDEX idx_user_state_city (selected_city_id),
-    INDEX idx_user_state_branch (selected_branch_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
--- Таблица полигонов доставки (зоны)
-CREATE TABLE IF NOT EXISTS delivery_polygons (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    branch_id INT NOT NULL,
-    name VARCHAR(100),
-    polygon POLYGON NOT NULL,
-    delivery_time INT DEFAULT 30,
-    min_order_amount DECIMAL(10, 2) DEFAULT 0.00,
-    delivery_cost DECIMAL(10, 2) DEFAULT 0.00,
-    is_active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE CASCADE,
-    SPATIAL INDEX idx_polygon (polygon),
-    INDEX idx_branch_active (branch_id, is_active)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
--- Таблица категорий меню
-CREATE TABLE IF NOT EXISTS menu_categories (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    city_id INT NOT NULL,
-    name VARCHAR(100) NOT NULL,
-    description TEXT,
-    image_url VARCHAR(500),
-    sort_order INT DEFAULT 0,
-    is_active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (city_id) REFERENCES cities(id) ON DELETE CASCADE,
-    INDEX idx_city_active_sort (city_id, is_active, sort_order)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
--- Таблица позиций меню
-CREATE TABLE IF NOT EXISTS menu_items (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    category_id INT NOT NULL,
-    name VARCHAR(200) NOT NULL,
-    description TEXT,
-    price DECIMAL(10, 2) DEFAULT 0.00 COMMENT 'Базовая цена (используется если нет вариантов)',
-    image_url VARCHAR(500),
-    weight VARCHAR(50),
-    weight_value DECIMAL(10, 2),
-    weight_unit ENUM('g', 'kg', 'ml', 'l', 'pcs'),
-    calories INT,
-    sort_order INT DEFAULT 0,
-    is_active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (category_id) REFERENCES menu_categories(id) ON DELETE CASCADE,
-    INDEX idx_category_active_sort (category_id, is_active, sort_order)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
--- Таблица вариантов позиций (например: Маленькая/Средняя/Большая пицца)
-CREATE TABLE IF NOT EXISTS item_variants (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    item_id INT NOT NULL,
-    name VARCHAR(100) NOT NULL COMMENT 'Название варианта (например: "Маленькая (25см)")',
-    price DECIMAL(10, 2) NOT NULL,
-    weight_value DECIMAL(10, 2),
-    weight_unit ENUM('g', 'kg', 'ml', 'l', 'pcs'),
-    sort_order INT DEFAULT 0,
-    is_active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (item_id) REFERENCES menu_items(id) ON DELETE CASCADE,
-    INDEX idx_item_active_sort (item_id, is_active, sort_order)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
--- Таблица групп модификаторов
-CREATE TABLE IF NOT EXISTS modifier_groups (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(200) NOT NULL COMMENT 'Название группы (например: "Уровень прожарки")',
-    type ENUM('single', 'multiple') NOT NULL DEFAULT 'single' COMMENT 'Одиночный или множественный выбор',
-    is_required BOOLEAN DEFAULT FALSE COMMENT 'Обязательность выбора модификатора из группы',
-    is_active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_active (is_active)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
--- Таблица модификаторов (привязаны к группам)
-CREATE TABLE IF NOT EXISTS modifiers (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    group_id INT NOT NULL,
-    name VARCHAR(200) NOT NULL,
-    price DECIMAL(10, 2) DEFAULT 0.00,
-    sort_order INT DEFAULT 0,
-    is_active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (group_id) REFERENCES modifier_groups(id) ON DELETE CASCADE,
-    INDEX idx_group_active_sort (group_id, is_active, sort_order)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
--- Таблица связи позиций меню и групп модификаторов
-CREATE TABLE IF NOT EXISTS item_modifier_groups (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    item_id INT NOT NULL,
-    modifier_group_id INT NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (item_id) REFERENCES menu_items(id) ON DELETE CASCADE,
-    FOREIGN KEY (modifier_group_id) REFERENCES modifier_groups(id) ON DELETE CASCADE,
-    UNIQUE KEY unique_item_modifier_group (item_id, modifier_group_id),
-    INDEX idx_item_id (item_id),
-    INDEX idx_modifier_group_id (modifier_group_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
--- Таблица модификаторов (старая, для обратной совместимости - можно удалить после миграции)
-CREATE TABLE IF NOT EXISTS menu_modifiers (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    item_id INT NOT NULL,
-    name VARCHAR(200) NOT NULL,
-    price DECIMAL(10, 2) DEFAULT 0.00,
-    is_required BOOLEAN DEFAULT FALSE,
-    is_active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (item_id) REFERENCES menu_items(id) ON DELETE CASCADE,
-    INDEX idx_item_active (item_id, is_active)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
--- Таблица заказов
-CREATE TABLE IF NOT EXISTS orders (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    order_number VARCHAR(4) NOT NULL UNIQUE,
-    user_id INT NOT NULL,
-    city_id INT NOT NULL,
-    branch_id INT,
-    order_type ENUM('delivery', 'pickup') NOT NULL,
-    status ENUM('pending', 'confirmed', 'preparing', 'ready', 'delivering', 'completed', 'cancelled') DEFAULT 'pending',
-    -- Адрес доставки (для доставки)
-    delivery_address_id INT,
-    delivery_street VARCHAR(200),
-    delivery_house VARCHAR(20),
-    delivery_entrance VARCHAR(10),
-    delivery_floor VARCHAR(10),
-    delivery_apartment VARCHAR(10),
-    delivery_intercom VARCHAR(50),
-    delivery_comment TEXT,
-    -- Оплата
-    payment_method ENUM('cash', 'card') NOT NULL,
-    change_from DECIMAL(10, 2),
-    -- Суммы
-    subtotal DECIMAL(10, 2) NOT NULL,
-    delivery_cost DECIMAL(10, 2) DEFAULT 0.00,
-    bonus_used DECIMAL(10, 2) DEFAULT 0.00,
-    bonus_earn_amount DECIMAL(10, 2) DEFAULT 0.00 COMMENT 'Зафиксированная сумма начисления при первом delivered',
-    bonus_earn_locked BOOLEAN DEFAULT FALSE COMMENT 'Флаг блокировки для защиты от дублирования начислений',
-    total DECIMAL(10, 2) NOT NULL,
-    -- Комментарий
-    comment TEXT,
-    -- Время
-    desired_time DATETIME,
-    completed_at DATETIME,
-    user_timezone_offset INT DEFAULT 0,
-    auto_status_date DATE,
-    -- Синхронизация
-    sync_status ENUM('pending', 'synced', 'failed') DEFAULT 'pending',
-    sync_attempts INT DEFAULT 0,
-    sync_error TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (city_id) REFERENCES cities(id) ON DELETE CASCADE,
-    FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE SET NULL,
-    FOREIGN KEY (delivery_address_id) REFERENCES delivery_addresses(id) ON DELETE SET NULL,
-    INDEX idx_user_id (user_id),
-    INDEX idx_order_number (order_number),
-    INDEX idx_status (status),
-    INDEX idx_sync_status (sync_status),
-    INDEX idx_bonus_earn_locked (bonus_earn_locked),
-    INDEX idx_created_at (created_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
--- Таблица элементов заказа
-CREATE TABLE IF NOT EXISTS order_items (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    order_id INT NOT NULL,
-    item_id INT,
-    variant_id INT COMMENT 'ID варианта позиции (если выбран вариант)',
-    item_name VARCHAR(200) NOT NULL,
-    variant_name VARCHAR(100) COMMENT 'Название варианта для истории заказа',
-    item_price DECIMAL(10, 2) NOT NULL,
-    quantity INT NOT NULL DEFAULT 1,
-    subtotal DECIMAL(10, 2) NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
-    FOREIGN KEY (item_id) REFERENCES menu_items(id) ON DELETE SET NULL,
-    FOREIGN KEY (variant_id) REFERENCES item_variants(id) ON DELETE SET NULL,
-    INDEX idx_order_id (order_id),
-    INDEX idx_variant_id (variant_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
--- Таблица модификаторов в заказе
-CREATE TABLE IF NOT EXISTS order_item_modifiers (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    order_item_id INT NOT NULL,
-    modifier_id INT COMMENT 'ID модификатора из таблицы modifiers (новая система)',
-    old_modifier_id INT COMMENT 'ID модификатора из таблицы menu_modifiers (старая система, для обратной совместимости)',
-    modifier_group_id INT COMMENT 'ID группы модификаторов',
-    modifier_name VARCHAR(200) NOT NULL,
-    modifier_price DECIMAL(10, 2) NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (order_item_id) REFERENCES order_items(id) ON DELETE CASCADE,
-    FOREIGN KEY (modifier_id) REFERENCES modifiers(id) ON DELETE SET NULL,
-    FOREIGN KEY (old_modifier_id) REFERENCES menu_modifiers(id) ON DELETE SET NULL,
-    FOREIGN KEY (modifier_group_id) REFERENCES modifier_groups(id) ON DELETE SET NULL,
-    INDEX idx_order_item_id (order_item_id),
-    INDEX idx_modifier_id (modifier_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
--- Таблица истории бонусов
-CREATE TABLE IF NOT EXISTS bonus_history (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    user_id INT NOT NULL,
-    order_id INT,
-    type ENUM('earned', 'used', 'expired', 'manual') NOT NULL,
-    amount DECIMAL(10, 2) NOT NULL,
-    balance_after DECIMAL(10, 2) NOT NULL,
-    description TEXT,
-    sync_status ENUM('pending', 'synced', 'failed') DEFAULT 'pending',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL,
-    INDEX idx_user_id (user_id),
-    INDEX idx_sync_status (sync_status),
-    INDEX idx_created_at (created_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
-CREATE TABLE IF NOT EXISTS loyalty_transactions (
-  id BIGINT AUTO_INCREMENT PRIMARY KEY,
-  user_id INT NOT NULL,
-  order_id INT NULL,
-  type ENUM('earn', 'spend', 'refund_earn', 'refund_spend', 'expire', 'register_bonus', 'birthday_bonus', 'adjustment') NOT NULL,
-  amount INT NOT NULL,
-  earned_at DATETIME NULL,
-  expires_at DATETIME NULL,
-  status ENUM('pending', 'completed', 'cancelled') NOT NULL DEFAULT 'completed',
-  cancels_transaction_id BIGINT NULL,
-  description VARCHAR(500) NULL,
-  metadata JSON NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  INDEX idx_loyalty_user_status (user_id, status),
-  INDEX idx_loyalty_user_expires (user_id, expires_at, status),
-  INDEX idx_loyalty_order (order_id),
-  INDEX idx_loyalty_type_status (type, status),
-  INDEX idx_loyalty_created (created_at),
-  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-  FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
--- Таблица администраторов/менеджеров
-CREATE TABLE IF NOT EXISTS admin_users (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    email VARCHAR(100) NOT NULL UNIQUE,
-    password_hash VARCHAR(255) NOT NULL,
-    first_name VARCHAR(100) NOT NULL,
-    last_name VARCHAR(100) NOT NULL,
-    role ENUM('admin', 'manager', 'seo') NOT NULL,
-    is_active BOOLEAN DEFAULT TRUE,
-    telegram_id BIGINT,
-    branch_id INT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_email (email),
-    INDEX idx_role (role),
-    INDEX idx_branch_id (branch_id),
-    FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
--- Таблица связи менеджеров с городами
-CREATE TABLE IF NOT EXISTS admin_user_cities (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    admin_user_id INT NOT NULL,
-    city_id INT NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (admin_user_id) REFERENCES admin_users(id) ON DELETE CASCADE,
-    FOREIGN KEY (city_id) REFERENCES cities(id) ON DELETE CASCADE,
-    UNIQUE KEY unique_admin_city (admin_user_id, city_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
--- Таблица связи менеджеров с филиалами
-CREATE TABLE IF NOT EXISTS admin_user_branches (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    admin_user_id INT NOT NULL,
-    branch_id INT NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (admin_user_id) REFERENCES admin_users(id) ON DELETE CASCADE,
-    FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE CASCADE,
-    UNIQUE KEY unique_admin_branch (admin_user_id, branch_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
--- Таблица очереди синхронизации
-CREATE TABLE IF NOT EXISTS sync_queue (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    entity_type ENUM('order', 'client', 'bonus') NOT NULL,
-    entity_id INT NOT NULL,
-    action ENUM('create', 'update', 'delete') NOT NULL,
-    payload JSON,
-    status ENUM('pending', 'processing', 'completed', 'failed') DEFAULT 'pending',
-    attempts INT DEFAULT 0,
-    max_attempts INT DEFAULT 5,
-    last_error TEXT,
-    next_retry_at DATETIME,
-    completed_at DATETIME,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_status_next_retry (status, next_retry_at),
-    INDEX idx_entity (entity_type, entity_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
--- Таблица логов действий администраторов
-CREATE TABLE IF NOT EXISTS admin_action_logs (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    admin_user_id INT NOT NULL,
-    action VARCHAR(100) NOT NULL,
-    entity_type VARCHAR(50),
-    entity_id INT,
-    description TEXT,
-    ip_address VARCHAR(45),
-    user_agent TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (admin_user_id) REFERENCES admin_users(id) ON DELETE CASCADE,
-    INDEX idx_admin_user_id (admin_user_id),
-    INDEX idx_created_at (created_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
--- Таблица системных логов
-CREATE TABLE IF NOT EXISTS system_logs (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    level ENUM('info', 'warning', 'error', 'critical') NOT NULL,
-    category VARCHAR(50),
-    message TEXT NOT NULL,
-    context JSON,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_level_created (level, created_at),
-    INDEX idx_category (category)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
--- ============================================
--- Migration: 002_add_variants_and_modifier_groups.sql
--- Executed: 2026-01-14T18:53:54.920Z
--- ============================================
-SET @dbname = DATABASE();
-SET @tablename = 'users';
-SET @columnname = 'loyalty_level';
-SET @preparedStatement = (SELECT IF(
-  (
-    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
-    WHERE
-      (TABLE_SCHEMA = @dbname)
-      AND (TABLE_NAME = @tablename)
-      AND (COLUMN_NAME = @columnname)
-  ) > 0,
-  'SELECT 1',
-  CONCAT('ALTER TABLE ', @tablename, ' ADD COLUMN ', @columnname, ' INT DEFAULT 1 COMMENT ''1=Бронза, 2=Серебро, 3=Золото'' AFTER bonus_balance')
-));
-PREPARE alterIfNotExists FROM @preparedStatement;
-EXECUTE alterIfNotExists;
-DEALLOCATE PREPARE alterIfNotExists;
-SET @columnname = 'total_spent';
-SET @preparedStatement = (SELECT IF(
-  (
-    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
-    WHERE
-      (TABLE_SCHEMA = @dbname)
-      AND (TABLE_NAME = @tablename)
-      AND (COLUMN_NAME = @columnname)
-  ) > 0,
-  'SELECT 1',
-  CONCAT('ALTER TABLE ', @tablename, ' ADD COLUMN ', @columnname, ' DECIMAL(10, 2) DEFAULT 0.00 COMMENT ''Общая сумма всех заказов для расчета уровня лояльности'' AFTER loyalty_level')
-));
-PREPARE alterIfNotExists FROM @preparedStatement;
-EXECUTE alterIfNotExists;
-DEALLOCATE PREPARE alterIfNotExists;
-ALTER TABLE menu_items 
-MODIFY COLUMN price DECIMAL(10, 2) DEFAULT 0.00 COMMENT 'Базовая цена (используется если нет вариантов)';
-SET @tablename = 'menu_items';
-SET @columnname = 'weight_value';
-SET @preparedStatement = (SELECT IF(
-  (
-    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
-    WHERE
-      (TABLE_SCHEMA = DATABASE())
-      AND (TABLE_NAME = @tablename)
-      AND (COLUMN_NAME = @columnname)
-  ) > 0,
-  'SELECT 1',
-  CONCAT('ALTER TABLE ', @tablename, ' ADD COLUMN ', @columnname, ' DECIMAL(10, 2) NULL AFTER weight')
-));
-PREPARE alterIfNotExists FROM @preparedStatement;
-EXECUTE alterIfNotExists;
-DEALLOCATE PREPARE alterIfNotExists;
-SET @columnname = 'weight_unit';
-SET @preparedStatement = (SELECT IF(
-  (
-    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
-    WHERE
-      (TABLE_SCHEMA = DATABASE())
-      AND (TABLE_NAME = @tablename)
-      AND (COLUMN_NAME = @columnname)
-  ) > 0,
-  'SELECT 1',
-  CONCAT('ALTER TABLE ', @tablename, ' ADD COLUMN ', @columnname, " ENUM('g','kg','ml','l','pcs') NULL AFTER weight_value")
-));
-PREPARE alterIfNotExists FROM @preparedStatement;
-EXECUTE alterIfNotExists;
-DEALLOCATE PREPARE alterIfNotExists;
-SET @tablename = 'item_variants';
-SET @columnname = 'weight_value';
-SET @preparedStatement = (SELECT IF(
-  (
-    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
-    WHERE
-      (TABLE_SCHEMA = DATABASE())
-      AND (TABLE_NAME = @tablename)
-      AND (COLUMN_NAME = @columnname)
-  ) > 0,
-  'SELECT 1',
-  CONCAT('ALTER TABLE ', @tablename, ' ADD COLUMN ', @columnname, ' DECIMAL(10, 2) NULL AFTER price')
-));
-PREPARE alterIfNotExists FROM @preparedStatement;
-EXECUTE alterIfNotExists;
-DEALLOCATE PREPARE alterIfNotExists;
-SET @columnname = 'weight_unit';
-SET @preparedStatement = (SELECT IF(
-  (
-    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
-    WHERE
-      (TABLE_SCHEMA = DATABASE())
-      AND (TABLE_NAME = @tablename)
-      AND (COLUMN_NAME = @columnname)
-  ) > 0,
-  'SELECT 1',
-  CONCAT('ALTER TABLE ', @tablename, " ADD COLUMN ", @columnname, " ENUM('g','kg','ml','l','pcs') NULL AFTER weight_value")
-));
-PREPARE alterIfNotExists FROM @preparedStatement;
-EXECUTE alterIfNotExists;
-DEALLOCATE PREPARE alterIfNotExists;
-CREATE TABLE IF NOT EXISTS item_variants (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    item_id INT NOT NULL,
-    name VARCHAR(100) NOT NULL COMMENT 'Название варианта (например: "Маленькая (25см)")',
-    price DECIMAL(10, 2) NOT NULL,
-    weight_value DECIMAL(10, 2),
-    weight_unit ENUM('g', 'kg', 'ml', 'l', 'pcs'),
-    sort_order INT DEFAULT 0,
-    is_active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (item_id) REFERENCES menu_items(id) ON DELETE CASCADE,
-    INDEX idx_item_active_sort (item_id, is_active, sort_order)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
-CREATE TABLE IF NOT EXISTS modifier_groups (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(200) NOT NULL COMMENT 'Название группы (например: "Уровень прожарки")',
-    type ENUM('single', 'multiple') NOT NULL DEFAULT 'single' COMMENT 'Одиночный или множественный выбор',
-    is_required BOOLEAN DEFAULT FALSE COMMENT 'Обязательность выбора модификатора из группы',
-    is_active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_active (is_active)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
-CREATE TABLE IF NOT EXISTS modifiers (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    group_id INT NOT NULL,
-    name VARCHAR(200) NOT NULL,
-    price DECIMAL(10, 2) DEFAULT 0.00,
-    sort_order INT DEFAULT 0,
-    is_active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (group_id) REFERENCES modifier_groups(id) ON DELETE CASCADE,
-    INDEX idx_group_active_sort (group_id, is_active, sort_order)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
-CREATE TABLE IF NOT EXISTS item_modifier_groups (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    item_id INT NOT NULL,
-    modifier_group_id INT NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (item_id) REFERENCES menu_items(id) ON DELETE CASCADE,
-    FOREIGN KEY (modifier_group_id) REFERENCES modifier_groups(id) ON DELETE CASCADE,
-    UNIQUE KEY unique_item_modifier_group (item_id, modifier_group_id),
-    INDEX idx_item_id (item_id),
-    INDEX idx_modifier_group_id (modifier_group_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
-SET @tablename = 'order_items';
-SET @columnname = 'variant_id';
-SET @preparedStatement = (SELECT IF(
-  (
-    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
-    WHERE
-      (TABLE_SCHEMA = DATABASE())
-      AND (TABLE_NAME = @tablename)
-      AND (COLUMN_NAME = @columnname)
-  ) > 0,
-  'SELECT 1',
-  CONCAT('ALTER TABLE ', @tablename, ' ADD COLUMN ', @columnname, ' INT COMMENT ''ID варианта позиции (если выбран вариант)'' AFTER item_id')
-));
-PREPARE alterIfNotExists FROM @preparedStatement;
-EXECUTE alterIfNotExists;
-DEALLOCATE PREPARE alterIfNotExists;
-SET @columnname = 'variant_name';
-SET @preparedStatement = (SELECT IF(
-  (
-    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
-    WHERE
-      (TABLE_SCHEMA = DATABASE())
-      AND (TABLE_NAME = @tablename)
-      AND (COLUMN_NAME = @columnname)
-  ) > 0,
-  'SELECT 1',
-  CONCAT('ALTER TABLE ', @tablename, ' ADD COLUMN ', @columnname, ' VARCHAR(100) COMMENT ''Название варианта для истории заказа'' AFTER item_name')
-));
-PREPARE alterIfNotExists FROM @preparedStatement;
-EXECUTE alterIfNotExists;
-DEALLOCATE PREPARE alterIfNotExists;
-SET @indexname = 'idx_variant_id';
-SET @preparedStatement = (SELECT IF(
-  (
-    SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
-    WHERE
-      (TABLE_SCHEMA = DATABASE())
-      AND (TABLE_NAME = @tablename)
-      AND (INDEX_NAME = @indexname)
-  ) > 0,
-  'SELECT 1',
-  CONCAT('ALTER TABLE ', @tablename, ' ADD INDEX ', @indexname, ' (variant_id)')
-));
-PREPARE alterIfNotExists FROM @preparedStatement;
-EXECUTE alterIfNotExists;
-DEALLOCATE PREPARE alterIfNotExists;
-SET @constraintname = 'fk_order_items_variant';
-SET @preparedStatement = (SELECT IF(
-  (
-    SELECT COUNT(*) FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
-    WHERE
-      (TABLE_SCHEMA = DATABASE())
-      AND (TABLE_NAME = @tablename)
-      AND (CONSTRAINT_NAME = @constraintname)
-  ) > 0,
-  'SELECT 1',
-  CONCAT('ALTER TABLE ', @tablename, ' ADD CONSTRAINT ', @constraintname, ' FOREIGN KEY (variant_id) REFERENCES item_variants(id) ON DELETE SET NULL')
-));
-PREPARE alterIfNotExists FROM @preparedStatement;
-EXECUTE alterIfNotExists;
-DEALLOCATE PREPARE alterIfNotExists;
-SET @tablename = 'order_item_modifiers';
-SET @columnname = 'old_modifier_id';
-SET @preparedStatement = (SELECT IF(
-  (
-    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
-    WHERE
-      (TABLE_SCHEMA = DATABASE())
-      AND (TABLE_NAME = @tablename)
-      AND (COLUMN_NAME = @columnname)
-  ) > 0,
-  'SELECT 1',
-  CONCAT('ALTER TABLE ', @tablename, ' ADD COLUMN ', @columnname, ' INT COMMENT ''ID модификатора из таблицы menu_modifiers (старая система, для обратной совместимости)'' AFTER modifier_id')
-));
-PREPARE alterIfNotExists FROM @preparedStatement;
-EXECUTE alterIfNotExists;
-DEALLOCATE PREPARE alterIfNotExists;
-SET @columnname = 'modifier_group_id';
-SET @preparedStatement = (SELECT IF(
-  (
-    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
-    WHERE
-      (TABLE_SCHEMA = DATABASE())
-      AND (TABLE_NAME = @tablename)
-      AND (COLUMN_NAME = @columnname)
-  ) > 0,
-  'SELECT 1',
-  CONCAT('ALTER TABLE ', @tablename, ' ADD COLUMN ', @columnname, ' INT COMMENT ''ID группы модификаторов'' AFTER modifier_id')
-));
-PREPARE alterIfNotExists FROM @preparedStatement;
-EXECUTE alterIfNotExists;
-DEALLOCATE PREPARE alterIfNotExists;
-UPDATE order_item_modifiers 
-SET old_modifier_id = modifier_id 
-WHERE modifier_id IS NOT NULL AND old_modifier_id IS NULL;
-SET @indexname = 'idx_modifier_id';
-SET @preparedStatement = (SELECT IF(
-  (
-    SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
-    WHERE
-      (TABLE_SCHEMA = DATABASE())
-      AND (TABLE_NAME = @tablename)
-      AND (INDEX_NAME = @indexname)
-  ) > 0,
-  'SELECT 1',
-  CONCAT('ALTER TABLE ', @tablename, ' ADD INDEX ', @indexname, ' (modifier_id)')
-));
-PREPARE alterIfNotExists FROM @preparedStatement;
-EXECUTE alterIfNotExists;
-DEALLOCATE PREPARE alterIfNotExists;
-SET @constraintname = 'fk_order_item_modifiers_modifier';
-SET @preparedStatement = (SELECT IF(
-  (
-    SELECT COUNT(*) FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
-    WHERE
-      (TABLE_SCHEMA = DATABASE())
-      AND (TABLE_NAME = @tablename)
-      AND (CONSTRAINT_NAME = @constraintname)
-  ) > 0,
-  'SELECT 1',
-  CONCAT('ALTER TABLE ', @tablename, ' ADD CONSTRAINT ', @constraintname, ' FOREIGN KEY (modifier_id) REFERENCES modifiers(id) ON DELETE SET NULL')
-));
-PREPARE alterIfNotExists FROM @preparedStatement;
-EXECUTE alterIfNotExists;
-DEALLOCATE PREPARE alterIfNotExists;
-SET @constraintname = 'fk_order_item_modifiers_group';
-SET @preparedStatement = (SELECT IF(
-  (
-    SELECT COUNT(*) FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
-    WHERE
-      (TABLE_SCHEMA = DATABASE())
-      AND (TABLE_NAME = @tablename)
-      AND (CONSTRAINT_NAME = @constraintname)
-  ) > 0,
-  'SELECT 1',
-  CONCAT('ALTER TABLE ', @tablename, ' ADD CONSTRAINT ', @constraintname, ' FOREIGN KEY (modifier_group_id) REFERENCES modifier_groups(id) ON DELETE SET NULL')
-));
-PREPARE alterIfNotExists FROM @preparedStatement;
-EXECUTE alterIfNotExists;
-DEALLOCATE PREPARE alterIfNotExists;
--- ============================================
--- Migration: 01_seed_cities.sql
--- Executed: 2026-01-14T18:59:57.555Z
--- ============================================
-SET NAMES utf8;
-SET CHARACTER SET utf8;
-DELETE FROM branches;
-DELETE FROM cities;
-INSERT INTO cities (name, latitude, longitude, is_active) VALUES
-('Когалым', 62.2667, 74.4833, TRUE, NULL),
-('Москва', 55.7558, 37.6173, TRUE, NULL),
-('Пенза', 53.2001, 45.0047, TRUE, NULL);
-INSERT INTO branches (city_id, name, address, latitude, longitude, phone, working_hours, is_active) 
-SELECT 
-    c.id,
-    'Улица Бакинская, 6А',
-    'ул. Бакинская, 6А, Когалым',
-    62.2680,
-    74.4850,
-    '+7 (34667) 1-23-45',
-    JSON_OBJECT(
-        'monday', JSON_OBJECT('open', '10:15', 'close', '22:30'),
-        'tuesday', JSON_OBJECT('open', '10:15', 'close', '22:30'),
-        'wednesday', JSON_OBJECT('open', '10:15', 'close', '22:30'),
-        'thursday', JSON_OBJECT('open', '10:15', 'close', '22:30'),
-        'friday', JSON_OBJECT('open', '10:15', 'close', '22:30'),
-        'saturday', JSON_OBJECT('open', '10:15', 'close', '22:30'),
-        'sunday', JSON_OBJECT('open', '10:15', 'close', '22:30')
-    ),
-    TRUE,
-    NULL
-FROM cities c 
-WHERE c.name = 'Когалым';
-INSERT INTO branches (city_id, name, address, latitude, longitude, phone, working_hours, is_active) 
-SELECT 
-    c.id,
-    'Шумкина',
-    'ул. Шумкина, 20Б, Москва',
-    55.7520,
-    37.5897,
-    '+7 (495) 123-45-67',
-    JSON_OBJECT(
-        'monday', JSON_OBJECT('open', '09:00', 'close', '23:00'),
-        'tuesday', JSON_OBJECT('open', '09:00', 'close', '23:00'),
-        'wednesday', JSON_OBJECT('open', '09:00', 'close', '23:00'),
-        'thursday', JSON_OBJECT('open', '09:00', 'close', '23:00'),
-        'friday', JSON_OBJECT('open', '09:00', 'close', '23:00'),
-        'saturday', JSON_OBJECT('open', '09:00', 'close', '23:00'),
-        'sunday', JSON_OBJECT('open', '09:00', 'close', '23:00')
-    ),
-    TRUE
-FROM cities c 
-WHERE c.name = 'Москва';
-INSERT INTO branches (city_id, name, address, latitude, longitude, phone, working_hours, is_active) 
-SELECT 
-    c.id,
-    'Фурманова',
-    'ул. Фурманова, 1, Пенза',
-    53.2050,
-    45.0100,
-    '+7 (8412) 345-67-89',
-    JSON_OBJECT(
-        'monday', JSON_OBJECT('open', '10:00', 'close', '22:00'),
-        'tuesday', JSON_OBJECT('open', '10:00', 'close', '22:00'),
-        'wednesday', JSON_OBJECT('open', '10:00', 'close', '22:00'),
-        'thursday', JSON_OBJECT('open', '10:00', 'close', '22:00'),
-        'friday', JSON_OBJECT('open', '10:00', 'close', '22:00'),
-        'saturday', JSON_OBJECT('open', '10:00', 'close', '22:00'),
-        'sunday', JSON_OBJECT('open', '10:00', 'close', '22:00')
-    ),
-    TRUE
-FROM cities c 
-WHERE c.name = 'Пенза';
--- ============================================
--- Migration: 02_seed_menu.sql
--- Executed: 2026-01-15T07:52:02.833Z
--- ============================================
-SET @city_id = (SELECT id FROM cities LIMIT 1);
-INSERT INTO cities (name, is_active)
-SELECT 'Когалым', TRUE
-WHERE NOT EXISTS (SELECT 1 FROM cities LIMIT 1);
-SET @city_id = (SELECT id FROM cities LIMIT 1);
-INSERT INTO menu_categories (city_id, name, description, sort_order, is_active) VALUES
-(@city_id, 'Пицца', 'Классическая итальянская пицца', 1, TRUE),
-(@city_id, 'Бургеры', 'Сочные бургеры с мясом', 2, TRUE),
-(@city_id, 'Напитки', 'Холодные и горячие напитки', 3, TRUE),
-(@city_id, 'Стейки', 'Мясные стейки на любой вкус', 4, TRUE)
-ON DUPLICATE KEY UPDATE name=name;
-SET @pizza_category = (SELECT id FROM menu_categories WHERE name = 'Пицца' AND city_id = @city_id LIMIT 1);
-SET @burger_category = (SELECT id FROM menu_categories WHERE name = 'Бургеры' AND city_id = @city_id LIMIT 1);
-SET @drinks_category = (SELECT id FROM menu_categories WHERE name = 'Напитки' AND city_id = @city_id LIMIT 1);
-SET @steak_category = (SELECT id FROM menu_categories WHERE name = 'Стейки' AND city_id = @city_id LIMIT 1);
-INSERT INTO modifier_groups (name, type, is_required, is_active) VALUES
-('Размер пиццы', 'single', FALSE, TRUE),
-('Дополнительные ингредиенты', 'multiple', FALSE, TRUE),
-('Уровень прожарки', 'single', TRUE, TRUE),
-('Соусы', 'multiple', FALSE, TRUE),
-('Размер порции', 'single', FALSE, TRUE)
-ON DUPLICATE KEY UPDATE name=name;
-SET @size_group = (SELECT id FROM modifier_groups WHERE name = 'Размер пиццы' LIMIT 1);
-SET @ingredients_group = (SELECT id FROM modifier_groups WHERE name = 'Дополнительные ингредиенты' LIMIT 1);
-SET @doneness_group = (SELECT id FROM modifier_groups WHERE name = 'Уровень прожарки' LIMIT 1);
-SET @sauce_group = (SELECT id FROM modifier_groups WHERE name = 'Соусы' LIMIT 1);
-SET @portion_group = (SELECT id FROM modifier_groups WHERE name = 'Размер порции' LIMIT 1);
-INSERT INTO modifiers (group_id, name, price, sort_order, is_active) VALUES
-(@ingredients_group, 'Дополнительный сыр', 50.00, 1, TRUE),
-(@ingredients_group, 'Бекон', 60.00, 2, TRUE),
-(@ingredients_group, 'Грибы', 40.00, 3, TRUE),
-(@ingredients_group, 'Оливки', 30.00, 4, TRUE),
-(@doneness_group, 'Rare (с кровью)', 0.00, 1, TRUE),
-(@doneness_group, 'Medium (средняя)', 0.00, 2, TRUE),
-(@doneness_group, 'Well Done (прожаренная)', 0.00, 3, TRUE),
-(@sauce_group, 'Кетчуп', 0.00, 1, TRUE),
-(@sauce_group, 'Майонез', 0.00, 2, TRUE),
-(@sauce_group, 'Чесночный соус', 20.00, 3, TRUE),
-(@sauce_group, 'Барбекю', 20.00, 4, TRUE),
-(@portion_group, 'Маленькая', 0.00, 1, TRUE),
-(@portion_group, 'Средняя', 30.00, 2, TRUE),
-(@portion_group, 'Большая', 60.00, 3, TRUE)
-ON DUPLICATE KEY UPDATE name=name;
-INSERT INTO menu_items (category_id, name, description, price, sort_order, is_active) VALUES
-(@pizza_category, 'Пицца Маргарита', 'Классическая пицца с томатами, моцареллой и базиликом', 0.00, 1, TRUE);
-SET @margherita_id = LAST_INSERT_ID();
-INSERT INTO item_variants (item_id, name, price, sort_order, is_active) VALUES
-(@margherita_id, 'Маленькая (25см)', 450.00, 1, TRUE),
-(@margherita_id, 'Средняя (30см)', 650.00, 2, TRUE),
-(@margherita_id, 'Большая (35см)', 850.00, 3, TRUE);
-INSERT INTO item_modifier_groups (item_id, modifier_group_id) VALUES
-(@margherita_id, @ingredients_group)
-ON DUPLICATE KEY UPDATE item_id=item_id;
-INSERT INTO menu_items (category_id, name, description, price, sort_order, is_active) VALUES
-(@pizza_category, 'Пицца Пепперони', 'Острая пицца с колбасой пепперони и сыром', 0.00, 2, TRUE);
-SET @pepperoni_id = LAST_INSERT_ID();
-INSERT INTO item_variants (item_id, name, price, sort_order, is_active) VALUES
-(@pepperoni_id, 'Маленькая (25см)', 500.00, 1, TRUE),
-(@pepperoni_id, 'Средняя (30см)', 700.00, 2, TRUE),
-(@pepperoni_id, 'Большая (35см)', 900.00, 3, TRUE);
-INSERT INTO item_modifier_groups (item_id, modifier_group_id) VALUES
-(@pepperoni_id, @ingredients_group)
-ON DUPLICATE KEY UPDATE item_id=item_id;
-INSERT INTO menu_items (category_id, name, description, price, sort_order, is_active) VALUES
-(@burger_category, 'Классический бургер', 'Бургер с говяжьей котлетой, овощами и соусом', 350.00, 1, TRUE);
-SET @burger_id = LAST_INSERT_ID();
-INSERT INTO item_modifier_groups (item_id, modifier_group_id) VALUES
-(@burger_id, @sauce_group),
-(@burger_id, @ingredients_group)
-ON DUPLICATE KEY UPDATE item_id=item_id;
-INSERT INTO menu_items (category_id, name, description, price, sort_order, is_active) VALUES
-(@burger_category, 'Чизбургер', 'Бургер с двойной котлетой и сыром', 420.00, 2, TRUE);
-INSERT INTO menu_items (category_id, name, description, price, sort_order, is_active) VALUES
-(@steak_category, 'Стейк Рибай', 'Премиальный стейк из мраморной говядины', 1200.00, 1, TRUE);
-SET @ribeye_id = LAST_INSERT_ID();
-INSERT INTO item_modifier_groups (item_id, modifier_group_id) VALUES
-(@ribeye_id, @doneness_group),
-(@ribeye_id, @sauce_group)
-ON DUPLICATE KEY UPDATE item_id=item_id;
-INSERT INTO menu_items (category_id, name, description, price, sort_order, is_active) VALUES
-(@steak_category, 'Стейк Филе-миньон', 'Нежный стейк из вырезки', 1500.00, 2, TRUE);
-SET @filet_id = LAST_INSERT_ID();
-INSERT INTO item_modifier_groups (item_id, modifier_group_id) VALUES
-(@filet_id, @doneness_group),
-(@filet_id, @sauce_group)
-ON DUPLICATE KEY UPDATE item_id=item_id;
-INSERT INTO menu_items (category_id, name, description, price, sort_order, is_active) VALUES
-(@burger_category, 'Картофель фри', 'Хрустящий картофель фри', 0.00, 3, TRUE);
-SET @fries_id = LAST_INSERT_ID();
-INSERT INTO item_variants (item_id, name, price, sort_order, is_active) VALUES
-(@fries_id, 'Маленькая порция', 150.00, 1, TRUE),
-(@fries_id, 'Большая порция', 220.00, 2, TRUE);
-INSERT INTO item_modifier_groups (item_id, modifier_group_id) VALUES
-(@fries_id, @sauce_group)
-ON DUPLICATE KEY UPDATE item_id=item_id;
-INSERT INTO menu_items (category_id, name, description, price, sort_order, is_active) VALUES
-(@drinks_category, 'Кола', 'Газированный напиток', 120.00, 1, TRUE);
-INSERT INTO menu_items (category_id, name, description, price, sort_order, is_active) VALUES
-(@drinks_category, 'Кофе', 'Ароматный кофе', 0.00, 2, TRUE);
-SET @coffee_id = LAST_INSERT_ID();
-INSERT INTO item_variants (item_id, name, price, sort_order, is_active) VALUES
-(@coffee_id, 'Маленький (200мл)', 150.00, 1, TRUE),
-(@coffee_id, 'Средний (300мл)', 180.00, 2, TRUE),
-(@coffee_id, 'Большой (400мл)', 210.00, 3, TRUE);
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `loyalty_logs` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `user_id` int DEFAULT NULL,
+  `order_id` int DEFAULT NULL,
+  `event_type` varchar(50) NOT NULL,
+  `old_value` text,
+  `new_value` text,
+  `metadata` json DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_loyalty_event_type` (`event_type`),
+  KEY `idx_loyalty_user` (`user_id`),
+  KEY `idx_loyalty_order` (`order_id`),
+  KEY `idx_loyalty_created` (`created_at`),
+  CONSTRAINT `loyalty_logs_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `loyalty_logs_ibfk_2` FOREIGN KEY (`order_id`) REFERENCES `orders` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb3;
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `loyalty_transactions` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `user_id` int NOT NULL,
+  `type` enum('earn','spend','expire','registration','birthday','adjustment') NOT NULL,
+  `status` enum('pending','completed','cancelled') NOT NULL DEFAULT 'completed',
+  `amount` decimal(10,2) NOT NULL DEFAULT '0.00',
+  `remaining_amount` decimal(10,2) DEFAULT NULL,
+  `order_id` int DEFAULT NULL,
+  `related_transaction_id` int DEFAULT NULL,
+  `description` text,
+  `expires_at` timestamp NULL DEFAULT NULL,
+  `admin_id` int DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_loyalty_user` (`user_id`),
+  KEY `idx_loyalty_order` (`order_id`),
+  KEY `idx_loyalty_type` (`type`),
+  KEY `idx_loyalty_status` (`status`),
+  KEY `idx_loyalty_expires` (`expires_at`),
+  KEY `idx_loyalty_user_type_created` (`user_id`,`type`,`created_at`),
+  KEY `idx_loyalty_type_status_expires` (`type`,`status`,`expires_at`),
+  KEY `loyalty_transactions_new_ibfk_3` (`related_transaction_id`),
+  KEY `loyalty_transactions_new_ibfk_4` (`admin_id`),
+  CONSTRAINT `loyalty_transactions_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `loyalty_transactions_ibfk_2` FOREIGN KEY (`order_id`) REFERENCES `orders` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `loyalty_transactions_ibfk_3` FOREIGN KEY (`related_transaction_id`) REFERENCES `loyalty_transactions` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `loyalty_transactions_ibfk_4` FOREIGN KEY (`admin_id`) REFERENCES `admin_users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb3;
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `menu_categories` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `city_id` int NOT NULL,
+  `name` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `description` text COLLATE utf8mb4_unicode_ci,
+  `image_url` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `sort_order` int DEFAULT '0',
+  `is_active` tinyint(1) DEFAULT '1',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_city_active_sort` (`city_id`,`is_active`,`sort_order`),
+  CONSTRAINT `menu_categories_ibfk_1` FOREIGN KEY (`city_id`) REFERENCES `cities` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=25 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `menu_category_cities` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `category_id` int NOT NULL,
+  `city_id` int NOT NULL,
+  `is_active` tinyint(1) DEFAULT '1' COMMENT 'Включена ли категория для данного города',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_category_city` (`category_id`,`city_id`),
+  KEY `idx_category` (`category_id`),
+  KEY `idx_city` (`city_id`),
+  KEY `idx_active` (`is_active`),
+  CONSTRAINT `menu_category_cities_ibfk_1` FOREIGN KEY (`category_id`) REFERENCES `menu_categories` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `menu_category_cities_ibfk_2` FOREIGN KEY (`city_id`) REFERENCES `cities` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=10 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Доступность категорий по городам';
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `menu_item_categories` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `item_id` int NOT NULL,
+  `category_id` int NOT NULL,
+  `sort_order` int DEFAULT '0' COMMENT 'Порядок отображения блюда в категории',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_item_category` (`item_id`,`category_id`),
+  KEY `idx_item` (`item_id`),
+  KEY `idx_category` (`category_id`),
+  KEY `idx_category_sort` (`category_id`,`sort_order`),
+  CONSTRAINT `menu_item_categories_ibfk_1` FOREIGN KEY (`item_id`) REFERENCES `menu_items` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `menu_item_categories_ibfk_2` FOREIGN KEY (`category_id`) REFERENCES `menu_categories` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Связь блюд с несколькими категориями';
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `menu_item_cities` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `item_id` int NOT NULL,
+  `city_id` int NOT NULL,
+  `is_active` tinyint(1) DEFAULT '1' COMMENT 'Включено ли блюдо для данного города',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_item_city` (`item_id`,`city_id`),
+  KEY `idx_item` (`item_id`),
+  KEY `idx_city` (`city_id`),
+  KEY `idx_active` (`is_active`),
+  CONSTRAINT `menu_item_cities_ibfk_1` FOREIGN KEY (`item_id`) REFERENCES `menu_items` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `menu_item_cities_ibfk_2` FOREIGN KEY (`city_id`) REFERENCES `cities` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=19 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Доступность блюд по городам';
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `menu_item_disabled_modifiers` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `item_id` int NOT NULL,
+  `modifier_id` int NOT NULL COMMENT 'Модификатор из глобальной группы, который отключен для данного блюда',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_item_modifier` (`item_id`,`modifier_id`),
+  KEY `idx_item` (`item_id`),
+  KEY `idx_modifier` (`modifier_id`),
+  CONSTRAINT `menu_item_disabled_modifiers_ibfk_1` FOREIGN KEY (`item_id`) REFERENCES `menu_items` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `menu_item_disabled_modifiers_ibfk_2` FOREIGN KEY (`modifier_id`) REFERENCES `modifiers` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Отключенные модификаторы из глобальных групп';
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `menu_item_prices` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `item_id` int NOT NULL,
+  `city_id` int DEFAULT NULL COMMENT 'NULL = цена для всех городов',
+  `fulfillment_type` enum('delivery','pickup','dine_in') COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'Способ получения: доставка, самовывоз, зал',
+  `price` decimal(10,2) NOT NULL,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_item_city_fulfillment` (`item_id`,`city_id`,`fulfillment_type`),
+  KEY `idx_item` (`item_id`),
+  KEY `idx_city` (`city_id`),
+  KEY `idx_fulfillment` (`fulfillment_type`),
+  CONSTRAINT `menu_item_prices_ibfk_1` FOREIGN KEY (`item_id`) REFERENCES `menu_items` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `menu_item_prices_ibfk_2` FOREIGN KEY (`city_id`) REFERENCES `cities` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Цены блюд по городам и способам получения';
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `menu_item_tags` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `item_id` int NOT NULL,
+  `tag_id` int NOT NULL,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_item_tag` (`item_id`,`tag_id`),
+  KEY `idx_item` (`item_id`),
+  KEY `idx_tag` (`tag_id`),
+  CONSTRAINT `menu_item_tags_ibfk_1` FOREIGN KEY (`item_id`) REFERENCES `menu_items` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `menu_item_tags_ibfk_2` FOREIGN KEY (`tag_id`) REFERENCES `tags` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Связь блюд с тегами';
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `menu_items` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `category_id` int NOT NULL,
+  `name` varchar(200) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `description` text COLLATE utf8mb4_unicode_ci,
+  `composition` text COLLATE utf8mb4_unicode_ci,
+  `price` decimal(10,2) DEFAULT '0.00' COMMENT 'Базовая цена (используется если нет вариантов)',
+  `image_url` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `weight` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `weight_value` decimal(10,2) DEFAULT NULL,
+  `weight_unit` enum('g','kg','ml','l','pcs') COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `calories_per_100g` decimal(10,2) DEFAULT NULL COMMENT 'Калории на 100г',
+  `proteins_per_100g` decimal(10,2) DEFAULT NULL COMMENT 'Белки на 100г',
+  `fats_per_100g` decimal(10,2) DEFAULT NULL COMMENT 'Жиры на 100г',
+  `carbs_per_100g` decimal(10,2) DEFAULT NULL COMMENT 'Углеводы на 100г',
+  `calories_per_serving` decimal(10,2) DEFAULT NULL COMMENT 'Калории на порцию',
+  `proteins_per_serving` decimal(10,2) DEFAULT NULL COMMENT 'Белки на порцию',
+  `fats_per_serving` decimal(10,2) DEFAULT NULL COMMENT 'Жиры на порцию',
+  `carbs_per_serving` decimal(10,2) DEFAULT NULL COMMENT 'Углеводы на порцию',
+  `calories` int DEFAULT NULL,
+  `sort_order` int DEFAULT '0',
+  `is_active` tinyint(1) DEFAULT '1',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_category_active_sort` (`category_id`,`is_active`,`sort_order`),
+  CONSTRAINT `menu_items_ibfk_1` FOREIGN KEY (`category_id`) REFERENCES `menu_categories` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=55 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `menu_modifier_variant_prices` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `modifier_id` int NOT NULL,
+  `variant_id` int NOT NULL COMMENT 'Вариация, для которой действует данная цена модификатора',
+  `price` decimal(10,2) NOT NULL,
+  `weight` decimal(10,2) DEFAULT NULL COMMENT 'Вес модификатора для данной вариации',
+  `weight_unit` enum('g','kg','ml','l','pcs') COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_modifier_variant` (`modifier_id`,`variant_id`),
+  KEY `idx_modifier` (`modifier_id`),
+  KEY `idx_variant` (`variant_id`),
+  CONSTRAINT `menu_modifier_variant_prices_ibfk_1` FOREIGN KEY (`modifier_id`) REFERENCES `modifiers` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `menu_modifier_variant_prices_ibfk_2` FOREIGN KEY (`variant_id`) REFERENCES `item_variants` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Цены модификаторов для разных вариаций';
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `menu_modifiers` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `item_id` int NOT NULL,
+  `name` varchar(200) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `price` decimal(10,2) DEFAULT '0.00',
+  `is_required` tinyint(1) DEFAULT '0',
+  `is_active` tinyint(1) DEFAULT '1',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_item_active` (`item_id`,`is_active`),
+  CONSTRAINT `menu_modifiers_ibfk_1` FOREIGN KEY (`item_id`) REFERENCES `menu_items` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `menu_stop_list` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `branch_id` int NOT NULL,
+  `entity_type` enum('item','variant','modifier') COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'Тип сущности: блюдо, вариация, модификатор',
+  `entity_id` int NOT NULL COMMENT 'ID блюда, вариации или модификатора',
+  `reason` text COLLATE utf8mb4_unicode_ci COMMENT 'Причина добавления в стоп-лист',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `created_by` int DEFAULT NULL COMMENT 'ID администратора, добавившего в стоп-лист',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_branch_entity` (`branch_id`,`entity_type`,`entity_id`),
+  KEY `created_by` (`created_by`),
+  KEY `idx_branch` (`branch_id`),
+  KEY `idx_entity` (`entity_type`,`entity_id`),
+  CONSTRAINT `menu_stop_list_ibfk_1` FOREIGN KEY (`branch_id`) REFERENCES `branches` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `menu_stop_list_ibfk_2` FOREIGN KEY (`created_by`) REFERENCES `admin_users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Стоп-лист позиций по филиалам';
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `menu_stop_list_reasons` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `name` varchar(255) NOT NULL,
+  `sort_order` int DEFAULT '0',
+  `is_active` tinyint(1) DEFAULT '1',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_reason_name` (`name`),
+  KEY `idx_sort` (`sort_order`)
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb3;
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `menu_variant_prices` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `variant_id` int NOT NULL,
+  `city_id` int DEFAULT NULL COMMENT 'NULL = цена для всех городов',
+  `fulfillment_type` enum('delivery','pickup','dine_in') COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'Способ получения: доставка, самовывоз, зал',
+  `price` decimal(10,2) NOT NULL,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_variant_city_fulfillment` (`variant_id`,`city_id`,`fulfillment_type`),
+  KEY `idx_variant` (`variant_id`),
+  KEY `idx_city` (`city_id`),
+  KEY `idx_fulfillment` (`fulfillment_type`),
+  CONSTRAINT `menu_variant_prices_ibfk_1` FOREIGN KEY (`variant_id`) REFERENCES `item_variants` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `menu_variant_prices_ibfk_2` FOREIGN KEY (`city_id`) REFERENCES `cities` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=95 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Цены вариаций по городам и способам получения';
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `migrations` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `name` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `executed_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `name` (`name`)
+) ENGINE=InnoDB AUTO_INCREMENT=31 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `modifier_groups` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `name` varchar(200) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'Название группы (например: "Уровень прожарки")',
+  `type` enum('single','multiple') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'single' COMMENT 'Одиночный или множественный выбор',
+  `is_required` tinyint(1) DEFAULT '0' COMMENT 'Обязательность выбора модификатора из группы',
+  `is_global` tinyint(1) DEFAULT '0' COMMENT 'Глобальная группа (переиспользуемая)',
+  `min_selections` int DEFAULT '0' COMMENT 'Минимальное количество выборов',
+  `max_selections` int DEFAULT '1' COMMENT 'Максимальное количество выборов',
+  `is_active` tinyint(1) DEFAULT '1',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_active` (`is_active`)
+) ENGINE=InnoDB AUTO_INCREMENT=29 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `modifiers` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `group_id` int NOT NULL,
+  `name` varchar(200) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `price` decimal(10,2) DEFAULT '0.00',
+  `weight` decimal(10,2) DEFAULT NULL COMMENT 'Вес модификатора',
+  `weight_unit` enum('g','kg','ml','l','pcs') COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'Единица измерения веса',
+  `image_url` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'URL изображения модификатора',
+  `sort_order` int DEFAULT '0',
+  `is_active` tinyint(1) DEFAULT '1',
+  `gulyash_modifier_id` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_group_active_sort` (`group_id`,`is_active`,`sort_order`),
+  CONSTRAINT `modifiers_ibfk_1` FOREIGN KEY (`group_id`) REFERENCES `modifier_groups` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=82 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `order_item_modifiers` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `order_item_id` int NOT NULL,
+  `modifier_id` int DEFAULT NULL COMMENT 'ID модификатора из таблицы modifiers (новая система)',
+  `old_modifier_id` int DEFAULT NULL COMMENT 'ID модификатора из таблицы menu_modifiers (старая система, для обратной совместимости)',
+  `modifier_group_id` int DEFAULT NULL COMMENT 'ID группы модификаторов',
+  `modifier_name` varchar(200) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `modifier_price` decimal(10,2) NOT NULL,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `old_modifier_id` (`old_modifier_id`),
+  KEY `idx_order_item_id` (`order_item_id`),
+  KEY `idx_modifier_id` (`modifier_id`),
+  KEY `fk_order_item_modifiers_group` (`modifier_group_id`),
+  CONSTRAINT `fk_order_item_modifiers_group` FOREIGN KEY (`modifier_group_id`) REFERENCES `modifier_groups` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_order_item_modifiers_modifier` FOREIGN KEY (`modifier_id`) REFERENCES `modifiers` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `order_item_modifiers_ibfk_1` FOREIGN KEY (`order_item_id`) REFERENCES `order_items` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `order_item_modifiers_ibfk_2` FOREIGN KEY (`modifier_id`) REFERENCES `modifiers` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `order_item_modifiers_ibfk_3` FOREIGN KEY (`old_modifier_id`) REFERENCES `menu_modifiers` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `order_item_modifiers_ibfk_4` FOREIGN KEY (`modifier_group_id`) REFERENCES `modifier_groups` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB AUTO_INCREMENT=17 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `order_items` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `order_id` int NOT NULL,
+  `item_id` int DEFAULT NULL,
+  `variant_id` int DEFAULT NULL COMMENT 'ID варианта позиции (если выбран вариант)',
+  `item_name` varchar(200) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `variant_name` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'Название варианта для истории заказа',
+  `item_price` decimal(10,2) NOT NULL,
+  `quantity` int NOT NULL DEFAULT '1',
+  `subtotal` decimal(10,2) NOT NULL,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `item_id` (`item_id`),
+  KEY `idx_order_id` (`order_id`),
+  KEY `idx_variant_id` (`variant_id`),
+  CONSTRAINT `fk_order_items_variant` FOREIGN KEY (`variant_id`) REFERENCES `item_variants` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `order_items_ibfk_1` FOREIGN KEY (`order_id`) REFERENCES `orders` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `order_items_ibfk_2` FOREIGN KEY (`item_id`) REFERENCES `menu_items` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `order_items_ibfk_3` FOREIGN KEY (`variant_id`) REFERENCES `item_variants` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB AUTO_INCREMENT=26 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `orders` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `order_number` varchar(4) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `user_id` int NOT NULL,
+  `city_id` int NOT NULL,
+  `branch_id` int DEFAULT NULL,
+  `order_type` enum('delivery','pickup') COLLATE utf8mb4_unicode_ci NOT NULL,
+  `status` enum('pending','confirmed','preparing','ready','delivering','completed','cancelled') COLLATE utf8mb4_unicode_ci DEFAULT 'pending',
+  `delivery_address_id` int DEFAULT NULL,
+  `delivery_street` varchar(200) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `delivery_house` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `delivery_entrance` varchar(10) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `delivery_floor` varchar(10) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `delivery_apartment` varchar(10) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `delivery_intercom` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `delivery_comment` text COLLATE utf8mb4_unicode_ci,
+  `payment_method` enum('cash','card') COLLATE utf8mb4_unicode_ci NOT NULL,
+  `change_from` decimal(10,2) DEFAULT NULL,
+  `subtotal` decimal(10,2) NOT NULL,
+  `delivery_cost` decimal(10,2) DEFAULT '0.00',
+  `bonus_spent` decimal(10,2) DEFAULT '0.00',
+  `total` decimal(10,2) NOT NULL,
+  `comment` text COLLATE utf8mb4_unicode_ci,
+  `desired_time` datetime DEFAULT NULL,
+  `completed_at` datetime DEFAULT NULL,
+  `user_timezone_offset` int DEFAULT '0',
+  `auto_status_date` date DEFAULT NULL,
+  `gulyash_order_id` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `sync_status` enum('pending','synced','failed') COLLATE utf8mb4_unicode_ci DEFAULT 'pending',
+  `sync_attempts` int DEFAULT '0',
+  `sync_error` text COLLATE utf8mb4_unicode_ci,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `bonus_earn_amount` decimal(10,2) DEFAULT '0.00' COMMENT 'Зафиксированная сумма начисления при первом delivered',
+  `bonus_earn_locked` tinyint(1) DEFAULT '0' COMMENT 'Флаг блокировки для защиты от дублирования начислений',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `order_number` (`order_number`),
+  KEY `city_id` (`city_id`),
+  KEY `branch_id` (`branch_id`),
+  KEY `delivery_address_id` (`delivery_address_id`),
+  KEY `idx_user_id` (`user_id`),
+  KEY `idx_order_number` (`order_number`),
+  KEY `idx_status` (`status`),
+  KEY `idx_sync_status` (`sync_status`),
+  KEY `idx_created_at` (`created_at`),
+  KEY `idx_bonus_earn_locked` (`bonus_earn_locked`),
+  KEY `idx_user_status_created` (`user_id`,`status`,`created_at`),
+  CONSTRAINT `orders_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `orders_ibfk_2` FOREIGN KEY (`city_id`) REFERENCES `cities` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `orders_ibfk_3` FOREIGN KEY (`branch_id`) REFERENCES `branches` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `orders_ibfk_4` FOREIGN KEY (`delivery_address_id`) REFERENCES `delivery_addresses` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB AUTO_INCREMENT=20 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `system_settings` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `key` varchar(100) NOT NULL,
+  `value` json NOT NULL,
+  `description` varchar(255) DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_setting_key` (`key`)
+) ENGINE=InnoDB AUTO_INCREMENT=112 DEFAULT CHARSET=utf8mb3;
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `tags` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `name` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `icon` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'Иконка или эмодзи для тега',
+  `color` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'Цвет тега для отображения',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `name` (`name`),
+  KEY `idx_name` (`name`)
+) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Теги для фильтрации и поиска блюд';
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `user_loyalty_levels` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `user_id` int NOT NULL,
+  `loyalty_level_id` int NOT NULL,
+  `previous_level_id` int DEFAULT NULL,
+  `reason` varchar(255) NOT NULL,
+  `threshold_sum` decimal(10,2) NOT NULL DEFAULT '0.00',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_user_created` (`user_id`,`created_at`),
+  KEY `user_loyalty_levels_new_ibfk_2` (`loyalty_level_id`),
+  KEY `user_loyalty_levels_new_ibfk_3` (`previous_level_id`),
+  CONSTRAINT `user_loyalty_levels_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `user_loyalty_levels_ibfk_2` FOREIGN KEY (`loyalty_level_id`) REFERENCES `loyalty_levels` (`id`) ON DELETE RESTRICT,
+  CONSTRAINT `user_loyalty_levels_ibfk_3` FOREIGN KEY (`previous_level_id`) REFERENCES `loyalty_levels` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb3;
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `user_states` (
+  `user_id` int NOT NULL,
+  `selected_city_id` int DEFAULT NULL,
+  `selected_branch_id` int DEFAULT NULL,
+  `delivery_type` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT 'delivery',
+  `delivery_address` text COLLATE utf8mb4_unicode_ci,
+  `delivery_coords` json DEFAULT NULL,
+  `delivery_details` json DEFAULT NULL,
+  `cart` json DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`user_id`),
+  KEY `idx_user_state_city` (`selected_city_id`),
+  KEY `idx_user_state_branch` (`selected_branch_id`),
+  CONSTRAINT `user_states_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `user_states_ibfk_2` FOREIGN KEY (`selected_city_id`) REFERENCES `cities` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `user_states_ibfk_3` FOREIGN KEY (`selected_branch_id`) REFERENCES `branches` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `users` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `telegram_id` bigint DEFAULT NULL,
+  `phone` varchar(20) DEFAULT NULL,
+  `first_name` varchar(100) DEFAULT NULL,
+  `last_name` varchar(100) DEFAULT NULL,
+  `email` varchar(100) DEFAULT NULL,
+  `date_of_birth` date DEFAULT NULL,
+  `loyalty_balance` decimal(10,2) DEFAULT '0.00',
+  `current_loyalty_level_id` int DEFAULT NULL,
+  `loyalty_joined_at` timestamp NULL DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `telegram_id` (`telegram_id`),
+  UNIQUE KEY `phone` (`phone`),
+  KEY `idx_phone` (`phone`),
+  KEY `idx_telegram_id` (`telegram_id`),
+  KEY `idx_birth_date` (`date_of_birth`),
+  KEY `idx_current_loyalty_level` (`current_loyalty_level_id`),
+  KEY `idx_loyalty_joined_at` (`loyalty_joined_at`)
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb3;
+/*!40101 SET character_set_client = @saved_cs_client */;

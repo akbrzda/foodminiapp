@@ -1,5 +1,5 @@
 import { defineStore } from "pinia";
-import { authAPI } from "../api/endpoints";
+import { bonusesAPI } from "../api/endpoints";
 import {
   LOYALTY_LEVELS,
   MAX_BONUS_REDEEM_PERCENT,
@@ -16,7 +16,7 @@ export const useLoyaltyStore = defineStore("loyalty", {
     updatedAt: null,
     levels: LOYALTY_LEVELS,
     fallbackRedeemPercent: MAX_BONUS_REDEEM_PERCENT,
-    settings: null, // Настройки лояльности
+    periodDays: 60,
   }),
   getters: {
     currentLevel: (state) => getLoyaltyLevel(state.totalSpent, state.levels),
@@ -37,90 +37,50 @@ export const useLoyaltyStore = defineStore("loyalty", {
       this.totalSpent = normalizeSpend(amount);
       this.updatedAt = Date.now();
     },
-    applySettings(settings, levelsFromApi = []) {
-      const data = settings || {};
-
-      // Сохраняем все настройки лояльности
-      this.settings = data;
-
-      const rawMaxRedeem = Number(data.bonus_max_redeem_percent);
-      const fallbackRedeemPercent = Number.isFinite(rawMaxRedeem)
-        ? rawMaxRedeem > 1
-          ? rawMaxRedeem / 100
-          : rawMaxRedeem
-        : MAX_BONUS_REDEEM_PERCENT;
-      if (Array.isArray(levelsFromApi) && levelsFromApi.length > 0) {
-        const normalized = levelsFromApi
-          .filter((level) => level && (level.is_active === undefined || level.is_active))
-          .map((level) => ({
-            id: level.id ?? level.level_number,
-            name: level.name,
-            threshold: Number(level.threshold_amount) || 0,
-            rate: Number(level.earn_percent) || 0,
-            redeemPercent: Number(level.max_spend_percent),
-            levelNumber: Number(level.level_number) || 0,
-          }))
-          .sort((a, b) => a.threshold - b.threshold || a.levelNumber - b.levelNumber);
-        this.levels = normalized.map((level, index) => {
-          const next = normalized[index + 1];
-          const min = Math.max(0, level.threshold);
-          const max = next ? Math.max(min, next.threshold - 1) : Number.POSITIVE_INFINITY;
-          const redeemPercent = Number.isFinite(level.redeemPercent) ? level.redeemPercent / 100 : fallbackRedeemPercent;
-          return {
-            id: String(level.id ?? index + 1),
-            name: level.name || `Уровень ${index + 1}`,
-            rate: level.rate,
-            redeemPercent,
-            min,
-            max,
-          };
-        });
-        this.fallbackRedeemPercent = fallbackRedeemPercent;
+    applyLevels(levelsFromApi = []) {
+      if (!Array.isArray(levelsFromApi) || levelsFromApi.length === 0) {
+        this.levels = LOYALTY_LEVELS;
+        this.fallbackRedeemPercent = MAX_BONUS_REDEEM_PERCENT;
         return;
       }
-      const level2Threshold = Number(data.loyalty_level_2_threshold);
-      const level3Threshold = Number(data.loyalty_level_3_threshold);
-      const level1RedeemPercent = Number(data.loyalty_level_1_redeem_percent);
-      const level2RedeemPercent = Number(data.loyalty_level_2_redeem_percent);
-      const level3RedeemPercent = Number(data.loyalty_level_3_redeem_percent);
-      const level1Rate = Number(data.loyalty_level_1_rate);
-      const level2Rate = Number(data.loyalty_level_2_rate);
-      const level3Rate = Number(data.loyalty_level_3_rate);
-      this.levels = [
-        {
-          id: "starter",
-          name: data.loyalty_level_1_name || LOYALTY_LEVELS[0].name,
-          rate: Number.isFinite(level1Rate) ? level1Rate : LOYALTY_LEVELS[0].rate,
-          redeemPercent: Number.isFinite(level1RedeemPercent) ? level1RedeemPercent : fallbackRedeemPercent,
-          min: 0,
-          max: Number.isFinite(level2Threshold) ? level2Threshold - 1 : LOYALTY_LEVELS[0].max,
-        },
-        {
-          id: "growth",
-          name: data.loyalty_level_2_name || LOYALTY_LEVELS[1].name,
-          rate: Number.isFinite(level2Rate) ? level2Rate : LOYALTY_LEVELS[1].rate,
-          redeemPercent: Number.isFinite(level2RedeemPercent) ? level2RedeemPercent : fallbackRedeemPercent,
-          min: Number.isFinite(level2Threshold) ? level2Threshold : LOYALTY_LEVELS[1].min,
-          max: Number.isFinite(level3Threshold) ? level3Threshold - 1 : LOYALTY_LEVELS[1].max,
-        },
-        {
-          id: "prime",
-          name: data.loyalty_level_3_name || LOYALTY_LEVELS[2].name,
-          rate: Number.isFinite(level3Rate) ? level3Rate : LOYALTY_LEVELS[2].rate,
-          redeemPercent: Number.isFinite(level3RedeemPercent) ? level3RedeemPercent : fallbackRedeemPercent,
-          min: Number.isFinite(level3Threshold) ? level3Threshold : LOYALTY_LEVELS[2].min,
-          max: Number.POSITIVE_INFINITY,
-        },
-      ];
+      const normalized = levelsFromApi
+        .filter((level) => level)
+        .map((level) => ({
+          id: level.id,
+          name: level.name,
+          threshold: Number(level.threshold) || 0,
+          rate: Number(level.earnRate) || 0,
+          redeemPercent: Number(level.maxSpendPercent),
+        }))
+        .sort((a, b) => a.threshold - b.threshold);
+      const fallbackRedeemPercent = Number.isFinite(normalized[0]?.redeemPercent)
+        ? normalized[0].redeemPercent
+        : MAX_BONUS_REDEEM_PERCENT;
+      this.levels = normalized.map((level, index) => {
+        const next = normalized[index + 1];
+        const min = Math.max(0, level.threshold);
+        const max = next ? Math.max(min, next.threshold - 1) : Number.POSITIVE_INFINITY;
+        const redeemPercent = Number.isFinite(level.redeemPercent) ? level.redeemPercent : fallbackRedeemPercent;
+        return {
+          id: String(level.id ?? index + 1),
+          name: level.name || `Уровень ${index + 1}`,
+          rate: Number.isFinite(level.rate) ? level.rate : LOYALTY_LEVELS[index]?.rate,
+          redeemPercent,
+          min,
+          max,
+        };
+      });
       this.fallbackRedeemPercent = fallbackRedeemPercent;
     },
     async refreshFromProfile() {
       if (this.loading) return;
       this.loading = true;
       try {
-        const response = await authAPI.getProfile();
-        const totalSpent = response.data.user?.total_spent ?? 0;
+        const response = await bonusesAPI.getLevels();
+        const totalSpent = response.data?.total_spent_60_days ?? 0;
         this.setTotalSpent(totalSpent);
+        this.periodDays = response.data?.period_days || 60;
+        this.applyLevels(response.data?.levels || []);
       } catch (error) {
         console.error("Failed to refresh loyalty data:", error);
       } finally {

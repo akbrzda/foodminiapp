@@ -113,9 +113,9 @@
           <span>Доставка</span>
           <span>{{ formatPrice(order.delivery_cost) }} ₽</span>
         </div>
-        <div class="total-row" v-if="order.bonus_used > 0">
+        <div class="total-row" v-if="order.bonus_spent > 0">
           <span>Списано бонусов</span>
-          <span class="bonus-used">-{{ formatPrice(order.bonus_used) }} бонусов</span>
+          <span class="bonus-used">-{{ formatPrice(order.bonus_spent) }} бонусов</span>
         </div>
         <div class="total-row" v-if="order.bonuses_earned > 0">
           <span>Начислено бонусов</span>

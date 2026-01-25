@@ -1,59 +1,57 @@
 <template>
   <div class="space-y-6">
     <Card>
-      <CardHeader>
-        <CardTitle>Заказы</CardTitle>
-        <CardDescription>Фильтры и список заказов</CardDescription>
-      </CardHeader>
       <CardContent class="space-y-4">
-        <div class="grid gap-4 lg:grid-cols-[2fr_1fr_1fr_1fr_2fr]">
-          <div class="space-y-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Поиск</label>
-            <div class="relative">
-              <Search class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" :size="16" />
-              <Input v-model="filters.search" class="pl-9" placeholder="Номер заказа или телефон" @keyup.enter="loadOrders" />
+        <PageHeader title="Заказы" description="Фильтры и список заказов">
+          <template #filters>
+            <div class="min-w-[220px] flex-1 space-y-1">
+              <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Поиск</label>
+              <div class="relative">
+                <Search class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" :size="16" />
+                <Input v-model="filters.search" class="pl-9" placeholder="Номер заказа или телефон" @keyup.enter="loadOrders" />
+              </div>
             </div>
-          </div>
-          <div class="space-y-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Город</label>
-            <Select v-model="filters.city_id">
-              <option value="">Все</option>
-              <option v-for="city in referenceStore.cities" :key="city.id" :value="city.id">{{ city.name }}</option>
-            </Select>
-          </div>
-          <div class="space-y-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Статус</label>
-            <Select v-model="filters.status">
-              <option value="">Все</option>
-              <option value="pending">Новый</option>
-              <option value="confirmed">Принят</option>
-              <option value="preparing">Готовится</option>
-              <option value="ready">Готов</option>
-              <option value="delivering">В пути</option>
-              <option value="completed">Завершен</option>
-              <option value="cancelled">Отменен</option>
-            </Select>
-          </div>
-          <div class="space-y-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Тип</label>
-            <Select v-model="filters.order_type">
-              <option value="">Все</option>
-              <option value="delivery">Доставка</option>
-              <option value="pickup">Самовывоз</option>
-            </Select>
-          </div>
-          <div class="space-y-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Период</label>
-            <RangeCalendar v-model:from="filters.date_from" v-model:to="filters.date_to" />
-          </div>
-        </div>
-        <div class="flex flex-wrap items-center gap-3">
-          <Button variant="outline" @click="resetFilters">
-            <RotateCcw :size="16" />
-            Сбросить
-          </Button>
-          <Badge variant="secondary">Всего: {{ formatNumber(orders.length) }}</Badge>
-        </div>
+            <div class="min-w-[160px] space-y-1">
+              <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Город</label>
+              <Select v-model="filters.city_id">
+                <option value="">Все</option>
+                <option v-for="city in referenceStore.cities" :key="city.id" :value="city.id">{{ city.name }}</option>
+              </Select>
+            </div>
+            <div class="min-w-[160px] space-y-1">
+              <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Статус</label>
+              <Select v-model="filters.status">
+                <option value="">Все</option>
+                <option value="pending">Новый</option>
+                <option value="confirmed">Принят</option>
+                <option value="preparing">Готовится</option>
+                <option value="ready">Готов</option>
+                <option value="delivering">В пути</option>
+                <option value="completed">Завершен</option>
+                <option value="cancelled">Отменен</option>
+              </Select>
+            </div>
+            <div class="min-w-[160px] space-y-1">
+              <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Тип</label>
+              <Select v-model="filters.order_type">
+                <option value="">Все</option>
+                <option value="delivery">Доставка</option>
+                <option value="pickup">Самовывоз</option>
+              </Select>
+            </div>
+            <div class="min-w-[220px] space-y-1">
+              <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Период</label>
+              <RangeCalendar v-model:from="filters.date_from" v-model:to="filters.date_to" />
+            </div>
+            <div class="ml-auto flex flex-wrap items-center gap-2">
+              <Button variant="outline" @click="resetFilters">
+                <RotateCcw :size="16" />
+                Сбросить
+              </Button>
+              <Badge variant="secondary">Всего: {{ formatNumber(orders.length) }}</Badge>
+            </div>
+          </template>
+        </PageHeader>
       </CardContent>
     </Card>
     <Card>
@@ -115,9 +113,9 @@ import Badge from "../components/ui/Badge.vue";
 import Button from "../components/ui/Button.vue";
 import Card from "../components/ui/Card.vue";
 import CardContent from "../components/ui/CardContent.vue";
-import CardDescription from "../components/ui/CardDescription.vue";
 import CardHeader from "../components/ui/CardHeader.vue";
 import CardTitle from "../components/ui/CardTitle.vue";
+import PageHeader from "../components/PageHeader.vue";
 import Input from "../components/ui/Input.vue";
 import RangeCalendar from "../components/ui/RangeCalendar.vue";
 import Select from "../components/ui/Select.vue";
@@ -130,7 +128,7 @@ import TableRow from "../components/ui/TableRow.vue";
 const router = useRouter();
 const authStore = useAuthStore();
 const referenceStore = useReferenceStore();
-const { showNewOrderNotification } = useNotifications();
+const { showNewOrderNotification, showErrorNotification } = useNotifications();
 const orders = ref([]);
 const recentOrderIds = ref(new Set());
 let ws = null;
@@ -238,9 +236,14 @@ const connectWebSocket = () => {
   };
 };
 onMounted(async () => {
-  await referenceStore.loadCities();
-  await loadOrders();
-  connectWebSocket();
+  try {
+    await referenceStore.loadCities();
+    await loadOrders();
+    connectWebSocket();
+  } catch (error) {
+    console.error("Ошибка загрузки заказов:", error);
+    showErrorNotification("Ошибка загрузки заказов");
+  }
 });
 watch(
   filters,

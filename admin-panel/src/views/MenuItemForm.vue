@@ -1,18 +1,16 @@
 <template>
   <div class="space-y-6">
     <Card>
-      <CardHeader>
-        <div class="flex items-center justify-between">
-          <div>
-            <CardTitle>{{ modalTitle }}</CardTitle>
-            <CardDescription>{{ modalSubtitle }}</CardDescription>
-          </div>
-          <Button variant="outline" @click="goBack">
-            <ArrowLeft :size="16" />
-            Назад к списку
-          </Button>
-        </div>
-      </CardHeader>
+      <CardContent>
+        <PageHeader :title="modalTitle" :description="modalSubtitle">
+          <template #actions>
+            <Button variant="outline" @click="goBack">
+              <ArrowLeft :size="16" />
+              Назад к списку
+            </Button>
+          </template>
+        </PageHeader>
+      </CardContent>
     </Card>
     <Tabs :tabs="tabLabels" v-model="activeTab">
       <div v-show="activeTab === 0" class="space-y-4">
@@ -430,6 +428,7 @@ import CardDescription from "../components/ui/CardDescription.vue";
 import CardHeader from "../components/ui/CardHeader.vue";
 import CardTitle from "../components/ui/CardTitle.vue";
 import Input from "../components/ui/Input.vue";
+import PageHeader from "../components/PageHeader.vue";
 import Select from "../components/ui/Select.vue";
 import Table from "../components/ui/Table.vue";
 import TableBody from "../components/ui/TableBody.vue";
@@ -820,7 +819,12 @@ const handleFile = async (file) => {
   }
 };
 onMounted(async () => {
-  await Promise.all([referenceStore.fetchCitiesAndBranches(), loadCategories(), loadModifierGroups(), loadTags()]);
-  await loadItem();
+  try {
+    await Promise.all([referenceStore.fetchCitiesAndBranches(), loadCategories(), loadModifierGroups(), loadTags()]);
+    await loadItem();
+  } catch (error) {
+    console.error("Ошибка инициализации формы позиции:", error);
+    showErrorNotification("Ошибка загрузки данных формы");
+  }
 });
 </script>

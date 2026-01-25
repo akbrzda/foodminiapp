@@ -3,7 +3,6 @@ import db from "../config/database.js";
 import { authenticateToken } from "../middleware/auth.js";
 import { normalizePhone } from "../utils/phone.js";
 import { getSystemSettings } from "../utils/settings.js";
-import { getLoyaltySettings } from "../utils/loyaltySettings.js";
 import { grantRegistrationBonus } from "../utils/bonuses.js";
 const router = express.Router();
 router.post("/register", async (req, res, next) => {
@@ -34,7 +33,10 @@ router.post("/register", async (req, res, next) => {
         await db.query(`UPDATE users SET ${updates.join(", ")} WHERE id = ?`, values);
       }
       const [updatedUsers] = await db.query(
-        "SELECT id, telegram_id, phone, first_name, last_name, email, date_of_birth, bonus_balance, loyalty_level, total_spent, created_at, updated_at FROM users WHERE id = ?",
+        `SELECT u.id, u.telegram_id, u.phone, u.first_name, u.last_name, u.email, u.date_of_birth,
+                u.loyalty_balance, u.current_loyalty_level_id, u.loyalty_joined_at, u.created_at, u.updated_at
+         FROM users u
+         WHERE u.id = ?`,
         [user.id],
       );
       return res.json({ user: updatedUsers[0] });
@@ -45,15 +47,18 @@ router.post("/register", async (req, res, next) => {
       first_name || null,
       last_name || null,
     ]);
+    await db.query("UPDATE users SET current_loyalty_level_id = 1, loyalty_joined_at = NOW() WHERE id = ?", [result.insertId]);
     const [newUser] = await db.query(
-      "SELECT id, telegram_id, phone, first_name, last_name, email, date_of_birth, bonus_balance, loyalty_level, total_spent, created_at, updated_at FROM users WHERE id = ?",
+      `SELECT u.id, u.telegram_id, u.phone, u.first_name, u.last_name, u.email, u.date_of_birth,
+              u.loyalty_balance, u.current_loyalty_level_id, u.loyalty_joined_at, u.created_at, u.updated_at
+       FROM users u
+       WHERE u.id = ?`,
       [result.insertId],
     );
     try {
       const systemSettings = await getSystemSettings();
       if (systemSettings.bonuses_enabled) {
-        const loyaltySettings = await getLoyaltySettings();
-        await grantRegistrationBonus(result.insertId, null, loyaltySettings);
+        await grantRegistrationBonus(result.insertId, null);
       }
     } catch (bonusError) {
       console.error("Failed to grant registration bonus:", bonusError);
@@ -67,7 +72,10 @@ router.get("/profile", authenticateToken, async (req, res, next) => {
   try {
     const userId = req.user.id;
     const [users] = await db.query(
-      "SELECT id, telegram_id, phone, first_name, last_name, email, date_of_birth, bonus_balance, loyalty_level, total_spent, created_at, updated_at FROM users WHERE id = ?",
+      `SELECT u.id, u.telegram_id, u.phone, u.first_name, u.last_name, u.email, u.date_of_birth,
+              u.loyalty_balance, u.current_loyalty_level_id, u.loyalty_joined_at, u.created_at, u.updated_at
+       FROM users u
+       WHERE u.id = ?`,
       [userId],
     );
     if (users.length === 0) {
@@ -192,7 +200,10 @@ router.put("/profile", authenticateToken, async (req, res, next) => {
     values.push(userId);
     await db.query(`UPDATE users SET ${updates.join(", ")} WHERE id = ?`, values);
     const [updatedUsers] = await db.query(
-      "SELECT id, telegram_id, phone, first_name, last_name, email, date_of_birth, bonus_balance, loyalty_level, total_spent, created_at, updated_at FROM users WHERE id = ?",
+      `SELECT u.id, u.telegram_id, u.phone, u.first_name, u.last_name, u.email, u.date_of_birth,
+              u.loyalty_balance, u.current_loyalty_level_id, u.loyalty_joined_at, u.created_at, u.updated_at
+       FROM users u
+       WHERE u.id = ?`,
       [userId],
     );
     res.json({ user: updatedUsers[0] });

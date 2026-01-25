@@ -1,15 +1,20 @@
 <template>
   <div class="space-y-6">
     <Card>
-      <CardHeader class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-        <div>
-          <CardTitle>Стоп-лист</CardTitle>
-          <CardDescription>Управление временно недоступными позициями по филиалам</CardDescription>
-        </div>
-        <Button @click="openModal()">
-          <Plus :size="16" />
-          Добавить
-        </Button>
+      <CardContent>
+        <PageHeader title="Стоп-лист" description="Управление временно недоступными позициями по филиалам">
+          <template #actions>
+            <Button @click="openModal()">
+              <Plus :size="16" />
+              Добавить
+            </Button>
+          </template>
+        </PageHeader>
+      </CardContent>
+    </Card>
+    <Card>
+      <CardHeader>
+        <CardTitle>Список позиций</CardTitle>
       </CardHeader>
       <CardContent class="pt-0">
         <div v-if="stopList.length === 0" class="py-8 text-center text-sm text-muted-foreground">Стоп-лист пуст</div>
@@ -104,10 +109,10 @@ import Badge from "../components/ui/Badge.vue";
 import Button from "../components/ui/Button.vue";
 import Card from "../components/ui/Card.vue";
 import CardContent from "../components/ui/CardContent.vue";
-import CardDescription from "../components/ui/CardDescription.vue";
 import CardHeader from "../components/ui/CardHeader.vue";
 import CardTitle from "../components/ui/CardTitle.vue";
 import Select from "../components/ui/Select.vue";
+import PageHeader from "../components/PageHeader.vue";
 import Table from "../components/ui/Table.vue";
 import TableBody from "../components/ui/TableBody.vue";
 import TableCell from "../components/ui/TableCell.vue";
@@ -201,8 +206,13 @@ const removeFromStopList = async (item) => {
   }
 };
 onMounted(async () => {
-  await referenceStore.fetchCitiesAndBranches();
-  await loadReasons();
-  await loadStopList();
+  try {
+    await referenceStore.fetchCitiesAndBranches();
+    await loadReasons();
+    await loadStopList();
+  } catch (error) {
+    console.error("Ошибка загрузки стоп-листа:", error);
+    showErrorNotification("Ошибка загрузки стоп-листа");
+  }
 });
 </script>

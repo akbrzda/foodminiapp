@@ -84,10 +84,6 @@
             <SlidersHorizontal :size="18" />
             <span v-if="!isCollapsed">Настройки системы</span>
           </RouterLink>
-          <RouterLink v-if="!isManager" class="nav-link" to="/loyalty" @click="emit('navigate')">
-            <Award :size="18" />
-            <span v-if="!isCollapsed">Лояльность</span>
-          </RouterLink>
           <RouterLink v-if="!isManager" class="nav-link" to="/admin-users" @click="emit('navigate')">
             <UserCog :size="18" />
             <span v-if="!isCollapsed">Пользователи</span>
@@ -113,7 +109,6 @@ import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { RouterLink } from "vue-router";
 import { useAuthStore } from "../stores/auth.js";
 import {
-  Award,
   Building2,
   ChevronLeft,
   ChevronRight,

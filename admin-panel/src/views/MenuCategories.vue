@@ -1,17 +1,16 @@
 <template>
   <div class="space-y-6">
     <Card>
-      <CardHeader>
-        <CardTitle>Категории меню</CardTitle>
-        <CardDescription>Создание и настройка категорий</CardDescription>
-      </CardHeader>
       <CardContent>
-        <div class="flex justify-end">
-          <Button class="w-full md:w-auto" @click="openModal()">
-            <Plus :size="16" />
-            Добавить категорию
-          </Button>
-        </div>
+        <PageHeader title="Категории меню" description="Создание и настройка категорий">
+          <template #actions>
+            <Badge variant="secondary">Всего: {{ categories.length }}</Badge>
+            <Button class="w-full md:w-auto" @click="openModal()">
+              <Plus :size="16" />
+              Добавить категорию
+            </Button>
+          </template>
+        </PageHeader>
       </CardContent>
     </Card>
     <Card>
@@ -36,12 +35,14 @@
               </TableCell>
               <TableCell>{{ formatNumber(category.sort_order || 0) }}</TableCell>
               <TableCell>
-              <Badge
-                variant="secondary"
-                :class="category.is_active ? 'bg-emerald-100 text-emerald-700 border-transparent' : 'bg-muted text-muted-foreground border-transparent'"
-              >
-                {{ category.is_active ? "Активна" : "Скрыта" }}
-              </Badge>
+                <Badge
+                  variant="secondary"
+                  :class="
+                    category.is_active ? 'bg-emerald-100 text-emerald-700 border-transparent' : 'bg-muted text-muted-foreground border-transparent'
+                  "
+                >
+                  {{ category.is_active ? "Активна" : "Скрыта" }}
+                </Badge>
               </TableCell>
               <TableCell class="text-right">
                 <div class="flex justify-end gap-2">
@@ -110,10 +111,10 @@ import BaseModal from "../components/BaseModal.vue";
 import Badge from "../components/ui/Badge.vue";
 import Button from "../components/ui/Button.vue";
 import Card from "../components/ui/Card.vue";
-import CardContent from "../components/ui/CardContent.vue";
-import CardDescription from "../components/ui/CardDescription.vue";
 import CardHeader from "../components/ui/CardHeader.vue";
 import CardTitle from "../components/ui/CardTitle.vue";
+import CardContent from "../components/ui/CardContent.vue";
+import PageHeader from "../components/PageHeader.vue";
 import Input from "../components/ui/Input.vue";
 import Select from "../components/ui/Select.vue";
 import Table from "../components/ui/Table.vue";
@@ -214,7 +215,12 @@ const deleteCategory = async (category) => {
   }
 };
 onMounted(async () => {
-  await referenceStore.loadCities();
-  await loadCategories();
+  try {
+    await referenceStore.loadCities();
+    await loadCategories();
+  } catch (error) {
+    console.error("Ошибка загрузки категорий:", error);
+    showErrorNotification("Ошибка загрузки категорий");
+  }
 });
 </script>

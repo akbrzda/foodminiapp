@@ -1,22 +1,21 @@
 <template>
   <div class="space-y-6">
     <Card>
-      <CardHeader>
-        <CardTitle>Системные настройки</CardTitle>
-        <CardDescription>Включение и отключение ключевых модулей и их настройка</CardDescription>
-      </CardHeader>
+      <CardContent>
+        <PageHeader title="Системные настройки" description="Включение и отключение ключевых модулей и их настройка" />
+      </CardContent>
     </Card>
 
     <Tabs v-model="activeTab" :tabs="tabs">
       <div v-if="activeTab === 0" class="space-y-6">
-        <Card v-if="groupedModuleSettings.length">
+        <Card v-if="moduleGroups.length">
           <CardHeader>
             <CardTitle>Модули</CardTitle>
             <CardDescription>Управление состоянием сервисных блоков</CardDescription>
           </CardHeader>
           <CardContent class="pt-0">
             <div class="space-y-6">
-              <div v-for="group in groupedModuleSettings" :key="group.name" class="space-y-4">
+              <div v-for="group in moduleGroups" :key="group.name" class="space-y-4">
                 <div class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   {{ group.name }}
                 </div>
@@ -56,6 +55,48 @@
           <CardContent class="py-8 text-center text-sm text-muted-foreground">Настройки не найдены</CardContent>
         </Card>
 
+        <div class="flex flex-wrap justify-end gap-3">
+          <Button variant="secondary" :disabled="moduleLoading || moduleSaving" @click="loadModuleSettings">
+            <RefreshCcw :size="16" />
+            Сбросить
+          </Button>
+          <Button :disabled="moduleLoading || moduleSaving" @click="saveModuleSettings">
+            <Save :size="16" />
+            {{ moduleSaving ? "Сохранение..." : "Сохранить" }}
+          </Button>
+        </div>
+      </div>
+
+      <div v-else-if="activeTab === 1" class="space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Лояльность</CardTitle>
+            <CardDescription>Включение и справка по бонусной программе</CardDescription>
+          </CardHeader>
+          <CardContent class="space-y-4 pt-0">
+            <div v-if="loyaltySettings.length" class="space-y-3">
+              <div
+                v-for="item in loyaltySettings"
+                :key="item.key"
+                class="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-border/60 bg-background px-4 py-3"
+              >
+                <div class="min-w-0">
+                  <div class="text-sm font-semibold text-foreground">{{ item.label }}</div>
+                  <div class="text-xs text-muted-foreground">{{ item.description }}</div>
+                </div>
+                <div class="w-40">
+                  <Select v-model="moduleForm[item.key]">
+                    <option :value="true">Включено</option>
+                    <option :value="false">Выключено</option>
+                  </Select>
+                </div>
+              </div>
+            </div>
+            <div class="rounded-xl border border-dashed border-border/60 bg-muted/30 px-4 py-3 text-xs text-muted-foreground">
+              Параметры начисления и уровней фиксированы: 3 уровня (Бронза, Серебро, Золото), начисление 3/5/7% и максимум списания 25%.
+            </div>
+          </CardContent>
+        </Card>
         <div class="flex flex-wrap justify-end gap-3">
           <Button variant="secondary" :disabled="moduleLoading || moduleSaving" @click="loadModuleSettings">
             <RefreshCcw :size="16" />
@@ -163,6 +204,7 @@ import CardDescription from "../components/ui/CardDescription.vue";
 import CardHeader from "../components/ui/CardHeader.vue";
 import CardTitle from "../components/ui/CardTitle.vue";
 import Input from "../components/ui/Input.vue";
+import PageHeader from "../components/PageHeader.vue";
 import Select from "../components/ui/Select.vue";
 import Table from "../components/ui/Table.vue";
 import TableBody from "../components/ui/TableBody.vue";
@@ -179,7 +221,7 @@ const moduleForm = ref({});
 const moduleLoading = ref(false);
 const moduleSaving = ref(false);
 const reasons = ref([]);
-const tabs = ["Модули", "Причины стоп-листа"];
+const tabs = ["Модули", "Лояльность", "Причины стоп-листа"];
 const activeTab = ref(0);
 const showModal = ref(false);
 const editing = ref(null);
@@ -193,15 +235,7 @@ const { showErrorNotification, showSuccessNotification } = useNotifications();
 
 const modalTitle = computed(() => (editing.value ? "Редактировать причину" : "Новая причина"));
 const modalSubtitle = computed(() => (editing.value ? "Измените параметры" : "Создайте причину стоп-листа"));
-const percentKeys = new Set([
-  "bonus_max_redeem_percent",
-  "loyalty_level_1_redeem_percent",
-  "loyalty_level_2_redeem_percent",
-  "loyalty_level_3_redeem_percent",
-  "loyalty_level_1_rate",
-  "loyalty_level_2_rate",
-  "loyalty_level_3_rate",
-]);
+const percentKeys = new Set();
 
 const groupSettings = (list) => {
   const groups = new Map();
@@ -216,6 +250,8 @@ const groupSettings = (list) => {
 };
 
 const groupedModuleSettings = computed(() => groupSettings(moduleItems.value));
+const moduleGroups = computed(() => groupedModuleSettings.value.filter((group) => group.name !== "Лояльность"));
+const loyaltySettings = computed(() => groupedModuleSettings.value.find((group) => group.name === "Лояльность")?.items || []);
 
 const normalizeInteger = (targetForm, key) => {
   const value = targetForm.value[key];
@@ -335,7 +371,12 @@ const deleteReason = async (reason) => {
 };
 
 onMounted(async () => {
-  await loadModuleSettings();
-  await loadReasons();
+  try {
+    await loadModuleSettings();
+    await loadReasons();
+  } catch (error) {
+    console.error("Ошибка загрузки настроек системы:", error);
+    showErrorNotification("Ошибка загрузки настроек системы");
+  }
 });
 </script>

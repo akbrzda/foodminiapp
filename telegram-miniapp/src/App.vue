@@ -96,7 +96,9 @@ function scheduleSync() {
 }
 onMounted(async () => {
   await settingsStore.loadSettings();
-  loyaltyStore.applySettings(settingsStore.$state, settingsStore.loyaltyLevels);
+  if (settingsStore.bonusesEnabled) {
+    await loyaltyStore.refreshFromProfile();
+  }
   applyDeliveryTypeSettings();
   try {
     await loadRemoteState();

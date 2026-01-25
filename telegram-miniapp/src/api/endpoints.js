@@ -62,23 +62,18 @@ export const ordersAPI = {
 };
 export const bonusesAPI = {
   getBalance() {
-    return api.get("/bonuses/balance");
+    return api.get("/client/loyalty/balance");
   },
-  getHistory() {
-    return api.get("/bonuses/history").then((response) => ({
-      ...response,
-      data: {
-        transactions: response.data.history || [],
-      },
-    }));
+  getHistory(params = {}) {
+    return api.get("/client/loyalty/history", { params });
   },
-  // Расчет доступных для списания бонусов с учетом исключений
-  calculateUsable(items) {
-    return api.post("/bonuses/calculate-usable", { items });
+  calculateMaxSpend(orderTotal, deliveryCost = 0) {
+    return api.get("/client/loyalty/calculate-max-spend", {
+      params: { orderTotal, deliveryCost },
+    });
   },
-  // Получение истекающих бонусов
-  getExpiring(daysThreshold = 14) {
-    return api.get("/bonuses/expiring", { params: { days: daysThreshold } });
+  getLevels() {
+    return api.get("/client/loyalty/levels");
   },
 };
 export const addressesAPI = {
@@ -103,8 +98,5 @@ export const geocodeAPI = {
 export const settingsAPI = {
   getSettings() {
     return api.get("/settings");
-  },
-  getLoyaltySettings() {
-    return api.get("/loyalty-settings");
   },
 };

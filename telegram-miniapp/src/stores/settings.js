@@ -6,18 +6,6 @@ const DEFAULT_SETTINGS = {
   orders_enabled: true,
   delivery_enabled: true,
   pickup_enabled: true,
-  loyalty_level_1_name: "Бронза",
-  loyalty_level_2_name: "Серебро",
-  loyalty_level_3_name: "Золото",
-  bonus_max_redeem_percent: 0.2,
-  loyalty_level_1_redeem_percent: 0.2,
-  loyalty_level_2_redeem_percent: 0.25,
-  loyalty_level_3_redeem_percent: 0.3,
-  loyalty_level_1_rate: 0.03,
-  loyalty_level_2_rate: 0.05,
-  loyalty_level_3_rate: 0.07,
-  loyalty_level_2_threshold: 10000,
-  loyalty_level_3_threshold: 20000,
 };
 const normalizeBoolean = (value, fallback) => {
   if (typeof value === "boolean") return value;
@@ -38,7 +26,6 @@ const normalizeNumber = (value, fallback) => {
 export const useSettingsStore = defineStore("settings", {
   state: () => ({
     ...DEFAULT_SETTINGS,
-    loyaltyLevels: [],
     loaded: false,
   }),
   getters: {
@@ -67,16 +54,10 @@ export const useSettingsStore = defineStore("settings", {
     },
     async loadSettings() {
       try {
-        const [systemResponse, loyaltyResponse] = await Promise.all([settingsAPI.getSettings(), settingsAPI.getLoyaltySettings()]);
-        this.loyaltyLevels = loyaltyResponse.data?.levels || [];
-        const combined = {
-          ...(systemResponse.data?.settings || {}),
-          ...(loyaltyResponse.data?.settings || {}),
-        };
-        this.applySettings(combined);
+        const systemResponse = await settingsAPI.getSettings();
+        this.applySettings(systemResponse.data?.settings || {});
       } catch (error) {
         console.error("Failed to load settings:", error);
-        this.loyaltyLevels = [];
         this.applySettings({});
       }
     },

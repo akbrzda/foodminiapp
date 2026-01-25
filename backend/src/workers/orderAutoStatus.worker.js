@@ -1,7 +1,6 @@
 import db from "../config/database.js";
 import { earnBonuses, cancelOrderBonuses, getLoyaltyLevelsFromDb } from "../utils/bonuses.js";
 import { getSystemSettings } from "../utils/settings.js";
-import { getLoyaltySettings } from "../utils/loyaltySettings.js";
 import { logger } from "../utils/logger.js";
 
 const AUTO_STATUS_INTERVAL_MS = 60 * 1000;
@@ -57,15 +56,13 @@ async function updateOrderStatus(order, localDate) {
   if (newStatus === "completed") {
     const orderTotal = parseFloat(order.total) || 0;
     const settings = await getSystemSettings();
-    const loyaltySettings = await getLoyaltySettings();
     const loyaltyLevels = await getLoyaltyLevelsFromDb();
     if (settings.bonuses_enabled && orderTotal > 0) {
       try {
         await db.query("UPDATE loyalty_transactions SET status = 'completed' WHERE order_id = ? AND type = 'spend' AND status = 'pending'", [
           order.id,
         ]);
-        await earnBonuses(order, null, loyaltyLevels, loyaltySettings);
-        await db.query("UPDATE user_loyalty_stats SET last_order_at = NOW() WHERE user_id = ?", [order.user_id]);
+        await earnBonuses(order, null, loyaltyLevels);
       } catch (bonusError) {
         console.error("Failed to earn bonuses:", bonusError);
       }
@@ -73,7 +70,6 @@ async function updateOrderStatus(order, localDate) {
   } else if (newStatus === "cancelled") {
     try {
       const settings = await getSystemSettings();
-      const loyaltySettings = await getLoyaltySettings();
       const loyaltyLevels = await getLoyaltyLevelsFromDb();
       await rollbackBonuses(order, loyaltyLevels);
     } catch (bonusError) {
@@ -92,7 +88,7 @@ async function processOffset(offsetMinutes, nowUtc) {
   const localDate = buildLocalDateString(localParts);
   const utcMidnight = getUtcMidnightForLocalDate(localParts, offsetMinutes);
   const [orders] = await db.query(
-    `SELECT id, status, user_id, total, subtotal, delivery_cost, bonus_used, order_number, order_type
+    `SELECT id, status, user_id, total, subtotal, delivery_cost, bonus_spent, order_number, order_type
      FROM orders
      WHERE status IN (?)
        AND user_timezone_offset = ?

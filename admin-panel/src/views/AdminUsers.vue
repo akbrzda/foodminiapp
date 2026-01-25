@@ -1,38 +1,35 @@
 <template>
   <div class="space-y-6">
     <Card>
-      <CardHeader class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-        <div>
-          <CardTitle>Пользователи панели</CardTitle>
-          <CardDescription>Администраторы и менеджеры</CardDescription>
-        </div>
-        <Button @click="openModal()">
-          <Plus :size="16" />
-          Добавить пользователя
-        </Button>
-      </CardHeader>
-    </Card>
-    <Card>
       <CardContent>
-        <div class="grid gap-4 md:grid-cols-2">
-          <div class="space-y-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Роль</label>
-            <Select v-model="filters.role" @change="loadUsers">
-              <option value="">Все роли</option>
-              <option value="admin">Администратор</option>
-              <option value="manager">Менеджер</option>
-              <option value="ceo">CEO</option>
-            </Select>
-          </div>
-          <div class="space-y-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Статус</label>
-            <Select v-model="filters.is_active" @change="loadUsers">
-              <option value="">Все статусы</option>
-              <option value="true">Активные</option>
-              <option value="false">Неактивные</option>
-            </Select>
-          </div>
-        </div>
+        <PageHeader title="Пользователи панели" description="Администраторы и менеджеры">
+          <template #actions>
+            <Badge variant="secondary">Всего: {{ users.length }}</Badge>
+            <Button @click="openModal()">
+              <Plus :size="16" />
+              Добавить пользователя
+            </Button>
+          </template>
+          <template #filters>
+            <div class="min-w-[180px] space-y-1">
+              <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Роль</label>
+              <Select v-model="filters.role" @change="loadUsers">
+                <option value="">Все роли</option>
+                <option value="admin">Администратор</option>
+                <option value="manager">Менеджер</option>
+                <option value="ceo">CEO</option>
+              </Select>
+            </div>
+            <div class="min-w-[180px] space-y-1">
+              <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Статус</label>
+              <Select v-model="filters.is_active" @change="loadUsers">
+                <option value="">Все статусы</option>
+                <option value="true">Активные</option>
+                <option value="false">Неактивные</option>
+              </Select>
+            </div>
+          </template>
+        </PageHeader>
       </CardContent>
     </Card>
     <Card>
@@ -174,10 +171,10 @@ import { useAuthStore } from "../stores/auth.js";
 import Badge from "../components/ui/Badge.vue";
 import Button from "../components/ui/Button.vue";
 import Card from "../components/ui/Card.vue";
-import CardContent from "../components/ui/CardContent.vue";
-import CardDescription from "../components/ui/CardDescription.vue";
 import CardHeader from "../components/ui/CardHeader.vue";
 import CardTitle from "../components/ui/CardTitle.vue";
+import CardContent from "../components/ui/CardContent.vue";
+import PageHeader from "../components/PageHeader.vue";
 import Input from "../components/ui/Input.vue";
 import Select from "../components/ui/Select.vue";
 import Table from "../components/ui/Table.vue";
@@ -322,8 +319,13 @@ const deleteUser = async (user) => {
   }
 };
 onMounted(async () => {
-  await referenceStore.loadCities();
-  await loadUsers();
+  try {
+    await referenceStore.loadCities();
+    await loadUsers();
+  } catch (error) {
+    console.error("Ошибка загрузки пользователей:", error);
+    showErrorNotification("Ошибка загрузки пользователей");
+  }
 });
 watch(
   () => [...(form.value.city_ids || [])],

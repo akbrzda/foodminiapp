@@ -1,35 +1,38 @@
 <template>
   <div class="space-y-6">
     <Card>
-      <CardHeader>
-        <CardTitle>Аналитика</CardTitle>
-        <CardDescription>Сводка по заказам и клиентам</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-start">
-          <div class="flex flex-wrap items-center gap-3">
-            <div class="inline-flex items-center gap-1 rounded-md border border-border bg-muted/40 p-1">
-              <Button size="sm" :variant="periodButtonVariant('day')" @click="setPeriod('day')">Д</Button>
-              <Button size="sm" :variant="periodButtonVariant('week')" @click="setPeriod('week')">Н</Button>
-              <Button size="sm" :variant="periodButtonVariant('month')" @click="setPeriod('month')">М</Button>
-              <Button size="sm" :variant="periodButtonVariant('year')" @click="setPeriod('year')">Г</Button>
+      <CardContent class="space-y-4">
+        <PageHeader title="Аналитика" description="Сводка по заказам и клиентам">
+          <template #filters>
+            <div class="min-w-[320px] flex-1 space-y-2">
+              <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Период</label>
+              <div class="flex flex-wrap items-center gap-2">
+                <div class="inline-flex items-center gap-1 rounded-md border border-border bg-muted/40 p-1">
+                  <Button size="sm" :variant="periodButtonVariant('day')" @click="setPeriod('day')">Д</Button>
+                  <Button size="sm" :variant="periodButtonVariant('week')" @click="setPeriod('week')">Н</Button>
+                  <Button size="sm" :variant="periodButtonVariant('month')" @click="setPeriod('month')">М</Button>
+                  <Button size="sm" :variant="periodButtonVariant('year')" @click="setPeriod('year')">Г</Button>
+                </div>
+                <div class="inline-flex items-center gap-2 rounded-full border border-border bg-background px-2 py-1">
+                  <Button size="icon" variant="ghost" @click="shiftPeriod(-1)" :disabled="isCustomPeriod">
+                    <ChevronLeft :size="16" />
+                  </Button>
+                  <span class="min-w-[160px] text-center text-sm font-medium text-foreground">{{ periodRangeLabel }}</span>
+                  <Button size="icon" variant="ghost" @click="shiftPeriod(1)" :disabled="isCustomPeriod">
+                    <ChevronRight :size="16" />
+                  </Button>
+                </div>
+                <Button size="icon" variant="outline" @click="activateCustomPeriod">
+                  <Calendar :size="16" />
+                </Button>
+              </div>
+              <div v-if="isCustomPeriod" class="space-y-1">
+                <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Произвольный период</label>
+                <RangeCalendar v-model:from="filters.date_from" v-model:to="filters.date_to" />
+              </div>
             </div>
-            <div class="inline-flex items-center gap-2 rounded-full border border-border bg-background px-2 py-1">
-              <Button size="icon" variant="ghost" @click="shiftPeriod(-1)" :disabled="isCustomPeriod">
-                <ChevronLeft :size="16" />
-              </Button>
-              <span class="min-w-[160px] text-center text-sm font-medium text-foreground">{{ periodRangeLabel }}</span>
-              <Button size="icon" variant="ghost" @click="shiftPeriod(1)" :disabled="isCustomPeriod">
-                <ChevronRight :size="16" />
-              </Button>
-            </div>
-            <Button size="icon" variant="outline" @click="activateCustomPeriod">
-              <Calendar :size="16" />
-            </Button>
-          </div>
-          <div class="grid gap-4 sm:grid-cols-2">
-            <div class="space-y-2">
-              <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Город</label>
+            <div class="min-w-[180px] space-y-1">
+              <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Город</label>
               <Select v-model="filters.city_id" :disabled="isLocationLocked" @change="onCityChange">
                 <option value="">Все города</option>
                 <option v-for="city in referenceStore.cities" :key="city.id" :value="city.id">
@@ -37,8 +40,8 @@
                 </option>
               </Select>
             </div>
-            <div class="space-y-2">
-              <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Филиал</label>
+            <div class="min-w-[180px] space-y-1">
+              <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Филиал</label>
               <Select v-model="filters.branch_id" :disabled="isLocationLocked || !filters.city_id" @change="scheduleLoad">
                 <option value="">Все филиалы</option>
                 <option v-for="branch in branches" :key="branch.id" :value="branch.id">
@@ -46,14 +49,8 @@
                 </option>
               </Select>
             </div>
-          </div>
-        </div>
-        <div v-if="isCustomPeriod" class="mt-4 grid gap-4 sm:grid-cols-2">
-          <div class="space-y-2 sm:col-span-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Период</label>
-            <RangeCalendar v-model:from="filters.date_from" v-model:to="filters.date_to" />
-          </div>
-        </div>
+          </template>
+        </PageHeader>
       </CardContent>
     </Card>
     <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
@@ -274,6 +271,7 @@ import {
 import api from "../api/client.js";
 import { useReferenceStore } from "../stores/reference.js";
 import { useAuthStore } from "../stores/auth.js";
+import { useNotifications } from "../composables/useNotifications.js";
 import { formatCurrency, formatNumber } from "../utils/format.js";
 import Button from "../components/ui/Button.vue";
 import Card from "../components/ui/Card.vue";
@@ -281,11 +279,13 @@ import CardContent from "../components/ui/CardContent.vue";
 import CardDescription from "../components/ui/CardDescription.vue";
 import CardHeader from "../components/ui/CardHeader.vue";
 import CardTitle from "../components/ui/CardTitle.vue";
+import PageHeader from "../components/PageHeader.vue";
 import Select from "../components/ui/Select.vue";
 import Tabs from "../components/ui/Tabs.vue";
 import RangeCalendar from "../components/ui/RangeCalendar.vue";
 const referenceStore = useReferenceStore();
 const authStore = useAuthStore();
+const { showErrorNotification } = useNotifications();
 const stats = ref(null);
 const branches = ref([]);
 const branchesRequestId = ref(0);
@@ -552,17 +552,22 @@ watch(
   },
 );
 onMounted(async () => {
-  await referenceStore.loadCities();
-  if (isManager.value && managerBranches.value.length > 0) {
-    const [firstBranch] = managerBranches.value;
-    filters.value.city_id = firstBranch?.city_id || "";
-    filters.value.branch_id = firstBranch?.id || "";
-    if (filters.value.city_id) {
-      const loadedBranches = (await referenceStore.loadBranches(filters.value.city_id)) || [];
-      const allowed = new Set(managerBranchIds.value);
-      branches.value = loadedBranches.filter((branch) => allowed.has(branch.id));
+  try {
+    await referenceStore.loadCities();
+    if (isManager.value && managerBranches.value.length > 0) {
+      const [firstBranch] = managerBranches.value;
+      filters.value.city_id = firstBranch?.city_id || "";
+      filters.value.branch_id = firstBranch?.id || "";
+      if (filters.value.city_id) {
+        const loadedBranches = (await referenceStore.loadBranches(filters.value.city_id)) || [];
+        const allowed = new Set(managerBranchIds.value);
+        branches.value = loadedBranches.filter((branch) => allowed.has(branch.id));
+      }
     }
+    await loadDashboard();
+  } catch (error) {
+    console.error("Ошибка загрузки аналитики:", error);
+    showErrorNotification("Ошибка загрузки аналитики");
   }
-  await loadDashboard();
 });
 </script>

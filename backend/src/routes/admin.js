@@ -4,8 +4,6 @@ import db from "../config/database.js";
 import { authenticateToken, requireRole } from "../middleware/auth.js";
 import { telegramQueue, imageQueue, getQueueStats, getFailedJobs, retryFailedJobs, cleanQueue } from "../queues/config.js";
 import { getSystemSettings } from "../utils/settings.js";
-import { getBonusHistory, applyManualBonusAdjustment } from "../utils/bonuses.js";
-import { logLoyaltyEvent } from "../utils/loyaltyLogs.js";
 const router = express.Router();
 router.use(authenticateToken);
 router.get("/users/admins", requireRole("admin", "ceo"), async (req, res, next) => {
@@ -126,7 +124,7 @@ router.get("/clients", requireRole("admin", "manager", "ceo"), async (req, res, 
       params.push(city_id);
     }
     const query = `
-      SELECT u.id, u.phone, u.first_name, u.last_name, u.email, u.bonus_balance,
+      SELECT u.id, u.phone, u.first_name, u.last_name, u.email, u.loyalty_balance,
              COALESCE(oc.orders_count, 0) as orders_count,
              lo.created_at as last_order_at,
              c.name as city_name
@@ -170,7 +168,7 @@ router.get("/clients/:id", requireRole("admin", "manager", "ceo"), async (req, r
       return res.status(403).json({ error: "You do not have access to this user" });
     }
     const [users] = await db.query(
-      `SELECT u.id, u.phone, u.first_name, u.last_name, u.email, u.bonus_balance, u.created_at,
+      `SELECT u.id, u.phone, u.first_name, u.last_name, u.email, u.loyalty_balance, u.created_at,
               c.name as city_name
        FROM users u
        LEFT JOIN orders o ON o.id = (
@@ -208,7 +206,7 @@ router.put("/clients/:id", requireRole("admin", "manager", "ceo"), async (req, r
       userId,
     ]);
     const [updated] = await db.query(
-      `SELECT u.id, u.phone, u.first_name, u.last_name, u.email, u.bonus_balance, u.created_at,
+      `SELECT u.id, u.phone, u.first_name, u.last_name, u.email, u.loyalty_balance, u.created_at,
               c.name as city_name
        FROM users u
        LEFT JOIN orders o ON o.id = (
@@ -221,52 +219,6 @@ router.put("/clients/:id", requireRole("admin", "manager", "ceo"), async (req, r
     res.json({ user: updated[0] });
   } catch (error) {
     next(error);
-  }
-});
-router.post("/clients/:id/bonuses", requireRole("admin", "manager", "ceo"), async (req, res, next) => {
-  const connection = await db.getConnection();
-  try {
-    await connection.beginTransaction();
-    const settings = await getSystemSettings();
-    if (!settings.bonuses_enabled) {
-      await connection.rollback();
-      return res.status(403).json({ error: "Бонусная система отключена" });
-    }
-    const userId = req.params.id;
-    const { amount, mode = "add" } = req.body;
-    const hasAccess = await ensureManagerClientAccess(req, userId);
-    if (!hasAccess) {
-      await connection.rollback();
-      return res.status(403).json({ error: "You do not have access to this user" });
-    }
-    const parsedAmount = Number(amount);
-    if (!Number.isFinite(parsedAmount)) {
-      await connection.rollback();
-      return res.status(400).json({ error: "Amount must be a number" });
-    }
-    const [users] = await connection.query("SELECT bonus_balance FROM users WHERE id = ?", [userId]);
-    if (users.length === 0) {
-      await connection.rollback();
-      return res.status(404).json({ error: "User not found" });
-    }
-    const currentBalance = parseFloat(users[0].bonus_balance) || 0;
-    let newBalance = currentBalance;
-    if (mode === "set") {
-      newBalance = Math.max(0, parsedAmount);
-    } else {
-      newBalance = Math.max(0, currentBalance + parsedAmount);
-    }
-    const delta = newBalance - currentBalance;
-    if (delta !== 0) {
-      await applyManualBonusAdjustment({ userId, delta, connection });
-    }
-    await connection.commit();
-    res.json({ balance: newBalance });
-  } catch (error) {
-    await connection.rollback();
-    next(error);
-  } finally {
-    connection.release();
   }
 });
 router.get("/clients/:id/orders", requireRole("admin", "manager", "ceo"), async (req, res, next) => {
@@ -293,237 +245,6 @@ router.get("/clients/:id/orders", requireRole("admin", "manager", "ceo"), async 
       params,
     );
     res.json({ orders });
-  } catch (error) {
-    next(error);
-  }
-});
-router.get("/clients/:id/bonuses", requireRole("admin", "manager", "ceo"), async (req, res, next) => {
-  try {
-    const userId = req.params.id;
-    if (req.user.role === "manager") {
-      const [orders] = await db.query("SELECT id FROM orders WHERE user_id = ? AND city_id IN (?) LIMIT 1", [userId, req.user.cities]);
-      if (orders.length === 0) {
-        return res.status(403).json({ error: "You do not have access to this user" });
-      }
-    }
-    const transactions = await getBonusHistory(userId, 50, 0);
-    res.json({ transactions });
-  } catch (error) {
-    next(error);
-  }
-});
-router.get("/loyalty/levels", requireRole("admin", "ceo"), async (req, res, next) => {
-  try {
-    const [levels] = await db.query(
-      `SELECT 
-         ll.id,
-         ll.name,
-         ll.level_number,
-         ll.threshold_amount,
-         ll.earn_percent,
-         ll.max_spend_percent,
-         ll.is_active,
-         ll.sort_order,
-         COUNT(DISTINCT u.id) as user_count
-       FROM loyalty_levels ll
-       LEFT JOIN users u ON u.current_loyalty_level_id = ll.id
-       WHERE ll.deleted_at IS NULL
-       GROUP BY ll.id
-       ORDER BY ll.sort_order ASC, ll.level_number ASC`,
-    );
-    res.json({ levels });
-  } catch (error) {
-    next(error);
-  }
-});
-router.post("/loyalty/levels", requireRole("admin", "ceo"), async (req, res, next) => {
-  try {
-    const { name, level_number, threshold_amount, earn_percent, max_spend_percent, is_active = true, sort_order = 0 } = req.body;
-    if (!name || !level_number) {
-      return res.status(400).json({ error: "name и level_number обязательны" });
-    }
-    const normalizedThreshold = Number(level_number) === 1 ? 0 : Math.max(0, Number(threshold_amount) || 0);
-    const [result] = await db.query(
-      `INSERT INTO loyalty_levels (name, level_number, threshold_amount, earn_percent, max_spend_percent, is_active, sort_order)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [
-        name,
-        Number(level_number),
-        normalizedThreshold,
-        Number(earn_percent) || 0,
-        Number(max_spend_percent) || 0,
-        Boolean(is_active),
-        Number(sort_order) || 0,
-      ],
-    );
-    await logLoyaltyEvent({ eventType: "cron_execution", severity: "info", message: "Создан уровень лояльности" });
-    res.status(201).json({ id: result.insertId });
-  } catch (error) {
-    next(error);
-  }
-});
-router.put("/loyalty/levels/:id", requireRole("admin", "ceo"), async (req, res, next) => {
-  try {
-    const levelId = req.params.id;
-    const { name, level_number, threshold_amount, earn_percent, max_spend_percent, is_active, sort_order } = req.body;
-    const normalizedThreshold = Number(level_number) === 1 ? 0 : Math.max(0, Number(threshold_amount) || 0);
-    await db.query(
-      `UPDATE loyalty_levels
-       SET name = ?, level_number = ?, threshold_amount = ?, earn_percent = ?, max_spend_percent = ?, is_active = ?, sort_order = ?
-       WHERE id = ? AND deleted_at IS NULL`,
-      [
-        name,
-        Number(level_number),
-        normalizedThreshold,
-        Number(earn_percent) || 0,
-        Number(max_spend_percent) || 0,
-        Boolean(is_active),
-        Number(sort_order) || 0,
-        levelId,
-      ],
-    );
-    await logLoyaltyEvent({ eventType: "cron_execution", severity: "info", message: "Обновлен уровень лояльности" });
-    res.json({ success: true });
-  } catch (error) {
-    next(error);
-  }
-});
-router.delete("/loyalty/levels/:id", requireRole("admin", "ceo"), async (req, res, next) => {
-  try {
-    const levelId = req.params.id;
-    const [inUse] = await db.query("SELECT id FROM users WHERE current_loyalty_level_id = ? LIMIT 1", [levelId]);
-    if (inUse.length > 0) {
-      return res.status(400).json({ error: "Нельзя удалить уровень с активными пользователями" });
-    }
-    const [history] = await db.query("SELECT id FROM user_loyalty_levels WHERE level_id = ? LIMIT 1", [levelId]);
-    if (history.length > 0) {
-      return res.status(400).json({ error: "Нельзя удалить уровень с историей пользователей" });
-    }
-    await db.query("UPDATE loyalty_levels SET deleted_at = NOW(), is_active = FALSE WHERE id = ?", [levelId]);
-    await logLoyaltyEvent({ eventType: "cron_execution", severity: "warning", message: "Удален уровень лояльности" });
-    res.json({ success: true });
-  } catch (error) {
-    next(error);
-  }
-});
-router.get("/loyalty/logs", requireRole("admin", "ceo"), async (req, res, next) => {
-  try {
-    const { limit = 50, offset = 0, event_type, severity, user_id } = req.query;
-    const filters = [];
-    const params = [];
-    if (event_type) {
-      filters.push("event_type = ?");
-      params.push(event_type);
-    }
-    if (severity) {
-      filters.push("severity = ?");
-      params.push(severity);
-    }
-    if (user_id) {
-      filters.push("user_id = ?");
-      params.push(user_id);
-    }
-    const whereClause = filters.length ? `WHERE ${filters.join(" AND ")}` : "";
-    params.push(Number(limit), Number(offset));
-    const [logs] = await db.query(
-      `SELECT id, event_type, severity, user_id, order_id, transaction_id, message, details, created_at
-       FROM loyalty_logs
-       ${whereClause}
-       ORDER BY created_at DESC
-       LIMIT ? OFFSET ?`,
-      params,
-    );
-    res.json({ logs });
-  } catch (error) {
-    next(error);
-  }
-});
-router.get("/loyalty/audit/duplicates", requireRole("admin", "ceo"), async (req, res, next) => {
-  try {
-    const [rows] = await db.query(
-      `SELECT order_id, type, COUNT(*) as total
-       FROM loyalty_transactions
-       WHERE order_id IS NOT NULL
-       GROUP BY order_id, type
-       HAVING COUNT(*) > 1
-       ORDER BY total DESC`,
-    );
-    res.json({ duplicates: rows });
-  } catch (error) {
-    next(error);
-  }
-});
-router.get("/loyalty/audit/mismatches", requireRole("admin", "ceo"), async (req, res, next) => {
-  try {
-    const [rows] = await db.query(
-      `SELECT u.id as user_id, u.bonus_balance as user_balance,
-              COALESCE(t.total_earned, 0) as total_earned,
-              COALESCE(t.total_spent, 0) as total_spent,
-              COALESCE(t.total_expired, 0) as total_expired
-       FROM users u
-       LEFT JOIN (
-         SELECT
-           user_id,
-           SUM(
-             CASE
-               WHEN type IN ('earn', 'register_bonus', 'birthday_bonus', 'refund_spend') THEN amount
-               WHEN type = 'adjustment' AND amount > 0 THEN amount
-               ELSE 0
-             END
-           ) AS total_earned,
-           SUM(
-             CASE
-               WHEN type IN ('spend', 'refund_earn') THEN amount
-               WHEN type = 'adjustment' AND amount < 0 THEN ABS(amount)
-               ELSE 0
-             END
-           ) AS total_spent,
-           SUM(CASE WHEN type = 'expire' THEN amount ELSE 0 END) AS total_expired
-         FROM loyalty_transactions
-         WHERE status = 'completed'
-         GROUP BY user_id
-       ) t ON t.user_id = u.id`,
-    );
-    const mismatches = rows
-      .map((row) => {
-        const calculated = Math.max(0, Number(row.total_earned) - Number(row.total_spent) - Number(row.total_expired));
-        return { ...row, calculated_balance: calculated };
-      })
-      .filter((row) => Number(row.user_balance) !== Number(row.calculated_balance));
-    res.json({ mismatches });
-  } catch (error) {
-    next(error);
-  }
-});
-router.get("/loyalty/users/:id/stats", requireRole("admin", "manager", "ceo"), async (req, res, next) => {
-  try {
-    const userId = req.params.id;
-    const [rows] = await db.query(
-      `SELECT us.*, ll.name as level_name, ll.level_number
-       FROM user_loyalty_stats us
-       LEFT JOIN users u ON u.id = us.user_id
-       LEFT JOIN loyalty_levels ll ON ll.id = u.current_loyalty_level_id
-       WHERE us.user_id = ?`,
-      [userId],
-    );
-    res.json({ stats: rows[0] || null });
-  } catch (error) {
-    next(error);
-  }
-});
-router.get("/loyalty/users/:id/levels", requireRole("admin", "manager", "ceo"), async (req, res, next) => {
-  try {
-    const userId = req.params.id;
-    const [rows] = await db.query(
-      `SELECT ul.id, ul.reason, ul.total_spent_amount, ul.started_at, ul.ended_at,
-              ll.name as level_name, ll.level_number
-       FROM user_loyalty_levels ul
-       JOIN loyalty_levels ll ON ll.id = ul.level_id
-       WHERE ul.user_id = ?
-       ORDER BY ul.started_at DESC`,
-      [userId],
-    );
-    res.json({ levels: rows });
   } catch (error) {
     next(error);
   }

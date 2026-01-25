@@ -26,13 +26,10 @@
           </button>
         </div>
         <div v-if="leftTab === 'zones'" class="space-y-4">
-          <div class="pb-3 border-b border-border">
-            <h2 class="text-lg font-semibold text-foreground">Зоны доставки</h2>
-            <p class="text-xs text-muted-foreground mt-1">Фильтры и управление</p>
-          </div>
+          <PageHeader title="Зоны доставки" description="Фильтры и управление" />
           <div class="space-y-3">
             <div class="space-y-2">
-              <label class="text-xs font-medium text-muted-foreground">Город</label>
+              <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Город</label>
               <Select v-model="cityId" @change="onCityChange">
                 <option value="">Все города</option>
                 <option v-for="city in referenceStore.cities" :key="city.id" :value="city.id">
@@ -41,7 +38,7 @@
               </Select>
             </div>
             <div v-if="cityId" class="space-y-2">
-              <label class="text-xs font-medium text-muted-foreground">Филиал</label>
+              <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Филиал</label>
               <Select v-model="branchId" @change="onBranchChange">
                 <option value="">Все филиалы</option>
                 <option v-for="branch in branches" :key="branch.id" :value="branch.id">
@@ -50,7 +47,7 @@
               </Select>
             </div>
             <div class="space-y-2">
-              <label class="text-xs font-medium text-muted-foreground">Статус</label>
+              <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Статус</label>
               <Select v-model="statusFilter" @change="onFilterChange">
                 <option value="all">Все полигоны</option>
                 <option value="active">Активные</option>
@@ -60,7 +57,7 @@
             </div>
           </div>
           <div class="pt-3 border-t border-border">
-            <p class="text-xs font-medium text-muted-foreground mb-2">Легенда</p>
+            <p class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-2">Легенда</p>
             <div class="space-y-1.5">
               <div class="flex items-center gap-2 text-xs">
                 <div class="h-3 w-3 rounded-sm border border-[#FFD200] bg-[#FFD200]/30"></div>
@@ -142,20 +139,7 @@
         </div>
         <div class="flex gap-2">
           <Button class="flex-1" type="submit" variant="default">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
-              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-            </svg>
+            <Lock :size="16" />
             Заблокировать
           </Button>
           <Button type="button" variant="outline" @click="closeBlockModal"> Отмена </Button>
@@ -178,7 +162,7 @@
 </template>
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
-import { Plus, Save } from "lucide-vue-next";
+import { Lock, Plus, Save } from "lucide-vue-next";
 import api from "../api/client.js";
 import BaseModal from "../components/BaseModal.vue";
 import PolygonSidebar from "../components/PolygonSidebar.vue";
@@ -188,11 +172,39 @@ import Button from "../components/ui/Button.vue";
 import Input from "../components/ui/Input.vue";
 import RangeCalendar from "../components/ui/RangeCalendar.vue";
 import Select from "../components/ui/Select.vue";
+import PageHeader from "../components/PageHeader.vue";
 import { useNotifications } from "../composables/useNotifications.js";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "leaflet-draw";
 import "leaflet-draw/dist/leaflet.draw.css";
+
+const patchLeafletTouchEvents = () => {
+  if (!L?.DomEvent || L.DomEvent.__touchleavePatched) return;
+  const sanitizeTypes = (types) => {
+    if (typeof types !== "string") return types;
+    return types
+      .split(/\s+/)
+      .filter((type) => type && type !== "touchleave")
+      .join(" ");
+  };
+  const originalOn = L.DomEvent.on;
+  const originalOff = L.DomEvent.off;
+  L.DomEvent.on = function (obj, types, fn, context) {
+    const safeTypes = sanitizeTypes(types);
+    if (!safeTypes) return this;
+    return originalOn.call(this, obj, safeTypes, fn, context);
+  };
+  L.DomEvent.off = function (obj, types, fn, context) {
+    const safeTypes = sanitizeTypes(types);
+    if (!safeTypes) return this;
+    return originalOff.call(this, obj, safeTypes, fn, context);
+  };
+  L.DomEvent.__touchleavePatched = true;
+};
+
+// Убираем предупреждения Leaflet о неверном событии touchleave.
+patchLeafletTouchEvents();
 if (L?.GeometryUtil?.readableArea && !L.GeometryUtil.__patched) {
   L.GeometryUtil.readableArea = () => "";
   L.GeometryUtil.__patched = true;
@@ -471,9 +483,7 @@ const renderPolygonsOnMap = () => {
     `;
     layer.bindPopup(popupContent, { autoPan: false });
     drawnItems.addLayer(layer);
-    if (branchId.value) {
-      polygonLayers.set(polygon.id, layer);
-    }
+    polygonLayers.set(polygon.id, layer);
   });
 };
 const startDrawing = () => {
@@ -708,7 +718,7 @@ const transferPolygon = async (data) => {
   }
 };
 const startRedrawPolygon = (polygon) => {
-  if (!branchId.value || !polygon?.id) return;
+  if (!polygon?.id) return;
   const layer = polygonLayers.get(polygon.id);
   if (!layer) return;
   stopPolygonEditing();

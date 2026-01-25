@@ -3,7 +3,6 @@
     <div class="content">
       <div v-if="!bonusesEnabled" class="bonus-disabled">Бонусная система временно отключена</div>
       <template v-else>
-        <!-- Секция 1: Текущий статус -->
         <div class="loyalty-card">
           <div class="loyalty-card-header">
             <div class="loyalty-balance">
@@ -14,12 +13,7 @@
             </div>
             <div class="loyalty-status">
               <div class="loyalty-rate">Ваш статус {{ currentRateLabel }}%</div>
-              <div class="loyalty-tier">
-                {{ currentLevel.name }}
-                <button class="info-button" type="button" @click="showRulesModal = true" aria-label="Правила программы">
-                  <Info :size="14" />
-                </button>
-              </div>
+              <div class="loyalty-tier">{{ currentLevel.name }}</div>
             </div>
           </div>
           <div class="loyalty-benefits">
@@ -34,7 +28,6 @@
           </div>
         </div>
 
-        <!-- Секция 2: Прогресс до следующего уровня -->
         <div class="progress-card">
           <div class="progress-values">
             <span>{{ formatPrice(totalSpent) }} ₽</span>
@@ -50,7 +43,6 @@
           </div>
           <div class="progress-caption" v-else>У вас максимальный статус</div>
 
-          <!-- Карточка следующего уровня -->
           <div v-if="nextLevel" class="next-level-card">
             <div class="next-level-icon dimmed">
               <Trophy :size="18" />
@@ -66,7 +58,23 @@
           </div>
         </div>
 
-        <!-- Секция 4: Скоро сгорят -->
+        <div class="levels-section">
+          <h3>Все уровни</h3>
+          <div class="levels-grid">
+            <div v-for="level in formattedLevels" :key="level.id" class="level-card" :class="{ current: level.id === currentLevel.id }">
+              <div class="level-card-header">
+                <span class="level-name">{{ level.name }}</span>
+                <span v-if="level.id === currentLevel.id" class="level-badge">Ваш уровень</span>
+              </div>
+              <div class="level-metrics">
+                <span>Начисление: {{ level.rateLabel }}%</span>
+                <span>Списание до: {{ level.redeemLabel }}%</span>
+              </div>
+              <div class="level-threshold">{{ level.rangeLabel }}</div>
+            </div>
+          </div>
+        </div>
+
         <div v-if="expiringBonuses.length > 0" class="expiring-section">
           <div class="expiring-alert">
             <div class="expiring-icon">
@@ -85,7 +93,6 @@
           </div>
         </div>
 
-        <!-- Секция 5: История транзакций -->
         <div class="history-section">
           <h3>История операций</h3>
           <div class="loading" v-if="loading">Загрузка...</div>
@@ -109,52 +116,19 @@
                 {{ getTransactionSign(transaction.type) }}{{ formatPrice(Math.abs(transaction.amount)) }} ₽
               </div>
             </div>
+            <button v-if="historyHasMore" class="history-more" type="button" :disabled="loadingMore" @click="loadMoreHistory">
+              {{ loadingMore ? "Загрузка..." : "Загрузить еще" }}
+            </button>
           </div>
         </div>
       </template>
     </div>
 
-    <!-- Секция 3: Все уровни (модальное окно) -->
-    <div v-if="bonusesEnabled && showRulesModal" class="modal-overlay" @click.self="showRulesModal = false">
-      <div class="modal-card" role="dialog" aria-modal="true">
-        <div class="modal-header">
-          <h3>Бонусная система</h3>
-          <button class="modal-close" type="button" @click="showRulesModal = false" aria-label="Закрыть">
-            <X :size="18" />
-          </button>
-        </div>
-        <div class="modal-body">
-          <p>
-            Статус зависит от суммы всех завершённых заказов за последние {{ levelCalculationDays }} дней и пересчитывается автоматически. Можно
-            списывать до {{ maxRedeemPercentLabel }}% от суммы заказа (1 бонус = 1 ₽).
-          </p>
-          <p>Бонусы начисляются после завершения заказа и доступны в течение {{ bonusLifetimeDays }} дней.</p>
-
-          <div class="levels-table-header">
-            <span>Уровень</span>
-            <span>Начисление</span>
-            <span>Списание</span>
-            <span>Порог</span>
-          </div>
-          <div class="levels-list">
-            <div v-for="level in formattedLevels" :key="level.id" class="level-row" :class="{ 'current-level': level.id === currentLevel.id }">
-              <span class="level-name">
-                {{ level.name }}
-                <span v-if="level.id === currentLevel.id" class="current-badge">Ваш уровень</span>
-              </span>
-              <span class="level-rate">{{ level.rateLabel }}%</span>
-              <span class="level-redeem">{{ level.redeemLabel }}%</span>
-              <span class="level-range">{{ level.rangeLabel }}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
   </div>
 </template>
 <script setup>
 import { computed, ref, onMounted } from "vue";
-import { X, Plus, Minus, Award, Trophy, AlertTriangle, Info } from "lucide-vue-next";
+import { X, Plus, Minus, Award, Trophy, AlertTriangle } from "lucide-vue-next";
 import { bonusesAPI } from "../api/endpoints";
 import { formatPrice } from "../utils/format";
 import { useLoyaltyStore } from "../stores/loyalty";
@@ -165,11 +139,13 @@ const transactions = ref([]);
 const expiringBonuses = ref([]);
 const totalExpiring = ref(0);
 const loading = ref(true);
+const loadingMore = ref(false);
 const expiringDaysThreshold = 14;
+const historyPage = ref(1);
+const historyHasMore = ref(false);
 
 const loyaltyStore = useLoyaltyStore();
 const settingsStore = useSettingsStore();
-const showRulesModal = ref(false);
 
 const bonusesEnabled = computed(() => settingsStore.bonusesEnabled);
 const currentLevel = computed(() => loyaltyStore.currentLevel);
@@ -180,9 +156,7 @@ const maxRedeemPercentLabel = computed(() => Math.round(loyaltyStore.maxRedeemPe
 const progressPercent = computed(() => Math.round(loyaltyStore.progressToNextLevel * 100));
 const amountToNextLevel = computed(() => loyaltyStore.amountToNextLevel);
 
-// Получаем настройки из store
-const bonusLifetimeDays = computed(() => loyaltyStore.settings?.default_bonus_expires_days || 60);
-const levelCalculationDays = computed(() => loyaltyStore.settings?.level_calculation_period_days || 60);
+const levelCalculationDays = computed(() => loyaltyStore.periodDays || 60);
 
 const formattedLevels = computed(() =>
   loyaltyStore.levels.map((level) => ({
@@ -198,15 +172,21 @@ onMounted(async () => {
     loading.value = false;
     return;
   }
-  await Promise.all([loadData(), loadExpiringBonuses(), loyaltyStore.refreshFromProfile()]);
+  await Promise.all([loadData(), loyaltyStore.refreshFromProfile()]);
 });
 
 async function loadData() {
   loading.value = true;
   try {
-    const [balanceResponse, historyResponse] = await Promise.all([bonusesAPI.getBalance(), bonusesAPI.getHistory()]);
+    const [balanceResponse, historyResponse] = await Promise.all([
+      bonusesAPI.getBalance(),
+      bonusesAPI.getHistory({ page: historyPage.value, limit: 20 }),
+    ]);
     bonusBalance.value = balanceResponse.data.balance || 0;
+    expiringBonuses.value = balanceResponse.data.expiring_bonuses || [];
+    totalExpiring.value = balanceResponse.data.total_expiring || 0;
     transactions.value = historyResponse.data.transactions || [];
+    historyHasMore.value = Boolean(historyResponse.data.has_more);
   } catch (error) {
     console.error("Failed to load bonus data:", error);
   } finally {
@@ -214,17 +194,24 @@ async function loadData() {
   }
 }
 
-async function loadExpiringBonuses() {
+async function loadMoreHistory() {
+  if (loadingMore.value || !historyHasMore.value) return;
+  loadingMore.value = true;
   try {
-    const response = await bonusesAPI.getExpiring(expiringDaysThreshold);
-    expiringBonuses.value = response.data.expiring_bonuses || [];
-    totalExpiring.value = response.data.total_expiring || 0;
+    const nextPage = historyPage.value + 1;
+    const response = await bonusesAPI.getHistory({ page: nextPage, limit: 20 });
+    const newItems = response.data.transactions || [];
+    transactions.value = [...transactions.value, ...newItems];
+    historyPage.value = nextPage;
+    historyHasMore.value = Boolean(response.data.has_more);
   } catch (error) {
-    console.error("Failed to load expiring bonuses:", error);
+    console.error("Failed to load bonus history:", error);
+  } finally {
+    loadingMore.value = false;
   }
 }
 
-const isEarnType = (type) => ["earn", "birthday_bonus", "adjustment"].includes(type);
+const isEarnType = (type) => ["earn", "registration", "birthday", "adjustment"].includes(type);
 
 const isActiveEarn = (transaction) => {
   if (!isEarnType(transaction.type)) return false;
@@ -248,11 +235,10 @@ function getTransactionTitle(transaction) {
   const typeLabels = {
     earn: "Начислено за заказ",
     spend: "Списано в заказе",
-    birthday_bonus: "Бонус на день рождения",
+    registration: "Бонус за регистрацию",
+    birthday: "Бонус на день рождения",
     adjustment: "Корректировка",
     expire: "Сгорело",
-    refund_earn: "Возврат начисления",
-    refund_spend: "Возврат списания",
   };
 
   const label = typeLabels[transaction.type] || "Операция";
@@ -550,6 +536,21 @@ function formatDateShort(dateString) {
   color: var(--color-text-primary);
   margin-bottom: 12px;
 }
+.history-more {
+  width: 100%;
+  margin-top: 12px;
+  padding: 12px 16px;
+  border-radius: var(--border-radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-background-secondary);
+  font-size: var(--font-size-body);
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+.history-more:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
 .levels-table-header {
   display: grid;
   grid-template-columns: 1.1fr 0.7fr 0.7fr 1.2fr;
@@ -773,5 +774,73 @@ function formatDateShort(dateString) {
 }
 .empty p {
   margin: 0;
+}
+
+.levels-section {
+  margin-top: 20px;
+  background: white;
+  padding: 20px;
+  border-radius: 16px;
+  box-shadow: 0 6px 16px rgba(17, 24, 39, 0.08);
+}
+
+.levels-section h3 {
+  margin: 0 0 12px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.levels-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.level-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  padding: 12px 14px;
+  background: #f9fafb;
+}
+
+.level-card.current {
+  border-color: #16a34a;
+  background: rgba(16, 185, 129, 0.08);
+}
+
+.level-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.level-name {
+  font-weight: 600;
+  color: #111827;
+}
+
+.level-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(16, 185, 129, 0.15);
+  color: #065f46;
+}
+
+.level-metrics {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: #374151;
+}
+
+.level-threshold {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #6b7280;
 }
 </style>

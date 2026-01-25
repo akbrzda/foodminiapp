@@ -6,7 +6,6 @@ import db from "../config/database.js";
 import { parseTelegramUser, validateTelegramData } from "../utils/telegram.js";
 import { normalizePhone } from "../utils/phone.js";
 import { getSystemSettings } from "../utils/settings.js";
-import { getLoyaltySettings } from "../utils/loyaltySettings.js";
 import { grantRegistrationBonus } from "../utils/bonuses.js";
 const router = express.Router();
 function verifyTelegramAuth(data, botToken) {
@@ -57,7 +56,10 @@ router.post("/telegram", async (req, res, next) => {
       return res.status(403).json({ error: "Auth data is too old" });
     }
     const [users] = await db.query(
-      "SELECT id, telegram_id, phone, first_name, last_name, email, date_of_birth, bonus_balance, loyalty_level, total_spent FROM users WHERE telegram_id = ?",
+      `SELECT u.id, u.telegram_id, u.phone, u.first_name, u.last_name, u.email, u.date_of_birth,
+              u.loyalty_balance, u.current_loyalty_level_id, u.loyalty_joined_at
+       FROM users u
+       WHERE u.telegram_id = ?`,
       [id],
     );
     let userId;
@@ -79,7 +81,10 @@ router.post("/telegram", async (req, res, next) => {
         values.push(userId);
         await db.query(`UPDATE users SET ${updates.join(", ")} WHERE id = ?`, values);
         const [updatedUsers] = await db.query(
-          "SELECT id, telegram_id, phone, first_name, last_name, email, date_of_birth, bonus_balance, loyalty_level, total_spent FROM users WHERE id = ?",
+          `SELECT u.id, u.telegram_id, u.phone, u.first_name, u.last_name, u.email, u.date_of_birth,
+                  u.loyalty_balance, u.current_loyalty_level_id, u.loyalty_joined_at
+           FROM users u
+           WHERE u.id = ?`,
           [userId],
         );
         user = updatedUsers[0];
@@ -99,8 +104,12 @@ router.post("/telegram", async (req, res, next) => {
         last_name || null,
       ]);
       userId = result.insertId;
+      await db.query("UPDATE users SET current_loyalty_level_id = 1, loyalty_joined_at = NOW() WHERE id = ?", [userId]);
       const [newUser] = await db.query(
-        "SELECT id, telegram_id, phone, first_name, last_name, email, date_of_birth, bonus_balance, loyalty_level, total_spent FROM users WHERE id = ?",
+        `SELECT u.id, u.telegram_id, u.phone, u.first_name, u.last_name, u.email, u.date_of_birth,
+                u.loyalty_balance, u.current_loyalty_level_id, u.loyalty_joined_at
+         FROM users u
+         WHERE u.id = ?`,
         [userId],
       );
       user = newUser[0];
@@ -108,8 +117,7 @@ router.post("/telegram", async (req, res, next) => {
     try {
       const systemSettings = await getSystemSettings();
       if (systemSettings.bonuses_enabled) {
-        const loyaltySettings = await getLoyaltySettings();
-        await grantRegistrationBonus(userId, null, loyaltySettings);
+        await grantRegistrationBonus(userId, null);
       }
     } catch (bonusError) {
       console.error("Failed to grant registration bonus:", bonusError);

@@ -1,28 +1,27 @@
 <template>
   <div class="space-y-6">
     <Card>
-      <CardHeader>
-        <CardTitle>Филиалы</CardTitle>
-        <CardDescription>Управление филиалами и временем приготовления</CardDescription>
-      </CardHeader>
       <CardContent>
-        <div class="grid gap-4 md:grid-cols-[1fr_auto]">
-          <div class="space-y-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Город</label>
-            <Select v-model="cityId" @change="loadBranches">
-              <option value="">Выберите город</option>
-              <option v-for="city in referenceStore.cities" :key="city.id" :value="city.id">
-                {{ city.name }}
-              </option>
-            </Select>
-          </div>
-          <div class="flex items-end">
+        <PageHeader title="Филиалы" description="Управление филиалами и временем приготовления">
+          <template #actions>
+            <Badge variant="secondary">Всего: {{ branches.length }}</Badge>
             <Button class="w-full md:w-auto" :disabled="!cityId" @click="openModal()">
               <Plus :size="16" />
               Добавить филиал
             </Button>
-          </div>
-        </div>
+          </template>
+          <template #filters>
+            <div class="min-w-[220px] space-y-1">
+              <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Город</label>
+              <Select v-model="cityId" @change="loadBranches">
+                <option value="">Выберите город</option>
+                <option v-for="city in referenceStore.cities" :key="city.id" :value="city.id">
+                  {{ city.name }}
+                </option>
+              </Select>
+            </div>
+          </template>
+        </PageHeader>
       </CardContent>
     </Card>
     <Card v-if="cityId">
@@ -61,12 +60,14 @@
                 <div class="text-xs text-muted-foreground">Сборка: {{ formatTimeValue(branch.assembly_time) }}</div>
               </TableCell>
               <TableCell>
-              <Badge
-                variant="secondary"
-                :class="branch.is_active ? 'bg-emerald-100 text-emerald-700 border-transparent' : 'bg-muted text-muted-foreground border-transparent'"
-              >
-                {{ branch.is_active ? "Активен" : "Неактивен" }}
-              </Badge>
+                <Badge
+                  variant="secondary"
+                  :class="
+                    branch.is_active ? 'bg-emerald-100 text-emerald-700 border-transparent' : 'bg-muted text-muted-foreground border-transparent'
+                  "
+                >
+                  {{ branch.is_active ? "Активен" : "Неактивен" }}
+                </Badge>
               </TableCell>
               <TableCell class="text-right">
                 <div class="flex justify-end gap-2">
@@ -160,7 +161,7 @@
   </div>
 </template>
 <script setup>
-import { computed, onMounted, ref, watch, nextTick } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch, nextTick, shallowRef } from "vue";
 import { MapPin, MapPinned, Pencil, Phone, Plus, Save, Trash2 } from "lucide-vue-next";
 import api from "../api/client.js";
 import BaseModal from "../components/BaseModal.vue";
@@ -168,10 +169,10 @@ import { useReferenceStore } from "../stores/reference.js";
 import Badge from "../components/ui/Badge.vue";
 import Button from "../components/ui/Button.vue";
 import Card from "../components/ui/Card.vue";
-import CardContent from "../components/ui/CardContent.vue";
-import CardDescription from "../components/ui/CardDescription.vue";
 import CardHeader from "../components/ui/CardHeader.vue";
 import CardTitle from "../components/ui/CardTitle.vue";
+import CardContent from "../components/ui/CardContent.vue";
+import PageHeader from "../components/PageHeader.vue";
 import Input from "../components/ui/Input.vue";
 import Select from "../components/ui/Select.vue";
 import Table from "../components/ui/Table.vue";
@@ -183,6 +184,33 @@ import TableRow from "../components/ui/TableRow.vue";
 import { useNotifications } from "../composables/useNotifications.js";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+
+const patchLeafletTouchEvents = () => {
+  if (!L?.DomEvent || L.DomEvent.__touchleavePatched) return;
+  const sanitizeTypes = (types) => {
+    if (typeof types !== "string") return types;
+    return types
+      .split(/\s+/)
+      .filter((type) => type && type !== "touchleave")
+      .join(" ");
+  };
+  const originalOn = L.DomEvent.on;
+  const originalOff = L.DomEvent.off;
+  L.DomEvent.on = function (obj, types, fn, context) {
+    const safeTypes = sanitizeTypes(types);
+    if (!safeTypes) return this;
+    return originalOn.call(this, obj, safeTypes, fn, context);
+  };
+  L.DomEvent.off = function (obj, types, fn, context) {
+    const safeTypes = sanitizeTypes(types);
+    if (!safeTypes) return this;
+    return originalOff.call(this, obj, safeTypes, fn, context);
+  };
+  L.DomEvent.__touchleavePatched = true;
+};
+
+// Убираем предупреждения Leaflet о неверном событии touchleave.
+patchLeafletTouchEvents();
 const referenceStore = useReferenceStore();
 const { showErrorNotification } = useNotifications();
 const cityId = ref("");
@@ -200,8 +228,10 @@ const form = ref({
   assembly_time: 0,
   is_active: true,
 });
-let branchMap = null;
-let branchMarker = null;
+
+// Используем shallowRef для объектов Leaflet (не требует глубокой реактивности)
+const branchMap = shallowRef(null);
+const branchMarker = shallowRef(null);
 const modalTitle = computed(() => (editing.value ? "Редактировать филиал" : "Новый филиал"));
 const modalSubtitle = computed(() => (editing.value ? "Измените параметры филиала" : "Добавьте новый филиал"));
 let branchesRequestId = 0;
@@ -440,6 +470,19 @@ const deleteBranch = async (branch) => {
 };
 onMounted(() => {
   referenceStore.loadCities();
+});
+
+// Очистка ресурсов при размонтировании компонента
+onUnmounted(() => {
+  // Удаление карты и маркеров
+  if (branchMarker.value) {
+    branchMarker.value.remove();
+    branchMarker.value = null;
+  }
+  if (branchMap.value) {
+    branchMap.value.remove();
+    branchMap.value = null;
+  }
 });
 const days = [
   { value: "monday", label: "Понедельник" },

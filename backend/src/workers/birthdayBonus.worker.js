@@ -1,10 +1,13 @@
 import db from "../config/database.js";
 import { getSystemSettings } from "../utils/settings.js";
-import { getLoyaltySettings } from "../utils/loyaltySettings.js";
 import { logLoyaltyEvent } from "../utils/loyaltyLogs.js";
 
+const BIRTHDAY_BONUS_AMOUNT = 500;
+const BIRTHDAY_BONUS_DAYS_BEFORE = 3;
+const BIRTHDAY_BONUS_DAYS_AFTER = 7;
+
 const CHECK_INTERVAL_MS = 10 * 60 * 1000;
-const RUN_HOUR = 6;
+const RUN_HOUR = 2;
 const RUN_WINDOW_MINUTES = 10;
 let lastRunDate = null;
 
@@ -20,53 +23,47 @@ const shouldRunNow = () => {
 async function issueBirthdayBonuses() {
   const systemSettings = await getSystemSettings();
   if (!systemSettings.bonuses_enabled) return;
-  const settings = await getLoyaltySettings();
-  if (!settings.birthday_bonus_enabled) return;
-  const daysBefore = Math.max(0, Number(settings.birthday_bonus_days_before) || 0);
-  const daysAfter = Math.max(0, Number(settings.birthday_bonus_days_after) || 0);
-  const amount = Math.max(0, Number(settings.birthday_bonus_amount) || 0);
-  if (amount <= 0) return;
+  const daysBefore = BIRTHDAY_BONUS_DAYS_BEFORE;
+  const daysAfter = BIRTHDAY_BONUS_DAYS_AFTER;
+  const amount = BIRTHDAY_BONUS_AMOUNT;
   const targetDate = new Date();
   targetDate.setDate(targetDate.getDate() + daysBefore);
   const targetMonth = targetDate.getMonth() + 1;
   const targetDay = targetDate.getDate();
   const targetYear = targetDate.getFullYear();
   const [users] = await db.query(
-    `SELECT id, bonus_balance, birthday_bonus_last_granted_year
+    `SELECT id, loyalty_balance
      FROM users
      WHERE date_of_birth IS NOT NULL
        AND MONTH(date_of_birth) = ?
-       AND DAY(date_of_birth) = ?
-       AND (birthday_bonus_last_granted_year IS NULL OR birthday_bonus_last_granted_year <> ?)`,
-    [targetMonth, targetDay, targetYear],
+       AND DAY(date_of_birth) = ?`,
+    [targetMonth, targetDay],
   );
   for (const user of users) {
-    const currentBalance = Math.round(parseFloat(user.bonus_balance) || 0);
-    const newBalance = currentBalance + Math.round(amount);
+    const [existing] = await db.query(
+      "SELECT id FROM loyalty_transactions WHERE user_id = ? AND type = 'birthday' AND YEAR(created_at) = ? LIMIT 1",
+      [user.id, targetYear],
+    );
+    if (existing.length > 0) {
+      continue;
+    }
+    const currentBalance = Math.floor(parseFloat(user.loyalty_balance) || 0);
+    const newBalance = currentBalance + Math.floor(amount);
     const birthdayDate = new Date(targetYear, targetMonth - 1, targetDay);
     const expiresAt = new Date(birthdayDate.getTime() + daysAfter * 24 * 60 * 60 * 1000);
     const [result] = await db.query(
       `INSERT INTO loyalty_transactions
-       (user_id, order_id, type, amount, earned_at, expires_at, status, description)
-       VALUES (?, NULL, 'birthday_bonus', ?, NOW(), ?, 'completed', 'Бонус ко дню рождения')`,
-      [user.id, Math.round(amount), expiresAt],
+       (user_id, type, status, amount, remaining_amount, expires_at, description)
+       VALUES (?, 'birthday', 'completed', ?, ?, ?, 'Бонус ко дню рождения')`,
+      [user.id, Math.floor(amount), Math.floor(amount), expiresAt],
     );
-    await db.query("UPDATE users SET bonus_balance = ?, birthday_bonus_last_granted_year = ? WHERE id = ?", [newBalance, targetYear, user.id]);
-    await db.query(
-      `INSERT INTO user_loyalty_stats (user_id, bonus_balance, total_earned)
-       VALUES (?, ?, ?)
-       ON DUPLICATE KEY UPDATE
-        bonus_balance = VALUES(bonus_balance),
-        total_earned = total_earned + VALUES(total_earned)`,
-      [user.id, newBalance, Math.round(amount)],
-    );
+    await db.query("UPDATE users SET loyalty_balance = ? WHERE id = ?", [newBalance, user.id]);
     await logLoyaltyEvent({
-      eventType: "cron_execution",
-      severity: "info",
+      eventType: "balance_calculated",
       userId: user.id,
-      transactionId: result.insertId,
-      message: "Начислен бонус ко дню рождения",
-      details: { amount: Math.round(amount), targetDate: targetDate.toISOString().slice(0, 10) },
+      oldValue: String(currentBalance),
+      newValue: String(newBalance),
+      metadata: { amount: Math.floor(amount), transaction_id: result.insertId, target_date: targetDate.toISOString().slice(0, 10) },
     });
   }
 }

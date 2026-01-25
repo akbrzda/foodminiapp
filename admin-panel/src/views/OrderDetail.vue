@@ -1,12 +1,14 @@
 <template>
   <div class="space-y-6">
-    <div class="flex flex-wrap items-center justify-between gap-3">
-      <Button variant="outline" size="sm" @click="router.push('/orders')">
-        <ArrowLeft :size="16" />
-        Назад к заказам
-      </Button>
-      <Badge variant="secondary">ID: {{ route.params.id }}</Badge>
-    </div>
+    <PageHeader :title="orderTitle" :description="orderSubtitle">
+      <template #actions>
+        <Button variant="outline" size="sm" @click="router.push('/orders')">
+          <ArrowLeft :size="16" />
+          Назад к заказам
+        </Button>
+        <Badge variant="secondary">ID: {{ route.params.id }}</Badge>
+      </template>
+    </PageHeader>
     <Card v-if="!order">
       <CardContent class="py-10 text-center text-sm text-muted-foreground">Загрузка...</CardContent>
     </Card>
@@ -141,9 +143,9 @@
               <span class="text-muted-foreground">Доставка</span>
               <span>{{ formatCurrency(order.delivery_cost) }}</span>
             </div>
-            <div v-if="order.bonus_used > 0" class="flex items-center justify-between text-red-600">
+            <div v-if="order.bonus_spent > 0" class="flex items-center justify-between text-red-600">
               <span>Списано бонусов</span>
-              <span>-{{ formatNumber(order.bonus_used) }}</span>
+              <span>-{{ formatNumber(order.bonus_spent) }}</span>
             </div>
             <div v-if="order.bonuses_earned > 0" class="flex items-center justify-between text-emerald-600">
               <span>Начислено бонусов</span>
@@ -161,19 +163,37 @@
             <CardTitle>Бонусы по заказу</CardTitle>
           </CardHeader>
           <CardContent class="space-y-3 text-sm">
+            <div v-if="order.bonus_spent > 0" class="flex items-center justify-between">
+              <span class="text-muted-foreground">Статус списания</span>
+              <Badge variant="secondary">
+                {{ formatBonusTransactionStatus(order.bonus_spend_status) }}
+              </Badge>
+            </div>
             <div class="flex items-center justify-between">
               <span class="text-muted-foreground">Статус начисления</span>
-              <Badge :variant="order.bonus_earn_locked ? 'secondary' : 'outline'">
-                {{ order.bonus_earn_locked ? "Зафиксировано" : "Не зафиксировано" }}
+              <Badge variant="secondary">
+                {{ formatBonusTransactionStatus(bonusEarnStatus) }}
               </Badge>
             </div>
             <div v-if="order.bonus_earn_amount" class="flex items-center justify-between">
               <span class="text-muted-foreground">Сумма начисления</span>
               <span class="font-medium text-emerald-600">+{{ formatNumber(order.bonus_earn_amount) }}</span>
             </div>
-            <div v-if="order.bonus_used > 0" class="flex items-center justify-between">
+            <div v-if="order.bonus_earn_expires_at" class="flex items-center justify-between">
+              <span class="text-muted-foreground">Срок действия</span>
+              <span>{{ formatDateTime(order.bonus_earn_expires_at) }}</span>
+            </div>
+            <div v-if="order.bonus_spent > 0" class="flex items-center justify-between">
               <span class="text-muted-foreground">Использовано</span>
-              <span class="font-medium text-red-600">-{{ formatNumber(order.bonus_used) }}</span>
+              <span class="font-medium text-red-600">-{{ formatNumber(order.bonus_spent) }}</span>
+            </div>
+            <div class="rounded-md border border-border/60 bg-muted/30 p-3 text-xs text-muted-foreground">
+              <div class="font-semibold text-foreground">Детали расчета</div>
+              <div class="mt-2 space-y-1">
+                <div>База начисления: {{ formatNumber(order.bonus_base_amount || 0) }}</div>
+                <div>Уровень: {{ order.bonus_level_name || "—" }}</div>
+                <div>Процент начисления: {{ order.bonus_earn_percent ? `${order.bonus_earn_percent}%` : "—" }}</div>
+              </div>
             </div>
             <div class="text-xs text-muted-foreground">
               <div v-if="!order.bonus_earn_locked">Начисление будет зафиксировано при переводе в статус "Доставлен"</div>
@@ -242,12 +262,21 @@ import TableCell from "../components/ui/TableCell.vue";
 import TableHead from "../components/ui/TableHead.vue";
 import TableHeader from "../components/ui/TableHeader.vue";
 import TableRow from "../components/ui/TableRow.vue";
+import PageHeader from "../components/PageHeader.vue";
 import { useNotifications } from "../composables/useNotifications.js";
 const route = useRoute();
 const router = useRouter();
 const { showErrorNotification, showSuccessNotification } = useNotifications();
 const order = ref(null);
 const statusUpdate = ref("");
+const orderTitle = computed(() => {
+  if (order.value?.order_number) return `Заказ #${order.value.order_number}`;
+  return `Заказ #${route.params.id}`;
+});
+const orderSubtitle = computed(() => {
+  if (order.value?.created_at) return formatDateTime(order.value.created_at);
+  return "Детали заказа";
+});
 const statusOrder = {
   pending: 0,
   confirmed: 1,
@@ -257,6 +286,20 @@ const statusOrder = {
   completed: 5,
   cancelled: -1,
 };
+const formatBonusTransactionStatus = (status) => {
+  const labels = {
+    pending: "Ожидает",
+    completed: "Завершено",
+    cancelled: "Отменено",
+  };
+  return labels[status] || "—";
+};
+const bonusEarnStatus = computed(() => {
+  if (!order.value) return null;
+  if (order.value.bonus_earn_status) return order.value.bonus_earn_status;
+  if (order.value.bonus_earn_locked) return "completed";
+  return order.value.status === "cancelled" ? "cancelled" : "pending";
+});
 const getStatusBadge = (status) => {
   const labels = {
     pending: "Новый",
@@ -313,7 +356,12 @@ const availableStatuses = computed(() => {
   });
 });
 onMounted(async () => {
-  await loadOrder();
+  try {
+    await loadOrder();
+  } catch (error) {
+    console.error("Ошибка загрузки заказа:", error);
+    showErrorNotification("Ошибка загрузки заказа");
+  }
 });
 const loadOrder = async () => {
   try {

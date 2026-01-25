@@ -3,11 +3,11 @@
     <div id="editor-map" class="absolute inset-0 z-0"></div>
     <div class="absolute left-4 top-4 z-10 w-[260px] rounded-xl border border-border bg-background/95 shadow-xl backdrop-blur">
       <div class="p-4 space-y-3">
-        <div>
-          <CardTitle class="text-base">{{ pageTitle }}</CardTitle>
-          <CardDescription>Редактирование полигона</CardDescription>
-        </div>
-        <Button variant="outline" class="w-full" @click="goBack">Назад</Button>
+        <PageHeader :title="pageTitle" description="Редактирование полигона">
+          <template #actions>
+            <Button variant="outline" class="w-full" @click="goBack">Назад</Button>
+          </template>
+        </PageHeader>
       </div>
     </div>
     <div
@@ -60,10 +60,38 @@ import CardDescription from "../components/ui/CardDescription.vue";
 import CardHeader from "../components/ui/CardHeader.vue";
 import CardTitle from "../components/ui/CardTitle.vue";
 import Input from "../components/ui/Input.vue";
+import PageHeader from "../components/PageHeader.vue";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "leaflet-draw";
 import "leaflet-draw/dist/leaflet.draw.css";
+
+const patchLeafletTouchEvents = () => {
+  if (!L?.DomEvent || L.DomEvent.__touchleavePatched) return;
+  const sanitizeTypes = (types) => {
+    if (typeof types !== "string") return types;
+    return types
+      .split(/\s+/)
+      .filter((type) => type && type !== "touchleave")
+      .join(" ");
+  };
+  const originalOn = L.DomEvent.on;
+  const originalOff = L.DomEvent.off;
+  L.DomEvent.on = function (obj, types, fn, context) {
+    const safeTypes = sanitizeTypes(types);
+    if (!safeTypes) return this;
+    return originalOn.call(this, obj, safeTypes, fn, context);
+  };
+  L.DomEvent.off = function (obj, types, fn, context) {
+    const safeTypes = sanitizeTypes(types);
+    if (!safeTypes) return this;
+    return originalOff.call(this, obj, safeTypes, fn, context);
+  };
+  L.DomEvent.__touchleavePatched = true;
+};
+
+// Убираем предупреждения Leaflet о неверном событии touchleave.
+patchLeafletTouchEvents();
 if (L?.GeometryUtil?.readableArea && !L.GeometryUtil.__patched) {
   L.GeometryUtil.readableArea = () => "";
   L.GeometryUtil.__patched = true;
@@ -240,12 +268,17 @@ const savePolygon = async () => {
   }
 };
 onMounted(async () => {
-  await referenceStore.loadCities();
-  if (cityId.value) {
-    await referenceStore.loadBranches(cityId.value);
+  try {
+    await referenceStore.loadCities();
+    if (cityId.value) {
+      await referenceStore.loadBranches(cityId.value);
+    }
+    initMap();
+    await loadPolygon();
+  } catch (error) {
+    console.error("Ошибка загрузки полигона:", error);
+    showErrorNotification("Ошибка загрузки полигона");
   }
-  initMap();
-  await loadPolygon();
 });
 onUnmounted(() => {
   if (map) {

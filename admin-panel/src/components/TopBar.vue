@@ -2,7 +2,7 @@
   <header class="sticky top-0 z-30 border-b border-border/60 bg-background/80 backdrop-blur">
     <div class="flex items-center justify-between px-4 py-4 sm:px-6 lg:px-10">
       <div class="flex items-center gap-3">
-        <Button class="lg:hidden" variant="ghost" size="icon" @click="$emit('toggle-menu')">
+        <Button class="lg:hidden" variant="ghost" size="icon" @click="emit('toggle-menu')">
           <Menu :size="18" />
         </Button>
         <div>
@@ -31,10 +31,13 @@ import { computed } from "vue";
 import { LogOut, Menu } from "lucide-vue-next";
 import { useAuthStore } from "../stores/auth.js";
 import Button from "./ui/Button.vue";
+
 defineProps({
   title: { type: String, default: "" },
   subtitle: { type: String, default: "" },
 });
+
+const emit = defineEmits(["toggle-menu"]);
 const authStore = useAuthStore();
 const initials = computed(() => {
   const first = authStore.user?.first_name?.[0] || "";

@@ -1,16 +1,16 @@
 <template>
   <div class="space-y-6">
     <Card>
-      <CardHeader class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-        <div>
-          <CardTitle>Группы модификаторов</CardTitle>
-          <CardDescription>Одиночный и множественный выбор</CardDescription>
-        </div>
-        <Button @click="openModal()">
-          <Plus :size="16" />
-          Добавить группу
-        </Button>
-      </CardHeader>
+      <CardContent>
+        <PageHeader title="Группы модификаторов" description="Одиночный и множественный выбор">
+          <template #actions>
+            <Button @click="openModal()">
+              <Plus :size="16" />
+              Добавить группу
+            </Button>
+          </template>
+        </PageHeader>
+      </CardContent>
     </Card>
     <div class="space-y-4">
       <Card v-for="group in groups" :key="group.id">
@@ -213,6 +213,7 @@ import CardDescription from "../components/ui/CardDescription.vue";
 import CardHeader from "../components/ui/CardHeader.vue";
 import CardTitle from "../components/ui/CardTitle.vue";
 import Input from "../components/ui/Input.vue";
+import PageHeader from "../components/PageHeader.vue";
 import Select from "../components/ui/Select.vue";
 import { useNotifications } from "../composables/useNotifications.js";
 import { formatCurrency } from "../utils/format.js";

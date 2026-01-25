@@ -1,27 +1,25 @@
 <template>
   <div class="space-y-6">
     <Card>
-      <CardHeader>
-        <CardTitle>Клиенты</CardTitle>
-        <CardDescription>Поиск по клиентам и фильтр по городу</CardDescription>
-      </CardHeader>
       <CardContent>
-        <div class="grid gap-4 lg:grid-cols-[2fr_1fr]">
-          <div class="space-y-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Поиск</label>
-            <div class="relative">
-              <Search class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" :size="16" />
-              <Input v-model="filters.search" class="pl-9" placeholder="Имя или телефон" @keyup.enter="loadClients" />
+        <PageHeader title="Клиенты" description="Поиск по клиентам и фильтр по городу">
+          <template #filters>
+            <div class="min-w-[220px] flex-1 space-y-1">
+              <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Поиск</label>
+              <div class="relative">
+                <Search class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" :size="16" />
+                <Input v-model="filters.search" class="pl-9" placeholder="Имя или телефон" @keyup.enter="loadClients" />
+              </div>
             </div>
-          </div>
-          <div class="space-y-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Город</label>
-            <Select v-model="filters.city_id">
-              <option value="">Все</option>
-              <option v-for="city in referenceStore.cities" :key="city.id" :value="city.id">{{ city.name }}</option>
-            </Select>
-          </div>
-        </div>
+            <div class="min-w-[180px] space-y-1">
+              <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Город</label>
+              <Select v-model="filters.city_id">
+                <option value="">Все</option>
+                <option v-for="city in referenceStore.cities" :key="city.id" :value="city.id">{{ city.name }}</option>
+              </Select>
+            </div>
+          </template>
+        </PageHeader>
       </CardContent>
     </Card>
     <Card>
@@ -51,7 +49,7 @@
                 <Badge variant="secondary">{{ client.city_name || "—" }}</Badge>
               </TableCell>
               <TableCell>{{ formatNumber(client.orders_count) }}</TableCell>
-              <TableCell>{{ formatNumber(client.bonus_balance) }}</TableCell>
+              <TableCell>{{ formatNumber(client.loyalty_balance) }}</TableCell>
               <TableCell class="text-right">
                 <Button variant="ghost" size="icon">
                   <ChevronRight :size="16" />
@@ -70,14 +68,15 @@ import { useRouter } from "vue-router";
 import { ChevronRight, Search } from "lucide-vue-next";
 import api from "../api/client.js";
 import { useReferenceStore } from "../stores/reference.js";
+import { useNotifications } from "../composables/useNotifications.js";
 import { formatNumber, formatPhone } from "../utils/format.js";
 import Badge from "../components/ui/Badge.vue";
 import Button from "../components/ui/Button.vue";
 import Card from "../components/ui/Card.vue";
-import CardContent from "../components/ui/CardContent.vue";
-import CardDescription from "../components/ui/CardDescription.vue";
 import CardHeader from "../components/ui/CardHeader.vue";
 import CardTitle from "../components/ui/CardTitle.vue";
+import CardContent from "../components/ui/CardContent.vue";
+import PageHeader from "../components/PageHeader.vue";
 import Input from "../components/ui/Input.vue";
 import Select from "../components/ui/Select.vue";
 import Table from "../components/ui/Table.vue";
@@ -87,6 +86,7 @@ import TableHead from "../components/ui/TableHead.vue";
 import TableHeader from "../components/ui/TableHeader.vue";
 import TableRow from "../components/ui/TableRow.vue";
 const referenceStore = useReferenceStore();
+const { showErrorNotification } = useNotifications();
 const router = useRouter();
 const clients = ref([]);
 const loadTimer = ref(null);
@@ -109,8 +109,13 @@ const openClient = (clientId) => {
   router.push(`/clients/${clientId}`);
 };
 onMounted(async () => {
-  await referenceStore.loadCities();
-  await loadClients();
+  try {
+    await referenceStore.loadCities();
+    await loadClients();
+  } catch (error) {
+    console.error("Ошибка загрузки клиентов:", error);
+    showErrorNotification("Ошибка загрузки клиентов");
+  }
 });
 watch(
   filters,

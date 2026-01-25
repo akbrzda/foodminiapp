@@ -172,13 +172,13 @@ router.get("/dashboard", async (req, res, next) => {
       paramsPrevious,
     );
     const [discountsCurrent] = await db.query(
-      `SELECT COALESCE(SUM(bonus_used), 0) as total_discounts
+      `SELECT COALESCE(SUM(bonus_spent), 0) as total_discounts
       FROM orders o
       WHERE ${dateFilter}${filterSql}`,
       paramsCurrent,
     );
     const [discountsPrevious] = await db.query(
-      `SELECT COALESCE(SUM(bonus_used), 0) as total_discounts
+      `SELECT COALESCE(SUM(bonus_spent), 0) as total_discounts
       FROM orders o
       WHERE ${dateFilter}${filterSql}`,
       paramsPrevious,
@@ -423,7 +423,7 @@ router.get("/customer-report", async (req, res, next) => {
         u.first_name,
         u.last_name,
         u.phone,
-        u.loyalty_level,
+        u.current_loyalty_level_id,
         COUNT(o.id) as orders_count,
         COALESCE(SUM(o.total_amount), 0) as total_revenue,
         COALESCE(AVG(o.total_amount), 0) as avg_order_value,
@@ -432,7 +432,7 @@ router.get("/customer-report", async (req, res, next) => {
       JOIN orders o ON u.id = o.user_id
       LEFT JOIN branches b ON o.branch_id = b.id
       WHERE o.status != 'cancelled'${dateFilter}${cityFilter}
-      GROUP BY u.id, u.first_name, u.last_name, u.phone, u.loyalty_level
+      GROUP BY u.id, u.first_name, u.last_name, u.phone, u.current_loyalty_level_id
       ORDER BY ${orderBy}
       LIMIT 100`,
       params,
