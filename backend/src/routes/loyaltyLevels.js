@@ -93,7 +93,11 @@ router.get("/users/:id/loyalty", authenticateToken, requireRole("admin", "manage
       return res.status(400).json({ error: "Некорректный ID" });
     }
     if (req.user.role === "manager") {
-      const [orders] = await db.query("SELECT id FROM orders WHERE user_id = ? AND city_id IN (?) LIMIT 1", [userId, req.user.cities]);
+      const cityIds = Array.isArray(req.user.cities) ? req.user.cities.filter((cityId) => Number.isInteger(cityId)) : [];
+      if (cityIds.length === 0) {
+        return res.status(403).json({ error: "Нет доступа к пользователю" });
+      }
+      const [orders] = await db.query("SELECT id FROM orders WHERE user_id = ? AND city_id IN (?) LIMIT 1", [userId, cityIds]);
       if (orders.length === 0) {
         return res.status(403).json({ error: "Нет доступа к пользователю" });
       }

@@ -6,6 +6,11 @@ import { telegramQueue, imageQueue, getQueueStats, getFailedJobs, retryFailedJob
 import { getSystemSettings } from "../utils/settings.js";
 const router = express.Router();
 router.use(authenticateToken);
+const getManagerCityIds = (req) => {
+  if (req.user?.role !== "manager") return null;
+  if (!Array.isArray(req.user.cities)) return [];
+  return req.user.cities.filter((cityId) => Number.isInteger(cityId));
+};
 router.get("/users/admins", requireRole("admin", "ceo"), async (req, res, next) => {
   try {
     const [admins] = await db.query(
@@ -117,8 +122,12 @@ router.get("/clients", requireRole("admin", "manager", "ceo"), async (req, res, 
       params.push(`%${search}%`, `%${search}%`, `%${search}%`);
     }
     if (req.user.role === "manager") {
+      const cityIds = getManagerCityIds(req);
+      if (!cityIds || cityIds.length === 0) {
+        return res.json({ clients: [] });
+      }
       whereClause += " AND EXISTS (SELECT 1 FROM orders o2 WHERE o2.user_id = u.id AND o2.city_id IN (?))";
-      params.push(req.user.cities);
+      params.push(cityIds);
     } else if (city_id) {
       whereClause += " AND EXISTS (SELECT 1 FROM orders o2 WHERE o2.user_id = u.id AND o2.city_id = ?)";
       params.push(city_id);
@@ -157,7 +166,9 @@ router.get("/clients", requireRole("admin", "manager", "ceo"), async (req, res, 
 });
 const ensureManagerClientAccess = async (req, userId) => {
   if (req.user.role !== "manager") return true;
-  const [orders] = await db.query("SELECT id FROM orders WHERE user_id = ? AND city_id IN (?) LIMIT 1", [userId, req.user.cities]);
+  const cityIds = getManagerCityIds(req);
+  if (!cityIds || cityIds.length === 0) return false;
+  const [orders] = await db.query("SELECT id FROM orders WHERE user_id = ? AND city_id IN (?) LIMIT 1", [userId, cityIds]);
   return orders.length > 0;
 };
 router.get("/clients/:id", requireRole("admin", "manager", "ceo"), async (req, res, next) => {
@@ -227,8 +238,12 @@ router.get("/clients/:id/orders", requireRole("admin", "manager", "ceo"), async 
     let whereClause = "WHERE o.user_id = ?";
     const params = [userId];
     if (req.user.role === "manager") {
+      const cityIds = getManagerCityIds(req);
+      if (!cityIds || cityIds.length === 0) {
+        return res.status(403).json({ error: "You do not have access to this user" });
+      }
       whereClause += " AND o.city_id IN (?)";
-      params.push(req.user.cities);
+      params.push(cityIds);
     }
     const [orders] = await db.query(
       `

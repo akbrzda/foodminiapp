@@ -1,4 +1,29 @@
 import jwt from "jsonwebtoken";
+const normalizeCityIds = (value) => {
+  if (Array.isArray(value)) {
+    return value.map((item) => Number(item)).filter((item) => Number.isInteger(item));
+  }
+  if (typeof value === "number") {
+    return Number.isInteger(value) ? [value] : [];
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return [];
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        return parsed.map((item) => Number(item)).filter((item) => Number.isInteger(item));
+      }
+    } catch (error) {
+      // Игнорируем ошибку парсинга и пробуем CSV.
+    }
+    return trimmed
+      .split(",")
+      .map((item) => Number(item.trim()))
+      .filter((item) => Number.isInteger(item));
+  }
+  return [];
+};
 export const authenticateToken = (req, res, next) => {
   const authHeader = req.headers["authorization"];
   const token = authHeader && authHeader.split(" ")[1];
@@ -9,7 +34,10 @@ export const authenticateToken = (req, res, next) => {
   }
   try {
     const user = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = user;
+    req.user = {
+      ...user,
+      cities: normalizeCityIds(user?.cities),
+    };
     next();
   } catch (error) {
     return res.status(403).json({

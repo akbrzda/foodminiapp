@@ -349,11 +349,18 @@ const goBack = () => {
   router.push("/clients");
 };
 onMounted(async () => {
-  try {
-    await Promise.all([loadClient(), loadOrders(), loadLoyalty()]);
-  } catch (error) {
-    console.error("Ошибка загрузки клиента:", error);
+  const [clientResult, ordersResult, loyaltyResult] = await Promise.allSettled([loadClient(), loadOrders(), loadLoyalty()]);
+  if (clientResult.status === "rejected") {
+    console.error("Ошибка загрузки клиента:", clientResult.reason);
     showErrorNotification("Ошибка загрузки клиента");
+  }
+  if (ordersResult.status === "rejected") {
+    console.error("Ошибка загрузки заказов:", ordersResult.reason);
+    showErrorNotification("Ошибка загрузки заказов");
+  }
+  if (loyaltyResult.status === "rejected") {
+    console.error("Ошибка загрузки бонусов:", loyaltyResult.reason);
+    showErrorNotification("Ошибка загрузки бонусов");
   }
 });
 </script>
