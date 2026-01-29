@@ -170,6 +170,9 @@ class WSServer {
     if (order.city_id) {
       this.sendToRoom(`city-${order.city_id}-orders`, message);
     }
+    if (order.branch_id) {
+      this.sendToRoom(`branch-${order.branch_id}-orders`, message);
+    }
     if (order.user_id) {
       this.sendToUser(order.user_id, {
         type: "order-created",
@@ -177,13 +180,14 @@ class WSServer {
       });
     }
   }
-  notifyOrderStatusUpdate(orderId, userId, newStatus, oldStatus) {
+  notifyOrderStatusUpdate(orderId, userId, newStatus, oldStatus, branchId = null) {
     const message = {
       type: "order-status-updated",
       data: {
         orderId,
         newStatus,
         oldStatus,
+        branchId,
         timestamp: new Date().toISOString(),
       },
     };
@@ -191,6 +195,9 @@ class WSServer {
       this.sendToUser(userId, message);
     }
     this.sendToRoom("admin-orders", message);
+    if (branchId) {
+      this.sendToRoom(`branch-${branchId}-orders`, message);
+    }
   }
   notifyBonusUpdate(userId, bonusBalance, operation) {
     const message = {

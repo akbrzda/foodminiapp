@@ -70,6 +70,7 @@ FoodMiniApp — система онлайн‑заказа еды с Telegram Mi
 
 - `users`, `user_states`, `delivery_addresses` — пользователи и их данные.
 - `cities`, `branches`, `delivery_polygons` — доставка.
+- `cities.timezone` — IANA‑таймзона города для расчёта смены.
 - `menu_categories`, `menu_items`, `item_variants`, `modifier_groups`, `modifiers`, `menu_modifiers` — меню.
 - `orders`, `order_items`, `order_item_modifiers` — заказы.
 - `loyalty_*` — система лояльности.
@@ -115,6 +116,8 @@ FoodMiniApp — система онлайн‑заказа еды с Telegram Mi
 - `GET /api/admin/loyalty/users/:id/loyalty` — детали по бонусам пользователя.
 - `PUT /api/menu/admin/variants/:variantId/prices` — полная замена цен вариации по городам и способам получения.
 - `GET /api/orders/admin/count` — количество заказов с фильтрами (например, `status=pending`).
+- `GET /api/orders/admin/shift` — заказы текущей смены по филиалу.
+- `PUT /api/orders/admin/:id/cancel` — отмена заказа по административной логике.
 
 ## Админ‑панель
 
@@ -123,6 +126,7 @@ FoodMiniApp — система онлайн‑заказа еды с Telegram Mi
 - Логи админских действий и системные события.
 - Стоп‑лист по филиалам с выбором типа (товар/продукция), способов получения и опциональным автоснятием по времени.
 - Темная тема с переключателем в верхней панели, состояние сохраняется локально.
+- Страница «Текущая смена»: полноэкранный режим без сайдбара, карта + список заказов смены, быстрые статусы, фильтрация и поиск.
 
 ## Telegram Mini App
 

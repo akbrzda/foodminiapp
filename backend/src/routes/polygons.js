@@ -261,32 +261,44 @@ router.post("/reverse", async (req, res, next) => {
 router.post("/check-delivery", async (req, res, next) => {
   try {
     const { latitude, longitude, city_id } = req.body;
-    if (!latitude || !longitude || !city_id) {
+    const lat = Number(latitude);
+    const lon = Number(longitude);
+    const cityId = Number(city_id);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon) || !Number.isFinite(cityId)) {
       return res.status(400).json({
         error: "latitude, longitude, and city_id are required",
       });
     }
-    const point = `POINT(${longitude} ${latitude})`;
-    const [polygons] = await db.query(
-      `SELECT dp.id, dp.branch_id, dp.name,
-              dp.delivery_time,
-              dp.min_order_amount, dp.delivery_cost,
-              b.name as branch_name, b.address as branch_address,
-              b.prep_time, b.assembly_time
-       FROM delivery_polygons dp
-       JOIN branches b ON dp.branch_id = b.id
-       WHERE b.city_id = ? 
-         AND dp.is_active = TRUE 
-         AND b.is_active = TRUE
-         AND (dp.is_blocked = FALSE OR 
-              (dp.blocked_from IS NOT NULL AND dp.blocked_until IS NOT NULL 
-               AND NOW() NOT BETWEEN dp.blocked_from AND dp.blocked_until))
-         AND ST_Contains(dp.polygon, ST_GeomFromText(?, 4326))
-       ORDER BY dp.delivery_cost, dp.delivery_time
-       LIMIT 1`,
-      [city_id, point],
-    );
-    if (polygons.length === 0) {
+    const findPolygon = async (pointLat, pointLon) => {
+      const point = `POINT(${pointLon} ${pointLat})`;
+      const [polygons] = await db.query(
+        `SELECT dp.id, dp.branch_id, dp.name,
+                dp.delivery_time,
+                dp.min_order_amount, dp.delivery_cost,
+                b.name as branch_name, b.address as branch_address,
+                b.prep_time, b.assembly_time
+         FROM delivery_polygons dp
+         JOIN branches b ON dp.branch_id = b.id
+         WHERE b.city_id = ? 
+           AND dp.is_active = TRUE 
+           AND b.is_active = TRUE
+           AND (dp.is_blocked = FALSE OR 
+                (dp.blocked_from IS NOT NULL AND dp.blocked_until IS NOT NULL 
+                 AND NOW() NOT BETWEEN dp.blocked_from AND dp.blocked_until))
+           AND ST_Contains(dp.polygon, ST_GeomFromText(?, 4326))
+         ORDER BY dp.delivery_cost, dp.delivery_time
+         LIMIT 1`,
+        [cityId, point],
+      );
+      return polygons[0] || null;
+    };
+    let polygon = await findPolygon(lat, lon);
+    let coordsSwapped = false;
+    if (!polygon) {
+      polygon = await findPolygon(lon, lat);
+      coordsSwapped = Boolean(polygon);
+    }
+    if (!polygon) {
       return res.json({
         available: false,
         message: "Delivery is not available to this address",
@@ -294,7 +306,8 @@ router.post("/check-delivery", async (req, res, next) => {
     }
     res.json({
       available: true,
-      polygon: polygons[0],
+      polygon,
+      coords_swapped: coordsSwapped,
     });
   } catch (error) {
     next(error);

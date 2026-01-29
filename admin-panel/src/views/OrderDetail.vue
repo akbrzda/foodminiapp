@@ -22,7 +22,7 @@
           </div>
           <div class="flex flex-wrap items-center gap-3">
             <Badge variant="outline">{{ order.order_type === "delivery" ? "Доставка" : "Самовывоз" }}</Badge>
-            <Badge variant="secondary" :class="getStatusBadge(order.status).class">
+            <Badge variant="secondary" :class="getStatusBadge(order.status).class" :style="getStatusBadge(order.status).style">
               {{ getStatusBadge(order.status).label }}
             </Badge>
           </div>
@@ -316,18 +316,19 @@ const getStatusBadge = (status) => {
     completed: "Завершен",
     cancelled: "Отменен",
   };
-  const classes = {
-    pending: "bg-amber-100 text-amber-700 border-transparent",
-    confirmed: "bg-blue-100 text-blue-700 border-transparent",
-    preparing: "bg-orange-100 text-orange-700 border-transparent",
-    ready: "bg-violet-100 text-violet-700 border-transparent",
-    delivering: "bg-indigo-100 text-indigo-700 border-transparent",
-    completed: "bg-emerald-100 text-emerald-700 border-transparent",
-    cancelled: "bg-red-100 text-red-700 border-transparent",
+  const styles = {
+    pending: { backgroundColor: "#3B82F6", color: "#FFFFFF" },
+    confirmed: { backgroundColor: "#10B981", color: "#FFFFFF" },
+    preparing: { backgroundColor: "#F59E0B", color: "#FFFFFF" },
+    ready: { backgroundColor: "#8B5CF6", color: "#FFFFFF" },
+    delivering: { backgroundColor: "#FFD200", color: "#000000" },
+    completed: { backgroundColor: "#6B7280", color: "#FFFFFF" },
+    cancelled: { backgroundColor: "#EF4444", color: "#FFFFFF" },
   };
   return {
     label: labels[status] || status || "—",
-    class: classes[status] || "bg-muted text-muted-foreground border-transparent",
+    class: "",
+    style: styles[status] || { backgroundColor: "#E0E0E0", color: "#666666" },
   };
 };
 const availableStatuses = computed(() => {
@@ -388,9 +389,13 @@ const loadOrder = async () => {
 const updateStatus = async () => {
   if (!statusUpdate.value) return;
   try {
-    await api.put(`/api/orders/admin/${order.value.id}/status`, {
-      status: statusUpdate.value,
-    });
+    if (statusUpdate.value === "cancelled") {
+      await api.put(`/api/orders/admin/${order.value.id}/cancel`);
+    } else {
+      await api.put(`/api/orders/admin/${order.value.id}/status`, {
+        status: statusUpdate.value,
+      });
+    }
     await loadOrder();
     statusUpdate.value = "";
     showSuccessNotification("Статус заказа обновлен");

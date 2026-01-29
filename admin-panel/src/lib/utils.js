@@ -1,16 +1,13 @@
-const normalizeClass = (value) => {
-  if (!value) return [];
-  if (typeof value === "string") return [value];
-  if (Array.isArray(value)) return value.flatMap(normalizeClass);
-  if (typeof value === "object") {
-    return Object.entries(value)
-      .filter(([, enabled]) => Boolean(enabled))
-      .map(([className]) => className);
-  }
-  return [String(value)];
-};
+import { clsx } from "clsx";
+import { twMerge } from "tailwind-merge";
 
-// Нормализуем классы, чтобы поддерживать строки, массивы и объекты.
-export function cn(...classes) {
-  return classes.flatMap(normalizeClass).filter(Boolean).join(" ");
+export function cn(...inputs) {
+  return twMerge(clsx(inputs));
+}
+
+export function valueUpdater(updaterOrValue, ref) {
+  ref.value =
+    typeof updaterOrValue === "function"
+      ? updaterOrValue(ref.value)
+      : updaterOrValue;
 }

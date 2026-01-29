@@ -13,7 +13,12 @@
             </div>
             <div class="loyalty-status">
               <div class="loyalty-rate">Ваш статус {{ currentRateLabel }}%</div>
-              <div class="loyalty-tier">{{ currentLevel.name }}</div>
+              <div class="loyalty-tier">
+                <span>{{ currentLevel.name }}</span>
+                <button class="level-info-button" type="button" @click="openLevelsPopup">
+                  <Info :size="16" />
+                </button>
+              </div>
             </div>
           </div>
           <div class="loyalty-benefits">
@@ -58,20 +63,24 @@
           </div>
         </div>
 
-        <div class="levels-section">
-          <h3>Все уровни</h3>
-          <div class="levels-grid">
-            <div v-for="level in formattedLevels" :key="level.id" class="level-card" :class="{ current: level.id === currentLevel.id }">
-              <div class="level-card-header">
-                <span class="level-name">{{ level.name }}</span>
-                <span v-if="level.id === currentLevel.id" class="level-badge">Ваш уровень</span>
+        <div v-if="levelsPopup.open" class="level-popup">
+          <div class="level-popup__overlay" @click="closeLevelsPopup"></div>
+          <div class="level-popup__content level-popup__content--list">
+            <div class="level-popup__title">Уровни и условия</div>
+            <div class="levels-list">
+              <div v-for="level in formattedLevels" :key="level.id" class="levels-list__item">
+                <div class="levels-list__header">
+                  <span class="levels-list__name">{{ level.name }}</span>
+                  <span v-if="level.id === currentLevel.id" class="levels-list__badge">Текущий</span>
+                </div>
+                <div class="levels-list__meta">
+                  <span>Начисление: {{ level.rateLabel }}%</span>
+                  <span>Списание до: {{ level.redeemLabel }}%</span>
+                </div>
+                <div class="levels-list__range">Порог: {{ level.rangeLabel }}</div>
               </div>
-              <div class="level-metrics">
-                <span>Начисление: {{ level.rateLabel }}%</span>
-                <span>Списание до: {{ level.redeemLabel }}%</span>
-              </div>
-              <div class="level-threshold">{{ level.rangeLabel }}</div>
             </div>
+            <button class="level-popup__button" @click="closeLevelsPopup">Понятно</button>
           </div>
         </div>
 
@@ -128,7 +137,7 @@
 </template>
 <script setup>
 import { computed, ref, onMounted } from "vue";
-import { X, Plus, Minus, Award, Trophy, AlertTriangle } from "lucide-vue-next";
+import { X, Plus, Minus, Award, Trophy, AlertTriangle, Info } from "lucide-vue-next";
 import { bonusesAPI } from "../api/endpoints";
 import { formatPrice } from "../utils/format";
 import { useLoyaltyStore } from "../stores/loyalty";
@@ -166,6 +175,13 @@ const formattedLevels = computed(() =>
     rangeLabel: Number.isFinite(level.max) ? `${formatPrice(level.min)} ₽ – ${formatPrice(level.max)} ₽` : `от ${formatPrice(level.min)} ₽`,
   })),
 );
+const levelsPopup = ref({ open: false });
+const openLevelsPopup = () => {
+  levelsPopup.value = { open: true };
+};
+const closeLevelsPopup = () => {
+  levelsPopup.value = { open: false };
+};
 
 onMounted(async () => {
   if (!bonusesEnabled.value) {
@@ -336,6 +352,21 @@ function formatDateShort(dateString) {
 .loyalty-tier {
   font-size: var(--font-size-caption);
   color: var(--color-text-secondary);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.level-info-button {
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  background: transparent;
+  color: var(--color-text-primary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* Преимущества уровня */
@@ -794,6 +825,100 @@ function formatDateShort(dateString) {
 .levels-grid {
   display: grid;
   gap: 12px;
+}
+.level-popup {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+}
+.level-popup__overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+}
+.level-popup__content {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: min(90vw, 320px);
+  transform: translate(-50%, -50%);
+  background: #fff;
+  border-radius: 16px;
+  padding: 18px;
+  text-align: center;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.18);
+}
+.level-popup__content--list {
+  text-align: left;
+}
+.level-popup__title {
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+.level-popup__text {
+  font-size: 13px;
+  color: #6b7280;
+  margin-bottom: 8px;
+}
+.level-popup__button {
+  width: 100%;
+  margin-top: 6px;
+  border: none;
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: #ffd200;
+  color: #111827;
+  font-weight: 600;
+}
+
+.levels-list {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0 4px;
+}
+
+.levels-list__item {
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: #f9fafb;
+}
+
+.levels-list__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.levels-list__name {
+  font-weight: 600;
+  color: #111827;
+}
+
+.levels-list__badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(16, 185, 129, 0.15);
+  color: #065f46;
+}
+
+.levels-list__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  color: #374151;
+}
+
+.levels-list__range {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #6b7280;
 }
 
 .level-card {

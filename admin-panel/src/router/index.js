@@ -2,9 +2,11 @@ import { createRouter, createWebHistory } from "vue-router";
 import { useAuthStore } from "../stores/auth.js";
 import { useOrdersStore } from "../stores/orders.js";
 import AdminLayout from "../layouts/AdminLayout.vue";
+import ShiftLayout from "../layouts/ShiftLayout.vue";
 import Login from "../views/Login.vue";
 import Dashboard from "../views/Dashboard.vue";
 import Orders from "../views/Orders.vue";
+import ShiftPage from "../views/ShiftPage.vue";
 import Clients from "../views/Clients.vue";
 import ClientDetail from "../views/ClientDetail.vue";
 import Cities from "../views/Cities.vue";
@@ -26,6 +28,12 @@ const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: "/login", name: "login", component: Login, meta: { public: true } },
+    {
+      path: "/shift",
+      component: ShiftLayout,
+      meta: { requiresAuth: true, fullBleed: true },
+      children: [{ path: "", name: "shift-page", component: ShiftPage, meta: { title: "Текущая смена", fullBleed: true } }],
+    },
     {
       path: "/",
       component: AdminLayout,

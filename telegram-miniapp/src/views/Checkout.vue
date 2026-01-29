@@ -107,6 +107,7 @@
         <div class="form-group" v-if="paymentMethod === 'cash'">
           <label class="label">Сдача с</label>
           <input v-model.number="changeFrom" type="number" class="input" placeholder="Сумма" min="0" step="100" />
+          <div v-if="paymentError" class="mt-2 text-xs text-red-500">{{ paymentError }}</div>
         </div>
         <div class="form-group">
           <label class="label">Комментарий к заказу</label>
@@ -175,6 +176,7 @@ const branches = ref([]);
 const loadingBranches = ref(false);
 const paymentMethod = ref("cash");
 const changeFrom = ref(null);
+const paymentError = ref("");
 const orderComment = ref("");
 const deliveryCost = ref(0);
 const submitting = ref(false);
@@ -486,11 +488,19 @@ function applyDeliveryZone(zone) {
 async function submitOrder() {
   if (!canSubmitOrder.value || submitting.value) return;
   if (!ordersEnabled.value) return;
+  paymentError.value = "";
   submitting.value = true;
   hapticFeedback("medium");
   try {
+    locationStore.setDeliveryDetails({ ...deliveryDetails.value });
     if (!locationStore.selectedCity?.id) {
       alert("Выберите город перед оформлением заказа");
+      return;
+    }
+    if (paymentMethod.value === "cash" && changeFrom.value && changeFrom.value < finalTotalPrice.value) {
+      paymentError.value = "Сумма для сдачи должна быть больше или равна оплате";
+      hapticFeedback("error");
+      submitting.value = false;
       return;
     }
     let bonusToUse = bonusesEnabled.value ? appliedBonusToUse.value : 0;
@@ -532,6 +542,10 @@ async function submitOrder() {
       bonus_to_use: bonusToUse,
     };
     if (orderType.value === "delivery") {
+      if (locationStore.deliveryCoords?.lat && locationStore.deliveryCoords?.lng) {
+        orderData.delivery_latitude = locationStore.deliveryCoords.lat;
+        orderData.delivery_longitude = locationStore.deliveryCoords.lng;
+      }
       const addressParts = deliveryAddress.value.split(",").map((s) => s.trim());
       let street = "";
       let house = "";

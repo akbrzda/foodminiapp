@@ -9,6 +9,7 @@ export const useOrdersStore = defineStore("orders", {
     statusById: {},
     ws: null,
     connecting: false,
+    rooms: [],
   }),
   actions: {
     setNewOrdersCount(value) {
@@ -86,6 +87,10 @@ export const useOrdersStore = defineStore("orders", {
       wsUrl.searchParams.set("token", token);
       this.connecting = true;
       this.ws = new WebSocket(wsUrl.toString());
+      this.ws.onopen = () => {
+        this.connecting = false;
+        this.syncRooms();
+      };
       this.ws.onmessage = (event) => {
         try {
           const payload = JSON.parse(event.data);
@@ -102,7 +107,6 @@ export const useOrdersStore = defineStore("orders", {
       this.ws.onerror = () => {
         this.connecting = false;
       };
-      this.connecting = false;
     },
     disconnectWebSocket() {
       if (this.ws) {
@@ -110,6 +114,28 @@ export const useOrdersStore = defineStore("orders", {
         this.ws = null;
       }
       this.connecting = false;
+    },
+    syncRooms() {
+      if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+      this.rooms.forEach((roomId) => {
+        this.ws.send(JSON.stringify({ type: "join-room", data: { roomId } }));
+      });
+    },
+    joinRoom(roomId) {
+      if (!roomId) return;
+      if (!this.rooms.includes(roomId)) {
+        this.rooms.push(roomId);
+      }
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify({ type: "join-room", data: { roomId } }));
+      }
+    },
+    leaveRoom(roomId) {
+      if (!roomId) return;
+      this.rooms = this.rooms.filter((existing) => existing !== roomId);
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify({ type: "leave-room", data: { roomId } }));
+      }
     },
   },
 });

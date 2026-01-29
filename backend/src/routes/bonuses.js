@@ -157,22 +157,47 @@ router.get("/history", authenticateToken, async (req, res, next) => {
     const offset = (page - 1) * limit;
 
     const [rows] = await db.query(
-      `SELECT 
-        lt.id,
-        lt.order_id,
-        o.order_number,
-        lt.type,
-        lt.amount,
-        lt.status,
-        lt.remaining_amount,
-        lt.expires_at,
-        lt.created_at
-       FROM loyalty_transactions lt
-       LEFT JOIN orders o ON lt.order_id = o.id
-       WHERE lt.user_id = ?
-       ORDER BY lt.created_at DESC
+      `SELECT *
+       FROM (
+         SELECT 
+           MAX(lt.id) as id,
+           lt.order_id,
+           o.order_number,
+           'spend' as type,
+           SUM(lt.amount) as amount,
+           CASE
+             WHEN SUM(lt.status = 'completed') > 0 THEN 'completed'
+             WHEN SUM(lt.status = 'pending') > 0 THEN 'pending'
+             WHEN SUM(lt.status = 'cancelled') = COUNT(*) THEN 'cancelled'
+             ELSE MAX(lt.status)
+           END as status,
+           NULL as remaining_amount,
+           NULL as expires_at,
+           MAX(lt.created_at) as created_at
+         FROM loyalty_transactions lt
+         LEFT JOIN orders o ON lt.order_id = o.id
+         WHERE lt.user_id = ?
+           AND lt.type = 'spend'
+         GROUP BY lt.order_id
+         UNION ALL
+         SELECT 
+           lt.id,
+           lt.order_id,
+           o.order_number,
+           lt.type,
+           lt.amount,
+           lt.status,
+           lt.remaining_amount,
+           lt.expires_at,
+           lt.created_at
+         FROM loyalty_transactions lt
+         LEFT JOIN orders o ON lt.order_id = o.id
+         WHERE lt.user_id = ?
+           AND lt.type <> 'spend'
+       ) as transactions
+       ORDER BY transactions.created_at DESC
        LIMIT ? OFFSET ?`,
-      [userId, limit + 1, offset],
+      [userId, userId, limit + 1, offset],
     );
 
     const hasMore = rows.length > limit;

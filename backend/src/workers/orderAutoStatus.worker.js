@@ -30,10 +30,10 @@ async function rollbackBonuses(order, loyaltyLevels) {
   await cancelOrderBonuses(order, null, loyaltyLevels);
 }
 
-async function notifyStatusChange(orderId, userId, oldStatus, newStatus, orderType, orderNumber) {
+async function notifyStatusChange(orderId, userId, oldStatus, newStatus, orderType, orderNumber, branchId) {
   try {
     const { wsServer } = await import("../index.js");
-    wsServer.notifyOrderStatusUpdate(orderId, userId, newStatus, oldStatus);
+    wsServer.notifyOrderStatusUpdate(orderId, userId, newStatus, oldStatus, branchId || null);
   } catch (wsError) {
     console.error("Failed to send WebSocket notification:", wsError);
   }
@@ -77,7 +77,7 @@ async function updateOrderStatus(order, localDate) {
     }
   }
   await logger.order.statusChanged(order.id, order.status, newStatus, "system");
-  await notifyStatusChange(order.id, order.user_id, order.status, newStatus, order.order_type, order.order_number);
+  await notifyStatusChange(order.id, order.user_id, order.status, newStatus, order.order_type, order.order_number, order.branch_id);
 }
 
 async function processOffset(offsetMinutes, nowUtc) {
@@ -88,7 +88,7 @@ async function processOffset(offsetMinutes, nowUtc) {
   const localDate = buildLocalDateString(localParts);
   const utcMidnight = getUtcMidnightForLocalDate(localParts, offsetMinutes);
   const [orders] = await db.query(
-    `SELECT id, status, user_id, total, subtotal, delivery_cost, bonus_spent, order_number, order_type
+    `SELECT id, status, user_id, total, subtotal, delivery_cost, bonus_spent, order_number, order_type, branch_id
      FROM orders
      WHERE status IN (?)
        AND user_timezone_offset = ?

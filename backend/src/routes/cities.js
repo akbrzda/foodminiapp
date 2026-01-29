@@ -5,7 +5,7 @@ const router = express.Router();
 router.get("/", async (req, res, next) => {
   try {
     const [cities] = await db.query(
-      `SELECT id, name, latitude, longitude, is_active, created_at, updated_at
+      `SELECT id, name, latitude, longitude, timezone, is_active, created_at, updated_at
        FROM cities
        WHERE is_active = TRUE
        ORDER BY name`,
@@ -19,7 +19,7 @@ router.get("/:id", async (req, res, next) => {
   try {
     const cityId = req.params.id;
     const [cities] = await db.query(
-      `SELECT id, name, latitude, longitude, is_active, created_at, updated_at
+      `SELECT id, name, latitude, longitude, timezone, is_active, created_at, updated_at
        FROM cities
        WHERE id = ? AND is_active = TRUE`,
       [cityId],
@@ -71,7 +71,7 @@ router.get("/:cityId/branches/:branchId", async (req, res, next) => {
 router.get("/admin/all", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
   try {
     let query = `
-        SELECT id, name, latitude, longitude, is_active, 
+        SELECT id, name, latitude, longitude, timezone, is_active, 
                created_at, updated_at
         FROM cities
       `;
@@ -89,17 +89,17 @@ router.get("/admin/all", authenticateToken, requireRole("admin", "manager", "ceo
 });
 router.post("/admin", authenticateToken, requireRole("admin", "ceo"), async (req, res, next) => {
   try {
-    const { name, latitude, longitude } = req.body;
+    const { name, latitude, longitude, timezone } = req.body;
     if (!name) {
       return res.status(400).json({ error: "Name is required" });
     }
     const [result] = await db.query(
-      `INSERT INTO cities (name, latitude, longitude)
-         VALUES (?, ?, ?)`,
-      [name, latitude || null, longitude || null],
+      `INSERT INTO cities (name, latitude, longitude, timezone)
+         VALUES (?, ?, ?, ?)`,
+      [name, latitude || null, longitude || null, timezone || "UTC"],
     );
     const [newCity] = await db.query(
-      `SELECT id, name, latitude, longitude, is_active, 
+      `SELECT id, name, latitude, longitude, timezone, is_active, 
                 created_at, updated_at
          FROM cities WHERE id = ?`,
       [result.insertId],
@@ -112,7 +112,7 @@ router.post("/admin", authenticateToken, requireRole("admin", "ceo"), async (req
 router.put("/admin/:id", authenticateToken, requireRole("admin", "ceo"), async (req, res, next) => {
   try {
     const cityId = req.params.id;
-    const { name, latitude, longitude, is_active } = req.body;
+    const { name, latitude, longitude, timezone, is_active } = req.body;
     const [cities] = await db.query("SELECT id FROM cities WHERE id = ?", [cityId]);
     if (cities.length === 0) {
       return res.status(404).json({ error: "City not found" });
@@ -131,6 +131,10 @@ router.put("/admin/:id", authenticateToken, requireRole("admin", "ceo"), async (
       updates.push("longitude = ?");
       values.push(longitude);
     }
+    if (timezone !== undefined) {
+      updates.push("timezone = ?");
+      values.push(timezone);
+    }
     if (is_active !== undefined) {
       updates.push("is_active = ?");
       values.push(is_active);
@@ -141,7 +145,7 @@ router.put("/admin/:id", authenticateToken, requireRole("admin", "ceo"), async (
     values.push(cityId);
     await db.query(`UPDATE cities SET ${updates.join(", ")} WHERE id = ?`, values);
     const [updatedCity] = await db.query(
-      `SELECT id, name, latitude, longitude, is_active, 
+      `SELECT id, name, latitude, longitude, timezone, is_active, 
                 created_at, updated_at
          FROM cities WHERE id = ?`,
       [cityId],

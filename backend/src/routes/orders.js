@@ -17,6 +17,84 @@ import { logger, adminActionLogger } from "../utils/logger.js";
 import { addTelegramNotification } from "../queues/config.js";
 import { getSystemSettings } from "../utils/settings.js";
 const router = express.Router();
+
+const getTimeZoneOffset = (date, timeZone) => {
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+  const parts = formatter.formatToParts(date).reduce((acc, part) => {
+    if (part.type !== "literal") {
+      acc[part.type] = part.value;
+    }
+    return acc;
+  }, {});
+  const utcTime = Date.UTC(
+    Number(parts.year),
+    Number(parts.month) - 1,
+    Number(parts.day),
+    Number(parts.hour),
+    Number(parts.minute),
+    Number(parts.second),
+  );
+  return (utcTime - date.getTime()) / 60000;
+};
+
+const zonedTimeToUtc = (localDateTime, timeZone) => {
+  const { year, month, day, hour = 0, minute = 0, second = 0 } = localDateTime;
+  const utcGuess = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
+  const offsetMinutes = getTimeZoneOffset(utcGuess, timeZone);
+  return new Date(utcGuess.getTime() - offsetMinutes * 60000);
+};
+
+const getShiftWindowUtc = (timeZone, now = new Date()) => {
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+  const parts = formatter.formatToParts(now).reduce((acc, part) => {
+    if (part.type !== "literal") {
+      acc[part.type] = part.value;
+    }
+    return acc;
+  }, {});
+  const localHour = Number(parts.hour);
+  const localDate = {
+    year: Number(parts.year),
+    month: Number(parts.month),
+    day: Number(parts.day),
+  };
+  const shiftStartDate = (() => {
+    if (localHour >= 5) {
+      return localDate;
+    }
+    const base = new Date(Date.UTC(localDate.year, localDate.month - 1, localDate.day));
+    base.setUTCDate(base.getUTCDate() - 1);
+    return { year: base.getUTCFullYear(), month: base.getUTCMonth() + 1, day: base.getUTCDate() };
+  })();
+  const shiftEndDateBase = new Date(Date.UTC(shiftStartDate.year, shiftStartDate.month - 1, shiftStartDate.day));
+  shiftEndDateBase.setUTCDate(shiftEndDateBase.getUTCDate() + 1);
+  const shiftEndDate = {
+    year: shiftEndDateBase.getUTCFullYear(),
+    month: shiftEndDateBase.getUTCMonth() + 1,
+    day: shiftEndDateBase.getUTCDate(),
+  };
+  const startUtc = zonedTimeToUtc({ ...shiftStartDate, hour: 5 }, timeZone);
+  const endUtc = zonedTimeToUtc({ ...shiftEndDate, hour: 5 }, timeZone);
+  return { startUtc, endUtc };
+};
 const ensureOrderAccess = (settings, orderType, res) => {
   if (!settings.orders_enabled) {
     res.status(403).json({ error: "Прием заказов временно отключен" });
@@ -264,6 +342,8 @@ router.post("/", authenticateToken, async (req, res, next) => {
       delivery_apartment,
       delivery_intercom,
       delivery_comment,
+      delivery_latitude,
+      delivery_longitude,
     } = req.body;
     if (!city_id || !order_type || !items || !Array.isArray(items) || items.length === 0) {
       await connection.rollback();
@@ -309,33 +389,75 @@ router.post("/", authenticateToken, async (req, res, next) => {
     }
     let deliveryCost = 0;
     let deliveryPolygon = null;
-    if (order_type === "delivery" && delivery_street && delivery_house) {
+    let deliveryLatitude = null;
+    let deliveryLongitude = null;
+    if (order_type === "delivery") {
       try {
-        const geocodeResponse = await axios.post(
-          `${req.protocol}://${req.get("host")}/api/geocode`,
-          { address: `${delivery_street}, ${delivery_house}` },
-          { headers: { "Content-Type": "application/json" } },
-        );
-        if (geocodeResponse.data && geocodeResponse.data.lat && geocodeResponse.data.lng) {
-          const checkResponse = await axios.post(
+        const providedLat = Number(delivery_latitude);
+        const providedLng = Number(delivery_longitude);
+        if (Number.isFinite(providedLat) && Number.isFinite(providedLng)) {
+          deliveryLatitude = providedLat;
+          deliveryLongitude = providedLng;
+        } else if (delivery_address_id) {
+          const [storedAddresses] = await connection.query("SELECT latitude, longitude FROM delivery_addresses WHERE id = ? AND user_id = ?", [
+            delivery_address_id,
+            req.user.id,
+          ]);
+          if (storedAddresses.length > 0) {
+            deliveryLatitude = Number(storedAddresses[0]?.latitude);
+            deliveryLongitude = Number(storedAddresses[0]?.longitude);
+          }
+        }
+        if (!Number.isFinite(deliveryLatitude) || !Number.isFinite(deliveryLongitude)) {
+          if (delivery_street && delivery_house) {
+          const geocodeResponse = await axios.post(
+            `${req.protocol}://${req.get("host")}/api/polygons/geocode`,
+            { address: `${delivery_street}, ${delivery_house}` },
+            { headers: { "Content-Type": "application/json" } },
+          );
+          if (geocodeResponse.data && geocodeResponse.data.lat && geocodeResponse.data.lng) {
+            deliveryLatitude = Number(geocodeResponse.data.lat);
+            deliveryLongitude = Number(geocodeResponse.data.lng);
+          }
+          }
+        }
+        const hasCoords = Number.isFinite(deliveryLatitude) && Number.isFinite(deliveryLongitude);
+        if (!hasCoords) {
+          await connection.rollback();
+          return res.status(400).json({
+            error: "Не удалось определить координаты адреса доставки",
+          });
+        }
+        const checkDeliveryZone = async (lat, lon) => {
+          const response = await axios.post(
             `${req.protocol}://${req.get("host")}/api/polygons/check-delivery`,
             {
-              latitude: geocodeResponse.data.lat,
-              longitude: geocodeResponse.data.lng,
+              latitude: lat,
+              longitude: lon,
               city_id: city_id,
             },
             { headers: { "Content-Type": "application/json" } },
           );
-          if (checkResponse.data && checkResponse.data.available && checkResponse.data.polygon) {
-            deliveryPolygon = checkResponse.data.polygon;
-            deliveryCost = parseFloat(deliveryPolygon.delivery_cost) || 0;
-          } else {
-            await connection.rollback();
-            return res.status(400).json({
-              error: "Delivery is not available to this address",
-            });
+          if (response.data && response.data.available && response.data.polygon) {
+            return response.data.polygon;
+          }
+          return null;
+        };
+        deliveryPolygon = await checkDeliveryZone(deliveryLatitude, deliveryLongitude);
+        if (!deliveryPolygon) {
+          const swappedPolygon = await checkDeliveryZone(deliveryLongitude, deliveryLatitude);
+          if (swappedPolygon) {
+            [deliveryLatitude, deliveryLongitude] = [deliveryLongitude, deliveryLatitude];
+            deliveryPolygon = swappedPolygon;
           }
         }
+        if (!deliveryPolygon) {
+          await connection.rollback();
+          return res.status(400).json({
+            error: "Delivery is not available to this address",
+          });
+        }
+        deliveryCost = parseFloat(deliveryPolygon.delivery_cost) || 0;
       } catch (geoError) {
         console.error("Geocoding error:", geoError);
       }
@@ -372,21 +494,50 @@ router.post("/", authenticateToken, async (req, res, next) => {
     const orderNumber = await generateOrderNumber();
     const timezoneOffset = Number.isFinite(Number(timezone_offset)) ? Number(timezone_offset) : 0;
     const normalizedTimezoneOffset = Math.max(-840, Math.min(840, Math.trunc(timezoneOffset)));
+    const resolvedBranchId = order_type === "delivery" ? deliveryPolygon?.branch_id || null : branch_id || null;
+    if (order_type === "delivery" && !resolvedBranchId) {
+      await connection.rollback();
+      return res.status(400).json({ error: "Не удалось определить филиал доставки" });
+    }
+    let resolvedDeliveryAddressId = delivery_address_id || null;
+    if (order_type === "delivery" && !resolvedDeliveryAddressId && deliveryLatitude && deliveryLongitude) {
+      const [addressResult] = await connection.query(
+        `INSERT INTO delivery_addresses
+         (user_id, city_id, street, house, entrance, apartment, intercom, comment, latitude, longitude, is_default)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          req.user.id,
+          city_id,
+          delivery_street || "",
+          delivery_house || "",
+          delivery_entrance || null,
+          delivery_apartment || null,
+          delivery_intercom || null,
+          delivery_comment || null,
+          deliveryLatitude,
+          deliveryLongitude,
+          0,
+        ],
+      );
+      resolvedDeliveryAddressId = addressResult.insertId;
+    }
     const [orderResult] = await connection.query(
       `INSERT INTO orders 
        (order_number, user_id, city_id, branch_id, order_type, status, 
-        delivery_address_id, delivery_street, delivery_house, delivery_entrance, delivery_floor,
+        delivery_address_id, delivery_latitude, delivery_longitude, delivery_street, delivery_house, delivery_entrance, delivery_floor,
         delivery_apartment, delivery_intercom, delivery_comment, 
         payment_method, change_from, subtotal, delivery_cost, bonus_spent, total, 
         comment, desired_time, user_timezone_offset)
-       VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         orderNumber,
         req.user.id,
         city_id,
-        branch_id || null,
+        resolvedBranchId,
         order_type,
-        delivery_address_id || null,
+        resolvedDeliveryAddressId,
+        deliveryLatitude,
+        deliveryLongitude,
         delivery_street || null,
         delivery_house || null,
         delivery_entrance || null,
@@ -454,6 +605,16 @@ router.post("/", authenticateToken, async (req, res, next) => {
     await connection.commit();
     const [orders] = await db.query(`SELECT * FROM orders WHERE id = ?`, [orderId]);
     const order = orders[0];
+    if (order?.branch_id) {
+      const [branchCoords] = await db.query("SELECT latitude, longitude FROM branches WHERE id = ?", [order.branch_id]);
+      order.branch_latitude = branchCoords[0]?.latitude || null;
+      order.branch_longitude = branchCoords[0]?.longitude || null;
+    }
+    if (order?.delivery_address_id) {
+      const [deliveryCoords] = await db.query("SELECT latitude, longitude FROM delivery_addresses WHERE id = ?", [order.delivery_address_id]);
+      order.delivery_latitude = deliveryCoords[0]?.latitude || null;
+      order.delivery_longitude = deliveryCoords[0]?.longitude || null;
+    }
     const [orderItems] = await db.query(
       `SELECT oi.*, 
         (SELECT JSON_ARRAYAGG(
@@ -688,6 +849,125 @@ router.get("/admin/all", authenticateToken, requireRole("admin", "manager", "ceo
     next(error);
   }
 });
+router.get("/admin/shift", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
+  try {
+    const { branch_id, order_type, search } = req.query;
+    if (!branch_id) {
+      return res.status(400).json({ error: "branch_id is required" });
+    }
+    const [branches] = await db.query(
+      `SELECT b.id, b.city_id, c.timezone
+       FROM branches b
+       JOIN cities c ON b.city_id = c.id
+       WHERE b.id = ?`,
+      [branch_id],
+    );
+    if (branches.length === 0) {
+      return res.status(404).json({ error: "Branch not found" });
+    }
+    const branch = branches[0];
+    if (req.user.role === "manager" && !req.user.cities.includes(branch.city_id)) {
+      return res.status(403).json({ error: "You do not have access to this city" });
+    }
+    const timeZone = branch.timezone || "UTC";
+    const { startUtc, endUtc } = getShiftWindowUtc(timeZone, new Date());
+    let query = `
+         SELECT o.*,
+           c.name as city_name,
+           c.timezone as city_timezone,
+           CASE
+             WHEN o.order_type = 'delivery' THEN DATE_ADD(o.created_at, INTERVAL (IFNULL(b.prep_time, 0) + IFNULL(b.assembly_time, 0) + IFNULL(dp.delivery_time, 0)) MINUTE)
+             WHEN o.order_type = 'pickup' THEN DATE_ADD(o.created_at, INTERVAL (IFNULL(b.prep_time, 0) + IFNULL(b.assembly_time, 0)) MINUTE)
+             ELSE NULL
+           END as deadline_time,
+           b.name as branch_name,
+           b.latitude as branch_latitude,
+           b.longitude as branch_longitude,
+           u.phone as user_phone,
+           u.first_name as user_first_name,
+           u.last_name as user_last_name,
+           COALESCE(da.latitude, o.delivery_latitude) as delivery_latitude,
+           COALESCE(da.longitude, o.delivery_longitude) as delivery_longitude
+        FROM orders o
+        LEFT JOIN cities c ON o.city_id = c.id
+        LEFT JOIN branches b ON o.branch_id = b.id
+        LEFT JOIN users u ON o.user_id = u.id
+        LEFT JOIN delivery_addresses da ON o.delivery_address_id = da.id
+        LEFT JOIN delivery_polygons dp
+          ON dp.branch_id = o.branch_id
+         AND dp.is_active = TRUE
+         AND COALESCE(da.latitude, o.delivery_latitude) IS NOT NULL
+         AND COALESCE(da.longitude, o.delivery_longitude) IS NOT NULL
+         AND ST_Contains(
+           dp.polygon,
+           ST_GeomFromText(
+             CONCAT('POINT(', COALESCE(da.longitude, o.delivery_longitude), ' ', COALESCE(da.latitude, o.delivery_latitude), ')'),
+             4326
+           )
+         )
+        WHERE o.branch_id = ?
+          AND o.created_at >= ?
+          AND o.created_at < ?
+      `;
+    const params = [branch_id, startUtc, endUtc];
+    if (order_type) {
+      query += " AND o.order_type = ?";
+      params.push(order_type);
+    }
+    if (search) {
+      query +=
+        " AND (o.order_number LIKE ? OR u.phone LIKE ? OR CONCAT_WS(' ', o.delivery_street, o.delivery_house, o.delivery_apartment, o.delivery_entrance, o.delivery_floor) LIKE ?)";
+      const searchValue = `%${search}%`;
+      params.push(searchValue, searchValue, searchValue);
+    }
+    query += " ORDER BY o.created_at DESC";
+    const [orders] = await db.query(query, params);
+    const orderIds = orders.map((order) => order.id);
+    const itemsByOrder = new Map();
+    if (orderIds.length > 0) {
+      const [items] = await db.query(
+        `SELECT oi.*, oim.modifier_id, oim.modifier_name, oim.modifier_price, oim.order_item_id
+         FROM order_items oi
+         LEFT JOIN order_item_modifiers oim ON oim.order_item_id = oi.id
+         WHERE oi.order_id IN (?)`,
+        [orderIds],
+      );
+      const itemsMap = new Map();
+      items.forEach((row) => {
+        if (!itemsMap.has(row.id)) {
+          itemsMap.set(row.id, { ...row, modifiers: [] });
+        }
+        if (row.modifier_id || row.modifier_name) {
+          itemsMap.get(row.id).modifiers.push({
+            modifier_id: row.modifier_id,
+            modifier_name: row.modifier_name,
+            modifier_price: row.modifier_price,
+          });
+        }
+      });
+      itemsMap.forEach((item) => {
+        if (!itemsByOrder.has(item.order_id)) {
+          itemsByOrder.set(item.order_id, []);
+        }
+        itemsByOrder.get(item.order_id).push(item);
+      });
+    }
+    const enrichedOrders = orders.map((order) => ({
+      ...order,
+      items: itemsByOrder.get(order.id) || [],
+    }));
+    res.json({
+      orders: enrichedOrders,
+      shift: {
+        start_at: startUtc.toISOString(),
+        end_at: endUtc.toISOString(),
+        timezone: timeZone,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
 router.get("/admin/count", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
   try {
     const { city_id, status, order_type, date_from, date_to, search } = req.query;
@@ -795,141 +1075,155 @@ router.get("/admin/:id", authenticateToken, requireRole("admin", "manager", "ceo
     next(error);
   }
 });
+const handleOrderStatusUpdate = async (req, res, next, forcedStatus = null) => {
+  const connection = await db.getConnection();
+  try {
+    await connection.beginTransaction();
+    const orderId = req.params.id;
+    const status = forcedStatus || req.body.status;
+    const validStatuses = ["pending", "confirmed", "preparing", "ready", "delivering", "completed", "cancelled"];
+    if (!status || !validStatuses.includes(status)) {
+      await connection.rollback();
+      return res.status(400).json({
+        error: `Status must be one of: ${validStatuses.join(", ")}`,
+      });
+    }
+    const [orders] = await connection.query("SELECT city_id, order_type FROM orders WHERE id = ?", [orderId]);
+    if (orders.length === 0) {
+      await connection.rollback();
+      return res.status(404).json({ error: "Order not found" });
+    }
+    if (req.user.role === "manager" && !req.user.cities.includes(orders[0].city_id)) {
+      await connection.rollback();
+      return res.status(403).json({
+        error: "You do not have access to this city",
+      });
+    }
+    const [oldOrderData] = await connection.query(
+      "SELECT status, user_id, total, subtotal, delivery_cost, bonus_spent, order_number, order_type, bonus_earn_amount, branch_id FROM orders WHERE id = ?",
+      [orderId],
+    );
+    const oldStatus = oldOrderData[0]?.status;
+    const userId = oldOrderData[0]?.user_id;
+    const orderTotal = parseFloat(oldOrderData[0]?.total) || 0;
+    const subtotal = parseFloat(oldOrderData[0]?.subtotal) || 0;
+    const deliveryCost = parseFloat(oldOrderData[0]?.delivery_cost) || 0;
+    const bonusUsed = parseFloat(oldOrderData[0]?.bonus_spent) || 0;
+    const bonusEarnAmount = parseFloat(oldOrderData[0]?.bonus_earn_amount) || 0;
+    const orderNumber = oldOrderData[0]?.order_number;
+    const statusOrder = {
+      pending: 0,
+      confirmed: 1,
+      preparing: 2,
+      ready: 3,
+      delivering: 3,
+      completed: 4,
+      cancelled: -1,
+    };
+    const oldStatusIndex = statusOrder[oldStatus];
+    const newStatusIndex = statusOrder[status];
+    if (oldStatusIndex === undefined || newStatusIndex === undefined) {
+      await connection.rollback();
+      return res.status(400).json({
+        error: "Invalid status transition",
+      });
+    }
+    if (status !== "cancelled" && oldStatus !== status && oldStatus === "completed") {
+    }
+    const settings = await getSystemSettings();
+    const loyaltyLevels = await getLoyaltyLevelsFromDb(connection);
+    const orderData = {
+      id: orderId,
+      user_id: userId,
+      order_number: orderNumber,
+      total: orderTotal,
+      subtotal,
+      delivery_cost: deliveryCost,
+      bonus_spent: bonusUsed,
+      bonus_earn_amount: bonusEarnAmount,
+    };
+    await connection.query("UPDATE orders SET status = ?, completed_at = ? WHERE id = ?", [
+      status,
+      status === "completed" ? new Date() : null,
+      orderId,
+    ]);
+    if (settings.bonuses_enabled && oldStatus === "completed" && status !== "completed" && status !== "cancelled") {
+      try {
+        await removeEarnedBonuses(orderData, connection, loyaltyLevels);
+      } catch (bonusError) {
+        await connection.rollback();
+        return res.status(400).json({ error: bonusError.message });
+      }
+    }
+    if (settings.bonuses_enabled && status === "completed" && oldStatus !== "completed" && orderTotal > 0) {
+      try {
+        await connection.query(
+          "UPDATE loyalty_transactions SET status = 'completed' WHERE order_id = ? AND type = 'spend' AND status = 'pending'",
+          [orderId],
+        );
+        if (orderData.bonus_earn_amount && orderData.bonus_earn_amount > 0) {
+          await redeliveryEarnBonuses(orderData, connection, loyaltyLevels);
+        } else {
+          await earnBonuses(orderData, connection, loyaltyLevels);
+        }
+      } catch (bonusError) {
+        console.error("Failed to earn bonuses:", bonusError);
+      }
+    }
+    if (settings.bonuses_enabled && status === "cancelled" && oldStatus !== "cancelled") {
+      try {
+        await cancelOrderBonuses(orderData, connection, loyaltyLevels);
+      } catch (bonusError) {
+        console.error("Failed to refund bonuses for cancelled order:", bonusError);
+      }
+    }
+    await connection.commit();
+    const [updatedOrders] = await db.query("SELECT * FROM orders WHERE id = ?", [orderId]);
+    await logger.order.statusChanged(orderId, oldStatus, status, req.user.id);
+    try {
+      const { wsServer } = await import("../index.js");
+      wsServer.notifyOrderStatusUpdate(orderId, userId, status, oldStatus, oldOrderData[0]?.branch_id || null);
+    } catch (wsError) {
+      console.error("Failed to send WebSocket notification:", wsError);
+    }
+    try {
+      const { sendTelegramNotification, formatOrderStatusMessage } = await import("../utils/telegram.js");
+      const [users] = await db.query("SELECT telegram_id FROM users WHERE id = ?", [userId]);
+      if (users.length > 0 && users[0].telegram_id) {
+        const orderNumber = updatedOrders[0].order_number;
+        const orderType = updatedOrders[0].order_type;
+        const message = formatOrderStatusMessage(orderNumber, status, orderType);
+        await sendTelegramNotification(users[0].telegram_id, message);
+      }
+    } catch (telegramError) {
+      console.error("Failed to send Telegram notification:", telegramError);
+    }
+    res.json({ order: updatedOrders[0] });
+  } catch (error) {
+    await connection.rollback();
+    next(error);
+  } finally {
+    connection.release();
+  }
+};
+
 router.put(
   "/admin/:id/status",
   authenticateToken,
   requireRole("admin", "manager", "ceo"),
   adminActionLogger("update_order_status", "order"),
   async (req, res, next) => {
-    const connection = await db.getConnection();
-    try {
-      await connection.beginTransaction();
-      const orderId = req.params.id;
-      const { status } = req.body;
-      const validStatuses = ["pending", "confirmed", "preparing", "ready", "delivering", "completed", "cancelled"];
-      if (!status || !validStatuses.includes(status)) {
-        await connection.rollback();
-        return res.status(400).json({
-          error: `Status must be one of: ${validStatuses.join(", ")}`,
-        });
-      }
-      const [orders] = await connection.query("SELECT city_id, order_type FROM orders WHERE id = ?", [orderId]);
-      if (orders.length === 0) {
-        await connection.rollback();
-        return res.status(404).json({ error: "Order not found" });
-      }
-      if (req.user.role === "manager" && !req.user.cities.includes(orders[0].city_id)) {
-        await connection.rollback();
-        return res.status(403).json({
-          error: "You do not have access to this city",
-        });
-      }
-      const [oldOrderData] = await connection.query(
-        "SELECT status, user_id, total, subtotal, delivery_cost, bonus_spent, order_number, order_type, bonus_earn_amount FROM orders WHERE id = ?",
-        [orderId],
-      );
-      const oldStatus = oldOrderData[0]?.status;
-      const userId = oldOrderData[0]?.user_id;
-      const orderTotal = parseFloat(oldOrderData[0]?.total) || 0;
-      const subtotal = parseFloat(oldOrderData[0]?.subtotal) || 0;
-      const deliveryCost = parseFloat(oldOrderData[0]?.delivery_cost) || 0;
-      const bonusUsed = parseFloat(oldOrderData[0]?.bonus_spent) || 0;
-      const bonusEarnAmount = parseFloat(oldOrderData[0]?.bonus_earn_amount) || 0;
-      const orderNumber = oldOrderData[0]?.order_number;
-      const statusOrder = {
-        pending: 0,
-        confirmed: 1,
-        preparing: 2,
-        ready: 3,
-        delivering: 3,
-        completed: 4,
-        cancelled: -1,
-      };
-      const oldStatusIndex = statusOrder[oldStatus];
-      const newStatusIndex = statusOrder[status];
-      if (oldStatusIndex === undefined || newStatusIndex === undefined) {
-        await connection.rollback();
-        return res.status(400).json({
-          error: "Invalid status transition",
-        });
-      }
-      if (status !== "cancelled" && oldStatus !== status && oldStatus === "completed") {
-      }
-      const settings = await getSystemSettings();
-      const loyaltyLevels = await getLoyaltyLevelsFromDb(connection);
-      const orderData = {
-        id: orderId,
-        user_id: userId,
-        order_number: orderNumber,
-        total: orderTotal,
-        subtotal,
-        delivery_cost: deliveryCost,
-        bonus_spent: bonusUsed,
-        bonus_earn_amount: bonusEarnAmount,
-      };
-      await connection.query("UPDATE orders SET status = ?, completed_at = ? WHERE id = ?", [
-        status,
-        status === "completed" ? new Date() : null,
-        orderId,
-      ]);
-      if (settings.bonuses_enabled && oldStatus === "completed" && status !== "completed" && status !== "cancelled") {
-        try {
-          await removeEarnedBonuses(orderData, connection, loyaltyLevels);
-        } catch (bonusError) {
-          await connection.rollback();
-          return res.status(400).json({ error: bonusError.message });
-        }
-      }
-      if (settings.bonuses_enabled && status === "completed" && oldStatus !== "completed" && orderTotal > 0) {
-        try {
-          await connection.query(
-            "UPDATE loyalty_transactions SET status = 'completed' WHERE order_id = ? AND type = 'spend' AND status = 'pending'",
-            [orderId],
-          );
-          if (orderData.bonus_earn_amount && orderData.bonus_earn_amount > 0) {
-            await redeliveryEarnBonuses(orderData, connection, loyaltyLevels);
-          } else {
-            await earnBonuses(orderData, connection, loyaltyLevels);
-          }
-        } catch (bonusError) {
-          console.error("Failed to earn bonuses:", bonusError);
-        }
-      }
-      if (settings.bonuses_enabled && status === "cancelled" && oldStatus !== "cancelled") {
-        try {
-          await cancelOrderBonuses(orderData, connection, loyaltyLevels);
-        } catch (bonusError) {
-          console.error("Failed to refund bonuses for cancelled order:", bonusError);
-        }
-      }
-      await connection.commit();
-      const [updatedOrders] = await db.query("SELECT * FROM orders WHERE id = ?", [orderId]);
-      await logger.order.statusChanged(orderId, oldStatus, status, req.user.id);
-      try {
-        const { wsServer } = await import("../index.js");
-        wsServer.notifyOrderStatusUpdate(orderId, userId, status, oldStatus);
-      } catch (wsError) {
-        console.error("Failed to send WebSocket notification:", wsError);
-      }
-      try {
-        const { sendTelegramNotification, formatOrderStatusMessage } = await import("../utils/telegram.js");
-        const [users] = await db.query("SELECT telegram_id FROM users WHERE id = ?", [userId]);
-        if (users.length > 0 && users[0].telegram_id) {
-          const orderNumber = updatedOrders[0].order_number;
-          const orderType = updatedOrders[0].order_type;
-          const message = formatOrderStatusMessage(orderNumber, status, orderType);
-          await sendTelegramNotification(users[0].telegram_id, message);
-        }
-      } catch (telegramError) {
-        console.error("Failed to send Telegram notification:", telegramError);
-      }
-      res.json({ order: updatedOrders[0] });
-    } catch (error) {
-      await connection.rollback();
-      next(error);
-    } finally {
-      connection.release();
-    }
+    await handleOrderStatusUpdate(req, res, next);
+  },
+);
+
+router.put(
+  "/admin/:id/cancel",
+  authenticateToken,
+  requireRole("admin", "manager", "ceo"),
+  adminActionLogger("cancel_order", "order"),
+  async (req, res, next) => {
+    await handleOrderStatusUpdate(req, res, next, "cancelled");
   },
 );
 router.get("/admin/stats", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
