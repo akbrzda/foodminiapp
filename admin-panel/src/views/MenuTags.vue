@@ -87,7 +87,7 @@
   </div>
 </template>
 <script setup>
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { Plus, Pencil, Trash2, Save } from "lucide-vue-next";
 import BaseModal from "../components/BaseModal.vue";
 import Button from "../components/ui/Button.vue";
@@ -104,8 +104,10 @@ import TableHead from "../components/ui/TableHead.vue";
 import TableHeader from "../components/ui/TableHeader.vue";
 import TableRow from "../components/ui/TableRow.vue";
 import { useNotifications } from "../composables/useNotifications";
+import { useOrdersStore } from "../stores/orders.js";
 import api from "../api/client";
 const { showErrorNotification, showSuccessNotification } = useNotifications();
+const ordersStore = useOrdersStore();
 const tags = ref([]);
 const showModal = ref(false);
 const editingTag = ref(null);
@@ -116,9 +118,27 @@ const form = ref({
 });
 const modalTitle = computed(() => (editingTag.value ? "Редактировать тег" : "Новый тег"));
 const modalSubtitle = computed(() => (editingTag.value ? "Изменение тега" : "Создание нового тега"));
+const modalNameTitle = computed(() => {
+  if (!showModal.value) return null;
+  const name = String(form.value.name || "").trim();
+  if (editingTag.value && name) return `Тег: ${name}`;
+  if (editingTag.value) return "Тег";
+  return "Новый тег";
+});
+const updateDocumentTitle = (baseTitle) => {
+  const count = ordersStore.newOrdersCount || 0;
+  document.title = count > 0 ? `(${count}) ${baseTitle}` : baseTitle;
+};
 onMounted(() => {
   loadTags();
 });
+watch(
+  () => [modalNameTitle.value, ordersStore.newOrdersCount],
+  () => {
+    updateDocumentTitle(modalNameTitle.value || "Теги меню");
+  },
+  { immediate: true },
+);
 async function loadTags() {
   try {
     const response = await api.get("/api/menu/admin/tags");

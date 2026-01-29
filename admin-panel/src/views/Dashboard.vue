@@ -4,7 +4,7 @@
       <CardContent class="space-y-4">
         <PageHeader title="Аналитика" description="Сводка по заказам и клиентам">
           <template #filters>
-            <div class="min-w-[320px] flex-1 space-y-2">
+            <div class="min-w-[180px] space-y-2">
               <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Период</label>
               <div class="flex flex-wrap items-center gap-2">
                 <div class="inline-flex items-center gap-1 rounded-md border border-border bg-muted/40 p-1">
@@ -14,24 +14,23 @@
                   <Button size="sm" :variant="periodButtonVariant('year')" @click="setPeriod('year')">Г</Button>
                 </div>
                 <div class="inline-flex items-center gap-2 rounded-full border border-border bg-background px-2 py-1">
-                  <Button size="icon" variant="ghost" @click="shiftPeriod(-1)" :disabled="isCustomPeriod">
-                    <ChevronLeft :size="16" />
+                  <Button size="sm" variant="ghost" @click="shiftPeriod(-1)" :disabled="isCustomPeriod">
+                    <ChevronLeft :size="14" />
                   </Button>
                   <span class="min-w-[160px] text-center text-sm font-medium text-foreground">{{ periodRangeLabel }}</span>
-                  <Button size="icon" variant="ghost" @click="shiftPeriod(1)" :disabled="isCustomPeriod">
-                    <ChevronRight :size="16" />
+                  <Button size="sm" variant="ghost" @click="shiftPeriod(1)" :disabled="isCustomPeriod">
+                    <ChevronRight :size="14" />
                   </Button>
                 </div>
                 <Button size="icon" variant="outline" @click="activateCustomPeriod">
                   <Calendar :size="16" />
                 </Button>
-              </div>
-              <div v-if="isCustomPeriod" class="space-y-1">
-                <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Произвольный период</label>
-                <RangeCalendar v-model:from="filters.date_from" v-model:to="filters.date_to" />
+                <div v-if="isCustomPeriod" class="space-y-1">
+                  <RangeCalendar v-model:from="filters.date_from" v-model:to="filters.date_to" />
+                </div>
               </div>
             </div>
-            <div class="min-w-[180px] space-y-1">
+            <div class="min-w-[180px] space-y-2">
               <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Город</label>
               <Select v-model="filters.city_id" :disabled="isLocationLocked" @change="onCityChange">
                 <option value="">Все города</option>
@@ -40,7 +39,7 @@
                 </option>
               </Select>
             </div>
-            <div class="min-w-[180px] space-y-1">
+            <div class="min-w-[180px] space-y-2">
               <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Филиал</label>
               <Select v-model="filters.branch_id" :disabled="isLocationLocked || !filters.city_id" @change="scheduleLoad">
                 <option value="">Все филиалы</option>

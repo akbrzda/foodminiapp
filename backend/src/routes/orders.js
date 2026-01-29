@@ -255,6 +255,7 @@ router.post("/", authenticateToken, async (req, res, next) => {
       bonus_to_use = 0,
       comment,
       desired_time,
+      timezone_offset,
       delivery_address_id,
       delivery_street,
       delivery_house,
@@ -683,6 +684,51 @@ router.get("/admin/all", authenticateToken, requireRole("admin", "manager", "ceo
     params.push(parseInt(limit), parseInt(offset));
     const [orders] = await db.query(query, params);
     res.json({ orders });
+  } catch (error) {
+    next(error);
+  }
+});
+router.get("/admin/count", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
+  try {
+    const { city_id, status, order_type, date_from, date_to, search } = req.query;
+    let query = `
+        SELECT COUNT(*) as total
+        FROM orders o
+        LEFT JOIN cities c ON o.city_id = c.id
+        LEFT JOIN branches b ON o.branch_id = b.id
+        LEFT JOIN users u ON o.user_id = u.id
+        WHERE 1=1
+      `;
+    const params = [];
+    if (req.user.role === "manager") {
+      query += " AND o.city_id IN (?)";
+      params.push(req.user.cities);
+    } else if (city_id) {
+      query += " AND o.city_id = ?";
+      params.push(city_id);
+    }
+    if (status) {
+      query += " AND o.status = ?";
+      params.push(status);
+    }
+    if (order_type) {
+      query += " AND o.order_type = ?";
+      params.push(order_type);
+    }
+    if (date_from) {
+      query += " AND o.created_at >= ?";
+      params.push(date_from);
+    }
+    if (date_to) {
+      query += " AND o.created_at <= ?";
+      params.push(date_to);
+    }
+    if (search) {
+      query += " AND (o.order_number LIKE ? OR u.phone LIKE ?)";
+      params.push(`%${search}%`, `%${search}%`);
+    }
+    const [rows] = await db.query(query, params);
+    res.json({ total: rows[0]?.total || 0 });
   } catch (error) {
     next(error);
   }

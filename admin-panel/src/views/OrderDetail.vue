@@ -242,7 +242,7 @@
   </div>
 </template>
 <script setup>
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, onMounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ArrowLeft, CircleCheck } from "lucide-vue-next";
 import api from "../api/client.js";
@@ -264,9 +264,11 @@ import TableHeader from "../components/ui/TableHeader.vue";
 import TableRow from "../components/ui/TableRow.vue";
 import PageHeader from "../components/PageHeader.vue";
 import { useNotifications } from "../composables/useNotifications.js";
+import { useOrdersStore } from "../stores/orders.js";
 const route = useRoute();
 const router = useRouter();
 const { showErrorNotification, showSuccessNotification } = useNotifications();
+const ordersStore = useOrdersStore();
 const order = ref(null);
 const statusUpdate = ref("");
 const orderTitle = computed(() => {
@@ -277,6 +279,10 @@ const orderSubtitle = computed(() => {
   if (order.value?.created_at) return formatDateTime(order.value.created_at);
   return "Детали заказа";
 });
+const updateDocumentTitle = (baseTitle) => {
+  const count = ordersStore.newOrdersCount || 0;
+  document.title = count > 0 ? `(${count}) ${baseTitle}` : baseTitle;
+};
 const statusOrder = {
   pending: 0,
   confirmed: 1,
@@ -363,6 +369,13 @@ onMounted(async () => {
     showErrorNotification("Ошибка загрузки заказа");
   }
 });
+watch(
+  () => [orderTitle.value, ordersStore.newOrdersCount],
+  () => {
+    updateDocumentTitle(orderTitle.value || "Заказ");
+  },
+  { immediate: true },
+);
 const loadOrder = async () => {
   try {
     const response = await api.get(`/api/orders/admin/${route.params.id}`);

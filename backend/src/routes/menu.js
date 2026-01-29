@@ -2394,6 +2394,46 @@ router.post("/admin/variants/:variantId/prices", authenticateToken, requireRole(
     next(error);
   }
 });
+router.put("/admin/variants/:variantId/prices", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
+  const connection = await db.getConnection();
+  try {
+    const variantId = req.params.variantId;
+    const { prices } = req.body;
+    if (!Array.isArray(prices)) {
+      return res.status(400).json({ error: "prices must be an array" });
+    }
+    const [variants] = await connection.query("SELECT id FROM item_variants WHERE id = ?", [variantId]);
+    if (variants.length === 0) {
+      return res.status(404).json({ error: "Variant not found" });
+    }
+    await connection.beginTransaction();
+    // Полная замена: удаляем старые цены и вставляем актуальные
+    await connection.query("DELETE FROM menu_variant_prices WHERE variant_id = ?", [variantId]);
+    for (const priceItem of prices) {
+      const { city_id, fulfillment_type, price } = priceItem || {};
+      if (!fulfillment_type || price === undefined || price === null) {
+        continue;
+      }
+      if (!["delivery", "pickup", "dine_in"].includes(fulfillment_type)) {
+        await connection.rollback();
+        return res.status(400).json({ error: "Invalid fulfillment_type" });
+      }
+      await connection.query(
+        `INSERT INTO menu_variant_prices (variant_id, city_id, fulfillment_type, price)
+         VALUES (?, ?, ?, ?)`,
+        [variantId, city_id || null, fulfillment_type, price],
+      );
+    }
+    await connection.commit();
+    await invalidateAllMenuCache();
+    res.json({ message: "Variant prices replaced successfully" });
+  } catch (error) {
+    await connection.rollback();
+    next(error);
+  } finally {
+    connection.release();
+  }
+});
 router.post("/admin/modifiers/:modifierId/variant-prices", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
   try {
     const modifierId = req.params.modifierId;

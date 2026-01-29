@@ -1,5 +1,5 @@
 <template>
-  <header class="sticky top-0 z-30 border-b border-border/60 bg-background/80 backdrop-blur">
+  <header class="sticky top-0 z-30 border-b border-border/60 bg-background backdrop-blur">
     <div class="flex items-center justify-between px-4 py-4 sm:px-6 lg:px-10">
       <div class="flex items-center gap-3">
         <Button class="lg:hidden" variant="ghost" size="icon" @click="emit('toggle-menu')">

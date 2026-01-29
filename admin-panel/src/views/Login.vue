@@ -1,11 +1,12 @@
 <template>
   <div class="flex min-h-screen items-center justify-center px-4 py-10">
-    <Card class="w-full max-w-lg">
+    <Card class="w-full max-w-[360px]">
       <CardHeader>
-        <CardTitle>Panda Admin</CardTitle>
-        <CardDescription>Вход для администраторов и менеджеров</CardDescription>
+        <UserIcon class="mx-auto mb-2" :size="56" />
+        <CardTitle class="text-center">Панель управления</CardTitle>
+        <CardDescription class="text-center">Вход для администраторов и менеджеров</CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent class="p-4">
         <form class="space-y-5" @submit.prevent="handleLogin">
           <div class="space-y-2">
             <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground" for="email">Email</label>
@@ -36,7 +37,7 @@
 <script setup>
 import { reactive } from "vue";
 import { useRouter } from "vue-router";
-import { LogIn, Lock, Mail } from "lucide-vue-next";
+import { LogIn, Lock, Mail, UserIcon } from "lucide-vue-next";
 import { useAuthStore } from "../stores/auth.js";
 import Button from "../components/ui/Button.vue";
 import Card from "../components/ui/Card.vue";

@@ -202,7 +202,7 @@
   </div>
 </template>
 <script setup>
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { Pencil, Plus, Save, Settings2, Trash2, UploadCloud } from "lucide-vue-next";
 import api from "../api/client.js";
 import BaseModal from "../components/BaseModal.vue";
@@ -217,8 +217,10 @@ import PageHeader from "../components/PageHeader.vue";
 import Select from "../components/ui/Select.vue";
 import { useNotifications } from "../composables/useNotifications.js";
 import { formatCurrency } from "../utils/format.js";
+import { useOrdersStore } from "../stores/orders.js";
 const groups = ref([]);
 const { showErrorNotification } = useNotifications();
+const ordersStore = useOrdersStore();
 const showModal = ref(false);
 const showModifierModal = ref(false);
 const showVariantPricesModal = ref(false);
@@ -258,6 +260,29 @@ const normalizeImageUrl = (url) => {
 };
 const modalTitle = computed(() => (editing.value ? "Редактировать группу" : "Новая группа"));
 const modalSubtitle = computed(() => (editing.value ? "Параметры группы" : "Создайте группу модификаторов"));
+const modalNameTitle = computed(() => {
+  if (showVariantPricesModal.value) {
+    const name = String(activeModifierForPrices.value?.name || "").trim();
+    return name ? `Цены модификатора: ${name}` : "Цены модификатора";
+  }
+  if (showModifierModal.value) {
+    const name = String(modifierForm.value.name || "").trim();
+    if (editingModifier.value && name) return `Модификатор: ${name}`;
+    if (editingModifier.value) return "Модификатор";
+    return "Новый модификатор";
+  }
+  if (showModal.value) {
+    const name = String(form.value.name || "").trim();
+    if (editing.value && name) return `Группа: ${name}`;
+    if (editing.value) return "Группа";
+    return "Новая группа";
+  }
+  return null;
+});
+const updateDocumentTitle = (baseTitle) => {
+  const count = ordersStore.newOrdersCount || 0;
+  document.title = count > 0 ? `(${count}) ${baseTitle}` : baseTitle;
+};
 const loadGroups = async () => {
   try {
     const response = await api.get("/api/menu/admin/modifier-groups");
@@ -465,5 +490,12 @@ const deleteModifier = async (modifier) => {
     showErrorNotification(`Ошибка при удалении модификатора: ${error.response?.data?.error || error.message}`);
   }
 };
+watch(
+  () => [modalNameTitle.value, ordersStore.newOrdersCount],
+  () => {
+    updateDocumentTitle(modalNameTitle.value || "Модификаторы");
+  },
+  { immediate: true },
+);
 onMounted(loadGroups);
 </script>

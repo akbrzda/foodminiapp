@@ -92,7 +92,7 @@
   </div>
 </template>
 <script setup>
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { X, Info } from "lucide-vue-next";
 import { useRouter } from "vue-router";
 import { useCartStore } from "../stores/cart";
@@ -115,6 +115,11 @@ const showPartialModal = ref(false);
 const partialBonusInput = ref("");
 
 const maxUsableFromApi = ref(0);
+const handleVisibilityChange = async () => {
+  if (document.visibilityState === "visible") {
+    await loadBonusBalance();
+  }
+};
 
 const bonusesEnabled = computed(() => settingsStore.bonusesEnabled);
 const ordersEnabled = computed(() => settingsStore.ordersEnabled);
@@ -161,6 +166,8 @@ const isMinOrderReached = computed(() => {
 });
 onMounted(async () => {
   await loadBonusBalance();
+  // Обновляем баланс при возвращении в приложение, чтобы не использовать старые данные
+  document.addEventListener("visibilitychange", handleVisibilityChange);
   if (isDelivery.value && !locationStore.deliveryZone && locationStore.deliveryCoords && locationStore.selectedCity?.id) {
     try {
       const checkResponse = await addressesAPI.checkDeliveryZone(
@@ -175,6 +182,9 @@ onMounted(async () => {
       console.error("Failed to load delivery zone in cart:", error);
     }
   }
+});
+onUnmounted(() => {
+  document.removeEventListener("visibilitychange", handleVisibilityChange);
 });
 function getItemTotalPrice(item) {
   const price = parseFloat(item.price) || 0;
@@ -281,10 +291,25 @@ async function loadBonusBalance() {
   }
   try {
     const response = await bonusesAPI.getBalance();
-    bonusBalance.value = response.data.balance || 0;
+    bonusBalance.value = Math.max(0, Math.floor(Number(response.data?.balance || 0)));
     await loadMaxUsable();
+    syncBonusUsage();
   } catch (error) {
     console.error("Failed to load bonus balance:", error);
+  }
+}
+function syncBonusUsage() {
+  if (!bonusesEnabled.value || bonusBalance.value <= 0) {
+    cartStore.resetBonusUsage();
+    return;
+  }
+  const maxAllowed = Math.min(bonusBalance.value, Math.floor(maxUsableFromApi.value || 0));
+  if (maxAllowed <= 0) {
+    cartStore.resetBonusUsage();
+    return;
+  }
+  if (cartStore.bonusUsage.bonusToUse > maxAllowed) {
+    cartStore.setBonusToUse(maxAllowed);
   }
 }
 async function loadMaxUsable() {

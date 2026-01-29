@@ -37,9 +37,19 @@
             <LayoutDashboard :size="18" />
             <span v-if="!isCollapsed">Аналитика</span>
           </RouterLink>
-          <RouterLink class="nav-link" to="/orders" @click="emit('navigate')">
+          <RouterLink class="nav-link relative" to="/orders" @click="emit('navigate')">
             <ClipboardList :size="18" />
             <span v-if="!isCollapsed">Заказы</span>
+            <span
+              v-if="newOrdersCount > 0"
+              :class="[
+                'ml-auto inline-flex min-w-[20px] items-center justify-center rounded-full px-1.5 text-[11px] font-semibold absolute',
+                isCollapsed ? 'ml-0 top-1 right-2' : 'right-3',
+              ]"
+              class="bg-amber-100 text-amber-700"
+            >
+              {{ newOrdersCount }}
+            </span>
           </RouterLink>
           <RouterLink class="nav-link" to="/clients" @click="emit('navigate')">
             <Users :size="18" />
@@ -108,6 +118,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { RouterLink } from "vue-router";
 import { useAuthStore } from "../stores/auth.js";
+import { useOrdersStore } from "../stores/orders.js";
 import {
   Building2,
   ChevronLeft,
@@ -134,7 +145,9 @@ const props = defineProps({
 });
 const emit = defineEmits(["navigate", "close", "toggle-collapse"]);
 const authStore = useAuthStore();
+const ordersStore = useOrdersStore();
 const isManager = computed(() => authStore.role === "manager");
+const newOrdersCount = computed(() => ordersStore.newOrdersCount);
 const isMobile = ref(false);
 const collapseTitle = computed(() => (props.isCollapsed ? "Развернуть меню" : "Свернуть меню"));
 const updateIsMobile = () => {

@@ -23,10 +23,7 @@
       </CardContent>
     </Card>
     <Card>
-      <CardHeader>
-        <CardTitle>Список клиентов</CardTitle>
-      </CardHeader>
-      <CardContent class="pt-0">
+      <CardContent class="!p-0">
         <Table>
           <TableHeader>
             <TableRow>

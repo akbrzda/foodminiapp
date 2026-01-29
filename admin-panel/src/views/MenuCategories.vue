@@ -104,7 +104,7 @@
   </div>
 </template>
 <script setup>
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { Pencil, Plus, Save, Trash2 } from "lucide-vue-next";
 import api from "../api/client.js";
 import BaseModal from "../components/BaseModal.vue";
@@ -127,7 +127,9 @@ import Textarea from "../components/ui/Textarea.vue";
 import { useNotifications } from "../composables/useNotifications.js";
 import { formatNumber } from "../utils/format.js";
 import { useReferenceStore } from "../stores/reference.js";
+import { useOrdersStore } from "../stores/orders.js";
 const referenceStore = useReferenceStore();
+const ordersStore = useOrdersStore();
 const { showErrorNotification } = useNotifications();
 const categories = ref([]);
 const showModal = ref(false);
@@ -143,6 +145,17 @@ const form = ref({
 });
 const modalTitle = computed(() => (editing.value ? "Редактировать категорию" : "Новая категория"));
 const modalSubtitle = computed(() => (editing.value ? "Измените параметры категории" : "Создайте категорию меню"));
+const modalNameTitle = computed(() => {
+  if (!showModal.value) return null;
+  const name = String(form.value.name || "").trim();
+  if (editing.value && name) return `Категория: ${name}`;
+  if (editing.value) return "Категория";
+  return "Новая категория";
+});
+const updateDocumentTitle = (baseTitle) => {
+  const count = ordersStore.newOrdersCount || 0;
+  document.title = count > 0 ? `(${count}) ${baseTitle}` : baseTitle;
+};
 const loadCategories = async () => {
   try {
     const response = await api.get("/api/menu/admin/all-categories");
@@ -223,4 +236,11 @@ onMounted(async () => {
     showErrorNotification("Ошибка загрузки категорий");
   }
 });
+watch(
+  () => [modalNameTitle.value, ordersStore.newOrdersCount],
+  () => {
+    updateDocumentTitle(modalNameTitle.value || "Категории");
+  },
+  { immediate: true },
+);
 </script>

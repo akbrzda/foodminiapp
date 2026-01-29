@@ -416,7 +416,7 @@
   </div>
 </template>
 <script setup>
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { ArrowLeft, Plus, Save, Trash2, UploadCloud } from "lucide-vue-next";
 import api from "../api/client.js";
@@ -440,9 +440,11 @@ import Textarea from "../components/ui/Textarea.vue";
 import Tabs from "../components/ui/Tabs.vue";
 import { useNotifications } from "../composables/useNotifications.js";
 import { useReferenceStore } from "../stores/reference.js";
+import { useOrdersStore } from "../stores/orders.js";
 const router = useRouter();
 const route = useRoute();
 const referenceStore = useReferenceStore();
+const ordersStore = useOrdersStore();
 const { showErrorNotification, showSuccessNotification } = useNotifications();
 const allCategories = ref([]);
 const modifierGroups = ref([]);
@@ -481,6 +483,22 @@ const form = ref({
 });
 const modalTitle = computed(() => (isEditing.value ? "Редактировать позицию" : "Новая позиция"));
 const modalSubtitle = computed(() => (isEditing.value ? "Измените параметры позиции" : "Создайте позицию меню"));
+const formTitle = computed(() => {
+  if (!isEditing.value) return "Новая позиция";
+  const name = String(form.value.name || "").trim();
+  return name ? `Позиция: ${name}` : "Позиция меню";
+});
+const updateDocumentTitle = (baseTitle) => {
+  const count = ordersStore.newOrdersCount || 0;
+  document.title = count > 0 ? `(${count}) ${baseTitle}` : baseTitle;
+};
+const normalizeIsActive = (value, fallback = true) => {
+  if (value === null || value === undefined) return fallback;
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value === 1;
+  if (typeof value === "string") return value === "1" || value.toLowerCase() === "true";
+  return Boolean(value);
+};
 const normalizeImageUrl = (url) => {
   if (!url) return "";
   if (url.startsWith("http://") || url.startsWith("https://")) return url;
@@ -560,7 +578,7 @@ const loadItem = async () => {
       fats_per_serving: item.fats_per_serving,
       carbs_per_serving: item.carbs_per_serving,
       sort_order: item.sort_order || 0,
-      is_active: item.is_active,
+      is_active: normalizeIsActive(item.is_active),
       category_ids: categoriesRes.data.category_ids || [],
       variants: variantsWithPrices,
       modifier_group_ids: modifiersRes.data.modifier_group_ids || [],
@@ -723,13 +741,15 @@ const saveVariantPrices = async () => {
     for (const variant of form.value.variants) {
       if (!variant.id) continue;
       if (!Array.isArray(variant.prices)) continue;
-      for (const priceItem of variant.prices) {
-        await api.post(`/api/menu/admin/variants/${variant.id}/prices`, {
-          city_id: priceItem.city_id,
-          fulfillment_type: priceItem.fulfillment_type,
-          price: priceItem.price,
-        });
-      }
+      const cleanedPrices = variant.prices.filter(
+        (priceItem) =>
+          priceItem &&
+          priceItem.fulfillment_type &&
+          priceItem.price !== null &&
+          priceItem.price !== undefined &&
+          priceItem.price !== "",
+      );
+      await api.put(`/api/menu/admin/variants/${variant.id}/prices`, { prices: cleanedPrices });
     }
     showSuccessNotification("Цены вариаций сохранены");
   } catch (error) {
@@ -827,4 +847,11 @@ onMounted(async () => {
     showErrorNotification("Ошибка загрузки данных формы");
   }
 });
+watch(
+  () => [formTitle.value, ordersStore.newOrdersCount],
+  () => {
+    updateDocumentTitle(formTitle.value);
+  },
+  { immediate: true },
+);
 </script>

@@ -14,7 +14,7 @@
         <CardTitle>Данные клиента</CardTitle>
         <CardDescription>Регистрация: {{ formatDateTime(client?.created_at) || "—" }} · Город: {{ client?.city_name || "—" }}</CardDescription>
       </CardHeader>
-      <CardContent class="space-y-4">
+      <CardContent class="p-3 space-y-4">
         <div class="grid gap-4 md:grid-cols-2">
           <div class="space-y-2">
             <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Имя</label>
@@ -50,11 +50,9 @@
           <CardTitle>Лояльность</CardTitle>
           <CardDescription>Уровень, статистика и история</CardDescription>
         </div>
-        <Button variant="secondary" @click="openAdjustModal">
-          Корректировка баланса
-        </Button>
+        <Button variant="secondary" @click="openAdjustModal"> Корректировка баланса </Button>
       </CardHeader>
-      <CardContent class="space-y-6">
+      <CardContent class="p-3 space-y-6">
         <div class="grid gap-4 md:grid-cols-3">
           <div class="rounded-xl border border-border/60 bg-background px-4 py-3">
             <div class="text-xs text-muted-foreground">Текущий уровень</div>
@@ -89,10 +87,7 @@
             <span>{{ Math.round((loyaltyStats?.progress_to_next_level || 0) * 100) }}%</span>
           </div>
           <div class="mt-2 h-2 w-full rounded-full bg-muted">
-            <div
-              class="h-2 rounded-full bg-primary"
-              :style="{ width: `${Math.round((loyaltyStats?.progress_to_next_level || 0) * 100)}%` }"
-            ></div>
+            <div class="h-2 rounded-full bg-primary" :style="{ width: `${Math.round((loyaltyStats?.progress_to_next_level || 0) * 100)}%` }"></div>
           </div>
         </div>
         <div>
@@ -120,7 +115,7 @@
       <CardHeader>
         <CardTitle>История заказов</CardTitle>
       </CardHeader>
-      <CardContent class="pt-0">
+      <CardContent class="p-3 pt-0">
         <div v-if="ordersLoading" class="text-sm text-muted-foreground">Загрузка...</div>
         <Table v-else>
           <TableHeader>
@@ -146,7 +141,7 @@
       <CardHeader>
         <CardTitle>История бонусов</CardTitle>
       </CardHeader>
-      <CardContent class="pt-0">
+      <CardContent class="p-3 pt-0">
         <div v-if="bonusesLoading" class="text-sm text-muted-foreground">Загрузка...</div>
         <Table v-else>
           <TableHeader>
@@ -199,11 +194,12 @@
   </div>
 </template>
 <script setup>
-import { computed, onMounted, reactive, ref } from "vue";
+import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ArrowLeft, Save } from "lucide-vue-next";
 import api from "../api/client.js";
 import { useNotifications } from "../composables/useNotifications.js";
+import { useOrdersStore } from "../stores/orders.js";
 import { formatCurrency, formatDateTime, formatNumber } from "../utils/format.js";
 import Button from "../components/ui/Button.vue";
 import Card from "../components/ui/Card.vue";
@@ -225,6 +221,7 @@ import BaseModal from "../components/BaseModal.vue";
 const route = useRoute();
 const router = useRouter();
 const { showErrorNotification } = useNotifications();
+const ordersStore = useOrdersStore();
 const clientId = route.params.id;
 const client = ref(null);
 const orders = ref([]);
@@ -247,6 +244,15 @@ const clientTitle = computed(() => {
   const phone = client.value.phone ? `· ${client.value.phone}` : "";
   return `${parts || "Данные профиля"} ${phone}`.trim();
 });
+const clientNameForTitle = computed(() => {
+  if (!client.value) return "Клиент";
+  const parts = [client.value.first_name, client.value.last_name].filter(Boolean).join(" ");
+  return parts ? `Клиент: ${parts}` : "Клиент";
+});
+const updateDocumentTitle = (baseTitle) => {
+  const count = ordersStore.newOrdersCount || 0;
+  document.title = count > 0 ? `(${count}) ${baseTitle}` : baseTitle;
+};
 const form = reactive({
   first_name: "",
   last_name: "",
@@ -363,4 +369,11 @@ onMounted(async () => {
     showErrorNotification("Ошибка загрузки бонусов");
   }
 });
+watch(
+  () => [clientNameForTitle.value, ordersStore.newOrdersCount],
+  () => {
+    updateDocumentTitle(clientNameForTitle.value);
+  },
+  { immediate: true },
+);
 </script>

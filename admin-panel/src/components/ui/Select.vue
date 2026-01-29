@@ -14,7 +14,7 @@ const emit = defineEmits(["update:modelValue", "change"]);
 const attrs = useAttrs();
 const classes = computed(() =>
   cn(
-    "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+    "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring  focus-visible:ring-offset-background",
     props.class,
   ),
 );

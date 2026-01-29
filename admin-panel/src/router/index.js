@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from "vue-router";
 import { useAuthStore } from "../stores/auth.js";
+import { useOrdersStore } from "../stores/orders.js";
 import AdminLayout from "../layouts/AdminLayout.vue";
 import Login from "../views/Login.vue";
 import Dashboard from "../views/Dashboard.vue";
@@ -122,5 +123,11 @@ router.beforeEach((to) => {
     return { name: "orders" };
   }
   return true;
+});
+router.afterEach((to) => {
+  const ordersStore = useOrdersStore();
+  const baseTitle = to.meta?.title || "Админ-панель";
+  const count = ordersStore?.newOrdersCount || 0;
+  document.title = count > 0 ? `(${count}) ${baseTitle}` : baseTitle;
 });
 export default router;

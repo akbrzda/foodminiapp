@@ -55,10 +55,7 @@
       </CardContent>
     </Card>
     <Card>
-      <CardHeader>
-        <CardTitle>Список заказов</CardTitle>
-      </CardHeader>
-      <CardContent class="pt-0">
+      <CardContent class="!p-0">
         <Table>
           <TableHeader>
             <TableRow>
@@ -101,13 +98,13 @@
   </div>
 </template>
 <script setup>
-import { onMounted, onBeforeUnmount, reactive, ref, watch } from "vue";
+import { onMounted, reactive, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { RotateCcw, Search } from "lucide-vue-next";
 import api from "../api/client.js";
-import { useAuthStore } from "../stores/auth.js";
 import { useReferenceStore } from "../stores/reference.js";
 import { useNotifications } from "../composables/useNotifications.js";
+import { useOrdersStore } from "../stores/orders.js";
 import { formatCurrency, formatDateTime, formatNumber, formatPhone } from "../utils/format.js";
 import Badge from "../components/ui/Badge.vue";
 import Button from "../components/ui/Button.vue";
@@ -126,12 +123,11 @@ import TableHead from "../components/ui/TableHead.vue";
 import TableHeader from "../components/ui/TableHeader.vue";
 import TableRow from "../components/ui/TableRow.vue";
 const router = useRouter();
-const authStore = useAuthStore();
 const referenceStore = useReferenceStore();
+const ordersStore = useOrdersStore();
 const { showNewOrderNotification, showErrorNotification } = useNotifications();
 const orders = ref([]);
 const recentOrderIds = ref(new Set());
-let ws = null;
 const loadTimer = ref(null);
 const filters = reactive({
   city_id: "",
@@ -145,6 +141,7 @@ const loadOrders = async () => {
   const params = Object.fromEntries(Object.entries(filters).filter(([, value]) => value));
   const response = await api.get("/api/orders/admin/all", { params });
   orders.value = response.data.orders || [];
+  ordersStore.trackOrders(orders.value);
 };
 const scheduleLoad = () => {
   if (loadTimer.value) {
@@ -194,52 +191,10 @@ const getStatusBadge = (status) => {
     class: classes[status] || "bg-muted text-muted-foreground border-transparent",
   };
 };
-const connectWebSocket = () => {
-  const apiBase = api.defaults.baseURL || "http://localhost:3000";
-  const wsBase = import.meta.env.VITE_WS_URL || apiBase;
-  const token = authStore.token;
-  if (!token) {
-    return;
-  }
-  let wsUrl;
-  try {
-    wsUrl = new URL(wsBase);
-    const isSecure = window.location.protocol === "https:" || wsUrl.protocol === "https:";
-    wsUrl.protocol = isSecure ? "wss:" : "ws:";
-    wsUrl.searchParams.set("token", token);
-    ws = new WebSocket(wsUrl.toString());
-    ws.onmessage = (event) => {
-      const payload = JSON.parse(event.data);
-      if (payload.type === "new-order") {
-        orders.value.unshift(payload.data);
-        const next = new Set(recentOrderIds.value);
-        next.add(payload.data.id);
-        recentOrderIds.value = next;
-        showNewOrderNotification(payload.data);
-        setTimeout(() => {
-          const updated = new Set(recentOrderIds.value);
-          updated.delete(payload.data.id);
-          recentOrderIds.value = updated;
-        }, 15000);
-      }
-      if (payload.type === "order-status-updated") {
-        const { orderId, newStatus } = payload.data;
-        orders.value = orders.value.map((order) => (order.id === orderId ? { ...order, status: newStatus } : order));
-      }
-    };
-  } catch (error) {
-    console.error("WebSocket URL parsing failed", error);
-    return;
-  }
-  ws.onclose = () => {
-    setTimeout(connectWebSocket, 5000);
-  };
-};
 onMounted(async () => {
   try {
     await referenceStore.loadCities();
     await loadOrders();
-    connectWebSocket();
   } catch (error) {
     console.error("Ошибка загрузки заказов:", error);
     showErrorNotification("Ошибка загрузки заказов");
@@ -252,7 +207,26 @@ watch(
   },
   { deep: true },
 );
-onBeforeUnmount(() => {
-  if (ws) ws.close();
-});
+watch(
+  () => ordersStore.lastEvent,
+  (payload) => {
+    if (!payload) return;
+    if (payload.type === "new-order") {
+      orders.value.unshift(payload.data);
+      const next = new Set(recentOrderIds.value);
+      next.add(payload.data.id);
+      recentOrderIds.value = next;
+      showNewOrderNotification(payload.data);
+      setTimeout(() => {
+        const updated = new Set(recentOrderIds.value);
+        updated.delete(payload.data.id);
+        recentOrderIds.value = updated;
+      }, 15000);
+    }
+    if (payload.type === "order-status-updated") {
+      const { orderId, newStatus } = payload.data || {};
+      orders.value = orders.value.map((order) => (order.id === orderId ? { ...order, status: newStatus } : order));
+    }
+  },
+);
 </script>

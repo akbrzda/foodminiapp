@@ -147,7 +147,7 @@
   </div>
 </template>
 <script setup>
-import { ref, computed, onMounted, watch } from "vue";
+import { ref, computed, onMounted, onUnmounted, watch } from "vue";
 import { useRouter } from "vue-router";
 import { Banknote, CreditCard, Phone, Store, Truck, Clock, Pencil } from "lucide-vue-next";
 import { useCartStore } from "../stores/cart";
@@ -156,7 +156,7 @@ import { useLocationStore } from "../stores/location";
 import { useMenuStore } from "../stores/menu";
 import { useSettingsStore } from "../stores/settings";
 import { useKeyboardHandler } from "../composables/useKeyboardHandler";
-import { citiesAPI, addressesAPI, ordersAPI, menuAPI } from "../api/endpoints";
+import { citiesAPI, addressesAPI, ordersAPI, menuAPI, bonusesAPI } from "../api/endpoints";
 import { hapticFeedback } from "../services/telegram";
 import { formatPrice } from "../utils/format";
 const router = useRouter();
@@ -182,6 +182,12 @@ const deliveryTime = ref(0);
 const minOrderAmount = ref(0);
 const prepTime = ref(0);
 const assemblyTime = ref(0);
+const bonusBalance = ref(null);
+const handleVisibilityChange = async () => {
+  if (document.visibilityState === "visible") {
+    await refreshBonusBalance();
+  }
+};
 const ordersEnabled = computed(() => settingsStore.ordersEnabled);
 const deliveryEnabled = computed(() => settingsStore.deliveryEnabled);
 const pickupEnabled = computed(() => settingsStore.pickupEnabled);
@@ -211,7 +217,9 @@ const isMinOrderReached = computed(() => {
 const appliedBonusToUse = computed(() => {
   if (!bonusesEnabled.value) return 0;
   if (!cartStore.bonusUsage.useBonuses) return 0;
-  return Math.min(cartStore.bonusUsage.bonusToUse, Math.floor(cartStore.totalPrice * loyaltyStore.maxRedeemPercent));
+  const balanceLimit = bonusBalance.value === null ? Number.POSITIVE_INFINITY : bonusBalance.value;
+  const maxByPercent = Math.floor(cartStore.totalPrice * loyaltyStore.maxRedeemPercent);
+  return Math.min(cartStore.bonusUsage.bonusToUse, maxByPercent, balanceLimit);
 });
 const deliveryCostForSummary = computed(() => (orderType.value === "delivery" ? deliveryCost.value : 0));
 const finalTotalPrice = computed(() => {
@@ -274,6 +282,8 @@ const resolveOrderType = () => {
 };
 onMounted(async () => {
   resolveOrderType();
+  await refreshBonusBalance();
+  document.addEventListener("visibilitychange", handleVisibilityChange);
   if (orderType.value === "pickup") {
     await loadBranches();
     applyBranchTimes(selectedBranch.value);
@@ -303,6 +313,9 @@ onMounted(async () => {
     loyaltyStore.refreshFromProfile();
   }
 });
+onUnmounted(() => {
+  document.removeEventListener("visibilitychange", handleVisibilityChange);
+});
 watch(
   () => [ordersEnabled.value, deliveryEnabled.value, pickupEnabled.value],
   () => {
@@ -312,8 +325,12 @@ watch(
 watch(
   () => bonusesEnabled.value,
   (isEnabled) => {
-    if (isEnabled) return;
+    if (isEnabled) {
+      refreshBonusBalance();
+      return;
+    }
     cartStore.resetBonusUsage();
+    bonusBalance.value = 0;
   },
 );
 watch(
@@ -391,6 +408,25 @@ watch(
     }
   },
 );
+async function refreshBonusBalance() {
+  if (!bonusesEnabled.value) {
+    bonusBalance.value = 0;
+    return;
+  }
+  try {
+    const response = await bonusesAPI.getBalance();
+    bonusBalance.value = Math.max(0, Math.floor(Number(response.data?.balance || 0)));
+    if (bonusBalance.value <= 0) {
+      cartStore.resetBonusUsage();
+      return;
+    }
+    if (cartStore.bonusUsage.useBonuses && cartStore.bonusUsage.bonusToUse > appliedBonusToUse.value) {
+      cartStore.setBonusToUse(appliedBonusToUse.value);
+    }
+  } catch (error) {
+    console.error("Не удалось обновить бонусный баланс:", error);
+  }
+}
 function selectOrderType(type) {
   if (!ordersEnabled.value) return;
   if (type === "delivery" && !deliveryEnabled.value) return;
@@ -457,6 +493,23 @@ async function submitOrder() {
       alert("Выберите город перед оформлением заказа");
       return;
     }
+    let bonusToUse = bonusesEnabled.value ? appliedBonusToUse.value : 0;
+    if (bonusesEnabled.value && cartStore.bonusUsage.useBonuses) {
+      try {
+        const balanceResponse = await bonusesAPI.getBalance();
+        const freshBalance = Math.max(0, Math.floor(Number(balanceResponse.data?.balance || 0)));
+        bonusToUse = Math.min(bonusToUse, freshBalance);
+        if (bonusToUse <= 0) {
+          cartStore.resetBonusUsage();
+        } else if (bonusToUse !== cartStore.bonusUsage.bonusToUse) {
+          cartStore.setBonusToUse(bonusToUse);
+        }
+      } catch (error) {
+        console.error("Не удалось обновить бонусный баланс перед оформлением:", error);
+        bonusToUse = 0;
+        cartStore.resetBonusUsage();
+      }
+    }
     const orderData = {
       city_id: locationStore.selectedCity.id,
       order_type: orderType.value,
@@ -476,7 +529,7 @@ async function submitOrder() {
       })),
       payment_method: paymentMethod.value,
       comment: orderComment.value,
-      bonus_to_use: bonusesEnabled.value ? appliedBonusToUse.value : 0,
+      bonus_to_use: bonusToUse,
     };
     if (orderType.value === "delivery") {
       const addressParts = deliveryAddress.value.split(",").map((s) => s.trim());
