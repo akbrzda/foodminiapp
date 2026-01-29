@@ -45,16 +45,19 @@ FoodMiniApp — система онлайн‑заказа еды с Telegram Mi
 ### Скрипты
 
 **Backend** (`backend/package.json`):
+
 - `npm run dev` — запуск API в режиме разработки.
 - `npm run start` — запуск API.
 - `npm run worker` — запуск фоновых воркеров.
 - `npm run init-db` — инициализация базы по `schema.sql`.
 
 **Admin panel** (`admin-panel/package.json`):
+
 - `npm run dev` — локальная разработка.
 - `npm run build` — сборка.
 
 **Telegram miniapp** (`telegram-miniapp/package.json`):
+
 - `npm run dev` — локальная разработка.
 - `npm run build` — сборка.
 
@@ -97,12 +100,14 @@ FoodMiniApp — система онлайн‑заказа еды с Telegram Mi
 ### Основные API‑эндпоинты
 
 **Публичные и пользовательские**
+
 - `GET /api/client/loyalty/balance` — баланс, уровень, прогресс и истекающие бонусы.
 - `GET /api/client/loyalty/calculate-max-spend` — расчет максимального списания.
 - `GET /api/client/loyalty/history` — история транзакций.
 - `GET /api/client/loyalty/levels` — уровни и прогресс.
 
 **Административные**
+
 - `GET /api/admin/loyalty/status` — статус модуля.
 - `PUT /api/admin/loyalty/toggle` — включение/выключение.
 - `POST /api/admin/loyalty/adjust` — корректировка баланса.
@@ -113,6 +118,7 @@ FoodMiniApp — система онлайн‑заказа еды с Telegram Mi
 - Управление меню, заказами, клиентами, городами и филиалами.
 - Контроль лояльности: уровни, включение модуля, исключения, аудит.
 - Логи админских действий и системные события.
+- Стоп‑лист по филиалам с выбором типа (товар/продукция), способов получения и опциональным автоснятием по времени.
 
 ## Telegram Mini App
 

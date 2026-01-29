@@ -132,11 +132,20 @@ router.get("/", async (req, res, next) => {
           item.price = prices.length > 0 ? prices[0].price : null;
         }
         if (branch_id) {
-          const [stopList] = await db.query(
-            `SELECT id FROM menu_stop_list
-             WHERE branch_id = ? AND entity_type = 'item' AND entity_id = ?`,
-            [branch_id, item.id],
-          );
+          const stopListQuery = fulfillment_type
+            ? `SELECT id FROM menu_stop_list
+               WHERE branch_id = ?
+                 AND entity_type = 'item'
+                 AND entity_id = ?
+                 AND (remove_at IS NULL OR remove_at > NOW())
+                 AND (fulfillment_types IS NULL OR JSON_CONTAINS(fulfillment_types, JSON_QUOTE(?)))`
+            : `SELECT id FROM menu_stop_list
+               WHERE branch_id = ?
+                 AND entity_type = 'item'
+                 AND entity_id = ?
+                 AND (remove_at IS NULL OR remove_at > NOW())`;
+          const params = fulfillment_type ? [branch_id, item.id, fulfillment_type] : [branch_id, item.id];
+          const [stopList] = await db.query(stopListQuery, params);
           item.in_stop_list = stopList.length > 0;
         } else {
           item.in_stop_list = false;
@@ -176,11 +185,20 @@ router.get("/", async (req, res, next) => {
             variant.price = variantPrices.length > 0 ? variantPrices[0].price : null;
           }
           if (branch_id) {
-            const [stopList] = await db.query(
-              `SELECT id FROM menu_stop_list
-               WHERE branch_id = ? AND entity_type = 'variant' AND entity_id = ?`,
-              [branch_id, variant.id],
-            );
+            const stopListQuery = fulfillment_type
+              ? `SELECT id FROM menu_stop_list
+                 WHERE branch_id = ?
+                   AND entity_type = 'variant'
+                   AND entity_id = ?
+                   AND (remove_at IS NULL OR remove_at > NOW())
+                   AND (fulfillment_types IS NULL OR JSON_CONTAINS(fulfillment_types, JSON_QUOTE(?)))`
+              : `SELECT id FROM menu_stop_list
+                 WHERE branch_id = ?
+                   AND entity_type = 'variant'
+                   AND entity_id = ?
+                   AND (remove_at IS NULL OR remove_at > NOW())`;
+            const params = fulfillment_type ? [branch_id, variant.id, fulfillment_type] : [branch_id, variant.id];
+            const [stopList] = await db.query(stopListQuery, params);
             variant.in_stop_list = stopList.length > 0;
           } else {
             variant.in_stop_list = false;
@@ -218,11 +236,20 @@ router.get("/", async (req, res, next) => {
               modifier.variant_prices = variantPrices;
             }
             if (branch_id) {
-              const [stopList] = await db.query(
-                `SELECT id FROM menu_stop_list
-                 WHERE branch_id = ? AND entity_type = 'modifier' AND entity_id = ?`,
-                [branch_id, modifier.id],
-              );
+              const stopListQuery = fulfillment_type
+                ? `SELECT id FROM menu_stop_list
+                   WHERE branch_id = ?
+                     AND entity_type = 'modifier'
+                     AND entity_id = ?
+                     AND (remove_at IS NULL OR remove_at > NOW())
+                     AND (fulfillment_types IS NULL OR JSON_CONTAINS(fulfillment_types, JSON_QUOTE(?)))`
+                : `SELECT id FROM menu_stop_list
+                   WHERE branch_id = ?
+                     AND entity_type = 'modifier'
+                     AND entity_id = ?
+                     AND (remove_at IS NULL OR remove_at > NOW())`;
+              const params = fulfillment_type ? [branch_id, modifier.id, fulfillment_type] : [branch_id, modifier.id];
+              const [stopList] = await db.query(stopListQuery, params);
               modifier.in_stop_list = stopList.length > 0;
             } else {
               modifier.in_stop_list = false;
@@ -2422,8 +2449,8 @@ router.get("/admin/stop-list", authenticateToken, requireRole("admin", "manager"
       params.push(branch_id);
     }
     const [stopList] = await db.query(
-      `SELECT msl.id, msl.branch_id, msl.entity_type, msl.entity_id, msl.reason, 
-              msl.created_at, msl.created_by,
+      `SELECT msl.id, msl.branch_id, msl.entity_type, msl.entity_id, msl.fulfillment_types,
+              msl.reason, msl.auto_remove, msl.remove_at, msl.created_at, msl.created_by,
               COALESCE(NULLIF(CONCAT(au.first_name, ' ', au.last_name), ' '), au.email) as created_by_username,
               CASE 
                 WHEN msl.entity_type = 'item' THEN mi.name
@@ -2522,12 +2549,21 @@ router.delete("/admin/stop-list-reasons/:id", authenticateToken, requireRole("ad
 });
 router.post("/admin/stop-list", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
   try {
-    const { branch_id, entity_type, entity_id, reason } = req.body;
+    const { branch_id, entity_type, entity_id, reason, fulfillment_types, auto_remove, remove_at } = req.body;
     if (!branch_id || !entity_type || !entity_id) {
       return res.status(400).json({ error: "branch_id, entity_type, and entity_id are required" });
     }
     if (!["item", "variant", "modifier"].includes(entity_type)) {
       return res.status(400).json({ error: "Invalid entity_type" });
+    }
+    const allowedFulfillment = ["delivery", "pickup", "dine_in"];
+    const normalizedFulfillment = Array.isArray(fulfillment_types)
+      ? Array.from(new Set(fulfillment_types.filter((type) => allowedFulfillment.includes(type))))
+      : null;
+    const autoRemove = Boolean(auto_remove);
+    const removeAtValue = autoRemove ? remove_at : null;
+    if (autoRemove && (!removeAtValue || Number.isNaN(Date.parse(removeAtValue)))) {
+      return res.status(400).json({ error: "remove_at is required for auto_remove" });
     }
     const [branches] = await db.query("SELECT id FROM branches WHERE id = ?", [branch_id]);
     if (branches.length === 0) {
@@ -2542,10 +2578,24 @@ router.post("/admin/stop-list", authenticateToken, requireRole("admin", "manager
       return res.status(404).json({ error: `${entity_type} not found` });
     }
     await db.query(
-      `INSERT INTO menu_stop_list (branch_id, entity_type, entity_id, reason, created_by)
-       VALUES (?, ?, ?, ?, ?)
-       ON DUPLICATE KEY UPDATE reason = VALUES(reason), created_by = VALUES(created_by)`,
-      [branch_id, entity_type, entity_id, reason || null, req.user.id],
+      `INSERT INTO menu_stop_list (branch_id, entity_type, entity_id, fulfillment_types, reason, auto_remove, remove_at, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE
+         fulfillment_types = VALUES(fulfillment_types),
+         reason = VALUES(reason),
+         auto_remove = VALUES(auto_remove),
+         remove_at = VALUES(remove_at),
+         created_by = VALUES(created_by)`,
+      [
+        branch_id,
+        entity_type,
+        entity_id,
+        normalizedFulfillment && normalizedFulfillment.length > 0 ? JSON.stringify(normalizedFulfillment) : null,
+        reason || null,
+        autoRemove,
+        removeAtValue,
+        req.user.id,
+      ],
     );
     await invalidateAllMenuCache();
     res.status(201).json({ message: "Added to stop list successfully" });

@@ -460,7 +460,10 @@ CREATE TABLE `menu_stop_list` (
   `branch_id` int NOT NULL,
   `entity_type` enum('item','variant','modifier') COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'Тип сущности: блюдо, вариация, модификатор',
   `entity_id` int NOT NULL COMMENT 'ID блюда, вариации или модификатора',
+  `fulfillment_types` json DEFAULT NULL COMMENT 'Способы получения',
   `reason` text COLLATE utf8mb4_unicode_ci COMMENT 'Причина добавления в стоп-лист',
+  `auto_remove` tinyint(1) NOT NULL DEFAULT '0' COMMENT 'Автоматически снять со стопа',
+  `remove_at` timestamp NULL DEFAULT NULL COMMENT 'Дата автоматического снятия',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   `created_by` int DEFAULT NULL COMMENT 'ID администратора, добавившего в стоп-лист',
   PRIMARY KEY (`id`),
@@ -468,6 +471,7 @@ CREATE TABLE `menu_stop_list` (
   KEY `created_by` (`created_by`),
   KEY `idx_branch` (`branch_id`),
   KEY `idx_entity` (`entity_type`,`entity_id`),
+  KEY `idx_stop_list_remove_at` (`remove_at`),
   CONSTRAINT `menu_stop_list_ibfk_1` FOREIGN KEY (`branch_id`) REFERENCES `branches` (`id`) ON DELETE CASCADE,
   CONSTRAINT `menu_stop_list_ibfk_2` FOREIGN KEY (`created_by`) REFERENCES `admin_users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Стоп-лист позиций по филиалам';

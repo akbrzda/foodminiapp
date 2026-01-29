@@ -165,15 +165,31 @@ export async function getLoyaltyLevelsFromDb(connection = null) {
 }
 
 export async function getTotalSpentForPeriod(userId, periodDays = LOYALTY_LEVEL_PERIOD_DAYS, executor = db) {
-  const [totals] = await executor.query(
-    `SELECT COALESCE(SUM(GREATEST(0, total - delivery_cost - bonus_spent)), 0) as total_spent
-     FROM orders
-     WHERE user_id = ?
-       AND status IN ('delivered','completed')
-       AND created_at >= (NOW() - INTERVAL ? DAY)`,
-    [userId, periodDays],
-  );
-  return parseFloat(totals[0]?.total_spent) || 0;
+  try {
+    const [totals] = await executor.query(
+      `SELECT COALESCE(SUM(GREATEST(0, total - delivery_cost - bonus_spent)), 0) as total_spent
+       FROM orders
+       WHERE user_id = ?
+         AND status IN ('delivered','completed')
+         AND created_at >= (NOW() - INTERVAL ? DAY)`,
+      [userId, periodDays],
+    );
+    return parseFloat(totals[0]?.total_spent) || 0;
+  } catch (error) {
+    // Фолбек для старой схемы с колонкой bonus_used
+    if (String(error?.message || "").includes("bonus_spent")) {
+      const [totals] = await executor.query(
+        `SELECT COALESCE(SUM(GREATEST(0, total - delivery_cost - bonus_used)), 0) as total_spent
+         FROM orders
+         WHERE user_id = ?
+           AND status IN ('delivered','completed')
+           AND created_at >= (NOW() - INTERVAL ? DAY)`,
+        [userId, periodDays],
+      );
+      return parseFloat(totals[0]?.total_spent) || 0;
+    }
+    throw error;
+  }
 }
 export function getRedeemPercentForLevel(levelId = 1, levels = DEFAULT_LOYALTY_LEVELS, fallback = 0.25) {
   const level = levels[levelId];
@@ -574,7 +590,6 @@ export async function cancelOrderBonuses(order, connection = null, levels = DEFA
   await executor.query("UPDATE orders SET bonus_spent = 0 WHERE id = ?", [order.id]);
   return { spent: spentTotal, earned: earnedTotal, balance_after: newBalance };
 }
-
 
 export async function applyManualBonusAdjustment({ userId, delta, description, connection = null, adminId = null }) {
   const executor = connection || db;
