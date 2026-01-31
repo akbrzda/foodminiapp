@@ -105,7 +105,7 @@ import TableHead from "../components/ui/TableHead.vue";
 import TableHeader from "../components/ui/TableHeader.vue";
 import TableRow from "../components/ui/TableRow.vue";
 import SegmentBuilder from "../components/broadcasts/SegmentBuilder.vue";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../components/ui/dialog.old/index.js";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../components/ui/dialog/index.js";
 import { useNotifications } from "../composables/useNotifications.js";
 import { formatDateTime, formatNumber } from "../utils/format.js";
 
