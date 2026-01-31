@@ -1198,6 +1198,19 @@ const handleOrderStatusUpdate = async (req, res, next, forcedStatus = null) => {
     } catch (telegramError) {
       console.error("Failed to send Telegram notification:", telegramError);
     }
+    if (status === "completed" && oldStatus !== "completed") {
+      try {
+        const { recordConversionForOrder } = await import("../modules/broadcasts/services/statisticsService.js");
+        await recordConversionForOrder({
+          id: orderId,
+          user_id: userId,
+          total: orderTotal,
+          created_at: updatedOrders[0].created_at || new Date(),
+        });
+      } catch (conversionError) {
+        console.error("Failed to record broadcast conversion:", conversionError);
+      }
+    }
     res.json({ order: updatedOrders[0] });
   } catch (error) {
     await connection.rollback();

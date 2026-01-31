@@ -29,3 +29,11 @@ export function normalizeImageUrl(url) {
   if (!base) return url.startsWith("/") ? url : `/${url}`;
   return url.startsWith("/") ? `${base}${url}` : `${base}/${url}`;
 }
+
+export function normalizeBoolean(value, fallback = false) {
+  if (value === null || value === undefined) return fallback;
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value === 1;
+  if (typeof value === "string") return value === "1" || value.toLowerCase() === "true";
+  return Boolean(value);
+}

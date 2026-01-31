@@ -214,7 +214,7 @@ import TableHeader from "../components/ui/TableHeader.vue";
 import TableRow from "../components/ui/TableRow.vue";
 import Tabs from "../components/ui/Tabs.vue";
 import { useNotifications } from "../composables/useNotifications.js";
-import { formatNumber } from "../utils/format.js";
+import { formatNumber, normalizeBoolean } from "../utils/format.js";
 
 const moduleItems = ref([]);
 const moduleForm = ref({});
@@ -327,7 +327,7 @@ const openModal = (reason = null) => {
     ? {
         name: reason.name,
         sort_order: reason.sort_order || 0,
-        is_active: reason.is_active,
+        is_active: normalizeBoolean(reason.is_active, true),
       }
     : {
         name: "",

@@ -6,6 +6,7 @@ export const useOrdersStore = defineStore("orders", {
     newOrdersCount: 0,
     lastEvent: null,
     lastBonusEvent: null,
+    lastBroadcastEvent: null,
     statusById: {},
     ws: null,
     connecting: false,
@@ -27,6 +28,10 @@ export const useOrdersStore = defineStore("orders", {
     applyOrderEvent(payload) {
       this.lastEvent = payload ? { ...payload, receivedAt: Date.now() } : null;
       if (!payload?.type) return;
+      if (payload.type.startsWith("broadcast:")) {
+        this.lastBroadcastEvent = { ...payload, receivedAt: Date.now() };
+        return;
+      }
       if (payload.type === "bonus-updated") {
         this.lastBonusEvent = { ...payload, receivedAt: Date.now() };
         return;

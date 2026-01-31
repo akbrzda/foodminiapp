@@ -88,6 +88,23 @@ router.post("/tags/:id", authenticateToken, upload.single("image"), async (req, 
     res.status(500).json({ error: "Failed to upload image" });
   }
 });
+router.post("/broadcasts/:id", authenticateToken, upload.single("image"), async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!req.file) {
+      return res.status(400).json({ error: "Файл изображения не получен" });
+    }
+    const entityId = id === "temp" ? `temp-${Date.now()}` : parseInt(id);
+    const result = await processAndSaveImage(req.file.buffer, IMAGE_CATEGORIES.BROADCASTS, entityId);
+    res.json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    console.error("Upload error:", error);
+    res.status(500).json({ error: "Не удалось загрузить изображение" });
+  }
+});
 router.delete("/:category/:id/:filename", authenticateToken, async (req, res) => {
   try {
     const { category, id, filename } = req.params;

@@ -50,10 +50,14 @@ class WSServer {
     this.userConnections.get(userId).add(ws);
     if (role === "admin" || role === "ceo") {
       this.joinRoom(ws, "admin-orders");
-    } else if (role === "manager" && city_ids) {
-      city_ids.forEach((cityId) => {
-        this.joinRoom(ws, `city-${cityId}-orders`);
-      });
+      this.joinRoom(ws, "admin-broadcasts");
+    } else if (role === "manager") {
+      if (city_ids) {
+        city_ids.forEach((cityId) => {
+          this.joinRoom(ws, `city-${cityId}-orders`);
+        });
+      }
+      this.joinRoom(ws, "admin-broadcasts");
     }
     this.joinRoom(ws, `user-${userId}`);
     this.send(ws, {
@@ -209,6 +213,40 @@ class WSServer {
       },
     };
     this.sendToUser(userId, message);
+  }
+  notifyBroadcastStatsUpdate(campaignId, stats) {
+    const message = {
+      type: "broadcast:stats:update",
+      data: {
+        campaignId,
+        stats,
+        timestamp: new Date().toISOString(),
+      },
+    };
+    this.sendToRoom("admin-broadcasts", message);
+  }
+  notifyBroadcastStatusChange(campaignId, status, extra = {}) {
+    const message = {
+      type: "broadcast:status:change",
+      data: {
+        campaignId,
+        status,
+        ...extra,
+        timestamp: new Date().toISOString(),
+      },
+    };
+    this.sendToRoom("admin-broadcasts", message);
+  }
+  notifyBroadcastCompleted(campaignId, summary = {}) {
+    const message = {
+      type: "broadcast:completed",
+      data: {
+        campaignId,
+        summary,
+        timestamp: new Date().toISOString(),
+      },
+    };
+    this.sendToRoom("admin-broadcasts", message);
   }
   startHeartbeat() {
     this.heartbeatInterval = setInterval(() => {

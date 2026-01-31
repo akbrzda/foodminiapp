@@ -18,6 +18,10 @@
         <div class="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
           {{ initials }}
         </div>
+        <Button variant="outline" size="sm" @click="openShiftPage">
+          <ExternalLink :size="16" />
+          Текущая смена
+        </Button>
         <Button variant="outline" size="sm" @click="authStore.logout()">
           <LogOut :size="16" />
           Выйти
@@ -28,7 +32,7 @@
 </template>
 <script setup>
 import { computed } from "vue";
-import { LogOut, Menu } from "lucide-vue-next";
+import { LogOut, Menu, ExternalLink } from "lucide-vue-next";
 import { useAuthStore } from "../stores/auth.js";
 import Button from "./ui/Button.vue";
 
@@ -44,4 +48,7 @@ const initials = computed(() => {
   const last = authStore.user?.last_name?.[0] || "";
   return `${first}${last}`.toUpperCase() || "PA";
 });
+const openShiftPage = () => {
+  window.open("/shift", "_blank");
+};
 </script>

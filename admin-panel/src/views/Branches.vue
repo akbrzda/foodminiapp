@@ -182,6 +182,7 @@ import TableHead from "../components/ui/TableHead.vue";
 import TableHeader from "../components/ui/TableHeader.vue";
 import TableRow from "../components/ui/TableRow.vue";
 import { useNotifications } from "../composables/useNotifications.js";
+import { normalizeBoolean } from "../utils/format.js";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -274,7 +275,7 @@ const openModal = (branch = null) => {
       working_hours: workingHours,
       prep_time: Number(branch.prep_time || 0),
       assembly_time: Number(branch.assembly_time || 0),
-      is_active: branch.is_active,
+      is_active: normalizeBoolean(branch.is_active, true),
     };
   } else {
     form.value = {

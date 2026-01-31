@@ -55,6 +55,10 @@
             <Users :size="18" />
             <span v-if="!isCollapsed">Клиенты</span>
           </RouterLink>
+          <RouterLink class="nav-link" to="/broadcasts" @click="emit('navigate')">
+            <Megaphone :size="18" />
+            <span v-if="!isCollapsed">Рассылки</span>
+          </RouterLink>
           <div v-if="!isCollapsed" class="mt-4 text-xs font-semibold uppercase text-muted-foreground">Меню</div>
           <RouterLink class="nav-link" to="/menu/categories" @click="emit('navigate')">
             <ListTree :size="18" />
@@ -131,6 +135,7 @@ import {
   ListChecks,
   Map,
   MapPinned,
+  Megaphone,
   Radio,
   SlidersHorizontal,
   Tag,

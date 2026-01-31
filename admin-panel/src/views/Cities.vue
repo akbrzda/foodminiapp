@@ -23,6 +23,7 @@
             <TableRow>
               <TableHead>Город</TableHead>
               <TableHead>Координаты</TableHead>
+              <TableHead>Часовой пояс</TableHead>
               <TableHead>Статус</TableHead>
               <TableHead class="text-right">Действия</TableHead>
             </TableRow>
@@ -37,6 +38,11 @@
                 <div class="flex items-center gap-2 text-sm text-muted-foreground">
                   <MapPin :size="14" />
                   {{ city.latitude && city.longitude ? `${city.latitude}, ${city.longitude}` : "—" }}
+                </div>
+              </TableCell>
+              <TableCell>
+                <div class="text-sm text-muted-foreground">
+                  {{ city.timezone || "Europe/Moscow" }}
                 </div>
               </TableCell>
               <TableCell>
@@ -93,6 +99,14 @@
             <option :value="false">Неактивен</option>
           </Select>
         </div>
+        <div class="space-y-2">
+          <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Часовой пояс</label>
+          <Select v-model="form.timezone">
+            <option v-for="zone in timezoneOptions" :key="zone.value" :value="zone.value">
+              {{ zone.label }}
+            </option>
+          </Select>
+        </div>
         <Button class="w-full" type="submit">
           <Save :size="16" />
           Сохранить
@@ -123,6 +137,7 @@ import TableHead from "../components/ui/TableHead.vue";
 import TableHeader from "../components/ui/TableHeader.vue";
 import TableRow from "../components/ui/TableRow.vue";
 import { useNotifications } from "../composables/useNotifications.js";
+import { normalizeBoolean } from "../utils/format.js";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -162,8 +177,22 @@ const form = ref({
   name: "",
   latitude: null,
   longitude: null,
+  timezone: "Europe/Moscow",
   is_active: true,
 });
+const timezoneOptions = [
+  { value: "Europe/Kaliningrad", label: "Europe/Kaliningrad (UTC+2)" },
+  { value: "Europe/Moscow", label: "Europe/Moscow (UTC+3)" },
+  { value: "Europe/Samara", label: "Europe/Samara (UTC+4)" },
+  { value: "Asia/Yekaterinburg", label: "Asia/Yekaterinburg (UTC+5)" },
+  { value: "Asia/Omsk", label: "Asia/Omsk (UTC+6)" },
+  { value: "Asia/Krasnoyarsk", label: "Asia/Krasnoyarsk (UTC+7)" },
+  { value: "Asia/Irkutsk", label: "Asia/Irkutsk (UTC+8)" },
+  { value: "Asia/Yakutsk", label: "Asia/Yakutsk (UTC+9)" },
+  { value: "Asia/Vladivostok", label: "Asia/Vladivostok (UTC+10)" },
+  { value: "Asia/Magadan", label: "Asia/Magadan (UTC+11)" },
+  { value: "Asia/Kamchatka", label: "Asia/Kamchatka (UTC+12)" },
+];
 let cityMap = null;
 let cityMarker = null;
 const modalTitle = computed(() => (editing.value ? "Редактировать город" : "Новый город"));
@@ -183,7 +212,8 @@ const openModal = (city = null) => {
       name: city.name,
       latitude: city.latitude,
       longitude: city.longitude,
-      is_active: city.is_active,
+      timezone: city.timezone || "Europe/Moscow",
+      is_active: normalizeBoolean(city.is_active, true),
     };
     searchQuery.value = city.name;
   } else {
@@ -191,6 +221,7 @@ const openModal = (city = null) => {
       name: "",
       latitude: null,
       longitude: null,
+      timezone: "Europe/Moscow",
       is_active: true,
     };
     searchQuery.value = "";

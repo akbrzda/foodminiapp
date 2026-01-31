@@ -184,6 +184,7 @@ import TableHead from "../components/ui/TableHead.vue";
 import TableHeader from "../components/ui/TableHeader.vue";
 import TableRow from "../components/ui/TableRow.vue";
 import { useNotifications } from "../composables/useNotifications.js";
+import { normalizeBoolean } from "../utils/format.js";
 const referenceStore = useReferenceStore();
 const authStore = useAuthStore();
 const { showErrorNotification } = useNotifications();
@@ -255,7 +256,7 @@ const openModal = (user = null) => {
       email: user.email,
       password: "",
       role: user.role,
-      is_active: user.is_active,
+      is_active: normalizeBoolean(user.is_active, true),
       telegram_id: user.telegram_id || "",
       city_ids: user.cities?.map((c) => c.id) || [],
       branch_ids: user.branches?.map((branch) => branch.id) || [],

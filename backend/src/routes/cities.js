@@ -96,7 +96,7 @@ router.post("/admin", authenticateToken, requireRole("admin", "ceo"), async (req
     const [result] = await db.query(
       `INSERT INTO cities (name, latitude, longitude, timezone)
          VALUES (?, ?, ?, ?)`,
-      [name, latitude || null, longitude || null, timezone || "UTC"],
+      [name, latitude || null, longitude || null, timezone || "Europe/Moscow"],
     );
     const [newCity] = await db.query(
       `SELECT id, name, latitude, longitude, timezone, is_active, 

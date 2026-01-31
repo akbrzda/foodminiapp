@@ -125,7 +125,7 @@ import TableHeader from "../components/ui/TableHeader.vue";
 import TableRow from "../components/ui/TableRow.vue";
 import Textarea from "../components/ui/Textarea.vue";
 import { useNotifications } from "../composables/useNotifications.js";
-import { formatNumber } from "../utils/format.js";
+import { formatNumber, normalizeBoolean } from "../utils/format.js";
 import { useReferenceStore } from "../stores/reference.js";
 import { useOrdersStore } from "../stores/orders.js";
 const referenceStore = useReferenceStore();
@@ -173,7 +173,7 @@ const openModal = async (category = null) => {
         description: category.description || "",
         image_url: category.image_url || "",
         sort_order: category.sort_order || 0,
-        is_active: category.is_active,
+        is_active: normalizeBoolean(category.is_active, true),
         city_ids: [],
       }
     : {

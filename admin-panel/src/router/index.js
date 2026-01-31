@@ -23,6 +23,11 @@ import SystemSettings from "../views/SystemSettings.vue";
 import AdminUsers from "../views/AdminUsers.vue";
 import AdminLogs from "../views/AdminLogs.vue";
 import OrderDetail from "../views/OrderDetail.vue";
+import Broadcasts from "../views/Broadcasts.vue";
+import BroadcastForm from "../views/BroadcastForm.vue";
+import BroadcastDetail from "../views/BroadcastDetail.vue";
+import BroadcastSegments from "../views/BroadcastSegments.vue";
+import BroadcastDashboard from "../views/BroadcastDashboard.vue";
 import NotFound from "../views/NotFound.vue";
 const router = createRouter({
   history: createWebHistory(),
@@ -95,6 +100,77 @@ const router = createRouter({
         { path: "menu/modifiers", name: "menu-modifiers", component: MenuModifiers, meta: { title: "Модификаторы", subtitle: "Группы и допы" } },
         { path: "menu/tags", name: "menu-tags", component: MenuTags, meta: { title: "Теги", subtitle: "Метки для фильтрации блюд" } },
         { path: "menu/stop-list", name: "menu-stop-list", component: MenuStopList, meta: { title: "Стоп-лист", subtitle: "Недоступные позиции" } },
+        {
+          path: "broadcasts",
+          name: "broadcasts",
+          component: Broadcasts,
+          meta: { title: "Рассылки", subtitle: "Маркетинговые кампании", breadcrumbs: [{ label: "Рассылки", to: "/broadcasts" }] },
+        },
+        {
+          path: "broadcasts/new",
+          name: "broadcast-new",
+          component: BroadcastForm,
+          meta: {
+            title: "Новая рассылка",
+            subtitle: "Создание кампании",
+            breadcrumbs: [
+              { label: "Рассылки", to: "/broadcasts" },
+              { label: "Новая рассылка" },
+            ],
+          },
+        },
+        {
+          path: "broadcasts/:id/edit",
+          name: "broadcast-edit",
+          component: BroadcastForm,
+          meta: {
+            title: "Редактирование рассылки",
+            subtitle: "Настройка кампании",
+            breadcrumbs: [
+              { label: "Рассылки", to: "/broadcasts" },
+              { label: "Редактирование" },
+            ],
+          },
+        },
+        {
+          path: "broadcasts/:id",
+          name: "broadcast-detail",
+          component: BroadcastDetail,
+          meta: {
+            title: "Статистика рассылки",
+            subtitle: "Детальный отчет",
+            breadcrumbs: [
+              { label: "Рассылки", to: "/broadcasts" },
+              { label: "Статистика" },
+            ],
+          },
+        },
+        {
+          path: "broadcasts/segments",
+          name: "broadcast-segments",
+          component: BroadcastSegments,
+          meta: {
+            title: "Сегменты",
+            subtitle: "Сохраненные аудитории",
+            breadcrumbs: [
+              { label: "Рассылки", to: "/broadcasts" },
+              { label: "Сегменты" },
+            ],
+          },
+        },
+        {
+          path: "broadcasts/dashboard",
+          name: "broadcast-dashboard",
+          component: BroadcastDashboard,
+          meta: {
+            title: "Дашборд рассылок",
+            subtitle: "Сводная аналитика",
+            breadcrumbs: [
+              { label: "Рассылки", to: "/broadcasts" },
+              { label: "Дашборд" },
+            ],
+          },
+        },
         {
           path: "system/settings",
           name: "system-settings",

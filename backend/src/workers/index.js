@@ -3,6 +3,8 @@ import { createImageWorker } from "./image.worker.js";
 import { createOrderAutoStatusWorker } from "./orderAutoStatus.worker.js";
 import { createBonusExpiryWorker } from "./bonusExpiry.worker.js";
 import { createBirthdayBonusWorker } from "./birthdayBonus.worker.js";
+import { createBroadcastWorker } from "./broadcast.worker.js";
+import { createTriggerWorker } from "./trigger.worker.js";
 import IORedis from "ioredis";
 import dotenv from "dotenv";
 import { logger } from "../utils/logger.js";
@@ -18,6 +20,8 @@ let imageWorker;
 let orderAutoStatusWorker;
 let bonusExpiryWorker;
 let birthdayBonusWorker;
+let broadcastWorker;
+let triggerWorker;
 export async function startWorkers() {
   try {
     telegramWorker = createTelegramWorker(redisConnection);
@@ -25,9 +29,13 @@ export async function startWorkers() {
     orderAutoStatusWorker = createOrderAutoStatusWorker();
     bonusExpiryWorker = createBonusExpiryWorker();
     birthdayBonusWorker = createBirthdayBonusWorker();
+    broadcastWorker = createBroadcastWorker();
+    triggerWorker = createTriggerWorker();
     orderAutoStatusWorker.start();
     bonusExpiryWorker.start();
     birthdayBonusWorker.start();
+    broadcastWorker.start();
+    triggerWorker.start();
     logger.system.startup("Background workers started");
     return {
       telegramWorker,
@@ -56,6 +64,12 @@ export async function stopWorkers() {
     }
     if (birthdayBonusWorker) {
       birthdayBonusWorker.stop();
+    }
+    if (broadcastWorker) {
+      broadcastWorker.stop();
+    }
+    if (triggerWorker) {
+      triggerWorker.stop();
     }
     await Promise.all(promises);
     logger.system.shutdown("Background workers stopped");

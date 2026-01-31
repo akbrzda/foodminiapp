@@ -11,6 +11,7 @@ export const IMAGE_CATEGORIES = {
   MODIFIERS: "modifiers",
   MODIFIER_GROUPS: "modifier-groups",
   TAGS: "tags",
+  BROADCASTS: "broadcasts",
 };
 export function getUploadPath(category, entityId) {
   return path.join(CDN_IMAGES_PATH, category, String(entityId));

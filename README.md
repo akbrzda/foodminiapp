@@ -28,6 +28,7 @@ FoodMiniApp — система онлайн‑заказа еды с Telegram Mi
 - **Настройки системы**: глобальные флаги и включение модуля лояльности.
 - **Логи и аудит**: логи админских действий, проверки целостности.
 - **Уведомления**: WebSocket‑события и Telegram‑уведомления.
+- **Маркетинговые рассылки**: сегментация аудитории, кампании, очередь, клики и конверсии.
 
 ## Запуск
 
@@ -70,11 +71,61 @@ FoodMiniApp — система онлайн‑заказа еды с Telegram Mi
 
 - `users`, `user_states`, `delivery_addresses` — пользователи и их данные.
 - `cities`, `branches`, `delivery_polygons` — доставка.
-- `cities.timezone` — IANA‑таймзона города для расчёта смены.
+- `cities.timezone`, `users.timezone` — IANA‑таймзоны для корректных рассылок и расчёта смены.
 - `menu_categories`, `menu_items`, `item_variants`, `modifier_groups`, `modifiers`, `menu_modifiers` — меню.
 - `orders`, `order_items`, `order_item_modifiers` — заказы.
 - `loyalty_*` — система лояльности.
 - `admin_users`, `admin_user_cities`, `admin_user_branches`, `admin_action_logs` — админ‑панель и аудит.
+- `broadcast_*` — модуль рассылок: сегменты, кампании, сообщения, очередь, клики, конверсии, статистика, лог триггеров.
+
+### Основные эндпоинты рассылок
+
+- `GET /api/broadcasts` — список кампаний.
+- `POST /api/broadcasts` — создание кампании.
+- `POST /api/broadcasts/:id/send` — запуск отправки.
+- `POST /api/broadcasts/:id/preview` — предпросмотр для пользователя.
+- `POST /api/broadcasts/:id/test` — тестовая отправка.
+- `GET /api/broadcasts/:id/stats` — статистика кампании.
+- `GET /api/broadcasts/dashboard` — дашборд аналитики.
+- `GET /api/broadcasts/segments` — сегменты.
+- `POST /api/broadcasts/telegram/callback` — обработка callback_query от Telegram (клики по кнопкам).
+
+### WebSocket события рассылок
+
+События отправляются в комнату `admin-broadcasts`:
+
+- `broadcast:stats:update` — обновление метрик рассылки.
+- `broadcast:status:change` — изменение статуса рассылки.
+- `broadcast:completed` — завершение рассылки.
+
+### Конфигурация рассылок
+
+Переменные окружения backend (`backend/.env`):
+
+- `BROADCAST_WORKER_ENABLED` — включить воркер рассылок.
+- `BROADCAST_WORKER_BATCH_SIZE` — размер батча очереди.
+- `BROADCAST_WORKER_INTERVAL_MS` — интервал обработки.
+- `BROADCAST_RATE_LIMIT` — лимит Telegram (сообщений/сек).
+- `BROADCAST_RETRY_MAX` — количество повторов.
+- `BROADCAST_RETRY_DELAYS` — задержки повторов, в секундах.
+- `BROADCAST_CONVERSION_WINDOW_DAYS` — окно конверсии, дней.
+- `BROADCAST_IMAGE_MAX_SIZE_MB` — лимит изображения, МБ.
+- `BROADCAST_WS_STATS_EVERY` — частота WS обновлений по отправке.
+- `BROADCAST_WS_STATS_FAIL_EVERY` — частота WS обновлений по ошибкам.
+
+### Развертывание рассылок
+
+- Примените миграцию `backend/database/migrations/20260131_add_broadcast_module.sql` или `npm run migrate`.
+- Убедитесь, что `backend/database/schema.sql` синхронизирован со схемой.
+- Настройте `TELEGRAM_BOT_TOKEN` и webhook Telegram на путь `/api/broadcasts/telegram/callback`, если используются callback-кнопки.
+- Запускайте воркеры вместе с API (`npm run start`) либо отдельным процессом (`npm run worker`).
+
+### Проверка рассылок
+
+- Создайте рассылку с сегментом и отправьте тест на свой Telegram ID.
+- Проверьте обработку плейсхолдеров через предпросмотр.
+- Запустите отправку и убедитесь, что статус меняется на `sending`/`completed`.
+- Нажмите callback-кнопку и проверьте рост кликов.
 
 ## Лояльность
 
