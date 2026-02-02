@@ -13,10 +13,7 @@
       </CardContent>
     </Card>
     <Card>
-      <CardHeader>
-        <CardTitle>Список тегов</CardTitle>
-      </CardHeader>
-      <CardContent class="pt-0">
+      <CardContent class="!p-0">
         <Table v-if="tags.length > 0">
           <TableHeader>
             <TableRow>
@@ -59,50 +56,63 @@
         </div>
       </CardContent>
     </Card>
-    <BaseModal v-if="showModal" :title="modalTitle" :subtitle="modalSubtitle" @close="closeModal">
-      <form class="space-y-4" @submit.prevent="submitTag">
-        <div class="space-y-2">
-          <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Название*</label>
-          <Input v-model="form.name" required placeholder="Например: Острое, Веган" />
-        </div>
-        <div class="space-y-2">
-          <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Иконка (эмодзи)</label>
-          <Input v-model="form.icon" placeholder="🌶️" maxlength="10" />
-          <p class="text-xs text-muted-foreground">Используйте эмодзи для визуального отображения тега</p>
-        </div>
-        <div class="space-y-2">
-          <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Цвет</label>
-          <div class="flex gap-2">
-            <Input v-model="form.color" placeholder="#FF6B6B" maxlength="7" class="flex-1" />
-            <input type="color" v-model="form.color" class="h-10 w-12 cursor-pointer rounded border" />
-          </div>
-          <p class="text-xs text-muted-foreground">Выберите цвет для отображения тега в интерфейсе</p>
-        </div>
-        <Button class="w-full" type="submit">
-          <Save :size="16" />
-          Сохранить
-        </Button>
-      </form>
-    </BaseModal>
+    <Dialog v-if="showModal" :open="showModal" @update:open="(value) => (value ? null : closeModal())">
+      <DialogContent class="w-full max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>{{ modalTitle }}</DialogTitle>
+          <DialogDescription>{{ modalSubtitle }}</DialogDescription>
+        </DialogHeader>
+        <form class="space-y-4" @submit.prevent="submitTag">
+          <FieldGroup>
+            <Field>
+              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Название*</FieldLabel>
+              <FieldContent>
+                <Input v-model="form.name" required placeholder="Например: Острое, Веган" />
+              </FieldContent>
+            </Field>
+            <Field>
+              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Иконка (эмодзи)</FieldLabel>
+              <FieldContent>
+                <Input v-model="form.icon" placeholder="🌶️" maxlength="10" />
+                <p class="text-xs text-muted-foreground">Используйте эмодзи для визуального отображения тега</p>
+              </FieldContent>
+            </Field>
+            <Field>
+              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Цвет</FieldLabel>
+              <FieldContent>
+                <div class="flex gap-2">
+                  <Input v-model="form.color" placeholder="#FF6B6B" maxlength="7" class="flex-1" />
+                  <input type="color" v-model="form.color" class="h-10 w-12 cursor-pointer rounded border" />
+                </div>
+                <p class="text-xs text-muted-foreground">Выберите цвет для отображения тега в интерфейсе</p>
+              </FieldContent>
+            </Field>
+          </FieldGroup>
+          <Button class="w-full" type="submit">
+            <Save :size="16" />
+            Сохранить
+          </Button>
+        </form>
+      </DialogContent>
+    </Dialog>
   </div>
 </template>
 <script setup>
 import { computed, onMounted, ref, watch } from "vue";
 import { Plus, Pencil, Trash2, Save } from "lucide-vue-next";
-import BaseModal from "../components/BaseModal.vue";
-import Button from "../components/ui/Button.vue";
-import Card from "../components/ui/Card.vue";
-import CardContent from "../components/ui/CardContent.vue";
-import CardHeader from "../components/ui/CardHeader.vue";
-import CardTitle from "../components/ui/CardTitle.vue";
-import Input from "../components/ui/Input.vue";
+import Button from "../components/ui/button/Button.vue";
+import Card from "../components/ui/card/Card.vue";
+import CardContent from "../components/ui/card/CardContent.vue";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../components/ui/dialog/index.js";
+import Input from "../components/ui/input/Input.vue";
 import PageHeader from "../components/PageHeader.vue";
-import Table from "../components/ui/Table.vue";
-import TableBody from "../components/ui/TableBody.vue";
-import TableCell from "../components/ui/TableCell.vue";
-import TableHead from "../components/ui/TableHead.vue";
-import TableHeader from "../components/ui/TableHeader.vue";
-import TableRow from "../components/ui/TableRow.vue";
+import Table from "../components/ui/table/Table.vue";
+import TableBody from "../components/ui/table/TableBody.vue";
+import TableCell from "../components/ui/table/TableCell.vue";
+import TableHead from "../components/ui/table/TableHead.vue";
+import TableHeader from "../components/ui/table/TableHeader.vue";
+import TableRow from "../components/ui/table/TableRow.vue";
+import { Field, FieldContent, FieldGroup, FieldLabel } from "../components/ui/field";
 import { useNotifications } from "../composables/useNotifications";
 import { useOrdersStore } from "../stores/orders.js";
 import api from "../api/client";

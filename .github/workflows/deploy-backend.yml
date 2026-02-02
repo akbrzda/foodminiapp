@@ -24,6 +24,8 @@ jobs:
         run: npm ci --production
       - name: Create .env file
         working-directory: backend
+        env:
+          BROADCAST_RATE_LIMIT: ${{ secrets.BROADCAST_RATE_LIMIT }}
         run: |
           cat << EOF > .env
           NODE_ENV=${{ secrets.NODE_ENV }}
@@ -45,7 +47,7 @@ jobs:
           BROADCAST_WORKER_ENABLED= ${{ secrets.BROADCAST_WORKER_ENABLED }}
           BROADCAST_WORKER_BATCH_SIZE= ${{ secrets.BROADCAST_WORKER_BATCH_SIZE }}
           BROADCAST_WORKER_INTERVAL_MS=${{ secrets.BROADCAST_WORKER_INTERVAL_MS }}
-          BROADCAST_RATE_LIMIT=${{ secrets.BROADCAST_RATE_LIMIT }}
+          BROADCAST_RATE_LIMIT=${BROADCAST_RATE_LIMIT}
           BROADCAST_RETRY_MAX=${{ secrets.BROADCAST_RETRY_MAX }}
           BROADCAST_RETRY_DELAYS=${{ secrets.BROADCAST_RETRY_DELAYS }}
           BROADCAST_CONVERSION_WINDOW_DAYS=${{ secrets.BROADCAST_CONVERSION_WINDOW_DAYS }}

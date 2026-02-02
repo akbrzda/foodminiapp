@@ -1,175 +1,194 @@
 <template>
   <aside :class="asideClasses">
     <div class="flex h-full flex-col">
-      <div class="flex min-h-[72px] items-center justify-between gap-3 border-b border-border/60 px-4">
-        <div class="flex min-w-0 items-center gap-3">
-          <div v-if="!isCollapsed" class="min-w-0">
-            <p class="text-base font-semibold text-foreground">Управление</p>
-            <p class="text-xs text-muted-foreground">Операционная панель</p>
-          </div>
+      <div :class="['flex items-center', isCollapsed ? 'justify-center py-4' : 'min-h-[72px] gap-3 px-4']">
+        <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+          <UtensilsCrossed :size="20" />
         </div>
-        <div class="flex items-center gap-2">
-          <button
-            v-if="!isMobile"
-            type="button"
-            class="flex h-9 w-9 items-center justify-center rounded-full border border-border/60 text-muted-foreground transition hover:bg-accent/40 hover:text-foreground"
-            :title="collapseTitle"
-            aria-label="Переключить ширину сайдбара"
-            @click="emit('toggle-collapse')"
-          >
-            <ChevronRight v-if="isCollapsed" :size="16" />
-            <ChevronLeft v-else :size="16" />
-          </button>
-          <button
-            type="button"
-            class="flex h-9 w-9 items-center justify-center rounded-full border border-border/60 text-muted-foreground transition hover:bg-accent/40 hover:text-foreground lg:hidden"
-            aria-label="Закрыть меню"
-            @click="emit('close')"
-          >
-            <X :size="16" />
-          </button>
+        <div v-if="!isCollapsed" class="min-w-0">
+          <p class="truncate text-base font-semibold text-foreground">FoodMiniApp</p>
+          <p class="text-xs text-muted-foreground">Админ-панель</p>
         </div>
       </div>
-      <div class="flex-1 overflow-y-auto p-3">
-        <nav class="flex flex-col gap-2 text-sm">
-          <div v-if="!isCollapsed" class="text-xs font-semibold uppercase text-muted-foreground">Операции</div>
-          <RouterLink class="nav-link" to="/dashboard" @click="emit('navigate')">
-            <LayoutDashboard :size="18" />
-            <span v-if="!isCollapsed">Аналитика</span>
-          </RouterLink>
-          <RouterLink class="nav-link relative" to="/orders" @click="emit('navigate')">
-            <ClipboardList :size="18" />
-            <span v-if="!isCollapsed">Заказы</span>
-            <span
-              v-if="newOrdersCount > 0"
-              :class="[
-                'ml-auto inline-flex min-w-[20px] items-center justify-center rounded-full px-1.5 text-[11px] font-semibold absolute',
-                isCollapsed ? 'ml-0 top-1 right-2' : 'right-3',
-              ]"
-              class="bg-amber-100 text-amber-700"
-            >
-              {{ newOrdersCount }}
-            </span>
-          </RouterLink>
-          <RouterLink class="nav-link" to="/clients" @click="emit('navigate')">
-            <Users :size="18" />
-            <span v-if="!isCollapsed">Клиенты</span>
-          </RouterLink>
-          <RouterLink class="nav-link" to="/broadcasts" @click="emit('navigate')">
-            <Megaphone :size="18" />
-            <span v-if="!isCollapsed">Рассылки</span>
-          </RouterLink>
-          <div v-if="!isCollapsed" class="mt-4 text-xs font-semibold uppercase text-muted-foreground">Меню</div>
-          <RouterLink class="nav-link" to="/menu/categories" @click="emit('navigate')">
-            <ListTree :size="18" />
-            <span v-if="!isCollapsed">Категории</span>
-          </RouterLink>
-          <RouterLink class="nav-link" to="/menu/items" @click="emit('navigate')">
-            <UtensilsCrossed :size="18" />
-            <span v-if="!isCollapsed">Позиции</span>
-          </RouterLink>
-          <RouterLink class="nav-link" to="/menu/modifiers" @click="emit('navigate')">
-            <Layers :size="18" />
-            <span v-if="!isCollapsed">Модификаторы</span>
-          </RouterLink>
-          <RouterLink class="nav-link" to="/menu/tags" @click="emit('navigate')">
-            <Tag :size="18" />
-            <span v-if="!isCollapsed">Теги</span>
-          </RouterLink>
-          <RouterLink class="nav-link" to="/menu/stop-list" @click="emit('navigate')">
-            <ListChecks :size="18" />
-            <span v-if="!isCollapsed">Стоп-лист</span>
-          </RouterLink>
-          <div v-if="!isCollapsed" class="mt-4 text-xs font-semibold uppercase text-muted-foreground">Справочники</div>
-          <RouterLink v-if="!isManager" class="nav-link" to="/cities" @click="emit('navigate')">
-            <MapPinned :size="18" />
-            <span v-if="!isCollapsed">Города</span>
-          </RouterLink>
-          <RouterLink v-if="!isManager" class="nav-link" to="/branches" @click="emit('navigate')">
-            <Building2 :size="18" />
-            <span v-if="!isCollapsed">Филиалы</span>
-          </RouterLink>
-          <RouterLink class="nav-link" to="/delivery-zones" @click="emit('navigate')">
-            <Map :size="18" />
-            <span v-if="!isCollapsed">Зоны доставки</span>
-          </RouterLink>
-          <div v-if="!isCollapsed & !isManager" class="mt-4 text-xs font-semibold uppercase text-muted-foreground">Система</div>
-          <RouterLink v-if="!isManager" class="nav-link" to="/system/settings" @click="emit('navigate')">
-            <SlidersHorizontal :size="18" />
-            <span v-if="!isCollapsed">Настройки системы</span>
-          </RouterLink>
-          <RouterLink v-if="!isManager" class="nav-link" to="/admin-users" @click="emit('navigate')">
-            <UserCog :size="18" />
-            <span v-if="!isCollapsed">Пользователи</span>
-          </RouterLink>
-          <RouterLink v-if="!isManager" class="nav-link" to="/logs" @click="emit('navigate')">
-            <FileText :size="18" />
-            <span v-if="!isCollapsed">Логи</span>
-          </RouterLink>
+      <div class="flex-1 overflow-y-auto px-3">
+        <nav :class="['flex flex-col text-sm', isCollapsed ? '' : 'gap-3']">
+          <div v-for="section in navSections" :key="section.id" class="space-y-1">
+            <div v-if="!isCollapsed" class="nav-group-title">
+              {{ section.title }}
+            </div>
+            <div class="flex flex-col gap-1">
+              <RouterLink
+                v-for="item in section.items"
+                :key="item.label"
+                :to="item.to"
+                class="nav-link"
+                :title="item.label"
+                @click="emit('navigate')"
+              >
+                <component :is="item.icon" :size="18" />
+                <span v-if="!isCollapsed" class="truncate">{{ item.label }}</span>
+                <span
+                  v-if="item.badge && item.badge > 0"
+                  :class="[
+                    'ml-auto inline-flex min-w-[20px] items-center justify-center rounded-full px-1.5 text-[11px] font-semibold',
+                    isCollapsed ? 'absolute right-2 top-2' : '',
+                  ]"
+                  class="bg-amber-100 text-amber-700"
+                >
+                  {{ item.badge }}
+                </span>
+              </RouterLink>
+            </div>
+          </div>
         </nav>
       </div>
-      <div v-if="!isCollapsed" class="border-t border-border/60 px-4 py-3 text-xs text-muted-foreground">
-        <div class="mb-1 flex items-center gap-2 text-sm font-semibold text-foreground">
-          <Radio :size="16" />
-          Live Ops
-        </div>
-        <div>Обновления заказов в реальном времени</div>
+      <div class="border-t border-border/60 p-3">
+        <DropdownMenu>
+          <DropdownMenuTrigger as-child>
+            <button
+              type="button"
+              class="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-foreground transition hover:bg-accent/40"
+              :title="userName"
+            >
+              <Avatar class="h-9 w-9">
+                <AvatarFallback>{{ initials }}</AvatarFallback>
+              </Avatar>
+              <div v-if="!isCollapsed" class="min-w-0 flex-1">
+                <div class="truncate font-medium">{{ userName }}</div>
+                <div class="truncate text-xs text-muted-foreground">{{ userRole }}</div>
+              </div>
+              <ChevronsUpDown v-if="!isCollapsed" :size="16" class="text-muted-foreground" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" class="w-56">
+            <DropdownMenuLabel>
+              {{ userName || "Профиль" }}
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem @click="authStore.logout()">
+              <LogOut :size="16" />
+              Выйти
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </div>
   </aside>
 </template>
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed } from "vue";
 import { RouterLink } from "vue-router";
 import { useAuthStore } from "../stores/auth.js";
 import { useOrdersStore } from "../stores/orders.js";
 import {
   Building2,
-  ChevronLeft,
-  ChevronRight,
+  ChevronsUpDown,
   ClipboardList,
   FileText,
   LayoutDashboard,
   Layers,
-  ListTree,
   ListChecks,
+  ListTree,
   Map,
   MapPinned,
   Megaphone,
-  Radio,
   SlidersHorizontal,
   Tag,
   UserCog,
   Users,
   UtensilsCrossed,
-  X,
+  LogOut,
 } from "lucide-vue-next";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+
 const props = defineProps({
   isOpen: { type: Boolean, default: true },
   isCollapsed: { type: Boolean, default: false },
 });
-const emit = defineEmits(["navigate", "close", "toggle-collapse"]);
+
+const emit = defineEmits(["navigate", "close"]);
 const authStore = useAuthStore();
 const ordersStore = useOrdersStore();
 const isManager = computed(() => authStore.role === "manager");
 const newOrdersCount = computed(() => ordersStore.newOrdersCount);
-const isMobile = ref(false);
-const collapseTitle = computed(() => (props.isCollapsed ? "Развернуть меню" : "Свернуть меню"));
-const updateIsMobile = () => {
-  isMobile.value = window.innerWidth < 1024;
-};
-onMounted(() => {
-  updateIsMobile();
-  window.addEventListener("resize", updateIsMobile);
+const initials = computed(() => {
+  const first = authStore.user?.first_name?.[0] || "";
+  const last = authStore.user?.last_name?.[0] || "";
+  return `${first}${last}`.toUpperCase() || "PA";
 });
-onBeforeUnmount(() => {
-  window.removeEventListener("resize", updateIsMobile);
+const userName = computed(() => {
+  const first = authStore.user?.first_name || "";
+  const last = authStore.user?.last_name || "";
+  return `${first} ${last}`.trim() || "Пользователь";
 });
+const userRole = computed(() => authStore.user?.role || "");
+
+const navSections = computed(() => {
+  const sections = [
+    {
+      id: "operations",
+      title: "Операции",
+      items: [
+        { label: "Аналитика", to: "/dashboard", icon: LayoutDashboard },
+        { label: "Заказы", to: "/orders", icon: ClipboardList, badge: newOrdersCount.value },
+        { label: "Клиенты", to: "/clients", icon: Users },
+        { label: "Рассылки", to: "/broadcasts", icon: Megaphone },
+      ],
+    },
+    {
+      id: "menu",
+      title: "Меню",
+      items: [
+        { label: "Категории", to: "/menu/categories", icon: ListTree },
+        { label: "Позиции", to: "/menu/items", icon: UtensilsCrossed },
+        { label: "Модификаторы", to: "/menu/modifiers", icon: Layers },
+        { label: "Теги", to: "/menu/tags", icon: Tag },
+        { label: "Стоп-лист", to: "/menu/stop-list", icon: ListChecks },
+      ],
+    },
+    {
+      id: "references",
+      title: "Справочники",
+      items: [
+        { label: "Города", to: "/cities", icon: MapPinned, visible: !isManager.value },
+        { label: "Филиалы", to: "/branches", icon: Building2, visible: !isManager.value },
+        { label: "Зоны доставки", to: "/delivery-zones", icon: Map },
+      ],
+    },
+    {
+      id: "system",
+      title: "Система",
+      visible: !isManager.value,
+      items: [
+        { label: "Настройки системы", to: "/system/settings", icon: SlidersHorizontal },
+        { label: "Пользователи", to: "/admin-users", icon: UserCog },
+        { label: "Логи", to: "/logs", icon: FileText },
+      ],
+    },
+  ];
+
+  return sections
+    .filter((section) => section.visible !== false)
+    .map((section) => ({
+      ...section,
+      items: section.items.filter((item) => item.visible !== false),
+    }))
+    .filter((section) => section.items.length > 0);
+});
+
 const asideClasses = computed(() => ["sidebar", props.isOpen ? "is-open" : "is-closed", props.isCollapsed ? "is-collapsed" : ""]);
 </script>
 <style scoped>
 .sidebar {
-  @apply relative flex h-screen w-72 shrink-0 flex-col border-r border-border/60 bg-card/90 backdrop-blur transition-transform duration-200 lg:sticky lg:top-0;
+  @apply relative flex h-screen w-60 shrink-0 flex-col border-r border-border/60 bg-card/90 backdrop-blur transition-all duration-200 lg:sticky lg:top-0;
 }
 .sidebar.is-collapsed {
   @apply w-20;
@@ -185,8 +204,11 @@ const asideClasses = computed(() => ["sidebar", props.isOpen ? "is-open" : "is-c
     @apply w-72;
   }
 }
+.nav-group-title {
+  @apply px-3 text-[11px] font-semibold uppercase text-muted-foreground;
+}
 .nav-link {
-  @apply flex min-h-[44px] items-center gap-3 rounded-xl px-3 py-2 text-muted-foreground transition hover:bg-accent/40 hover:text-foreground;
+  @apply relative flex min-h-[44px] items-center gap-1 rounded-xl px-3 py-2 text-muted-foreground transition hover:bg-accent/40 hover:text-foreground;
 }
 .sidebar.is-collapsed .nav-link {
   @apply justify-center px-0;

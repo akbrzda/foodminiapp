@@ -14,10 +14,7 @@
       </CardContent>
     </Card>
     <Card>
-      <CardHeader>
-        <CardTitle>Список категорий</CardTitle>
-      </CardHeader>
-      <CardContent class="pt-0">
+      <CardContent class="!p-0">
         <Table>
           <TableHeader>
             <TableRow>
@@ -59,78 +56,108 @@
         </Table>
       </CardContent>
     </Card>
-    <BaseModal v-if="showModal" :title="modalTitle" :subtitle="modalSubtitle" @close="closeModal">
-      <form class="space-y-4" @submit.prevent="submitCategory">
-        <div class="space-y-2">
-          <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Название</label>
-          <Input v-model="form.name" required />
-        </div>
-        <div class="space-y-2">
-          <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Описание</label>
-          <Textarea v-model="form.description" rows="3" />
-        </div>
-        <div class="space-y-2">
-          <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Изображение</label>
-          <Input v-model="form.image_url" placeholder="URL изображения категории (опционально)" />
-        </div>
-        <div class="grid gap-4 md:grid-cols-2">
-          <div class="space-y-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Порядок</label>
-            <Input v-model.number="form.sort_order" type="number" placeholder="0 = автоматически" />
-          </div>
-          <div class="space-y-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Глобальный статус</label>
-            <Select v-model="form.is_active">
-              <option :value="true">Активна</option>
-              <option :value="false">Скрыта</option>
-            </Select>
-          </div>
-        </div>
-        <div class="space-y-2">
-          <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Доступность по городам</label>
-          <div class="grid gap-2 md:grid-cols-2">
-            <label v-for="city in referenceStore.cities" :key="city.id" class="flex items-center gap-2 text-sm text-foreground">
-              <input v-model="form.city_ids" type="checkbox" :value="city.id" class="h-4 w-4 rounded border-border text-primary focus:ring-primary" />
-              {{ city.name }}
-            </label>
-          </div>
-        </div>
-        <Button class="w-full" type="submit" :disabled="saving">
-          <Save :size="16" />
-          {{ saving ? "Сохранение..." : "Сохранить" }}
-        </Button>
-      </form>
-    </BaseModal>
+    <Dialog v-if="showModal" :open="showModal" @update:open="(value) => (value ? null : closeModal())">
+      <DialogContent class="w-full max-w-3xl">
+        <DialogHeader>
+          <DialogTitle>{{ modalTitle }}</DialogTitle>
+          <DialogDescription>{{ modalSubtitle }}</DialogDescription>
+        </DialogHeader>
+        <form class="space-y-4" @submit.prevent="submitCategory">
+          <FieldGroup>
+            <Field>
+              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Название</FieldLabel>
+              <FieldContent>
+                <Input v-model="form.name" required />
+              </FieldContent>
+            </Field>
+            <Field>
+              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Описание</FieldLabel>
+              <FieldContent>
+                <Textarea v-model="form.description" rows="3" />
+              </FieldContent>
+            </Field>
+            <Field>
+              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Изображение</FieldLabel>
+              <FieldContent>
+                <Input v-model="form.image_url" placeholder="URL изображения категории (опционально)" />
+              </FieldContent>
+            </Field>
+            <FieldGroup class="grid gap-4 md:grid-cols-2">
+              <Field>
+                <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Порядок</FieldLabel>
+                <FieldContent>
+                  <Input v-model.number="form.sort_order" type="number" placeholder="0 = автоматически" />
+                </FieldContent>
+              </Field>
+              <Field>
+                <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Глобальный статус</FieldLabel>
+                <FieldContent>
+                  <Select v-model="form.is_active">
+                    <SelectTrigger class="w-full">
+                      <SelectValue placeholder="Выберите статус" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem :value="true">Активна</SelectItem>
+                      <SelectItem :value="false">Скрыта</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </FieldContent>
+              </Field>
+            </FieldGroup>
+            <Field>
+              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Доступность по городам</FieldLabel>
+              <FieldContent>
+                <div class="grid gap-2 md:grid-cols-2">
+                  <Label v-for="city in referenceStore.cities" :key="city.id" class="flex items-center gap-2 text-sm text-foreground">
+                    <input
+                      v-model="form.city_ids"
+                      type="checkbox"
+                      :value="city.id"
+                      class="h-4 w-4 rounded border-border text-primary focus:ring-primary"
+                    />
+                    {{ city.name }}
+                  </Label>
+                </div>
+              </FieldContent>
+            </Field>
+          </FieldGroup>
+          <Button class="w-full" type="submit" :disabled="saving">
+            <Save :size="16" />
+            {{ saving ? "Сохранение..." : "Сохранить" }}
+          </Button>
+        </form>
+      </DialogContent>
+    </Dialog>
   </div>
 </template>
 <script setup>
 import { computed, onMounted, ref, watch } from "vue";
 import { Pencil, Plus, Save, Trash2 } from "lucide-vue-next";
 import api from "../api/client.js";
-import BaseModal from "../components/BaseModal.vue";
-import Badge from "../components/ui/Badge.vue";
-import Button from "../components/ui/Button.vue";
-import Card from "../components/ui/Card.vue";
-import CardHeader from "../components/ui/CardHeader.vue";
-import CardTitle from "../components/ui/CardTitle.vue";
-import CardContent from "../components/ui/CardContent.vue";
+import Badge from "../components/ui/badge/Badge.vue";
+import Button from "../components/ui/button/Button.vue";
+import Card from "../components/ui/card/Card.vue";
+import CardContent from "../components/ui/card/CardContent.vue";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../components/ui/dialog/index.js";
 import PageHeader from "../components/PageHeader.vue";
-import Input from "../components/ui/Input.vue";
-import Select from "../components/ui/Select.vue";
-import Table from "../components/ui/Table.vue";
-import TableBody from "../components/ui/TableBody.vue";
-import TableCell from "../components/ui/TableCell.vue";
-import TableHead from "../components/ui/TableHead.vue";
-import TableHeader from "../components/ui/TableHeader.vue";
-import TableRow from "../components/ui/TableRow.vue";
-import Textarea from "../components/ui/Textarea.vue";
+import Input from "../components/ui/input/Input.vue";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
+import Table from "../components/ui/table/Table.vue";
+import TableBody from "../components/ui/table/TableBody.vue";
+import TableCell from "../components/ui/table/TableCell.vue";
+import TableHead from "../components/ui/table/TableHead.vue";
+import TableHeader from "../components/ui/table/TableHeader.vue";
+import TableRow from "../components/ui/table/TableRow.vue";
+import Textarea from "../components/ui/textarea/Textarea.vue";
+import { Field, FieldContent, FieldGroup, FieldLabel } from "../components/ui/field";
+import { Label } from "../components/ui/label";
 import { useNotifications } from "../composables/useNotifications.js";
 import { formatNumber, normalizeBoolean } from "../utils/format.js";
 import { useReferenceStore } from "../stores/reference.js";
 import { useOrdersStore } from "../stores/orders.js";
 const referenceStore = useReferenceStore();
 const ordersStore = useOrdersStore();
-const { showErrorNotification } = useNotifications();
+const { showErrorNotification, showSuccessNotification } = useNotifications();
 const categories = ref([]);
 const showModal = ref(false);
 const editing = ref(null);
@@ -208,6 +235,7 @@ const submitCategory = async () => {
     } else {
       await api.post("/api/menu/admin/categories", payload);
     }
+    showSuccessNotification(editing.value ? "Категория обновлена" : "Категория создана");
     showModal.value = false;
     await loadCategories();
   } catch (error) {
@@ -221,6 +249,7 @@ const deleteCategory = async (category) => {
   if (!confirm(`Удалить категорию "${category.name}"?`)) return;
   try {
     await api.delete(`/api/menu/admin/categories/${category.id}`);
+    showSuccessNotification("Категория удалена");
     await loadCategories();
   } catch (error) {
     console.error("Failed to delete category:", error);

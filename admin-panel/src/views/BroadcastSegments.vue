@@ -15,10 +15,7 @@
     </Card>
 
     <Card>
-      <CardHeader>
-        <CardTitle>Список сегментов</CardTitle>
-      </CardHeader>
-      <CardContent class="pt-0">
+      <CardContent class="!p-0">
         <Table>
           <TableHeader>
             <TableRow>
@@ -90,26 +87,27 @@
 import { computed, onMounted, ref } from "vue";
 import { Pencil, Plus, Save, Trash2 } from "lucide-vue-next";
 import api from "../api/client.js";
-import Badge from "../components/ui/Badge.vue";
-import Button from "../components/ui/Button.vue";
-import Card from "../components/ui/Card.vue";
-import CardContent from "../components/ui/CardContent.vue";
-import CardHeader from "../components/ui/CardHeader.vue";
-import CardTitle from "../components/ui/CardTitle.vue";
-import Input from "../components/ui/Input.vue";
+import Badge from "../components/ui/badge/Badge.vue";
+import Button from "../components/ui/button/Button.vue";
+import Card from "../components/ui/card/Card.vue";
+import CardContent from "../components/ui/card/CardContent.vue";
+import CardHeader from "../components/ui/card/CardHeader.vue";
+import CardTitle from "../components/ui/card/CardTitle.vue";
+import Input from "../components/ui/input/Input.vue";
+import Textarea from "../components/ui/textarea/Textarea.vue";
 import PageHeader from "../components/PageHeader.vue";
-import Table from "../components/ui/Table.vue";
-import TableBody from "../components/ui/TableBody.vue";
-import TableCell from "../components/ui/TableCell.vue";
-import TableHead from "../components/ui/TableHead.vue";
-import TableHeader from "../components/ui/TableHeader.vue";
-import TableRow from "../components/ui/TableRow.vue";
+import Table from "../components/ui/table/Table.vue";
+import TableBody from "../components/ui/table/TableBody.vue";
+import TableCell from "../components/ui/table/TableCell.vue";
+import TableHead from "../components/ui/table/TableHead.vue";
+import TableHeader from "../components/ui/table/TableHeader.vue";
+import TableRow from "../components/ui/table/TableRow.vue";
 import SegmentBuilder from "../components/broadcasts/SegmentBuilder.vue";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../components/ui/dialog/index.js";
 import { useNotifications } from "../composables/useNotifications.js";
 import { formatDateTime, formatNumber } from "../utils/format.js";
 
-const { showErrorNotification, showSuccessNotification } = useNotifications();
+const { showErrorNotification, showSuccessNotification, showWarningNotification } = useNotifications();
 const segments = ref([]);
 const showModal = ref(false);
 const editing = ref(null);
@@ -161,7 +159,7 @@ const closeModal = () => {
 const calculate = async () => {
   try {
     if (!segmentConfig.value?.conditions?.length) {
-      showErrorNotification("Добавьте условия сегментации");
+      showWarningNotification("Добавьте условия сегментации");
       return;
     }
     const response = await api.post("/api/broadcasts/segments/calculate", { config: segmentConfig.value });
@@ -180,11 +178,11 @@ const saveSegment = async () => {
       config: segmentConfig.value,
     };
     if (!payload.name) {
-      showErrorNotification("Укажите название сегмента");
+      showWarningNotification("Укажите название сегмента");
       return;
     }
     if (!payload.config?.conditions?.length) {
-      showErrorNotification("Добавьте условия сегментации");
+      showWarningNotification("Добавьте условия сегментации");
       return;
     }
     if (editing.value) {

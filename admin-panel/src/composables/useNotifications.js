@@ -1,9 +1,17 @@
 import { ref } from "vue";
-import { useToast } from "./useToast.js";
+import { toast } from "vue-sonner";
 export function useNotifications() {
-  const permission = ref(Notification.permission);
-  const isSupported = "Notification" in window;
-  const { toast } = useToast();
+  const isSupported = typeof window !== "undefined" && "Notification" in window;
+  const permission = ref(isSupported ? Notification.permission : "denied");
+  const normalizeMessage = (message, fallback) => {
+    if (typeof message === "string" && message.trim().length > 0) {
+      return message.trim();
+    }
+    if (message?.message && typeof message.message === "string") {
+      return message.message.trim();
+    }
+    return fallback;
+  };
   const playSound = () => {
     try {
       const context = new (window.AudioContext || window.webkitAudioContext)();
@@ -40,11 +48,13 @@ export function useNotifications() {
   const showNotification = async (title, options = {}) => {
     if (!isSupported) {
       console.warn("Браузер не поддерживает уведомления");
+      toast.message(title, { description: options.body || "" });
       return;
     }
     if (permission.value !== "granted") {
       const granted = await requestPermission();
       if (!granted) {
+        toast.message(title, { description: options.body || "" });
         return;
       }
     }
@@ -58,6 +68,7 @@ export function useNotifications() {
       return notification;
     } catch (error) {
       console.error("Ошибка отображения уведомления:", error);
+      toast.message(title, { description: options.body || "" });
     }
   };
   const showNewOrderNotification = (order) => {
@@ -65,6 +76,7 @@ export function useNotifications() {
     const title = `🔔 Новый заказ #${order.order_number}`;
     const body = `${type} • ${order.total.toLocaleString("ru-RU")}₽\n${order.branch?.name || ""}`;
     playSound();
+    toast.message(title, { description: body });
     return showNotification(title, {
       body,
       tag: `order-${order.id}`,
@@ -73,17 +85,18 @@ export function useNotifications() {
     });
   };
   const showErrorNotification = (message) => {
-    return toast({
-      title: "Ошибка",
-      description: message,
-      variant: "error",
+    return toast.error("Ошибка", {
+      description: normalizeMessage(message, "Произошла ошибка"),
+    });
+  };
+  const showWarningNotification = (message) => {
+    return toast.warning("Внимание", {
+      description: normalizeMessage(message, "Проверьте данные"),
     });
   };
   const showSuccessNotification = (message) => {
-    return toast({
-      title: "Успешно",
-      description: message,
-      variant: "success",
+    return toast.success("Успешно", {
+      description: normalizeMessage(message, "Операция выполнена"),
     });
   };
   return {
@@ -93,6 +106,7 @@ export function useNotifications() {
     showNotification,
     showNewOrderNotification,
     showErrorNotification,
+    showWarningNotification,
     showSuccessNotification,
     playSound,
   };

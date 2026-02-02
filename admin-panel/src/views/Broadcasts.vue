@@ -22,21 +22,31 @@
             <div class="min-w-[180px] space-y-1">
               <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Тип</label>
               <Select v-model="filters.type">
-                <option value="">Все</option>
-                <option value="manual">Ручные</option>
-                <option value="trigger">Триггерные</option>
+                <SelectTrigger class="w-full">
+                  <SelectValue placeholder="Все типы" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Все</SelectItem>
+                  <SelectItem value="manual">Ручные</SelectItem>
+                  <SelectItem value="trigger">Триггерные</SelectItem>
+                </SelectContent>
               </Select>
             </div>
             <div class="min-w-[180px] space-y-1">
               <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Статус</label>
               <Select v-model="filters.status">
-                <option value="">Все</option>
-                <option value="draft">Черновик</option>
-                <option value="scheduled">Запланирована</option>
-                <option value="sending">Отправляется</option>
-                <option value="completed">Завершена</option>
-                <option value="cancelled">Отменена</option>
-                <option value="failed">С ошибкой</option>
+                <SelectTrigger class="w-full">
+                  <SelectValue placeholder="Все статусы" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Все</SelectItem>
+                  <SelectItem value="draft">Черновик</SelectItem>
+                  <SelectItem value="scheduled">Запланирована</SelectItem>
+                  <SelectItem value="sending">Отправляется</SelectItem>
+                  <SelectItem value="completed">Завершена</SelectItem>
+                  <SelectItem value="cancelled">Отменена</SelectItem>
+                  <SelectItem value="failed">С ошибкой</SelectItem>
+                </SelectContent>
               </Select>
             </div>
             <div class="min-w-[220px] space-y-1">
@@ -49,10 +59,7 @@
     </Card>
 
     <Card>
-      <CardHeader>
-        <CardTitle>Список рассылок</CardTitle>
-      </CardHeader>
-      <CardContent class="pt-0">
+      <CardContent class="!p-0">
         <Table>
           <TableHeader>
             <TableRow>
@@ -106,21 +113,21 @@ import { computed, onMounted, ref, watch } from "vue";
 import { ChartLine, Eye, Pencil, Plus, Users } from "lucide-vue-next";
 import { useRouter } from "vue-router";
 import api from "../api/client.js";
-import Badge from "../components/ui/Badge.vue";
-import Button from "../components/ui/Button.vue";
-import Card from "../components/ui/Card.vue";
-import CardContent from "../components/ui/CardContent.vue";
-import CardHeader from "../components/ui/CardHeader.vue";
-import CardTitle from "../components/ui/CardTitle.vue";
-import Input from "../components/ui/Input.vue";
+import Badge from "../components/ui/badge/Badge.vue";
+import Button from "../components/ui/button/Button.vue";
+import Card from "../components/ui/card/Card.vue";
+import CardContent from "../components/ui/card/CardContent.vue";
+import CardHeader from "../components/ui/card/CardHeader.vue";
+import CardTitle from "../components/ui/card/CardTitle.vue";
+import Input from "../components/ui/input/Input.vue";
 import PageHeader from "../components/PageHeader.vue";
-import Select from "../components/ui/Select.vue";
-import Table from "../components/ui/Table.vue";
-import TableBody from "../components/ui/TableBody.vue";
-import TableCell from "../components/ui/TableCell.vue";
-import TableHead from "../components/ui/TableHead.vue";
-import TableHeader from "../components/ui/TableHeader.vue";
-import TableRow from "../components/ui/TableRow.vue";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
+import Table from "../components/ui/table/Table.vue";
+import TableBody from "../components/ui/table/TableBody.vue";
+import TableCell from "../components/ui/table/TableCell.vue";
+import TableHead from "../components/ui/table/TableHead.vue";
+import TableHeader from "../components/ui/table/TableHeader.vue";
+import TableRow from "../components/ui/table/TableRow.vue";
 import { useNotifications } from "../composables/useNotifications.js";
 import { useOrdersStore } from "../stores/orders.js";
 import { formatDateTime, formatNumber } from "../utils/format.js";
@@ -151,7 +158,12 @@ const filteredCampaigns = computed(() => {
     const matchType = filters.value.type ? item.type === filters.value.type : true;
     const matchStatus = filters.value.status ? item.status === filters.value.status : true;
     const matchSearch = search
-      ? String(item.name || "").toLowerCase().includes(search) || String(item.description || "").toLowerCase().includes(search)
+      ? String(item.name || "")
+          .toLowerCase()
+          .includes(search) ||
+        String(item.description || "")
+          .toLowerCase()
+          .includes(search)
       : true;
     return matchType && matchStatus && matchSearch;
   });

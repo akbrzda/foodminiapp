@@ -410,15 +410,15 @@ router.post("/", authenticateToken, async (req, res, next) => {
         }
         if (!Number.isFinite(deliveryLatitude) || !Number.isFinite(deliveryLongitude)) {
           if (delivery_street && delivery_house) {
-          const geocodeResponse = await axios.post(
-            `${req.protocol}://${req.get("host")}/api/polygons/geocode`,
-            { address: `${delivery_street}, ${delivery_house}` },
-            { headers: { "Content-Type": "application/json" } },
-          );
-          if (geocodeResponse.data && geocodeResponse.data.lat && geocodeResponse.data.lng) {
-            deliveryLatitude = Number(geocodeResponse.data.lat);
-            deliveryLongitude = Number(geocodeResponse.data.lng);
-          }
+            const geocodeResponse = await axios.post(
+              `${req.protocol}://${req.get("host")}/api/polygons/geocode`,
+              { address: `${delivery_street}, ${delivery_house}` },
+              { headers: { "Content-Type": "application/json" } },
+            );
+            if (geocodeResponse.data && geocodeResponse.data.lat && geocodeResponse.data.lng) {
+              deliveryLatitude = Number(geocodeResponse.data.lat);
+              deliveryLongitude = Number(geocodeResponse.data.lng);
+            }
           }
         }
         const hasCoords = Number.isFinite(deliveryLatitude) && Number.isFinite(deliveryLongitude);
@@ -737,6 +737,16 @@ router.get("/:id", authenticateToken, async (req, res, next) => {
       item.modifiers = modifiers;
     }
     order.items = items;
+    const [statusHistory] = await db.query(
+      `SELECT osh.id, osh.old_status, osh.new_status, osh.changed_by_type, osh.changed_at,
+              au.first_name as admin_first_name, au.last_name as admin_last_name
+       FROM order_status_history osh
+       LEFT JOIN admin_users au ON au.id = osh.changed_by_admin_id
+       WHERE osh.order_id = ?
+       ORDER BY osh.changed_at ASC, osh.id ASC`,
+      [orderId],
+    );
+    order.status_history = statusHistory || [];
     const [spendRows] = await db.query("SELECT status, amount FROM loyalty_transactions WHERE order_id = ? AND type = 'spend'", [orderId]);
     if (spendRows.length > 0) {
       const hasPending = spendRows.some((row) => row.status === "pending");
@@ -1147,6 +1157,12 @@ const handleOrderStatusUpdate = async (req, res, next, forcedStatus = null) => {
       status === "completed" ? new Date() : null,
       orderId,
     ]);
+    if (oldStatus !== status) {
+      await connection.query(
+        "INSERT INTO order_status_history (order_id, old_status, new_status, changed_by_type, changed_by_admin_id) VALUES (?, ?, ?, 'admin', ?)",
+        [orderId, oldStatus, status, req.user?.id || null],
+      );
+    }
     if (settings.bonuses_enabled && oldStatus === "completed" && status !== "completed" && status !== "cancelled") {
       try {
         await removeEarnedBonuses(orderData, connection, loyaltyLevels);
@@ -1157,10 +1173,9 @@ const handleOrderStatusUpdate = async (req, res, next, forcedStatus = null) => {
     }
     if (settings.bonuses_enabled && status === "completed" && oldStatus !== "completed" && orderTotal > 0) {
       try {
-        await connection.query(
-          "UPDATE loyalty_transactions SET status = 'completed' WHERE order_id = ? AND type = 'spend' AND status = 'pending'",
-          [orderId],
-        );
+        await connection.query("UPDATE loyalty_transactions SET status = 'completed' WHERE order_id = ? AND type = 'spend' AND status = 'pending'", [
+          orderId,
+        ]);
         if (orderData.bonus_earn_amount && orderData.bonus_earn_amount > 0) {
           await redeliveryEarnBonuses(orderData, connection, loyaltyLevels);
         } else {

@@ -75,151 +75,220 @@
         </CardContent>
       </Card>
     </div>
-    <BaseModal v-if="showModal" :title="modalTitle" :subtitle="modalSubtitle" @close="closeModal">
-      <form class="space-y-4" @submit.prevent="submitGroup">
-        <div class="space-y-2">
-          <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Название</label>
-          <Input v-model="form.name" required />
-        </div>
-        <div class="space-y-2">
-          <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Тип</label>
-          <Select v-model="form.type">
-            <option value="single">Одиночный выбор</option>
-            <option value="multiple">Множественный выбор</option>
-          </Select>
-        </div>
-        <div class="grid gap-4 md:grid-cols-2">
-          <div class="space-y-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Минимум выборов</label>
-            <Input v-model.number="form.min_selections" type="number" min="0" placeholder="0" />
+    <Dialog v-if="showModal" :open="showModal" @update:open="(value) => (value ? null : closeModal())">
+      <DialogContent class="w-full max-w-3xl">
+        <DialogHeader>
+          <DialogTitle>{{ modalTitle }}</DialogTitle>
+          <DialogDescription>{{ modalSubtitle }}</DialogDescription>
+        </DialogHeader>
+        <form class="space-y-4" @submit.prevent="submitGroup">
+          <FieldGroup>
+            <Field>
+              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Название</FieldLabel>
+              <FieldContent>
+                <Input v-model="form.name" required />
+              </FieldContent>
+            </Field>
+            <Field>
+              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Тип</FieldLabel>
+              <FieldContent>
+                <Select v-model="form.type">
+                  <SelectTrigger class="w-full">
+                    <SelectValue placeholder="Выберите тип" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="single">Одиночный выбор</SelectItem>
+                    <SelectItem value="multiple">Множественный выбор</SelectItem>
+                  </SelectContent>
+                </Select>
+              </FieldContent>
+            </Field>
+            <FieldGroup class="grid gap-4 md:grid-cols-2">
+              <Field>
+                <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Минимум выборов</FieldLabel>
+                <FieldContent>
+                  <Input v-model.number="form.min_selections" type="number" min="0" placeholder="0" />
+                </FieldContent>
+              </Field>
+              <Field>
+                <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Максимум выборов</FieldLabel>
+                <FieldContent>
+                  <Input v-model.number="form.max_selections" type="number" min="1" placeholder="1" />
+                </FieldContent>
+              </Field>
+            </FieldGroup>
+            <Field>
+              <FieldContent>
+                <Label class="flex items-center gap-2 text-sm text-foreground">
+                  <input v-model="form.is_required" type="checkbox" class="h-4 w-4 rounded border-border" />
+                  Обязательная группа
+                </Label>
+                <Label class="flex items-center gap-2 text-sm text-foreground">
+                  <input v-model="form.is_global" type="checkbox" class="h-4 w-4 rounded border-border" />
+                  Глобальная группа (переиспользуемая)
+                </Label>
+              </FieldContent>
+            </Field>
+          </FieldGroup>
+          <Button class="w-full" type="submit">
+            <Save :size="16" />
+            Сохранить
+          </Button>
+        </form>
+      </DialogContent>
+    </Dialog>
+    <Dialog v-if="showModifierModal" :open="showModifierModal" @update:open="(value) => (value ? null : closeModifierModal())">
+      <DialogContent class="w-full max-w-3xl">
+        <DialogHeader>
+          <DialogTitle>Модификатор</DialogTitle>
+          <DialogDescription>Добавьте параметр</DialogDescription>
+        </DialogHeader>
+        <form class="space-y-4" @submit.prevent="submitModifier">
+          <FieldGroup>
+            <Field>
+              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Название</FieldLabel>
+              <FieldContent>
+                <Input v-model="modifierForm.name" required />
+              </FieldContent>
+            </Field>
+            <Field>
+              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Цена</FieldLabel>
+              <FieldContent>
+                <Input v-model.number="modifierForm.price" type="number" step="0.01" />
+              </FieldContent>
+            </Field>
+            <FieldGroup class="grid gap-4 md:grid-cols-2">
+              <Field>
+                <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Вес</FieldLabel>
+                <FieldContent>
+                  <Input v-model.number="modifierForm.weight" type="number" step="0.01" placeholder="Опционально" />
+                </FieldContent>
+              </Field>
+              <Field>
+                <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Единица</FieldLabel>
+                <FieldContent>
+                  <Select v-model="modifierForm.weight_unit">
+                    <SelectTrigger class="w-full">
+                      <SelectValue placeholder="Не указано" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">Не указано</SelectItem>
+                      <SelectItem value="g">г (граммы)</SelectItem>
+                      <SelectItem value="kg">кг (килограммы)</SelectItem>
+                      <SelectItem value="ml">мл (миллилитры)</SelectItem>
+                      <SelectItem value="l">л (литры)</SelectItem>
+                      <SelectItem value="pcs">шт (штуки)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </FieldContent>
+              </Field>
+            </FieldGroup>
+            <Field>
+              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Изображение</FieldLabel>
+              <FieldContent>
+                <div
+                  class="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border bg-muted/40 px-4 py-6 text-center text-xs text-muted-foreground"
+                  @dragover.prevent
+                  @drop.prevent="onDrop"
+                >
+                  <input ref="fileInput" type="file" accept="image/*" class="hidden" @change="onFileChange" />
+                  <Button type="button" variant="outline" size="sm" @click="triggerFile">
+                    <UploadCloud :size="16" />
+                    Загрузить (до 500KB)
+                  </Button>
+                  <span>или перетащите файл сюда</span>
+                  <span v-if="uploadState.error" class="text-xs text-red-600">{{ uploadState.error }}</span>
+                  <span v-if="uploadState.loading" class="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Spinner class="h-4 w-4" />
+                    Загрузка...
+                  </span>
+                </div>
+                <div v-if="uploadState.preview || modifierForm.image_url" class="mt-3 flex items-center gap-3">
+                  <img
+                    :src="normalizeImageUrl(uploadState.preview || modifierForm.image_url)"
+                    class="h-16 w-16 rounded-xl object-cover"
+                    alt="preview"
+                  />
+                  <Input v-model="modifierForm.image_url" class="text-xs" placeholder="URL изображения" />
+                </div>
+              </FieldContent>
+            </Field>
+          </FieldGroup>
+          <Button class="w-full" type="submit">
+            <Save :size="16" />
+            Сохранить
+          </Button>
+        </form>
+      </DialogContent>
+    </Dialog>
+    <Dialog v-if="showVariantPricesModal" :open="showVariantPricesModal" @update:open="(value) => (value ? null : closeVariantPricesModal())">
+      <DialogContent class="w-full max-w-4xl">
+        <DialogHeader>
+          <DialogTitle>Цены по вариациям</DialogTitle>
+          <DialogDescription>Настройка цен модификатора</DialogDescription>
+        </DialogHeader>
+        <form class="space-y-4" @submit.prevent="submitVariantPrices">
+          <div v-if="variantPriceRows.length === 0" class="text-sm text-muted-foreground">Нет доступных вариаций</div>
+          <div v-for="row in variantPriceRows" :key="row.variant_id" class="grid gap-3 md:grid-cols-[1fr_auto_auto_auto] items-end">
+            <div class="space-y-1">
+              <div class="text-sm font-medium text-foreground">{{ row.variant_name }}</div>
+            </div>
+            <div class="space-y-1">
+              <Label class="text-xs text-muted-foreground">Цена</Label>
+              <Input v-model.number="row.price" type="number" step="0.01" placeholder="0.00" />
+            </div>
+            <div class="space-y-1">
+              <Label class="text-xs text-muted-foreground">Вес</Label>
+              <Input v-model.number="row.weight" type="number" step="0.01" placeholder="—" />
+            </div>
+            <div class="space-y-1">
+              <Label class="text-xs text-muted-foreground">Ед.</Label>
+              <Select v-model="row.weight_unit">
+                <SelectTrigger class="w-full">
+                  <SelectValue placeholder="—" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">—</SelectItem>
+                  <SelectItem value="g">г</SelectItem>
+                  <SelectItem value="kg">кг</SelectItem>
+                  <SelectItem value="ml">мл</SelectItem>
+                  <SelectItem value="l">л</SelectItem>
+                  <SelectItem value="pcs">шт</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
-          <div class="space-y-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Максимум выборов</label>
-            <Input v-model.number="form.max_selections" type="number" min="1" placeholder="1" />
-          </div>
-        </div>
-        <label class="flex items-center gap-2 text-sm text-foreground">
-          <input v-model="form.is_required" type="checkbox" class="h-4 w-4 rounded border-border" />
-          Обязательная группа
-        </label>
-        <label class="flex items-center gap-2 text-sm text-foreground">
-          <input v-model="form.is_global" type="checkbox" class="h-4 w-4 rounded border-border" />
-          Глобальная группа (переиспользуемая)
-        </label>
-        <Button class="w-full" type="submit">
-          <Save :size="16" />
-          Сохранить
-        </Button>
-      </form>
-    </BaseModal>
-    <BaseModal v-if="showModifierModal" title="Модификатор" subtitle="Добавьте параметр" @close="closeModifierModal">
-      <form class="space-y-4" @submit.prevent="submitModifier">
-        <div class="space-y-2">
-          <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Название</label>
-          <Input v-model="modifierForm.name" required />
-        </div>
-        <div class="space-y-2">
-          <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Цена</label>
-          <Input v-model.number="modifierForm.price" type="number" step="0.01" />
-        </div>
-        <div class="grid gap-4 md:grid-cols-2">
-          <div class="space-y-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Вес</label>
-            <Input v-model.number="modifierForm.weight" type="number" step="0.01" placeholder="Опционально" />
-          </div>
-          <div class="space-y-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Единица</label>
-            <Select v-model="modifierForm.weight_unit">
-              <option value="">Не указано</option>
-              <option value="g">г (граммы)</option>
-              <option value="kg">кг (килограммы)</option>
-              <option value="ml">мл (миллилитры)</option>
-              <option value="l">л (литры)</option>
-              <option value="pcs">шт (штуки)</option>
-            </Select>
-          </div>
-        </div>
-        <div class="space-y-2">
-          <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Изображение</label>
-          <div
-            class="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border bg-muted/40 px-4 py-6 text-center text-xs text-muted-foreground"
-            @dragover.prevent
-            @drop.prevent="onDrop"
-          >
-            <input ref="fileInput" type="file" accept="image/*" class="hidden" @change="onFileChange" />
-            <Button type="button" variant="outline" size="sm" @click="triggerFile">
-              <UploadCloud :size="16" />
-              Загрузить (до 500KB)
-            </Button>
-            <span>или перетащите файл сюда</span>
-            <span v-if="uploadState.error" class="text-xs text-red-600">{{ uploadState.error }}</span>
-            <span v-if="uploadState.loading" class="text-xs text-muted-foreground">Загрузка...</span>
-          </div>
-          <div v-if="uploadState.preview || modifierForm.image_url" class="mt-3 flex items-center gap-3">
-            <img :src="normalizeImageUrl(uploadState.preview || modifierForm.image_url)" class="h-16 w-16 rounded-xl object-cover" alt="preview" />
-            <Input v-model="modifierForm.image_url" class="text-xs" placeholder="URL изображения" />
-          </div>
-        </div>
-        <Button class="w-full" type="submit">
-          <Save :size="16" />
-          Сохранить
-        </Button>
-      </form>
-    </BaseModal>
-    <BaseModal v-if="showVariantPricesModal" title="Цены по вариациям" subtitle="Настройка цен модификатора" @close="closeVariantPricesModal">
-      <form class="space-y-4" @submit.prevent="submitVariantPrices">
-        <div v-if="variantPriceRows.length === 0" class="text-sm text-muted-foreground">Нет доступных вариаций</div>
-        <div v-for="row in variantPriceRows" :key="row.variant_id" class="grid gap-3 md:grid-cols-[1fr_auto_auto_auto] items-end">
-          <div class="space-y-1">
-            <div class="text-sm font-medium text-foreground">{{ row.variant_name }}</div>
-          </div>
-          <div class="space-y-1">
-            <label class="text-xs text-muted-foreground">Цена</label>
-            <Input v-model.number="row.price" type="number" step="0.01" placeholder="0.00" />
-          </div>
-          <div class="space-y-1">
-            <label class="text-xs text-muted-foreground">Вес</label>
-            <Input v-model.number="row.weight" type="number" step="0.01" placeholder="—" />
-          </div>
-          <div class="space-y-1">
-            <label class="text-xs text-muted-foreground">Ед.</label>
-            <Select v-model="row.weight_unit">
-              <option value="">—</option>
-              <option value="g">г</option>
-              <option value="kg">кг</option>
-              <option value="ml">мл</option>
-              <option value="l">л</option>
-              <option value="pcs">шт</option>
-            </Select>
-          </div>
-        </div>
-        <Button class="w-full" type="submit" :disabled="saving">
-          <Save :size="16" />
-          {{ saving ? "Сохранение..." : "Сохранить цены" }}
-        </Button>
-      </form>
-    </BaseModal>
+          <Button class="w-full" type="submit" :disabled="saving">
+            <Save :size="16" />
+            {{ saving ? "Сохранение..." : "Сохранить цены" }}
+          </Button>
+        </form>
+      </DialogContent>
+    </Dialog>
   </div>
 </template>
 <script setup>
 import { computed, onMounted, ref, watch } from "vue";
 import { Pencil, Plus, Save, Settings2, Trash2, UploadCloud } from "lucide-vue-next";
 import api from "../api/client.js";
-import BaseModal from "../components/BaseModal.vue";
-import Button from "../components/ui/Button.vue";
-import Card from "../components/ui/Card.vue";
-import CardContent from "../components/ui/CardContent.vue";
-import CardDescription from "../components/ui/CardDescription.vue";
-import CardHeader from "../components/ui/CardHeader.vue";
-import CardTitle from "../components/ui/CardTitle.vue";
-import Input from "../components/ui/Input.vue";
+import Button from "../components/ui/button/Button.vue";
+import Card from "../components/ui/card/Card.vue";
+import CardContent from "../components/ui/card/CardContent.vue";
+import CardDescription from "../components/ui/card/CardDescription.vue";
+import CardHeader from "../components/ui/card/CardHeader.vue";
+import CardTitle from "../components/ui/card/CardTitle.vue";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../components/ui/dialog/index.js";
+import Input from "../components/ui/input/Input.vue";
 import PageHeader from "../components/PageHeader.vue";
-import Select from "../components/ui/Select.vue";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { useNotifications } from "../composables/useNotifications.js";
 import { formatCurrency } from "../utils/format.js";
+import { Field, FieldContent, FieldGroup, FieldLabel } from "../components/ui/field";
+import { Label } from "../components/ui/label";
+import Spinner from "../components/ui/spinner/Spinner.vue";
 import { useOrdersStore } from "../stores/orders.js";
 const groups = ref([]);
-const { showErrorNotification } = useNotifications();
+const { showErrorNotification, showSuccessNotification } = useNotifications();
 const ordersStore = useOrdersStore();
 const showModal = ref(false);
 const showModifierModal = ref(false);
@@ -321,6 +390,7 @@ const submitGroup = async () => {
     } else {
       await api.post("/api/menu/admin/modifier-groups", form.value);
     }
+    showSuccessNotification(editing.value ? "Группа модификаторов обновлена" : "Группа модификаторов создана");
     showModal.value = false;
     await loadGroups();
   } catch (error) {
@@ -332,6 +402,7 @@ const deleteGroup = async (group) => {
   if (!confirm(`Удалить группу "${group.name}"?`)) return;
   try {
     await api.delete(`/api/menu/admin/modifier-groups/${group.id}`);
+    showSuccessNotification("Группа модификаторов удалена");
     await loadGroups();
   } catch (error) {
     console.error("Failed to delete group:", error);
@@ -446,12 +517,20 @@ const submitModifier = async () => {
     return;
   }
   try {
+    const payload = {
+      ...modifierForm.value,
+      name: String(modifierForm.value.name || "").trim(),
+      weight: modifierForm.value.weight ?? null,
+      weight_unit: modifierForm.value.weight_unit || null,
+      image_url: modifierForm.value.image_url || null,
+    };
     if (editingModifier.value) {
-      await api.put(`/api/menu/admin/modifiers/${editingModifier.value.id}`, modifierForm.value);
+      await api.put(`/api/menu/admin/modifiers/${editingModifier.value.id}`, payload);
     } else {
       const url = `/api/menu/admin/modifier-groups/${activeGroup.value.id}/modifiers`;
-      await api.post(url, modifierForm.value);
+      await api.post(url, payload);
     }
+    showSuccessNotification(editingModifier.value ? "Модификатор обновлен" : "Модификатор создан");
     showModifierModal.value = false;
     await loadGroups();
   } catch (error) {
@@ -472,6 +551,7 @@ const submitVariantPrices = async () => {
         weight_unit: row.weight_unit || null,
       });
     }
+    showSuccessNotification("Цены вариаций сохранены");
     closeVariantPricesModal();
   } catch (error) {
     console.error("Failed to save variant prices:", error);
@@ -484,6 +564,7 @@ const deleteModifier = async (modifier) => {
   if (!confirm(`Удалить модификатор "${modifier.name}"?`)) return;
   try {
     await api.delete(`/api/menu/admin/modifiers/${modifier.id}`);
+    showSuccessNotification("Модификатор удален");
     await loadGroups();
   } catch (error) {
     console.error("Failed to delete modifier:", error);

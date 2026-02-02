@@ -28,33 +28,54 @@
         <div v-if="leftTab === 'zones'" class="space-y-4">
           <PageHeader title="Зоны доставки" description="Фильтры и управление" />
           <div class="space-y-3">
-            <div class="space-y-2">
-              <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Город</label>
-              <Select v-model="cityId" @change="onCityChange">
-                <option value="">Все города</option>
-                <option v-for="city in referenceStore.cities" :key="city.id" :value="city.id">
-                  {{ city.name }}
-                </option>
-              </Select>
-            </div>
-            <div v-if="cityId" class="space-y-2">
-              <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Филиал</label>
-              <Select v-model="branchId" @change="onBranchChange">
-                <option value="">Все филиалы</option>
-                <option v-for="branch in branches" :key="branch.id" :value="branch.id">
-                  {{ branch.name }}
-                </option>
-              </Select>
-            </div>
-            <div class="space-y-2">
-              <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Статус</label>
-              <Select v-model="statusFilter" @change="onFilterChange">
-                <option value="all">Все полигоны</option>
-                <option value="active">Активные</option>
-                <option value="inactive">Неактивные</option>
-                <option value="blocked">Заблокированные</option>
-              </Select>
-            </div>
+            <Field>
+              <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Город</FieldLabel>
+              <FieldContent>
+                <Select v-model="cityId" @update:modelValue="onCityChange">
+                  <SelectTrigger class="w-full">
+                    <SelectValue placeholder="Все города" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Все города</SelectItem>
+                    <SelectItem v-for="city in referenceStore.cities" :key="city.id" :value="city.id">
+                      {{ city.name }}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </FieldContent>
+            </Field>
+            <Field v-if="cityId">
+              <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Филиал</FieldLabel>
+              <FieldContent>
+                <Select v-model="branchId" @update:modelValue="onBranchChange">
+                  <SelectTrigger class="w-full">
+                    <SelectValue placeholder="Все филиалы" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Все филиалы</SelectItem>
+                    <SelectItem v-for="branch in branches" :key="branch.id" :value="branch.id">
+                      {{ branch.name }}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </FieldContent>
+            </Field>
+            <Field>
+              <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Статус</FieldLabel>
+              <FieldContent>
+                <Select v-model="statusFilter" @update:modelValue="onFilterChange">
+                  <SelectTrigger class="w-full">
+                    <SelectValue placeholder="Все полигоны" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Все полигоны</SelectItem>
+                    <SelectItem value="active">Активные</SelectItem>
+                    <SelectItem value="inactive">Неактивные</SelectItem>
+                    <SelectItem value="blocked">Заблокированные</SelectItem>
+                  </SelectContent>
+                </Select>
+              </FieldContent>
+            </Field>
           </div>
           <div class="pt-3 border-t border-border">
             <p class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-2">Легенда</p>
@@ -89,63 +110,103 @@
         </div>
       </div>
     </div>
-    <BaseModal v-if="showModal" :title="modalTitle" :subtitle="modalSubtitle" @close="closeModal">
-      <form class="space-y-4" @submit.prevent="submitPolygon">
-        <div class="space-y-2">
-          <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Название</label>
-          <Input v-model="form.name" placeholder="Центральная зона" required />
-        </div>
-        <div class="space-y-2">
-          <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Время доставки (мин)</label>
-          <Input v-model.number="form.delivery_time" type="number" min="0" required />
-        </div>
-        <div class="grid gap-4 md:grid-cols-2">
-          <div class="space-y-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Мин. сумма заказа (₽)</label>
-            <Input v-model.number="form.min_order_amount" type="number" min="0" step="10" />
-          </div>
-          <div class="space-y-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Стоимость доставки (₽)</label>
-            <Input v-model.number="form.delivery_cost" type="number" min="0" step="10" />
-          </div>
-        </div>
-        <Button class="w-full" type="submit">
-          <Save :size="16" />
-          Сохранить
-        </Button>
-      </form>
-    </BaseModal>
-    <BaseModal
-      v-if="showBlockModalWindow"
-      :title="blockingPolygon?.id === 'bulk' ? `Блокировка полигонов (${blockingPolygon.ids.length})` : 'Блокировка полигона'"
-      :subtitle="blockingPolygon?.id === 'bulk' ? 'Укажите параметры для массовой блокировки' : 'Укажите параметры блокировки'"
-      @close="closeBlockModal"
-    >
-      <form class="space-y-4" @submit.prevent="submitBlock">
-        <div class="space-y-2">
-          <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Тип блокировки</label>
-          <Select v-model="blockForm.blockType">
-            <option value="permanent">Постоянная</option>
-            <option value="temporary">Временная</option>
-          </Select>
-        </div>
-        <div v-if="blockForm.blockType === 'temporary'" class="space-y-2">
-          <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Период</label>
-          <RangeCalendar v-model:from="blockForm.blocked_from" v-model:to="blockForm.blocked_until" :allow-future="true" :months="2" inline />
-        </div>
-        <div class="space-y-2">
-          <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Причина блокировки</label>
-          <Input v-model="blockForm.block_reason" placeholder="Укажите причину" />
-        </div>
-        <div class="flex gap-2">
-          <Button class="flex-1" type="submit" variant="default">
-            <Lock :size="16" />
-            Заблокировать
+    <Dialog v-if="showModal" :open="showModal" @update:open="(value) => (value ? null : closeModal())">
+      <DialogContent class="w-full max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>{{ modalTitle }}</DialogTitle>
+          <DialogDescription>{{ modalSubtitle }}</DialogDescription>
+        </DialogHeader>
+        <form class="space-y-4" @submit.prevent="submitPolygon">
+          <FieldGroup>
+            <Field>
+              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Название</FieldLabel>
+              <FieldContent>
+                <Input v-model="form.name" placeholder="Центральная зона" required />
+              </FieldContent>
+            </Field>
+            <Field>
+              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Время доставки (мин)</FieldLabel>
+              <FieldContent>
+                <Input v-model.number="form.delivery_time" type="number" min="0" required />
+              </FieldContent>
+            </Field>
+            <FieldGroup class="grid gap-4 md:grid-cols-2">
+              <Field>
+                <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Мин. сумма заказа (₽)</FieldLabel>
+                <FieldContent>
+                  <Input v-model.number="form.min_order_amount" type="number" min="0" step="10" />
+                </FieldContent>
+              </Field>
+              <Field>
+                <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Стоимость доставки (₽)</FieldLabel>
+                <FieldContent>
+                  <Input v-model.number="form.delivery_cost" type="number" min="0" step="10" />
+                </FieldContent>
+              </Field>
+            </FieldGroup>
+          </FieldGroup>
+          <Button class="w-full" type="submit">
+            <Save :size="16" />
+            Сохранить
           </Button>
-          <Button type="button" variant="outline" @click="closeBlockModal"> Отмена </Button>
-        </div>
-      </form>
-    </BaseModal>
+        </form>
+      </DialogContent>
+    </Dialog>
+    <Dialog v-if="showBlockModalWindow" :open="showBlockModalWindow" @update:open="(value) => (value ? null : closeBlockModal())">
+      <DialogContent class="w-full max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>
+            {{ blockingPolygon?.id === "bulk" ? `Блокировка полигонов (${blockingPolygon.ids.length})` : "Блокировка полигона" }}
+          </DialogTitle>
+          <DialogDescription>
+            {{ blockingPolygon?.id === "bulk" ? "Укажите параметры для массовой блокировки" : "Укажите параметры блокировки" }}
+          </DialogDescription>
+        </DialogHeader>
+        <form class="space-y-4" @submit.prevent="submitBlock">
+          <FieldGroup>
+            <Field>
+              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Тип блокировки</FieldLabel>
+              <FieldContent>
+                <Select v-model="blockForm.blockType">
+                  <SelectTrigger class="w-full">
+                    <SelectValue placeholder="Выберите тип" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="permanent">Постоянная</SelectItem>
+                    <SelectItem value="temporary">Временная</SelectItem>
+                  </SelectContent>
+                </Select>
+              </FieldContent>
+            </Field>
+            <Field v-if="blockForm.blockType === 'temporary'">
+              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Период</FieldLabel>
+              <FieldContent>
+                <div class="rounded-md border border-border bg-card">
+                  <CalendarView v-model="blockCalendarRange" :number-of-months="2" locale="ru-RU" multiple />
+                </div>
+                <div class="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>{{ blockRangeHelperLabel }}</span>
+                  <button type="button" class="text-primary hover:underline" @click="clearBlockRange">Очистить</button>
+                </div>
+              </FieldContent>
+            </Field>
+            <Field>
+              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Причина блокировки</FieldLabel>
+              <FieldContent>
+                <Input v-model="blockForm.block_reason" placeholder="Укажите причину" />
+              </FieldContent>
+            </Field>
+          </FieldGroup>
+          <div class="flex gap-2">
+            <Button class="flex-1" type="submit" variant="default">
+              <Lock :size="16" />
+              Заблокировать
+            </Button>
+            <Button type="button" variant="outline" @click="closeBlockModal"> Отмена </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
     <PolygonSidebar
       :is-open="showSidebar"
       :polygon="selectedPolygon"
@@ -163,17 +224,21 @@
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { Lock, Plus, Save } from "lucide-vue-next";
+import { parseDate as parseCalendarDate } from "@internationalized/date";
 import api from "../api/client.js";
-import BaseModal from "../components/BaseModal.vue";
 import PolygonSidebar from "../components/PolygonSidebar.vue";
 import { useReferenceStore } from "../stores/reference.js";
 import { useRoute, useRouter } from "vue-router";
-import Button from "../components/ui/Button.vue";
-import Input from "../components/ui/Input.vue";
-import RangeCalendar from "../components/ui/RangeCalendar.vue";
-import Select from "../components/ui/Select.vue";
+import Button from "../components/ui/button/Button.vue";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../components/ui/dialog/index.js";
+import { Field, FieldContent, FieldGroup, FieldLabel } from "../components/ui/field";
+import Input from "../components/ui/input/Input.vue";
+import { Calendar as CalendarView } from "../components/ui/calendar";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import PageHeader from "../components/PageHeader.vue";
 import { useNotifications } from "../composables/useNotifications.js";
+import { useTheme } from "../composables/useTheme.js";
+import { createMarkerIcon, getMapColor, getTileLayer } from "../utils/leaflet.js";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "leaflet-draw";
@@ -212,7 +277,8 @@ if (L?.GeometryUtil?.readableArea && !L.GeometryUtil.__patched) {
 const referenceStore = useReferenceStore();
 const route = useRoute();
 const router = useRouter();
-const { showErrorNotification, showSuccessNotification } = useNotifications();
+const { showErrorNotification, showSuccessNotification, showWarningNotification } = useNotifications();
+const { resolvedTheme } = useTheme();
 const cityId = ref("");
 const branchId = ref("");
 const branches = ref([]);
@@ -235,6 +301,34 @@ const blockForm = ref({
   blocked_until: "",
   block_reason: "",
 });
+const normalizeRangeValues = (value) => {
+  const dates = Array.isArray(value) ? value : value ? [value] : [];
+  if (!dates.length) return [];
+  const trimmed = dates.slice(-2);
+  return trimmed.sort((a, b) => a.compare(b));
+};
+const blockCalendarRange = computed({
+  get() {
+    const values = [];
+    if (blockForm.value.blocked_from) values.push(parseCalendarDate(blockForm.value.blocked_from));
+    if (blockForm.value.blocked_until) values.push(parseCalendarDate(blockForm.value.blocked_until));
+    return values.length ? values : undefined;
+  },
+  set(value) {
+    const normalized = normalizeRangeValues(value);
+    blockForm.value.blocked_from = normalized[0]?.toString() || "";
+    blockForm.value.blocked_until = normalized[1]?.toString() || "";
+  },
+});
+const blockRangeHelperLabel = computed(() => {
+  if (blockForm.value.blocked_from && blockForm.value.blocked_until) return "Диапазон выбран";
+  if (blockForm.value.blocked_from) return "Выберите дату окончания";
+  return "Выберите дату начала";
+});
+const clearBlockRange = () => {
+  blockForm.value.blocked_from = "";
+  blockForm.value.blocked_until = "";
+};
 const statusFilter = ref("all");
 const selectedPolygons = ref([]);
 const showSidebar = ref(false);
@@ -242,6 +336,7 @@ const selectedPolygon = ref(null);
 const editingPolygonId = ref(null);
 let map = null;
 let drawnItems = null;
+let tileLayer = null;
 let drawControl = null;
 let currentLayer = null;
 let editHandler = null;
@@ -355,18 +450,9 @@ const initMap = () => {
     zoomControl: false,
     attributionControl: false,
   }).setView(center, 13);
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: 20,
-  }).addTo(map);
+  tileLayer = getTileLayer(resolvedTheme.value, { maxZoom: 20 }).addTo(map);
   if (selectedBranch) {
-    const branchIcon = L.divIcon({
-      className: "custom-branch-marker",
-      html: `<div style="background-color: #FFD200; border: 3px solid #fff; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(0,0,0,0.3);">
-        <span style="font-size: 18px;">🏪</span>
-      </div>`,
-      iconSize: [32, 32],
-      iconAnchor: [16, 16],
-    });
+    const branchIcon = createMarkerIcon("pin", "primary", 18);
     L.marker(center, { icon: branchIcon })
       .addTo(map)
       .bindPopup(`<strong>${selectedBranch.name}</strong><br>${selectedBranch.address || ""}`, { autoPan: false });
@@ -384,9 +470,9 @@ const initMap = () => {
           allowIntersection: false,
           showArea: false,
           shapeOptions: {
-            color: "#FFD200",
-            fillColor: "#FFD200",
-            fillOpacity: 0.25,
+            color: getMapColor(resolvedTheme.value, "accent"),
+            fillColor: getMapColor(resolvedTheme.value, "accentFill"),
+            fillOpacity: 1,
             weight: 3,
             opacity: 0.9,
           },
@@ -417,8 +503,8 @@ const initMap = () => {
     editHandler = new L.EditToolbar.Edit(map, {
       featureGroup: drawnItems,
       selectedPathOptions: {
-        color: "#f97316",
-        fillColor: "#f97316",
+        color: getMapColor(resolvedTheme.value, "warning"),
+        fillColor: getMapColor(resolvedTheme.value, "warning"),
         fillOpacity: 0.2,
       },
     });
@@ -435,21 +521,25 @@ const renderPolygonsOnMap = () => {
     : cityId.value
       ? allPolygons.value.filter((polygon) => polygon.city_id === parseInt(cityId.value))
       : allPolygons.value;
+  const accent = getMapColor(resolvedTheme.value, "accent");
+  const accentFill = getMapColor(resolvedTheme.value, "accentFill");
+  const danger = getMapColor(resolvedTheme.value, "danger");
+  const muted = resolvedTheme.value === "dark" ? "#94a3b8" : "#9ca3af";
   visiblePolygons.forEach((polygon) => {
     if (!polygon.polygon) return;
     let color, fillOpacity;
     if (isPolygonBlocked(polygon)) {
-      color = "#ef4444";
+      color = danger;
       fillOpacity = 0.3;
     } else if (!polygon.is_active) {
-      color = "#9ca3af";
+      color = muted;
       fillOpacity = 0.2;
     } else {
-      color = "#FFD200";
-      fillOpacity = 0.25;
+      color = accentFill;
+      fillOpacity = 1;
     }
     const style = {
-      color: color,
+      color: accent,
       fillColor: color,
       fillOpacity: fillOpacity,
       weight: 3,
@@ -466,18 +556,20 @@ const renderPolygonsOnMap = () => {
     let statusBadge = "";
     if (isPolygonBlocked(polygon)) {
       statusBadge =
-        '<span style="display: inline-block; background: #fee2e2; color: #dc2626; padding: 2px 6px; border-radius: 4px; font-size: 11px; margin-top: 4px;">🔒 Заблокирован</span>';
+        '<span style="display: inline-block; background: rgba(239,68,68,0.12); color: #ef4444; padding: 2px 6px; border-radius: 999px; font-size: 11px; margin-top: 4px;">Заблокирован</span>';
     } else if (!polygon.is_active) {
       statusBadge =
-        '<span style="display: inline-block; background: #f3f4f6; color: #6b7280; padding: 2px 6px; border-radius: 4px; font-size: 11px; margin-top: 4px;">❌ Неактивен</span>';
+        '<span style="display: inline-block; background: rgba(148,163,184,0.18); color: #94a3b8; padding: 2px 6px; border-radius: 999px; font-size: 11px; margin-top: 4px;">Неактивен</span>';
     }
     const popupContent = `
-      <div style="font-family: system-ui, -apple-system, sans-serif;">
-        <strong style="font-size: 14px;">${polygon.name || `Полигон #${polygon.id}`}</strong><br>
-        <span style="font-size: 12px; color: #666;">${polygon.branch_name || ""}</span><br>
-        <span style="font-size: 12px; color: #666;">⏱️ ${polygon.delivery_time || 30} мин</span><br>
-        <span style="font-size: 12px; color: #666;">💰 Мин. заказ: ${polygon.min_order_amount || 0}₽</span><br>
-        <span style="font-size: 12px; color: #666;">🚚 Доставка: ${polygon.delivery_cost || 0}₽</span>
+      <div class="space-y-1.5 font-sans">
+        <div class="text-sm font-semibold text-foreground">${polygon.name || `Полигон #${polygon.id}`}</div>
+        <div class="text-xs text-muted-foreground">${polygon.branch_name || ""}</div>
+        <div class="grid gap-1 text-xs text-muted-foreground">
+          <div>Время доставки: ${polygon.delivery_time || 30} мин</div>
+            <div style="background: inherit;">Мин. заказ: ${polygon.min_order_amount || 0} ₽</div>
+          <div>Доставка: ${polygon.delivery_cost || 0} ₽</div>
+        </div>
         ${statusBadge}
       </div>
     `;
@@ -568,7 +660,7 @@ const submitBlock = async () => {
     };
     if (blockForm.value.blockType === "temporary") {
       if (!blockForm.value.blocked_from || !blockForm.value.blocked_until) {
-        showErrorNotification("Укажите период блокировки");
+        showWarningNotification("Укажите период блокировки");
         return;
       }
       payload.blocked_from = toStartOfDay(blockForm.value.blocked_from);
@@ -804,6 +896,19 @@ watch(
   },
   { deep: true },
 );
+watch(
+  () => resolvedTheme.value,
+  () => {
+    if (!map) return;
+    if (tileLayer) {
+      tileLayer.remove();
+    }
+    tileLayer = getTileLayer(resolvedTheme.value, { maxZoom: 20 }).addTo(map);
+    if (drawnItems) {
+      renderPolygonsOnMap();
+    }
+  },
+);
 onMounted(() => {
   referenceStore.loadCities();
   loadAllPolygons();
@@ -827,5 +932,8 @@ onUnmounted(() => {
     map.remove();
     map = null;
   }
+  tileLayer = null;
 });
 </script>
+<style>
+</style>

@@ -1,21 +1,55 @@
 <template>
-  <div class="min-h-screen min-w-[1280px] bg-[#F5F5F5]">
-    <header class="sticky top-0 z-30 border-b border-[#E0E0E0] bg-white/90 backdrop-blur">
+  <div class="min-h-screen min-w-[1280px] bg-background text-foreground">
+    <header class="sticky top-0 z-30 border-b border-border bg-background/90 backdrop-blur">
       <div class="flex h-[72px] items-center justify-between gap-6 px-6">
         <div class="flex items-center gap-4">
-          <div class="flex h-10 w-10 items-center justify-center rounded-full bg-[#FFD200] text-sm font-semibold text-black">PD</div>
+          <div class="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">PD</div>
           <div class="min-w-0">
-            <div class="text-base font-semibold text-black">Текущая смена</div>
-            <div class="text-xs text-[#666666]">Оперативное управление заказами</div>
+            <div class="text-base font-semibold text-foreground">Текущая смена</div>
+            <div class="text-xs text-muted-foreground">Оперативное управление заказами</div>
           </div>
         </div>
         <div class="flex items-center gap-3">
+          <div class="hidden items-center gap-2 sm:flex">
+            <Select v-model="themeValue">
+              <SelectTrigger class="h-9 w-[160px] text-xs">
+                <div class="flex items-center gap-2">
+                  <component :is="activeThemeIcon" :size="14" />
+                  <SelectValue />
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="system">
+                  <div class="flex items-center gap-2">
+                    <Monitor :size="14" />
+                    Системный
+                  </div>
+                </SelectItem>
+                <SelectItem value="light">
+                  <div class="flex items-center gap-2">
+                    <Sun :size="14" />
+                    Светлый
+                  </div>
+                </SelectItem>
+                <SelectItem value="dark">
+                  <div class="flex items-center gap-2">
+                    <Moon :size="14" />
+                    Темный
+                  </div>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           <div class="min-w-[260px]">
             <Select v-model="selectedBranchId">
-              <option value="">Выберите филиал</option>
-              <option v-for="branch in branchOptions" :key="branch.id" :value="branch.id">
-                {{ branch.label }}
-              </option>
+              <SelectTrigger class="w-full">
+                <SelectValue placeholder="Выберите филиал" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem v-for="branch in branchOptions" :key="branch.id" :value="branch.id">
+                  {{ branch.label }}
+                </SelectItem>
+              </SelectContent>
             </Select>
           </div>
           <Button variant="outline" @click="openAdminPanel">
@@ -27,7 +61,7 @@
     </header>
 
     <div class="flex h-[calc(100vh-72px)]">
-      <section class="flex w-[40%] min-w-[480px] flex-col border-r border-[#E0E0E0] bg-[#F5F5F5] p-4">
+      <section class="flex w-[40%] min-w-[480px] flex-col border-r border-border bg-muted/40 p-4">
         <div class="flex flex-wrap items-center justify-between gap-3">
           <div class="flex items-center gap-2 border-b border-transparent">
             <button
@@ -67,33 +101,40 @@
         </div>
 
         <div v-if="activeTab === 'search'" class="mt-3">
-          <label class="text-[11px] font-semibold uppercase tracking-wide text-[#666666]">Поиск</label>
-          <div class="relative mt-1">
-            <Search class="absolute left-3 top-1/2 -translate-y-1/2 text-[#666666]" :size="16" />
-            <Input
-              ref="searchInputRef"
-              v-model="searchQuery"
-              class="pl-9 pr-9"
-              placeholder="Поиск по номеру, телефону или адресу"
-              @keydown.esc.prevent="clearSearch"
-            />
-            <button
-              v-if="searchQuery"
-              type="button"
-              class="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-[#666666] hover:bg-black/5"
-              @click="clearSearch"
-            >
-              <X :size="14" />
-            </button>
-          </div>
+          <Field>
+            <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Поиск</FieldLabel>
+            <FieldContent>
+              <div class="relative mt-1">
+                <Search class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" :size="16" />
+                <Input
+                  ref="searchInputRef"
+                  v-model="searchQuery"
+                  class="pl-9 pr-9"
+                  placeholder="Поиск по номеру, телефону или адресу"
+                  @keydown.esc.prevent="clearSearch"
+                />
+                <button
+                  v-if="searchQuery"
+                  type="button"
+                  class="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-muted-foreground hover:bg-accent/60"
+                  @click="clearSearch"
+                >
+                  <X :size="14" />
+                </button>
+              </div>
+            </FieldContent>
+          </Field>
         </div>
 
         <div class="mt-4 flex-1 overflow-y-auto pr-1">
-          <div v-if="visibleOrders.length === 0" class="flex h-full flex-col items-center justify-center gap-3 text-center text-sm text-[#666666]">
+          <div
+            v-if="visibleOrders.length === 0"
+            class="flex h-full flex-col items-center justify-center gap-3 text-center text-sm text-muted-foreground"
+          >
             <component :is="emptyStateIcon" :size="28" />
             <div class="max-w-[240px]">
-              <div class="font-semibold text-[#666666]">{{ emptyStateTitle }}</div>
-              <div v-if="emptyStateSubtitle" class="text-xs text-[#999999]">{{ emptyStateSubtitle }}</div>
+              <div class="font-semibold text-muted-foreground">{{ emptyStateTitle }}</div>
+              <div v-if="emptyStateSubtitle" class="text-xs text-muted-foreground/70">{{ emptyStateSubtitle }}</div>
             </div>
           </div>
 
@@ -102,33 +143,33 @@
               v-for="order in visibleOrders"
               :key="order.id"
               :ref="(el) => setOrderRef(order.id, el)"
-              class="rounded-xl border bg-white p-4 transition-all"
+              class="rounded-xl border bg-card p-4 transition-all"
               :class="orderCardClass(order)"
               @click="toggleOrder(order)"
             >
               <div class="flex items-start justify-between gap-4">
                 <div class="space-y-1">
-                  <div class="flex items-center gap-2 text-sm font-semibold text-black">
+                  <div class="flex items-center gap-2 text-sm font-semibold text-foreground">
                     <span>#{{ order.order_number }}</span>
-                    <span class="flex items-center gap-1 text-xs font-medium text-[#666666]">
+                    <span class="flex items-center gap-1 text-xs font-medium text-muted-foreground">
                       <Clock :size="14" />
                       {{ formatOrderTime(order) }}
                     </span>
                   </div>
-                  <div class="flex items-center gap-2 text-sm text-[#666666]">
+                  <div class="flex items-center gap-2 text-sm text-muted-foreground">
                     <MapPin v-if="order.order_type === 'delivery'" :size="14" />
                     <Store v-else :size="14" />
                     <span>{{ getOrderLocation(order) }}</span>
                   </div>
-                  <div class="flex items-center gap-2 text-sm text-[#666666]">
+                  <div class="flex items-center gap-2 text-sm text-muted-foreground">
                     <Phone :size="14" />
                     <span>{{ formatPhone(order.user_phone) || "—" }}</span>
                   </div>
-                  <div v-if="order.delivery_comment || order.comment" class="flex items-center gap-2 text-sm text-[#666666]">
+                  <div v-if="order.delivery_comment || order.comment" class="flex items-center gap-2 text-sm text-muted-foreground">
                     <MessageSquare :size="14" />
                     <span>{{ order.delivery_comment || order.comment }}</span>
                   </div>
-                  <div class="flex items-center gap-2 text-sm text-[#666666]">
+                  <div class="flex items-center gap-2 text-sm text-muted-foreground">
                     <CreditCard :size="14" />
                     <span>{{ getPaymentSummary(order) }}</span>
                   </div>
@@ -140,22 +181,24 @@
 
               <Transition name="fade-slide">
                 <div v-if="expandedOrderId === order.id" class="mt-4 space-y-4">
-                  <div class="rounded-lg border border-[#E0E0E0] bg-[#FAFAFA] p-3">
+                  <div class="rounded-lg border border-border bg-muted/50 p-3">
                     <div v-for="(item, index) in order.items || []" :key="item.id" class="py-2">
-                      <div class="flex items-center justify-between text-sm font-semibold text-black">
+                      <div class="flex items-center justify-between text-sm font-semibold text-foreground">
                         <span>{{ item.item_name }}</span>
                         <span>{{ formatCurrency(item.subtotal) }}</span>
                       </div>
-                      <div v-if="item.modifiers?.length" class="text-xs text-[#666666]">
+                      <div v-if="item.modifiers?.length" class="text-xs text-muted-foreground">
                         {{ item.modifiers.map((modifier) => modifier.modifier_name).join(", ") }}
                       </div>
-                      <div v-if="index < (order.items?.length || 0) - 1" class="mt-2 h-px bg-[#E0E0E0]"></div>
+                      <div v-if="index < (order.items?.length || 0) - 1" class="mt-2 h-px bg-border"></div>
                     </div>
                   </div>
 
-                  <div v-if="Number(order.delivery_cost) > 0" class="text-sm text-[#666666]">Доставка: {{ formatCurrency(order.delivery_cost) }}</div>
+                  <div v-if="Number(order.delivery_cost) > 0" class="text-sm text-muted-foreground">
+                    Доставка: {{ formatCurrency(order.delivery_cost) }}
+                  </div>
 
-                  <div class="text-sm font-semibold text-black">Итого: {{ formatCurrency(order.total) }}</div>
+                  <div class="text-sm font-semibold text-foreground">Итого: {{ formatCurrency(order.total) }}</div>
 
                   <div class="space-y-2">
                     <Button v-if="getNextStatus(order)" class="w-full" @click.stop="changeStatus(order)">
@@ -172,7 +215,7 @@
         </div>
       </section>
 
-      <section class="relative flex-1 bg-white">
+      <section class="relative flex-1 bg-background">
         <div ref="mapContainer" class="absolute inset-0 z-0"></div>
         <div class="absolute right-4 top-4 z-20 flex flex-col gap-2 pointer-events-auto">
           <Button size="icon" variant="outline" @click="togglePolygons">
@@ -194,10 +237,14 @@
         </DialogHeader>
         <div class="mt-4">
           <Select v-model="selectedBranchId">
-            <option value="">Выберите филиал</option>
-            <option v-for="branch in branchOptions" :key="branch.id" :value="branch.id">
-              {{ branch.label }}
-            </option>
+            <SelectTrigger class="w-full">
+              <SelectValue placeholder="Выберите филиал" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem v-for="branch in branchOptions" :key="branch.id" :value="branch.id">
+                {{ branch.label }}
+              </SelectItem>
+            </SelectContent>
           </Select>
         </div>
         <DialogFooter class="mt-6">
@@ -234,22 +281,28 @@ import {
   EyeOff,
   LocateFixed,
   MapPin,
+  Monitor,
   MessageSquare,
+  Moon,
   PackageOpen,
   Phone,
   Search,
   Store,
+  Sun,
   X,
 } from "lucide-vue-next";
 import api from "../api/client.js";
 import { useReferenceStore } from "../stores/reference.js";
 import { useOrdersStore } from "../stores/orders.js";
 import { useNotifications } from "../composables/useNotifications.js";
+import { useTheme } from "../composables/useTheme.js";
+import { createMarkerIcon, getMapColor, getTileLayer } from "../utils/leaflet.js";
 import { formatCurrency, formatPhone } from "../utils/format.js";
-import Badge from "../components/ui/Badge.vue";
-import Button from "../components/ui/Button.vue";
-import Input from "../components/ui/Input.vue";
-import Select from "../components/ui/Select.vue";
+import Badge from "../components/ui/badge/Badge.vue";
+import Button from "../components/ui/button/Button.vue";
+import Input from "../components/ui/input/Input.vue";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
+import { Field, FieldContent, FieldLabel } from "../components/ui/field";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -262,6 +315,17 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 const referenceStore = useReferenceStore();
 const ordersStore = useOrdersStore();
 const { showErrorNotification, showNewOrderNotification, showSuccessNotification } = useNotifications();
+const { theme, setTheme, resolvedTheme } = useTheme();
+
+const themeValue = computed({
+  get: () => theme.value,
+  set: (value) => setTheme(value),
+});
+const activeThemeIcon = computed(() => {
+  if (theme.value === "dark") return Moon;
+  if (theme.value === "light") return Sun;
+  return Monitor;
+});
 
 const orders = ref([]);
 const recentOrderIds = ref(new Set());
@@ -284,10 +348,14 @@ let branchMarker = null;
 let staticBranchMarker = null;
 let deliveryMarker = null;
 let routeLine = null;
+let tileLayer = null;
 let shiftTimer = null;
 const orderRefs = new Map();
 
 const polygonsVisible = ref(localStorage.getItem("shift_polygons_visible") !== "false");
+
+const mapAccentColor = computed(() => getMapColor(resolvedTheme.value, "accent"));
+const mapAccentFill = computed(() => getMapColor(resolvedTheme.value, "accentFill"));
 
 const tabs = computed(() => [
   { value: "active", label: "Активные", badge: activeOrders.value.length },
@@ -362,11 +430,11 @@ const emptyStateSubtitle = computed(() => {
 });
 
 const tabButtonClass = (value) => {
-  return value === activeTab.value ? "border-b-2 border-[#FFD200] text-black" : "text-[#666666] hover:text-black";
+  return value === activeTab.value ? "border-b-2 border-primary text-foreground" : "text-muted-foreground hover:text-foreground";
 };
 
 const tabBadgeClass = (value) => {
-  return value === activeTab.value ? "bg-[#FFD200] text-black" : "bg-[#E0E0E0] text-[#666666]";
+  return value === activeTab.value ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground";
 };
 
 const clearSearch = () => {
@@ -471,15 +539,15 @@ const orderCardClass = (order) => {
   const isOverdue = Boolean(desiredDate) && desiredDate < new Date() && !["completed", "cancelled"].includes(order.status);
   const isRecent = recentOrderIds.value.has(order.id);
   if (isExpanded) {
-    return ["border-[#FFD200] shadow-lg"];
+    return ["border-primary shadow-lg"];
   }
   if (isOverdue) {
-    return ["border-2 border-[#FF0000] shadow-sm"];
+    return ["border-2 border-destructive shadow-sm"];
   }
   if (isRecent) {
-    return ["border-[#E0E0E0] shadow-sm", "bg-[#FFFBE6]"];
+    return ["border-border shadow-sm", "bg-primary/10"];
   }
-  return ["border-[#E0E0E0] shadow-sm"];
+  return ["border-border shadow-sm"];
 };
 
 const formatOrderTime = (order) => {
@@ -629,7 +697,7 @@ const initMap = () => {
   const branch = branchOptions.value.find((item) => item.id === Number(selectedBranchId.value));
   const center = branch?.latitude && branch?.longitude ? [branch.latitude, branch.longitude] : [55.751244, 37.618423];
   mapInstance = L.map(mapContainer.value, { zoomControl: true, attributionControl: false }).setView(center, 12);
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 18 }).addTo(mapInstance);
+  tileLayer = getTileLayer(resolvedTheme.value, { maxZoom: 18 }).addTo(mapInstance);
   renderBranchMarker();
 };
 
@@ -650,14 +718,7 @@ const renderBranchMarker = () => {
   if (staticBranchMarker) {
     staticBranchMarker.remove();
   }
-  const branchIcon = L.divIcon({
-    className: "shift-branch-marker",
-    html: `<div style=\"background-color: #FF0000; border: 3px solid #fff; border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(0,0,0,0.25);\">
-      <span style=\"font-size: 14px; color: #fff;\">🏪</span>
-    </div>`,
-    iconSize: [28, 28],
-    iconAnchor: [14, 14],
-  });
+  const branchIcon = createMarkerIcon("pin", "primary", 18);
   staticBranchMarker = L.marker([branch.latitude, branch.longitude], { icon: branchIcon }).addTo(mapInstance);
 };
 
@@ -676,13 +737,55 @@ const loadPolygons = async () => {
       polygonsLayer.remove();
       polygonsLayer = null;
     }
-    polygonsLayer = L.geoJSON(polygons.map((polygon) => normalizePolygon(polygon.polygon)).filter(Boolean), {
+    const features = polygons
+      .map((polygon) => {
+        const geometry = normalizePolygon(polygon.polygon);
+        if (!geometry) return null;
+        return {
+          type: "Feature",
+          geometry,
+          properties: { ...polygon },
+        };
+      })
+      .filter(Boolean);
+    polygonsLayer = L.geoJSON(features, {
       style: {
-        color: "#3B82F6",
+        color: mapAccentColor.value,
         weight: 2,
         opacity: 0.8,
-        fillColor: "#3B82F6",
-        fillOpacity: 0.2,
+        fillColor: mapAccentFill.value,
+        fillOpacity: 1,
+      },
+      onEachFeature: (feature, layer) => {
+        const props = feature?.properties || {};
+        const name = props.name || `Полигон #${props.id || ""}`;
+        const branchName = props.branch_name || "";
+        const deliveryTime = props.delivery_time || 30;
+        const minOrder = props.min_order_amount || 0;
+        const deliveryCost = props.delivery_cost || 0;
+        const isBlocked = Boolean(props.is_blocked);
+        const isInactive = props.is_active === 0 || props.is_active === false;
+        let statusBadge = "";
+        if (isBlocked) {
+          statusBadge =
+            '<span style="display:inline-block;background:rgba(239,68,68,0.12);color:#ef4444;padding:2px 6px;border-radius:999px;font-size:11px;margin-top:6px;">Заблокирован</span>';
+        } else if (isInactive) {
+          statusBadge =
+            '<span style="display:inline-block;background:rgba(148,163,184,0.18);color:#94a3b8;padding:2px 6px;border-radius:999px;font-size:11px;margin-top:6px;">Неактивен</span>';
+        }
+        const popupContent = `
+      <div class="space-y-1.5 font-sans">
+        <div class="text-sm font-semibold text-foreground">${name}</div>
+        <div class="text-xs text-muted-foreground">${branchName}</div>
+        <div class="grid gap-1 text-xs text-muted-foreground">
+          <div>Время доставки: ${deliveryTime} мин</div>
+            <div style="background: inherit;">Мин. заказ: ${minOrder} ₽</div>
+          <div>Доставка: ${deliveryCost} ₽</div>
+        </div>
+        ${statusBadge}
+      </div>
+    `;
+        layer.bindPopup(popupContent, { autoPan: false });
       },
     });
     updatePolygonsVisibility();
@@ -758,22 +861,8 @@ const showOrderOnMap = (order) => {
   const deliveryLat = normalizedDelivery.lat;
   const deliveryLng = normalizedDelivery.lng;
   clearOrderMap();
-  const branchIcon = L.divIcon({
-    className: "shift-branch-marker",
-    html: `<div style=\"background-color: #FF0000; border: 3px solid #fff; border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(0,0,0,0.25);\">
-      <span style=\"font-size: 14px; color: #fff;\">🏪</span>
-    </div>`,
-    iconSize: [28, 28],
-    iconAnchor: [14, 14],
-  });
-  const deliveryIcon = L.divIcon({
-    className: "shift-delivery-marker",
-    html: `<div style=\"background-color: #3B82F6; border: 3px solid #fff; border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(0,0,0,0.25);\">
-      <span style=\"font-size: 14px; color: #fff;\">📍</span>
-    </div>`,
-    iconSize: [28, 28],
-    iconAnchor: [14, 14],
-  });
+  const branchIcon = createMarkerIcon("pin", "primary", 18);
+  const deliveryIcon = createMarkerIcon("circle", "blue", 16);
   branchMarker = L.marker([branchLat, branchLng], { icon: branchIcon }).addTo(mapInstance);
   deliveryMarker = L.marker([deliveryLat, deliveryLng], { icon: deliveryIcon }).addTo(mapInstance);
   routeLine = L.polyline(
@@ -781,7 +870,7 @@ const showOrderOnMap = (order) => {
       [branchLat, branchLng],
       [deliveryLat, deliveryLng],
     ],
-    { color: "#3B82F6", weight: 3, dashArray: "10, 5" },
+    { color: mapAccentColor.value, weight: 3, dashArray: "10, 5" },
   ).addTo(mapInstance);
   const bounds = L.latLngBounds([branchLat, branchLng], [deliveryLat, deliveryLng]);
   mapInstance.fitBounds(bounds, { padding: [50, 50] });
@@ -889,13 +978,39 @@ watch(
   },
 );
 
+watch(
+  () => resolvedTheme.value,
+  () => {
+    if (!mapInstance) return;
+    if (tileLayer) {
+      tileLayer.remove();
+    }
+    tileLayer = getTileLayer(resolvedTheme.value, { maxZoom: 18 }).addTo(mapInstance);
+    if (polygonsLayer) {
+      polygonsLayer.setStyle({
+        color: mapAccentColor.value,
+        fillColor: mapAccentFill.value,
+        fillOpacity: 1,
+      });
+    }
+    if (routeLine) {
+      routeLine.setStyle({ color: mapAccentColor.value });
+    }
+  },
+);
+
 onMounted(async () => {
   await referenceStore.fetchCitiesAndBranches();
   const storedBranch = localStorage.getItem("shift_selected_branch_id");
   if (storedBranch && branchOptions.value.some((branch) => branch.id === Number(storedBranch))) {
     selectedBranchId.value = storedBranch;
   } else {
-    branchDialogOpen.value = true;
+    const firstBranch = branchOptions.value[0];
+    if (firstBranch) {
+      selectedBranchId.value = String(firstBranch.id);
+    } else {
+      branchDialogOpen.value = true;
+    }
   }
   ordersStore.connectWebSocket();
 });
@@ -911,6 +1026,7 @@ onBeforeUnmount(() => {
     mapInstance.remove();
     mapInstance = null;
   }
+  tileLayer = null;
 });
 </script>
 

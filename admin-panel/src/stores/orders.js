@@ -8,11 +8,25 @@ export const useOrdersStore = defineStore("orders", {
     lastBonusEvent: null,
     lastBroadcastEvent: null,
     statusById: {},
+    breadcrumbs: {
+      items: [],
+      owner: null,
+    },
     ws: null,
     connecting: false,
     rooms: [],
   }),
   actions: {
+    setBreadcrumbs(items = [], owner = null) {
+      this.breadcrumbs = {
+        items: Array.isArray(items) ? items : [],
+        owner,
+      };
+    },
+    clearBreadcrumbs(owner = null) {
+      if (owner && this.breadcrumbs.owner !== owner) return;
+      this.breadcrumbs = { items: [], owner: null };
+    },
     setNewOrdersCount(value) {
       const normalized = Number(value);
       this.newOrdersCount = Number.isFinite(normalized) ? Math.max(0, Math.trunc(normalized)) : 0;

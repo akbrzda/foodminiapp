@@ -6,8 +6,11 @@
       </CardContent>
     </Card>
 
-    <Tabs v-model="activeTab" :tabs="tabs">
-      <div v-if="activeTab === 0" class="space-y-6">
+    <Tabs v-model="activeTab">
+      <TabsList>
+        <TabsTrigger v-for="(tab, index) in tabs" :key="tab" :value="index">{{ tab }}</TabsTrigger>
+      </TabsList>
+      <TabsContent :value="0" class="space-y-6">
         <Card v-if="moduleGroups.length">
           <CardHeader>
             <CardTitle>Модули</CardTitle>
@@ -31,8 +34,13 @@
                     </div>
                     <div class="w-40">
                       <Select v-if="item.type === 'boolean' || typeof moduleForm[item.key] === 'boolean'" v-model="moduleForm[item.key]">
-                        <option :value="true">Включено</option>
-                        <option :value="false">Выключено</option>
+                        <SelectTrigger class="w-full">
+                          <SelectValue placeholder="Выберите статус" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem :value="true">Включено</SelectItem>
+                          <SelectItem :value="false">Выключено</SelectItem>
+                        </SelectContent>
                       </Select>
                       <Input v-else-if="item.type === 'string'" v-model="moduleForm[item.key]" type="text" />
                       <Input
@@ -57,17 +65,19 @@
 
         <div class="flex flex-wrap justify-end gap-3">
           <Button variant="secondary" :disabled="moduleLoading || moduleSaving" @click="loadModuleSettings">
-            <RefreshCcw :size="16" />
+            <Spinner v-if="moduleLoading" class="h-4 w-4" />
+            <RefreshCcw v-else :size="16" />
             Сбросить
           </Button>
           <Button :disabled="moduleLoading || moduleSaving" @click="saveModuleSettings">
-            <Save :size="16" />
+            <Spinner v-if="moduleSaving" class="h-4 w-4" />
+            <Save v-else :size="16" />
             {{ moduleSaving ? "Сохранение..." : "Сохранить" }}
           </Button>
         </div>
-      </div>
+      </TabsContent>
 
-      <div v-else-if="activeTab === 1" class="space-y-6">
+      <TabsContent :value="1" class="space-y-6">
         <Card>
           <CardHeader>
             <CardTitle>Лояльность</CardTitle>
@@ -86,8 +96,13 @@
                 </div>
                 <div class="w-40">
                   <Select v-model="moduleForm[item.key]">
-                    <option :value="true">Включено</option>
-                    <option :value="false">Выключено</option>
+                    <SelectTrigger class="w-full">
+                      <SelectValue placeholder="Выберите статус" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem :value="true">Включено</SelectItem>
+                      <SelectItem :value="false">Выключено</SelectItem>
+                    </SelectContent>
                   </Select>
                 </div>
               </div>
@@ -99,29 +114,31 @@
         </Card>
         <div class="flex flex-wrap justify-end gap-3">
           <Button variant="secondary" :disabled="moduleLoading || moduleSaving" @click="loadModuleSettings">
-            <RefreshCcw :size="16" />
+            <Spinner v-if="moduleLoading" class="h-4 w-4" />
+            <RefreshCcw v-else :size="16" />
             Сбросить
           </Button>
           <Button :disabled="moduleLoading || moduleSaving" @click="saveModuleSettings">
-            <Save :size="16" />
+            <Spinner v-if="moduleSaving" class="h-4 w-4" />
+            <Save v-else :size="16" />
             {{ moduleSaving ? "Сохранение..." : "Сохранить" }}
           </Button>
         </div>
-      </div>
+      </TabsContent>
 
-      <div v-else class="space-y-6">
+      <TabsContent :value="2" class="space-y-6">
         <Card>
-          <CardHeader class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            <div>
-              <CardTitle>Причины стоп-листа</CardTitle>
-              <CardDescription>Настройка причин, по которым позиции скрываются</CardDescription>
+          <CardContent class="!p-0">
+            <div class="flex flex-col gap-2 border-b border-border/60 px-4 py-3 md:flex-row md:items-center md:justify-between">
+              <div>
+                <div class="text-sm font-semibold text-foreground">Причины стоп-листа</div>
+                <div class="text-xs text-muted-foreground">Настройка причин, по которым позиции скрываются</div>
+              </div>
+              <Button @click="openModal()">
+                <Plus :size="16" />
+                Добавить причину
+              </Button>
             </div>
-            <Button @click="openModal()">
-              <Plus :size="16" />
-              Добавить причину
-            </Button>
-          </CardHeader>
-          <CardContent class="pt-0">
             <Table v-if="reasons.length > 0">
               <TableHeader>
                 <TableRow>
@@ -161,58 +178,80 @@
             <div v-else class="py-8 text-center text-sm text-muted-foreground">Причины не добавлены</div>
           </CardContent>
         </Card>
-      </div>
+      </TabsContent>
     </Tabs>
 
-    <BaseModal v-if="showModal" :title="modalTitle" :subtitle="modalSubtitle" @close="closeModal">
-      <form class="space-y-4" @submit.prevent="submitReason">
-        <div class="space-y-2">
-          <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Название</label>
-          <Input v-model="formReason.name" required />
-        </div>
-        <div class="grid gap-4 md:grid-cols-2">
-          <div class="space-y-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Порядок</label>
-            <Input v-model.number="formReason.sort_order" type="number" placeholder="0 = автоматически" />
-          </div>
-          <div class="space-y-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Статус</label>
-            <Select v-model="formReason.is_active">
-              <option :value="true">Активна</option>
-              <option :value="false">Скрыта</option>
-            </Select>
-          </div>
-        </div>
-        <Button class="w-full" type="submit" :disabled="savingReason">
-          <Save :size="16" />
-          {{ savingReason ? "Сохранение..." : "Сохранить" }}
-        </Button>
-      </form>
-    </BaseModal>
+    <Dialog v-if="showModal" :open="showModal" @update:open="(value) => (value ? null : closeModal())">
+      <DialogContent class="w-full max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>{{ modalTitle }}</DialogTitle>
+          <DialogDescription>{{ modalSubtitle }}</DialogDescription>
+        </DialogHeader>
+        <form class="space-y-4" @submit.prevent="submitReason">
+          <FieldGroup>
+            <Field>
+              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Название</FieldLabel>
+              <FieldContent>
+                <Input v-model="formReason.name" required />
+              </FieldContent>
+            </Field>
+            <FieldGroup class="grid gap-4 md:grid-cols-2">
+              <Field>
+                <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Порядок</FieldLabel>
+                <FieldContent>
+                  <Input v-model.number="formReason.sort_order" type="number" placeholder="0 = автоматически" />
+                </FieldContent>
+              </Field>
+              <Field>
+                <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Статус</FieldLabel>
+                <FieldContent>
+                  <Select v-model="formReason.is_active">
+                    <SelectTrigger class="w-full">
+                      <SelectValue placeholder="Выберите статус" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem :value="true">Активна</SelectItem>
+                      <SelectItem :value="false">Скрыта</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </FieldContent>
+              </Field>
+            </FieldGroup>
+          </FieldGroup>
+          <Button class="w-full" type="submit" :disabled="savingReason">
+            <Spinner v-if="savingReason" class="h-4 w-4" />
+            <Save v-else :size="16" />
+            {{ savingReason ? "Сохранение..." : "Сохранить" }}
+          </Button>
+        </form>
+      </DialogContent>
+    </Dialog>
   </div>
 </template>
 <script setup>
 import { computed, onMounted, ref } from "vue";
 import { Pencil, Plus, RefreshCcw, Save, Trash2 } from "lucide-vue-next";
 import api from "../api/client.js";
-import BaseModal from "../components/BaseModal.vue";
-import Badge from "../components/ui/Badge.vue";
-import Button from "../components/ui/Button.vue";
-import Card from "../components/ui/Card.vue";
-import CardContent from "../components/ui/CardContent.vue";
-import CardDescription from "../components/ui/CardDescription.vue";
-import CardHeader from "../components/ui/CardHeader.vue";
-import CardTitle from "../components/ui/CardTitle.vue";
-import Input from "../components/ui/Input.vue";
+import Badge from "../components/ui/badge/Badge.vue";
+import Button from "../components/ui/button/Button.vue";
+import Card from "../components/ui/card/Card.vue";
+import CardContent from "../components/ui/card/CardContent.vue";
+import CardDescription from "../components/ui/card/CardDescription.vue";
+import CardHeader from "../components/ui/card/CardHeader.vue";
+import CardTitle from "../components/ui/card/CardTitle.vue";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../components/ui/dialog/index.js";
+import Input from "../components/ui/input/Input.vue";
 import PageHeader from "../components/PageHeader.vue";
-import Select from "../components/ui/Select.vue";
-import Table from "../components/ui/Table.vue";
-import TableBody from "../components/ui/TableBody.vue";
-import TableCell from "../components/ui/TableCell.vue";
-import TableHead from "../components/ui/TableHead.vue";
-import TableHeader from "../components/ui/TableHeader.vue";
-import TableRow from "../components/ui/TableRow.vue";
-import Tabs from "../components/ui/Tabs.vue";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
+import Table from "../components/ui/table/Table.vue";
+import TableBody from "../components/ui/table/TableBody.vue";
+import TableCell from "../components/ui/table/TableCell.vue";
+import TableHead from "../components/ui/table/TableHead.vue";
+import TableHeader from "../components/ui/table/TableHeader.vue";
+import TableRow from "../components/ui/table/TableRow.vue";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
+import { Field, FieldContent, FieldGroup, FieldLabel } from "../components/ui/field";
+import Spinner from "../components/ui/spinner/Spinner.vue";
 import { useNotifications } from "../composables/useNotifications.js";
 import { formatNumber, normalizeBoolean } from "../utils/format.js";
 

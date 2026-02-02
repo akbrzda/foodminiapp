@@ -10,7 +10,9 @@ import ShiftPage from "../views/ShiftPage.vue";
 import Clients from "../views/Clients.vue";
 import ClientDetail from "../views/ClientDetail.vue";
 import Cities from "../views/Cities.vue";
+import CityForm from "../views/CityForm.vue";
 import Branches from "../views/Branches.vue";
+import BranchForm from "../views/BranchForm.vue";
 import DeliveryZones from "../views/DeliveryZones.vue";
 import DeliveryZoneEditor from "../views/DeliveryZoneEditor.vue";
 import MenuCategories from "../views/MenuCategories.vue";
@@ -47,7 +49,16 @@ const router = createRouter({
         { path: "", redirect: "/dashboard" },
         { path: "dashboard", name: "dashboard", component: Dashboard, meta: { title: "Панель управления", subtitle: "Статистика и обзор" } },
         { path: "orders", name: "orders", component: Orders, meta: { title: "Заказы", subtitle: "Реальные заявки и статусы" } },
-        { path: "orders/:id", name: "order-detail", component: OrderDetail, meta: { title: "Детали заказа", subtitle: "Подробная информация" } },
+        {
+          path: "orders/:id",
+          name: "order-detail",
+          component: OrderDetail,
+          meta: {
+            title: "Детали заказа",
+            subtitle: "Подробная информация",
+            breadcrumbs: [{ label: "Заказы", to: "/orders" }, { label: "Детали заказа" }],
+          },
+        },
         {
           path: "clients",
           name: "clients",
@@ -58,7 +69,12 @@ const router = createRouter({
           path: "clients/:id",
           name: "client-detail",
           component: ClientDetail,
-          meta: { title: "Клиент", subtitle: "Данные и история", roles: ["admin", "ceo"] },
+          meta: {
+            title: "Клиент",
+            subtitle: "Данные и история",
+            roles: ["admin", "ceo"],
+            breadcrumbs: [{ label: "Клиенты", to: "/clients" }, { label: "Клиент" }],
+          },
         },
         {
           path: "cities",
@@ -67,10 +83,54 @@ const router = createRouter({
           meta: { title: "Города", subtitle: "Управление городами доставки", roles: ["admin", "ceo"] },
         },
         {
+          path: "cities/new",
+          name: "city-new",
+          component: CityForm,
+          meta: {
+            title: "Новый город",
+            subtitle: "Создание города",
+            roles: ["admin", "ceo"],
+            breadcrumbs: [{ label: "Города", to: "/cities" }, { label: "Новый город" }],
+          },
+        },
+        {
+          path: "cities/:id",
+          name: "city-edit",
+          component: CityForm,
+          meta: {
+            title: "Редактирование города",
+            subtitle: "Изменение города",
+            roles: ["admin", "ceo"],
+            breadcrumbs: [{ label: "Города", to: "/cities" }, { label: "Редактирование" }],
+          },
+        },
+        {
           path: "branches",
           name: "branches",
           component: Branches,
           meta: { title: "Филиалы", subtitle: "Рестораны и точки самовывоза", roles: ["admin", "ceo"] },
+        },
+        {
+          path: "branches/new",
+          name: "branch-new",
+          component: BranchForm,
+          meta: {
+            title: "Новый филиал",
+            subtitle: "Создание филиала",
+            roles: ["admin", "ceo"],
+            breadcrumbs: [{ label: "Филиалы", to: "/branches" }, { label: "Новый филиал" }],
+          },
+        },
+        {
+          path: "branches/:id",
+          name: "branch-edit",
+          component: BranchForm,
+          meta: {
+            title: "Редактирование филиала",
+            subtitle: "Изменение филиала",
+            roles: ["admin", "ceo"],
+            breadcrumbs: [{ label: "Филиалы", to: "/branches" }, { label: "Редактирование" }],
+          },
         },
         {
           path: "delivery-zones",
@@ -95,7 +155,11 @@ const router = createRouter({
           path: "menu/items/:id",
           name: "menu-item-form",
           component: MenuItemForm,
-          meta: { title: "Позиция меню", subtitle: "Создание и редактирование" },
+          meta: {
+            title: "Позиция меню",
+            subtitle: "Создание и редактирование",
+            breadcrumbs: [{ label: "Позиции", to: "/menu/items" }, { label: "Позиция меню" }],
+          },
         },
         { path: "menu/modifiers", name: "menu-modifiers", component: MenuModifiers, meta: { title: "Модификаторы", subtitle: "Группы и допы" } },
         { path: "menu/tags", name: "menu-tags", component: MenuTags, meta: { title: "Теги", subtitle: "Метки для фильтрации блюд" } },
@@ -113,10 +177,7 @@ const router = createRouter({
           meta: {
             title: "Новая рассылка",
             subtitle: "Создание кампании",
-            breadcrumbs: [
-              { label: "Рассылки", to: "/broadcasts" },
-              { label: "Новая рассылка" },
-            ],
+            breadcrumbs: [{ label: "Рассылки", to: "/broadcasts" }, { label: "Новая рассылка" }],
           },
         },
         {
@@ -126,10 +187,7 @@ const router = createRouter({
           meta: {
             title: "Редактирование рассылки",
             subtitle: "Настройка кампании",
-            breadcrumbs: [
-              { label: "Рассылки", to: "/broadcasts" },
-              { label: "Редактирование" },
-            ],
+            breadcrumbs: [{ label: "Рассылки", to: "/broadcasts" }, { label: "Редактирование" }],
           },
         },
         {
@@ -139,10 +197,7 @@ const router = createRouter({
           meta: {
             title: "Статистика рассылки",
             subtitle: "Детальный отчет",
-            breadcrumbs: [
-              { label: "Рассылки", to: "/broadcasts" },
-              { label: "Статистика" },
-            ],
+            breadcrumbs: [{ label: "Рассылки", to: "/broadcasts" }, { label: "Статистика" }],
           },
         },
         {
@@ -152,10 +207,7 @@ const router = createRouter({
           meta: {
             title: "Сегменты",
             subtitle: "Сохраненные аудитории",
-            breadcrumbs: [
-              { label: "Рассылки", to: "/broadcasts" },
-              { label: "Сегменты" },
-            ],
+            breadcrumbs: [{ label: "Рассылки", to: "/broadcasts" }, { label: "Сегменты" }],
           },
         },
         {
@@ -165,10 +217,7 @@ const router = createRouter({
           meta: {
             title: "Дашборд рассылок",
             subtitle: "Сводная аналитика",
-            breadcrumbs: [
-              { label: "Рассылки", to: "/broadcasts" },
-              { label: "Дашборд" },
-            ],
+            breadcrumbs: [{ label: "Рассылки", to: "/broadcasts" }, { label: "Дашборд" }],
           },
         },
         {

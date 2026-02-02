@@ -142,19 +142,19 @@ import { computed, onMounted, ref, watch } from "vue";
 import { ArrowLeft, Pencil } from "lucide-vue-next";
 import { useRoute, useRouter } from "vue-router";
 import api from "../api/client.js";
-import Badge from "../components/ui/Badge.vue";
-import Button from "../components/ui/Button.vue";
-import Card from "../components/ui/Card.vue";
-import CardContent from "../components/ui/CardContent.vue";
-import CardHeader from "../components/ui/CardHeader.vue";
-import CardTitle from "../components/ui/CardTitle.vue";
+import Badge from "../components/ui/badge/Badge.vue";
+import Button from "../components/ui/button/Button.vue";
+import Card from "../components/ui/card/Card.vue";
+import CardContent from "../components/ui/card/CardContent.vue";
+import CardHeader from "../components/ui/card/CardHeader.vue";
+import CardTitle from "../components/ui/card/CardTitle.vue";
 import PageHeader from "../components/PageHeader.vue";
-import Table from "../components/ui/Table.vue";
-import TableBody from "../components/ui/TableBody.vue";
-import TableCell from "../components/ui/TableCell.vue";
-import TableHead from "../components/ui/TableHead.vue";
-import TableHeader from "../components/ui/TableHeader.vue";
-import TableRow from "../components/ui/TableRow.vue";
+import Table from "../components/ui/table/Table.vue";
+import TableBody from "../components/ui/table/TableBody.vue";
+import TableCell from "../components/ui/table/TableCell.vue";
+import TableHead from "../components/ui/table/TableHead.vue";
+import TableHeader from "../components/ui/table/TableHeader.vue";
+import TableRow from "../components/ui/table/TableRow.vue";
 import { useNotifications } from "../composables/useNotifications.js";
 import { useOrdersStore } from "../stores/orders.js";
 import { formatCurrency, formatDateTime, formatNumber } from "../utils/format.js";
@@ -184,12 +184,17 @@ const statusLabel = (status) => {
   };
   return labels[status] || status || "—";
 };
+const updateBreadcrumbs = () => {
+  const name = campaign.value?.name || "Рассылка";
+  ordersStore.setBreadcrumbs([{ label: "Рассылки", to: "/broadcasts" }, { label: "Статистика " + name }], route.name);
+};
 
 const loadCampaign = async () => {
   try {
     const response = await api.get(`/api/broadcasts/${campaignId.value}`);
     campaign.value = response.data?.data?.campaign || null;
     stats.value = response.data?.data?.stats || {};
+    updateBreadcrumbs();
   } catch (error) {
     console.error("Ошибка загрузки рассылки:", error);
     showErrorNotification("Не удалось загрузить рассылку");
@@ -226,6 +231,13 @@ onMounted(async () => {
   await loadMessages();
   await loadConversions();
 });
+
+watch(
+  () => campaign.value?.name,
+  () => {
+    updateBreadcrumbs();
+  },
+);
 
 watch(
   () => ordersStore.lastBroadcastEvent,

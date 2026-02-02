@@ -4,19 +4,32 @@
       <CardContent>
         <PageHeader title="Клиенты" description="Поиск по клиентам и фильтр по городу">
           <template #filters>
-            <div class="min-w-[220px] flex-1 space-y-1">
-              <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Поиск</label>
-              <div class="relative">
-                <Search class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" :size="16" />
-                <Input v-model="filters.search" class="pl-9" placeholder="Имя или телефон" @keyup.enter="loadClients" />
-              </div>
+            <div class="min-w-[220px] flex-1">
+              <Field>
+                <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Поиск</FieldLabel>
+                <FieldContent>
+                  <div class="relative">
+                    <Search class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" :size="16" />
+                    <Input v-model="filters.search" class="pl-9" placeholder="Имя или телефон" @keyup.enter="loadClients" />
+                  </div>
+                </FieldContent>
+              </Field>
             </div>
-            <div class="min-w-[180px] space-y-1">
-              <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Город</label>
-              <Select v-model="filters.city_id">
-                <option value="">Все</option>
-                <option v-for="city in referenceStore.cities" :key="city.id" :value="city.id">{{ city.name }}</option>
-              </Select>
+            <div class="min-w-[180px]">
+              <Field>
+                <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Город</FieldLabel>
+                <FieldContent>
+                  <Select v-model="filters.city_id">
+                    <SelectTrigger class="w-full">
+                      <SelectValue placeholder="Все города" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">Все</SelectItem>
+                      <SelectItem v-for="city in referenceStore.cities" :key="city.id" :value="city.id">{{ city.name }}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </FieldContent>
+              </Field>
             </div>
           </template>
         </PageHeader>
@@ -67,21 +80,20 @@ import api from "../api/client.js";
 import { useReferenceStore } from "../stores/reference.js";
 import { useNotifications } from "../composables/useNotifications.js";
 import { formatNumber, formatPhone } from "../utils/format.js";
-import Badge from "../components/ui/Badge.vue";
-import Button from "../components/ui/Button.vue";
-import Card from "../components/ui/Card.vue";
-import CardHeader from "../components/ui/CardHeader.vue";
-import CardTitle from "../components/ui/CardTitle.vue";
-import CardContent from "../components/ui/CardContent.vue";
+import Badge from "../components/ui/badge/Badge.vue";
+import Button from "../components/ui/button/Button.vue";
+import Card from "../components/ui/card/Card.vue";
+import CardContent from "../components/ui/card/CardContent.vue";
 import PageHeader from "../components/PageHeader.vue";
-import Input from "../components/ui/Input.vue";
-import Select from "../components/ui/Select.vue";
-import Table from "../components/ui/Table.vue";
-import TableBody from "../components/ui/TableBody.vue";
-import TableCell from "../components/ui/TableCell.vue";
-import TableHead from "../components/ui/TableHead.vue";
-import TableHeader from "../components/ui/TableHeader.vue";
-import TableRow from "../components/ui/TableRow.vue";
+import Input from "../components/ui/input/Input.vue";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
+import { Field, FieldContent, FieldLabel } from "../components/ui/field";
+import Table from "../components/ui/table/Table.vue";
+import TableBody from "../components/ui/table/TableBody.vue";
+import TableCell from "../components/ui/table/TableCell.vue";
+import TableHead from "../components/ui/table/TableHead.vue";
+import TableHeader from "../components/ui/table/TableHeader.vue";
+import TableRow from "../components/ui/table/TableRow.vue";
 const referenceStore = useReferenceStore();
 const { showErrorNotification } = useNotifications();
 const router = useRouter();

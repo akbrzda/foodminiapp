@@ -31,10 +31,10 @@
         <div v-if="activeTab === 'general'" class="space-y-4">
           <div>
             <p class="text-xs text-muted-foreground mb-2">Статус</p>
-            <label class="flex items-center gap-2 cursor-pointer">
+            <Label class="flex items-center gap-2 cursor-pointer">
               <input v-model="editForm.is_active" type="checkbox" class="h-4 w-4 rounded border-gray-300" />
               <span class="text-sm text-foreground">{{ editForm.is_active ? "Активен" : "Неактивен" }}</span>
-            </label>
+            </Label>
           </div>
           <div v-if="isBlocked" class="rounded-lg border border-orange-200 bg-orange-50 dark:border-orange-900 dark:bg-orange-950/20 p-4">
             <p class="text-sm font-medium text-orange-900 dark:text-orange-100 mb-2">🔒 Полигон заблокирован</p>
@@ -61,12 +61,17 @@
         </div>
         <div v-else class="space-y-4">
           <div class="space-y-2">
-            <label class="text-xs font-medium text-muted-foreground">Новый филиал</label>
+            <Label class="text-xs font-medium text-muted-foreground">Новый филиал</Label>
             <Select v-model="transferBranchId">
-              <option value="">Выберите филиал</option>
-              <option v-for="branch in cityBranches" :key="branch.id" :value="branch.id" :disabled="branch.id === polygon?.branch_id">
-                {{ branch.name }}{{ branch.id === polygon?.branch_id ? " (текущий)" : "" }}
-              </option>
+              <SelectTrigger class="w-full">
+                <SelectValue placeholder="Выберите филиал" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">Выберите филиал</SelectItem>
+                <SelectItem v-for="branch in cityBranches" :key="branch.id" :value="branch.id" :disabled="branch.id === polygon?.branch_id">
+                  {{ branch.name }}{{ branch.id === polygon?.branch_id ? " (текущий)" : "" }}
+                </SelectItem>
+              </SelectContent>
             </Select>
           </div>
           <Button class="w-full" @click="handleTransfer" :disabled="!transferBranchId || parseInt(transferBranchId) === polygon?.branch_id">
@@ -97,9 +102,10 @@
 <script setup>
 import { ref, computed, watch } from "vue";
 import { Lock, Save, Trash2, Unlock, X } from "lucide-vue-next";
-import Button from "./ui/Button.vue";
-import Input from "./ui/Input.vue";
-import Select from "./ui/Select.vue";
+import Button from "./ui/button/Button.vue";
+import Input from "./ui/input/Input.vue";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
+import { Label } from "./ui/label";
 const props = defineProps({
   isOpen: Boolean,
   polygon: Object,

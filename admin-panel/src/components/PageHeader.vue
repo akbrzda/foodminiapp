@@ -2,7 +2,6 @@
   <div class="space-y-4">
     <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
       <div class="space-y-2">
-        <Breadcrumbs />
         <div class="text-lg font-semibold text-foreground">{{ title }}</div>
         <div v-if="description" class="text-sm text-muted-foreground">{{ description }}</div>
       </div>
@@ -18,7 +17,6 @@
   </div>
 </template>
 <script setup>
-import Breadcrumbs from "./Breadcrumbs.vue";
 defineProps({
   title: { type: String, required: true },
   description: { type: String, default: "" },

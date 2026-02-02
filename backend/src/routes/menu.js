@@ -1946,6 +1946,8 @@ router.put("/admin/modifiers/:id", authenticateToken, requireRole("admin", "mana
   try {
     const modifierId = req.params.id;
     const { name, price, weight, weight_unit, image_url, sort_order, is_active } = req.body;
+    const normalizedWeightUnit = weight_unit === "" ? null : weight_unit;
+    const normalizedImageUrl = image_url === "" ? null : image_url;
     const [modifiers] = await db.query("SELECT id FROM modifiers WHERE id = ?", [modifierId]);
     if (modifiers.length === 0) {
       return res.status(404).json({ error: "Modifier not found" });
@@ -1966,11 +1968,11 @@ router.put("/admin/modifiers/:id", authenticateToken, requireRole("admin", "mana
     }
     if (weight_unit !== undefined) {
       updates.push("weight_unit = ?");
-      values.push(weight_unit);
+      values.push(normalizedWeightUnit);
     }
     if (image_url !== undefined) {
       updates.push("image_url = ?");
-      values.push(image_url);
+      values.push(normalizedImageUrl);
     }
     if (sort_order !== undefined) {
       updates.push("sort_order = ?");

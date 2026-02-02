@@ -1,8 +1,12 @@
 <template>
   <RouterView />
-  <ToastHost />
+  <Toaster />
 </template>
 <script setup>
 import { RouterView } from "vue-router";
-import ToastHost from "./components/ToastHost.vue";
+import { Toaster } from "./components/ui/sonner";
+import { useTheme } from "./composables/useTheme.js";
+
+const { initTheme } = useTheme();
+initTheme();
 </script>

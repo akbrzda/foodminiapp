@@ -1,9 +1,9 @@
 <template>
   <div class="min-h-screen bg-background text-foreground">
     <div class="flex min-h-screen">
-      <SidebarNav class="hidden lg:flex" :is-open="true" :is-collapsed="sidebarCollapsed" @toggle-collapse="sidebarCollapsed = !sidebarCollapsed" />
+      <SidebarNav class="hidden lg:flex" :is-open="true" :is-collapsed="sidebarCollapsed" />
       <div class="flex min-h-screen flex-1 flex-col">
-        <TopBar :title="pageTitle" :subtitle="pageSubtitle" @toggle-menu="mobileMenuOpen = true" />
+        <TopBar :title="pageTitle" :subtitle="pageSubtitle" @toggle-menu="handleSidebarToggle" />
         <main :class="mainClasses">
           <RouterView />
         </main>
@@ -36,9 +36,10 @@ const authStore = useAuthStore();
 const ordersStore = useOrdersStore();
 const mobileMenuOpen = ref(false);
 const sidebarCollapsed = ref(false);
+const isMobile = ref(false);
 const pageTitle = computed(() => route.meta.title || "Админ-панель");
 const pageSubtitle = computed(() => route.meta.subtitle || "Операционная панель");
-const mainClasses = computed(() => (route.meta.fullBleed ? "flex-1" : "flex-1 px-4 pb-12 pt-6 sm:px-6 lg:px-10"));
+const mainClasses = computed(() => (route.meta.fullBleed ? "flex-1" : "flex-1 px-4 pb-12 pt-6 px-6"));
 const syncDocumentTitle = () => {
   const baseTitle = pageTitle.value || "Админ-панель";
   const count = ordersStore.newOrdersCount;
@@ -51,13 +52,26 @@ const syncSidebarState = () => {
     sidebarCollapsed.value = false;
   }
 };
+const updateIsMobile = () => {
+  isMobile.value = window.innerWidth < 1024;
+};
+const handleSidebarToggle = () => {
+  if (isMobile.value) {
+    mobileMenuOpen.value = !mobileMenuOpen.value;
+  } else {
+    sidebarCollapsed.value = !sidebarCollapsed.value;
+  }
+};
 onMounted(() => {
+  updateIsMobile();
+  window.addEventListener("resize", updateIsMobile);
   if (authStore.token) {
     ordersStore.refreshNewOrdersCount();
     ordersStore.connectWebSocket();
   }
 });
 onBeforeUnmount(() => {
+  window.removeEventListener("resize", updateIsMobile);
   ordersStore.disconnectWebSocket();
 });
 watch(

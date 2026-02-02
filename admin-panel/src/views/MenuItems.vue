@@ -14,10 +14,7 @@
       </CardContent>
     </Card>
     <Card>
-      <CardHeader>
-        <CardTitle>Список позиций</CardTitle>
-      </CardHeader>
-      <CardContent class="pt-0">
+      <CardContent class="!p-0">
         <Table>
           <TableHeader>
             <TableRow>
@@ -75,19 +72,19 @@ import { onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { Pencil, Plus, Trash2 } from "lucide-vue-next";
 import api from "../api/client.js";
-import Badge from "../components/ui/Badge.vue";
-import Button from "../components/ui/Button.vue";
-import Card from "../components/ui/Card.vue";
-import CardContent from "../components/ui/CardContent.vue";
-import CardHeader from "../components/ui/CardHeader.vue";
-import CardTitle from "../components/ui/CardTitle.vue";
+import Badge from "../components/ui/badge/Badge.vue";
+import Button from "../components/ui/button/Button.vue";
+import Card from "../components/ui/card/Card.vue";
+import CardContent from "../components/ui/card/CardContent.vue";
+import CardHeader from "../components/ui/card/CardHeader.vue";
+import CardTitle from "../components/ui/card/CardTitle.vue";
 import PageHeader from "../components/PageHeader.vue";
-import Table from "../components/ui/Table.vue";
-import TableBody from "../components/ui/TableBody.vue";
-import TableCell from "../components/ui/TableCell.vue";
-import TableHead from "../components/ui/TableHead.vue";
-import TableHeader from "../components/ui/TableHeader.vue";
-import TableRow from "../components/ui/TableRow.vue";
+import Table from "../components/ui/table/Table.vue";
+import TableBody from "../components/ui/table/TableBody.vue";
+import TableCell from "../components/ui/table/TableCell.vue";
+import TableHead from "../components/ui/table/TableHead.vue";
+import TableHeader from "../components/ui/table/TableHeader.vue";
+import TableRow from "../components/ui/table/TableRow.vue";
 import { useNotifications } from "../composables/useNotifications.js";
 import { formatCurrency } from "../utils/format.js";
 const router = useRouter();

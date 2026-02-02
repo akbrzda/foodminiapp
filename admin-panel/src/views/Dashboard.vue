@@ -4,49 +4,94 @@
       <CardContent class="space-y-4">
         <PageHeader title="Аналитика" description="Сводка по заказам и клиентам">
           <template #filters>
-            <div class="min-w-[180px] space-y-2">
-              <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Период</label>
-              <div class="flex flex-wrap items-center gap-2">
-                <div class="inline-flex items-center gap-1 rounded-md border border-border bg-muted/40 p-1">
-                  <Button size="sm" :variant="periodButtonVariant('day')" @click="setPeriod('day')">Д</Button>
-                  <Button size="sm" :variant="periodButtonVariant('week')" @click="setPeriod('week')">Н</Button>
-                  <Button size="sm" :variant="periodButtonVariant('month')" @click="setPeriod('month')">М</Button>
-                  <Button size="sm" :variant="periodButtonVariant('year')" @click="setPeriod('year')">Г</Button>
-                </div>
-                <div class="inline-flex items-center gap-2 rounded-full border border-border bg-background px-2 py-1">
-                  <Button size="sm" variant="ghost" @click="shiftPeriod(-1)" :disabled="isCustomPeriod">
-                    <ChevronLeft :size="14" />
+            <Field class="min-w-[180px] !w-auto">
+              <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Период</FieldLabel>
+              <FieldContent>
+                <div class="flex flex-wrap items-center gap-2">
+                  <div class="inline-flex items-center gap-1 rounded-md border border-border bg-muted/40 p-[1px]">
+                    <Button size="sm" :variant="periodButtonVariant('day')" @click="setPeriod('day')">Д</Button>
+                    <Button size="sm" :variant="periodButtonVariant('week')" @click="setPeriod('week')">Н</Button>
+                    <Button size="sm" :variant="periodButtonVariant('month')" @click="setPeriod('month')">М</Button>
+                    <Button size="sm" :variant="periodButtonVariant('year')" @click="setPeriod('year')">Г</Button>
+                  </div>
+                  <div class="inline-flex items-center gap-2 rounded-full border border-border bg-background px-2 py-[1px]">
+                    <Button size="sm" variant="ghost" @click="shiftPeriod(-1)" :disabled="isCustomPeriod">
+                      <ChevronLeft :size="14" />
+                    </Button>
+                    <span class="min-w-[160px] text-center text-sm font-medium text-foreground">{{ periodRangeLabel }}</span>
+                    <Button size="sm" variant="ghost" @click="shiftPeriod(1)" :disabled="isCustomPeriod">
+                      <ChevronRight :size="14" />
+                    </Button>
+                  </div>
+                  <Button size="icon" variant="outline" @click="activateCustomPeriod">
+                    <Calendar :size="16" />
                   </Button>
-                  <span class="min-w-[160px] text-center text-sm font-medium text-foreground">{{ periodRangeLabel }}</span>
-                  <Button size="sm" variant="ghost" @click="shiftPeriod(1)" :disabled="isCustomPeriod">
-                    <ChevronRight :size="14" />
-                  </Button>
+                  <div v-if="isCustomPeriod" class="min-w-[240px]">
+                    <Popover v-model:open="isRangeOpen">
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          class="w-full justify-start text-left font-normal"
+                          :class="!filters.date_from && 'text-muted-foreground'"
+                        >
+                          <Calendar :size="16" />
+                          {{ customRangeLabel }}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent class="w-auto p-0" align="start">
+                        <div class="space-y-3 p-3">
+                          <CalendarView
+                            :model-value="calendarRange"
+                            :number-of-months="2"
+                            :is-date-disabled="isFutureDateDisabled"
+                            locale="ru-RU"
+                            multiple
+                            @update:modelValue="handleRangeUpdate"
+                          />
+                          <div class="flex items-center justify-between text-xs text-muted-foreground">
+                            <span>{{ rangeHelperLabel }}</span>
+                            <button type="button" class="text-primary hover:underline" @click="clearDateRange">Очистить</button>
+                          </div>
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  </div>
                 </div>
-                <Button size="icon" variant="outline" @click="activateCustomPeriod">
-                  <Calendar :size="16" />
-                </Button>
-                <div v-if="isCustomPeriod" class="space-y-1">
-                  <RangeCalendar v-model:from="filters.date_from" v-model:to="filters.date_to" />
-                </div>
-              </div>
-            </div>
-            <div class="min-w-[180px] space-y-2">
-              <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Город</label>
-              <Select v-model="filters.city_id" :disabled="isLocationLocked" @change="onCityChange">
-                <option value="">Все города</option>
-                <option v-for="city in referenceStore.cities" :key="city.id" :value="city.id">
-                  {{ city.name }}
-                </option>
-              </Select>
-            </div>
-            <div class="min-w-[180px] space-y-2">
-              <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Филиал</label>
-              <Select v-model="filters.branch_id" :disabled="isLocationLocked || !filters.city_id" @change="scheduleLoad">
-                <option value="">Все филиалы</option>
-                <option v-for="branch in branches" :key="branch.id" :value="branch.id">
-                  {{ branch.name }}
-                </option>
-              </Select>
+              </FieldContent>
+            </Field>
+            <div class="grid grid-cols-2 gap-4">
+              <Field class="min-w-[180px]">
+                <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Город</FieldLabel>
+                <FieldContent>
+                  <Select v-model="filters.city_id" :disabled="isLocationLocked" @update:modelValue="onCityChange">
+                    <SelectTrigger class="w-full">
+                      <SelectValue placeholder="Все города" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">Все города</SelectItem>
+                      <SelectItem v-for="city in referenceStore.cities" :key="city.id" :value="city.id">
+                        {{ city.name }}
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </FieldContent>
+              </Field>
+              <Field class="min-w-[180px]">
+                <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Филиал</FieldLabel>
+                <FieldContent>
+                  <Select v-model="filters.branch_id" :disabled="isLocationLocked || !filters.city_id" @update:modelValue="scheduleLoad">
+                    <SelectTrigger class="w-full">
+                      <SelectValue placeholder="Все филиалы" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">Все филиалы</SelectItem>
+                      <SelectItem v-for="branch in branches" :key="branch.id" :value="branch.id">
+                        {{ branch.name }}
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </FieldContent>
+              </Field>
             </div>
           </template>
         </PageHeader>
@@ -61,7 +106,7 @@
           </div>
           <div class="text-3xl font-semibold text-foreground">{{ formatNumber(stats?.orders?.total_orders || 0) }}</div>
           <div class="flex items-center gap-2 text-xs">
-            <span :class="comparisonClass(stats?.comparisons?.orders)">
+            <span :class="comparisonClass(stats?.comparisons?.orders) + ' flex'">
               <component :is="comparisonIcon(stats?.comparisons?.orders)" :size="14" v-if="comparisonIcon(stats?.comparisons?.orders)" />
               {{ formatPercent(stats?.comparisons?.orders?.percent) }}
             </span>
@@ -83,7 +128,7 @@
           </div>
           <div class="text-3xl font-semibold text-foreground">{{ formatCurrency(stats?.orders?.total_revenue) }}</div>
           <div class="flex items-center gap-2 text-xs">
-            <span :class="comparisonClass(stats?.comparisons?.revenue)">
+            <span :class="comparisonClass(stats?.comparisons?.revenue) + ' flex'">
               <component :is="comparisonIcon(stats?.comparisons?.revenue)" :size="14" v-if="comparisonIcon(stats?.comparisons?.revenue)" />
               {{ formatPercent(stats?.comparisons?.revenue?.percent) }}
             </span>
@@ -100,7 +145,7 @@
           </div>
           <div class="text-3xl font-semibold text-foreground">{{ formatNumber(stats?.customers?.total_customers || 0) }}</div>
           <div class="flex items-center gap-2 text-xs">
-            <span :class="comparisonClass(stats?.comparisons?.customers)">
+            <span :class="comparisonClass(stats?.comparisons?.customers) + ' flex'">
               <component :is="comparisonIcon(stats?.comparisons?.customers)" :size="14" v-if="comparisonIcon(stats?.comparisons?.customers)" />
               {{ formatPercent(stats?.comparisons?.customers?.percent) }}
             </span>
@@ -120,7 +165,7 @@
           </div>
           <div class="text-3xl font-semibold text-foreground">{{ formatCurrency(stats?.discounts?.total_discounts) }}</div>
           <div class="flex items-center gap-2 text-xs">
-            <span :class="comparisonClass(stats?.comparisons?.discounts)">
+            <span :class="comparisonClass(stats?.comparisons?.discounts) + ' flex'">
               <component :is="comparisonIcon(stats?.comparisons?.discounts)" :size="14" v-if="comparisonIcon(stats?.comparisons?.discounts)" />
               {{ formatPercent(stats?.comparisons?.discounts?.percent) }}
             </span>
@@ -153,7 +198,11 @@
         <CardDescription>По выбранному периоду и фильтрам</CardDescription>
       </CardHeader>
       <CardContent>
-        <Tabs v-model="activeTab" :tabs="chartTabs" />
+        <Tabs v-model="activeTab">
+          <TabsList>
+            <TabsTrigger v-for="(tab, index) in chartTabs" :key="tab" :value="index">{{ tab }}</TabsTrigger>
+          </TabsList>
+        </Tabs>
         <div class="mt-4 overflow-x-auto">
           <div class="flex min-w-[640px] items-end gap-3">
             <div v-for="point in seriesPoints" :key="point.period" class="flex w-16 flex-col items-center gap-2">
@@ -267,21 +316,24 @@ import {
   ArrowUpRight,
   Minus,
 } from "lucide-vue-next";
+import { DateFormatter, getLocalTimeZone, parseDate as parseCalendarDate, today } from "@internationalized/date";
 import api from "../api/client.js";
 import { useReferenceStore } from "../stores/reference.js";
 import { useAuthStore } from "../stores/auth.js";
 import { useNotifications } from "../composables/useNotifications.js";
 import { formatCurrency, formatNumber } from "../utils/format.js";
-import Button from "../components/ui/Button.vue";
-import Card from "../components/ui/Card.vue";
-import CardContent from "../components/ui/CardContent.vue";
-import CardDescription from "../components/ui/CardDescription.vue";
-import CardHeader from "../components/ui/CardHeader.vue";
-import CardTitle from "../components/ui/CardTitle.vue";
+import Button from "../components/ui/button/Button.vue";
+import Card from "../components/ui/card/Card.vue";
+import CardContent from "../components/ui/card/CardContent.vue";
+import { Field, FieldContent, FieldLabel } from "../components/ui/field";
+import CardDescription from "../components/ui/card/CardDescription.vue";
+import CardHeader from "../components/ui/card/CardHeader.vue";
+import CardTitle from "../components/ui/card/CardTitle.vue";
 import PageHeader from "../components/PageHeader.vue";
-import Select from "../components/ui/Select.vue";
-import Tabs from "../components/ui/Tabs.vue";
-import RangeCalendar from "../components/ui/RangeCalendar.vue";
+import { Calendar as CalendarView } from "../components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popover";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
+import { Tabs, TabsList, TabsTrigger } from "../components/ui/tabs";
 const referenceStore = useReferenceStore();
 const authStore = useAuthStore();
 const { showErrorNotification } = useNotifications();
@@ -311,6 +363,56 @@ const filters = ref({
   city_id: "",
   branch_id: "",
 });
+const isRangeOpen = ref(false);
+const timeZone = getLocalTimeZone();
+const rangeFormatter = new DateFormatter("ru-RU", { dateStyle: "medium" });
+const normalizeRangeValues = (value) => {
+  const dates = Array.isArray(value) ? value : value ? [value] : [];
+  if (!dates.length) return [];
+  const trimmed = dates.slice(-2);
+  return trimmed.sort((a, b) => a.compare(b));
+};
+const calendarRange = computed({
+  get() {
+    const values = [];
+    if (filters.value.date_from) values.push(parseCalendarDate(filters.value.date_from));
+    if (filters.value.date_to) values.push(parseCalendarDate(filters.value.date_to));
+    return values.length ? values : undefined;
+  },
+  set(value) {
+    const normalized = normalizeRangeValues(value);
+    filters.value.date_from = normalized[0]?.toString() || "";
+    filters.value.date_to = normalized[1]?.toString() || "";
+  },
+});
+const handleRangeUpdate = (value) => {
+  calendarRange.value = value;
+  if (filters.value.date_from && filters.value.date_to) {
+    isRangeOpen.value = false;
+  }
+};
+const customRangeLabel = computed(() => {
+  if (filters.value.date_from && filters.value.date_to) {
+    const from = rangeFormatter.format(parseCalendarDate(filters.value.date_from).toDate(timeZone));
+    const to = rangeFormatter.format(parseCalendarDate(filters.value.date_to).toDate(timeZone));
+    return `${from} — ${to}`;
+  }
+  if (filters.value.date_from) {
+    const from = rangeFormatter.format(parseCalendarDate(filters.value.date_from).toDate(timeZone));
+    return `${from} — ...`;
+  }
+  return "Выберите диапазон";
+});
+const rangeHelperLabel = computed(() => {
+  if (filters.value.date_from && filters.value.date_to) return "Диапазон выбран";
+  if (filters.value.date_from) return "Выберите дату окончания";
+  return "Выберите дату начала";
+});
+const isFutureDateDisabled = (date) => date.compare(today(timeZone)) > 0;
+const clearDateRange = () => {
+  filters.value.date_from = "";
+  filters.value.date_to = "";
+};
 const chartTabs = ["Выручка", "Заказы", "Средний чек"];
 const isCustomPeriod = computed(() => filters.value.period === "custom");
 const isManager = computed(() => authStore.role === "manager");
@@ -375,7 +477,7 @@ const periodRangeLabel = computed(() => {
   }
   return `${formatRangeDate(start)} - ${formatRangeDate(end)}`;
 });
-const periodButtonVariant = (periodKey) => (filters.value.period === periodKey ? "secondary" : "ghost");
+const periodButtonVariant = (periodKey) => (filters.value.period === periodKey ? "" : "ghost");
 const setPeriod = (periodKey) => {
   const wasCustom = filters.value.period === "custom";
   filters.value.period = periodKey;

@@ -17,7 +17,7 @@
 <script setup>
 import { Home } from "lucide-vue-next";
 import { RouterLink } from "vue-router";
-import Button from "../components/ui/Button.vue";
-import Card from "../components/ui/Card.vue";
-import CardContent from "../components/ui/CardContent.vue";
+import Button from "../components/ui/button/Button.vue";
+import Card from "../components/ui/card/Card.vue";
+import CardContent from "../components/ui/card/CardContent.vue";
 </script>

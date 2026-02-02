@@ -13,10 +13,7 @@
       </CardContent>
     </Card>
     <Card>
-      <CardHeader>
-        <CardTitle>Список позиций</CardTitle>
-      </CardHeader>
-      <CardContent class="pt-0">
+      <CardContent class="!p-0">
         <div v-if="stopList.length === 0" class="py-8 text-center text-sm text-muted-foreground">Стоп-лист пуст</div>
         <Table v-else>
           <TableHeader>
@@ -58,215 +55,277 @@
         </Table>
       </CardContent>
     </Card>
-    <BaseModal v-if="showModal" size="xl" title="Добавить в стоп-лист" subtitle="Временно сделать позицию недоступной" @close="closeModal">
-      <form class="space-y-6" @submit.prevent="submitStopList">
-        <div v-if="step === 1" class="space-y-5">
-          <div class="grid gap-4 md:grid-cols-2">
-            <div class="space-y-2">
-              <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Филиал *</label>
-              <Select v-model="form.branch_id" required>
-                <option value="">Выберите филиал</option>
-                <optgroup v-for="city in referenceStore.cities" :key="city.id" :label="city.name">
-                  <option v-for="branch in referenceStore.branchesByCity[city.id] || []" :key="branch.id" :value="branch.id">
-                    {{ branch.name }}
-                  </option>
-                </optgroup>
-              </Select>
-            </div>
-            <div class="space-y-2">
-              <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Тип *</label>
-              <Select v-model="form.type" @change="onTypeChange" required>
-                <option value="">Выберите тип</option>
-                <option value="modifier">Товар</option>
-                <option value="product">Продукция</option>
-              </Select>
-            </div>
+    <Dialog v-if="showModal" :open="showModal" @update:open="(value) => (value ? null : closeModal())">
+      <DialogContent class="w-full max-w-5xl">
+        <DialogHeader>
+          <DialogTitle>Добавить в стоп-лист</DialogTitle>
+          <DialogDescription>Временно сделать позицию недоступной</DialogDescription>
+        </DialogHeader>
+        <form class="space-y-6" @submit.prevent="submitStopList">
+          <div v-if="step === 1" class="space-y-5">
+            <FieldGroup>
+              <FieldGroup class="grid gap-4 md:grid-cols-2">
+                <Field>
+                  <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Филиал *</FieldLabel>
+                  <FieldContent>
+                    <Select v-model="form.branch_id" required>
+                      <SelectTrigger class="w-full">
+                        <SelectValue placeholder="Выберите филиал" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup v-for="city in referenceStore.cities" :key="city.id">
+                          <SelectLabel>{{ city.name }}</SelectLabel>
+                          <SelectItem v-for="branch in referenceStore.branchesByCity[city.id] || []" :key="branch.id" :value="branch.id">
+                            {{ branch.name }}
+                          </SelectItem>
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  </FieldContent>
+                </Field>
+                <Field>
+                  <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Тип *</FieldLabel>
+                  <FieldContent>
+                    <Select v-model="form.type" @update:modelValue="onTypeChange" required>
+                      <SelectTrigger class="w-full">
+                        <SelectValue placeholder="Выберите тип" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="modifier">Товар</SelectItem>
+                        <SelectItem value="product">Продукция</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </FieldContent>
+                </Field>
+              </FieldGroup>
+              <Field v-if="isModifierType">
+                <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Товар *</FieldLabel>
+                <FieldContent>
+                  <div ref="modifierContainer" class="relative">
+                    <Input
+                      v-model="modifierQuery"
+                      placeholder="Введите название товара"
+                      @focus="modifierListOpen = true"
+                      @input="modifierListOpen = true"
+                    />
+                    <div
+                      v-if="modifierListOpen"
+                      class="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md border border-border bg-card shadow-sm"
+                    >
+                      <div v-if="loadingModifiers" class="px-3 py-2">
+                        <Skeleton class="h-4 w-full" />
+                      </div>
+                      <button
+                        v-for="modifier in filteredModifiers"
+                        :key="modifier.id"
+                        type="button"
+                        class="flex w-full items-center px-3 py-2 text-left text-sm hover:bg-muted"
+                        @mousedown.prevent="selectModifier(modifier)"
+                      >
+                        {{ modifier.name }}
+                      </button>
+                      <div v-if="!loadingModifiers && filteredModifiers.length === 0" class="px-3 py-2 text-sm text-muted-foreground">
+                        Ничего не найдено
+                      </div>
+                    </div>
+                  </div>
+                  <p v-if="selectedModifier" class="text-xs text-muted-foreground">Выбрано: {{ selectedModifier.name }}</p>
+                </FieldContent>
+              </Field>
+              <Field>
+                <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Причина постановки на стоп</FieldLabel>
+                <FieldContent>
+                  <Select v-model="form.reason">
+                    <SelectTrigger class="w-full">
+                      <SelectValue placeholder="Без причины" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Без причины</SelectItem>
+                      <SelectItem v-for="reason in reasons" :key="reason.id" :value="reason.name">{{ reason.name }}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </FieldContent>
+              </Field>
+              <Field>
+                <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Способы получения</FieldLabel>
+                <FieldContent>
+                  <div class="grid gap-2 sm:grid-cols-3">
+                    <Label
+                      v-for="option in fulfillmentOptions"
+                      :key="option.value"
+                      class="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm"
+                    >
+                      <input
+                        type="checkbox"
+                        class="h-4 w-4 rounded border-input text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        :value="option.value"
+                        v-model="form.fulfillment_types"
+                      />
+                      <span>{{ option.label }}</span>
+                    </Label>
+                  </div>
+                </FieldContent>
+              </Field>
+            </FieldGroup>
           </div>
-          <div v-if="isModifierType" class="space-y-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Товар *</label>
-            <div ref="modifierContainer" class="relative">
-              <Input
-                v-model="modifierQuery"
-                placeholder="Введите название товара"
-                @focus="modifierListOpen = true"
-                @input="modifierListOpen = true"
-              />
-              <div v-if="modifierListOpen" class="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md border border-border bg-card shadow-sm">
-                <div v-if="loadingModifiers" class="px-3 py-2 text-sm text-muted-foreground">Загрузка списка...</div>
-                <button
-                  v-for="modifier in filteredModifiers"
-                  :key="modifier.id"
-                  type="button"
-                  class="flex w-full items-center px-3 py-2 text-left text-sm hover:bg-muted"
-                  @mousedown.prevent="selectModifier(modifier)"
-                >
-                  {{ modifier.name }}
-                </button>
-                <div v-if="!loadingModifiers && filteredModifiers.length === 0" class="px-3 py-2 text-sm text-muted-foreground">
-                  Ничего не найдено
-                </div>
-              </div>
-            </div>
-            <p v-if="selectedModifier" class="text-xs text-muted-foreground">Выбрано: {{ selectedModifier.name }}</p>
-          </div>
-          <div class="space-y-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Причина постановки на стоп</label>
-            <Select v-model="form.reason">
-              <option value="">Без причины</option>
-              <option v-for="reason in reasons" :key="reason.id" :value="reason.name">{{ reason.name }}</option>
-            </Select>
-          </div>
-          <div class="space-y-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Способы получения</label>
-            <div class="grid gap-2 sm:grid-cols-3">
-              <label
-                v-for="option in fulfillmentOptions"
-                :key="option.value"
-                class="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm"
-              >
-                <input
-                  type="checkbox"
-                  class="h-4 w-4 rounded border-input text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  :value="option.value"
-                  v-model="form.fulfillment_types"
-                />
-                <span>{{ option.label }}</span>
-              </label>
-            </div>
-          </div>
-        </div>
-        <div v-else-if="step === 2 && isProductType" class="space-y-4">
-          <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div class="flex items-center gap-3">
-              <label class="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  class="h-4 w-4 rounded border-input text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  :checked="allProductsSelected"
-                  @change="toggleAllProducts"
-                />
-                Выбрать все
-              </label>
-              <label class="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  class="h-4 w-4 rounded border-input text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  v-model="showSelectedOnly"
-                />
-                Показать выбранные
-              </label>
-            </div>
-            <div class="w-full sm:max-w-xs">
-              <Input v-model="productSearch" placeholder="Введите название продукции" />
-            </div>
-          </div>
-          <div class="rounded-lg border border-border">
-            <div v-if="loadingCategories" class="px-4 py-6 text-center text-sm text-muted-foreground">Загрузка продукции...</div>
-            <div v-else-if="filteredCategories.length === 0" class="px-4 py-6 text-center text-sm text-muted-foreground">Нет доступной продукции</div>
-            <div v-else class="max-h-[420px] space-y-4 overflow-auto p-4">
-              <div v-for="category in filteredCategories" :key="category.id" class="space-y-2">
-                <label class="flex items-center gap-2 text-sm font-semibold">
+          <div v-else-if="step === 2 && isProductType" class="space-y-4">
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div class="flex items-center gap-3">
+                <Label class="flex items-center gap-2 text-sm">
                   <input
                     type="checkbox"
                     class="h-4 w-4 rounded border-input text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    :checked="isCategorySelected(category)"
-                    @change="toggleCategory(category)"
+                    :checked="allProductsSelected"
+                    @change="toggleAllProducts"
                   />
-                  {{ category.name }}
-                </label>
-                <div class="space-y-1 pl-6">
-                  <label v-for="item in category.items" :key="item.id" class="flex items-center gap-2 text-sm text-muted-foreground">
+                  Выбрать все
+                </Label>
+                <Label class="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    class="h-4 w-4 rounded border-input text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    v-model="showSelectedOnly"
+                  />
+                  Показать выбранные
+                </Label>
+              </div>
+              <div class="w-full sm:max-w-xs">
+                <Input v-model="productSearch" placeholder="Введите название продукции" />
+              </div>
+            </div>
+            <div class="rounded-lg border border-border">
+              <div v-if="loadingCategories" class="px-4 py-6">
+                <div class="space-y-2">
+                  <Skeleton class="h-4 w-full" />
+                  <Skeleton class="h-4 w-3/4" />
+                  <Skeleton class="h-4 w-2/3" />
+                </div>
+              </div>
+              <div v-else-if="filteredCategories.length === 0" class="px-4 py-6 text-center text-sm text-muted-foreground">
+                Нет доступной продукции
+              </div>
+              <div v-else class="max-h-[420px] space-y-4 overflow-auto p-4">
+                <div v-for="category in filteredCategories" :key="category.id" class="space-y-2">
+                  <Label class="flex items-center gap-2 text-sm font-semibold">
                     <input
                       type="checkbox"
                       class="h-4 w-4 rounded border-input text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      :value="item.id"
-                      v-model="selectedProductIds"
+                      :checked="isCategorySelected(category)"
+                      @change="toggleCategory(category)"
                     />
-                    <span>{{ item.name }}</span>
-                  </label>
+                    {{ category.name }}
+                  </Label>
+                  <div class="space-y-1 pl-6">
+                    <Label v-for="item in category.items" :key="item.id" class="flex items-center gap-2 text-sm text-muted-foreground">
+                      <input
+                        type="checkbox"
+                        class="h-4 w-4 rounded border-input text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        :value="item.id"
+                        v-model="selectedProductIds"
+                      />
+                      <span>{{ item.name }}</span>
+                    </Label>
+                  </div>
                 </div>
               </div>
             </div>
+            <p class="text-xs text-muted-foreground">Выбрано позиций: {{ selectedProductIds.length }}</p>
           </div>
-          <p class="text-xs text-muted-foreground">Выбрано позиций: {{ selectedProductIds.length }}</p>
-        </div>
-        <div v-else-if="step === timeStep" class="space-y-4">
-          <div class="rounded-lg border border-border bg-muted/20 p-4 text-sm text-muted-foreground">
-            По умолчанию стоп-лист устанавливается без ограничения по времени. Можно включить автоматическое снятие.
-          </div>
-          <label class="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              class="h-4 w-4 rounded border-input text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              v-model="form.auto_remove"
-            />
-            Автоматически снять со стопа
-          </label>
-          <div v-if="form.auto_remove" class="space-y-3">
-            <div class="text-sm text-muted-foreground">Время филиала: {{ branchTimeLabel }}</div>
-            <div class="flex flex-wrap gap-2">
-              <Button type="button" variant="ghost" class="text-xs" @click="applyQuickTime(1)">Через 1 час</Button>
-              <Button type="button" variant="ghost" class="text-xs" @click="applyQuickTime(3)">Через 3 часа</Button>
-              <Button type="button" variant="ghost" class="text-xs" @click="applyQuickTime(5)">Через 5 часов</Button>
-              <Button type="button" variant="ghost" class="text-xs" @click="applyShiftEnd">По окончании смены</Button>
+          <div v-else-if="step === timeStep" class="space-y-4">
+            <div class="rounded-lg border border-border bg-muted/20 p-4 text-sm text-muted-foreground">
+              По умолчанию стоп-лист устанавливается без ограничения по времени. Можно включить автоматическое снятие.
             </div>
-            <div class="grid gap-3 sm:grid-cols-[1.2fr_0.6fr_0.6fr]">
-              <div class="space-y-1">
-                <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Дата</label>
-                <Input v-model="removeDate" type="date" />
+            <Label class="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                class="h-4 w-4 rounded border-input text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                v-model="form.auto_remove"
+              />
+              Автоматически снять со стопа
+            </Label>
+            <div v-if="form.auto_remove" class="space-y-3">
+              <div class="text-sm text-muted-foreground">Время филиала: {{ branchTimeLabel }}</div>
+              <div class="flex flex-wrap gap-2">
+                <Button type="button" variant="ghost" class="text-xs" @click="applyQuickTime(1)">Через 1 час</Button>
+                <Button type="button" variant="ghost" class="text-xs" @click="applyQuickTime(3)">Через 3 часа</Button>
+                <Button type="button" variant="ghost" class="text-xs" @click="applyQuickTime(5)">Через 5 часов</Button>
+                <Button type="button" variant="ghost" class="text-xs" @click="applyShiftEnd">По окончании смены</Button>
               </div>
-              <div class="space-y-1">
-                <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Часы</label>
-                <Select v-model="removeHour">
-                  <option v-for="hour in hours" :key="hour" :value="hour">{{ hour }}</option>
-                </Select>
-              </div>
-              <div class="space-y-1">
-                <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Минуты</label>
-                <Select v-model="removeMinute">
-                  <option v-for="minute in minutes" :key="minute" :value="minute">{{ minute }}</option>
-                </Select>
-              </div>
+              <FieldGroup class="grid gap-3 sm:grid-cols-[1.2fr_0.6fr_0.6fr]">
+                <Field>
+                  <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Дата</FieldLabel>
+                  <FieldContent>
+                    <Input v-model="removeDate" type="date" />
+                  </FieldContent>
+                </Field>
+                <Field>
+                  <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Часы</FieldLabel>
+                  <FieldContent>
+                    <Select v-model="removeHour">
+                      <SelectTrigger class="w-full">
+                        <SelectValue placeholder="Часы" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem v-for="hour in hours" :key="hour" :value="hour">{{ hour }}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </FieldContent>
+                </Field>
+                <Field>
+                  <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Минуты</FieldLabel>
+                  <FieldContent>
+                    <Select v-model="removeMinute">
+                      <SelectTrigger class="w-full">
+                        <SelectValue placeholder="Минуты" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem v-for="minute in minutes" :key="minute" :value="minute">{{ minute }}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </FieldContent>
+                </Field>
+              </FieldGroup>
             </div>
           </div>
-        </div>
-      </form>
-      <template #footer>
-        <Button variant="outline" type="button" @click="handleBack" :disabled="step === 1">Назад</Button>
-        <Button v-if="!isFinalStep" type="button" @click="handleNext" :disabled="!canProceed"> Следующий шаг </Button>
-        <Button v-else type="button" @click="submitStopList" :disabled="saving || !canSubmit">
-          <Save :size="16" />
-          {{ saving ? "Сохранение..." : "Поставить" }}
-        </Button>
-      </template>
-    </BaseModal>
+        </form>
+        <DialogFooter class="flex flex-wrap gap-2">
+          <Button variant="outline" type="button" @click="handleBack" :disabled="step === 1">Назад</Button>
+          <Button v-if="!isFinalStep" type="button" @click="handleNext" :disabled="!canProceed"> Следующий шаг </Button>
+          <Button v-else type="button" @click="submitStopList" :disabled="saving || !canSubmit">
+            <Save :size="16" />
+            {{ saving ? "Сохранение..." : "Поставить" }}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   </div>
 </template>
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { Plus, Save, Trash2 } from "lucide-vue-next";
 import api from "../api/client.js";
-import BaseModal from "../components/BaseModal.vue";
-import Badge from "../components/ui/Badge.vue";
-import Button from "../components/ui/Button.vue";
-import Card from "../components/ui/Card.vue";
-import CardContent from "../components/ui/CardContent.vue";
-import CardHeader from "../components/ui/CardHeader.vue";
-import CardTitle from "../components/ui/CardTitle.vue";
-import Input from "../components/ui/Input.vue";
-import Select from "../components/ui/Select.vue";
+import Badge from "../components/ui/badge/Badge.vue";
+import Button from "../components/ui/button/Button.vue";
+import Card from "../components/ui/card/Card.vue";
+import CardContent from "../components/ui/card/CardContent.vue";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../components/ui/dialog/index.js";
+import Input from "../components/ui/input/Input.vue";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "../components/ui/select";
 import PageHeader from "../components/PageHeader.vue";
-import Table from "../components/ui/Table.vue";
-import TableBody from "../components/ui/TableBody.vue";
-import TableCell from "../components/ui/TableCell.vue";
-import TableHead from "../components/ui/TableHead.vue";
-import TableHeader from "../components/ui/TableHeader.vue";
-import TableRow from "../components/ui/TableRow.vue";
+import Table from "../components/ui/table/Table.vue";
+import TableBody from "../components/ui/table/TableBody.vue";
+import TableCell from "../components/ui/table/TableCell.vue";
+import TableHead from "../components/ui/table/TableHead.vue";
+import TableHeader from "../components/ui/table/TableHeader.vue";
+import TableRow from "../components/ui/table/TableRow.vue";
+import { Field, FieldContent, FieldGroup, FieldLabel } from "../components/ui/field";
+import { Label } from "../components/ui/label";
+import Skeleton from "../components/ui/skeleton/Skeleton.vue";
 import { useNotifications } from "../composables/useNotifications.js";
 import { formatDate } from "../utils/date.js";
 import { useReferenceStore } from "../stores/reference.js";
 const referenceStore = useReferenceStore();
-const { showErrorNotification } = useNotifications();
+const { showErrorNotification, showSuccessNotification } = useNotifications();
 const stopList = ref([]);
 const reasons = ref([]);
 const showModal = ref(false);
@@ -538,7 +597,7 @@ const submitStopList = async () => {
   try {
     const payloadBase = {
       branch_id: form.value.branch_id,
-      reason: form.value.reason || null,
+      reason: form.value.reason && form.value.reason !== "none" ? form.value.reason : null,
       fulfillment_types: form.value.fulfillment_types,
       auto_remove: form.value.auto_remove,
       remove_at: form.value.auto_remove ? form.value.remove_at : null,
@@ -559,6 +618,7 @@ const submitStopList = async () => {
       );
       await Promise.all(requests);
     }
+    showSuccessNotification("Стоп-лист обновлен");
     showModal.value = false;
     await loadStopList();
   } catch (error) {
@@ -572,6 +632,7 @@ const removeFromStopList = async (item) => {
   if (!confirm(`Удалить "${item.entity_name}" из стоп-листа?`)) return;
   try {
     await api.delete(`/api/menu/admin/stop-list/${item.id}`);
+    showSuccessNotification("Позиция удалена из стоп-листа");
     await loadStopList();
   } catch (error) {
     console.error("Failed to remove from stop list:", error);

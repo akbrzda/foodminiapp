@@ -11,32 +11,47 @@
             </Button>
           </template>
           <template #filters>
-            <div class="min-w-[180px] space-y-1">
-              <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Роль</label>
-              <Select v-model="filters.role" @change="loadUsers">
-                <option value="">Все роли</option>
-                <option value="admin">Администратор</option>
-                <option value="manager">Менеджер</option>
-                <option value="ceo">CEO</option>
-              </Select>
+            <div class="min-w-[180px]">
+              <Field>
+                <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Роль</FieldLabel>
+                <FieldContent>
+                  <Select v-model="filters.role" @update:modelValue="loadUsers">
+                    <SelectTrigger class="w-full">
+                      <SelectValue placeholder="Все роли" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">Все роли</SelectItem>
+                      <SelectItem value="admin">Администратор</SelectItem>
+                      <SelectItem value="manager">Менеджер</SelectItem>
+                      <SelectItem value="ceo">CEO</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </FieldContent>
+              </Field>
             </div>
-            <div class="min-w-[180px] space-y-1">
-              <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Статус</label>
-              <Select v-model="filters.is_active" @change="loadUsers">
-                <option value="">Все статусы</option>
-                <option value="true">Активные</option>
-                <option value="false">Неактивные</option>
-              </Select>
+            <div class="min-w-[180px]">
+              <Field>
+                <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Статус</FieldLabel>
+                <FieldContent>
+                  <Select v-model="filters.is_active" @update:modelValue="loadUsers">
+                    <SelectTrigger class="w-full">
+                      <SelectValue placeholder="Все статусы" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">Все статусы</SelectItem>
+                      <SelectItem value="true">Активные</SelectItem>
+                      <SelectItem value="false">Неактивные</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </FieldContent>
+              </Field>
             </div>
           </template>
         </PageHeader>
       </CardContent>
     </Card>
     <Card>
-      <CardHeader>
-        <CardTitle>Список пользователей</CardTitle>
-      </CardHeader>
-      <CardContent class="pt-0">
+      <CardContent class="!p-0">
         <Table>
           <TableHeader>
             <TableRow>
@@ -92,97 +107,133 @@
         </Table>
       </CardContent>
     </Card>
-    <BaseModal v-if="showModal" :title="modalTitle" :subtitle="modalSubtitle" @close="closeModal">
-      <form class="space-y-4" @submit.prevent="submitUser">
-        <div class="grid gap-4 md:grid-cols-2">
-          <div class="space-y-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Имя</label>
-            <Input v-model="form.first_name" required />
-          </div>
-          <div class="space-y-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Фамилия</label>
-            <Input v-model="form.last_name" required />
-          </div>
-        </div>
-        <div class="space-y-2">
-          <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Email</label>
-          <Input v-model="form.email" type="email" required />
-        </div>
-        <div v-if="!editing" class="space-y-2">
-          <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Пароль</label>
-          <Input v-model="form.password" type="password" :required="!editing" minlength="6" />
-          <p class="text-xs text-muted-foreground">Минимум 6 символов</p>
-        </div>
-        <div class="grid gap-4 md:grid-cols-2">
-          <div class="space-y-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Роль</label>
-            <Select v-model="form.role" required>
-              <option value="admin">Администратор</option>
-              <option value="manager">Менеджер</option>
-              <option value="ceo">CEO</option>
-            </Select>
-          </div>
-          <div class="space-y-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Статус</label>
-            <Select v-model="form.is_active">
-              <option :value="true">Активен</option>
-              <option :value="false">Неактивен</option>
-            </Select>
-          </div>
-        </div>
-        <div class="space-y-2">
-          <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Telegram ID (опционально)</label>
-          <Input v-model="form.telegram_id" type="number" />
-        </div>
-        <div v-if="form.role === 'manager'">
-          <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Города доступа</label>
-          <div class="mt-2 grid gap-2 md:grid-cols-2">
-            <label v-for="city in referenceStore.cities" :key="city.id" class="flex items-center gap-2 text-sm text-foreground">
-              <input type="checkbox" :value="city.id" v-model="form.city_ids" class="h-4 w-4 rounded border-border" />
-              <span>{{ city.name }}</span>
-            </label>
-          </div>
-        </div>
-        <div v-if="form.role === 'manager'" class="space-y-2">
-          <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground\">Филиалы доступа</label>
-          <div class="mt-2 grid gap-2 md:grid-cols-2">
-            <label v-for="branch in availableBranches" :key="branch.id" class="flex items-center gap-2 text-sm text-foreground">
-              <input type="checkbox" :value="branch.id" v-model="form.branch_ids" class="h-4 w-4 rounded border-border" />
-              <span>{{ branch.name }}{{ branch.city_name ? ` · ${branch.city_name}` : "" }}</span>
-            </label>
-          </div>
-          <p class="text-xs text-muted-foreground">Филиалы ограничены выбранными городами.</p>
-        </div>
-        <Button class="w-full" type="submit">
-          <Save :size="16" />
-          Сохранить
-        </Button>
-      </form>
-    </BaseModal>
+    <Dialog v-if="showModal" :open="showModal" @update:open="(value) => (value ? null : closeModal())">
+      <DialogContent class="w-full max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>{{ modalTitle }}</DialogTitle>
+          <DialogDescription>{{ modalSubtitle }}</DialogDescription>
+        </DialogHeader>
+        <form class="space-y-4" @submit.prevent="submitUser">
+          <FieldGroup>
+            <FieldGroup class="grid gap-4 md:grid-cols-2">
+              <Field>
+                <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Имя</FieldLabel>
+                <FieldContent>
+                  <Input v-model="form.first_name" required />
+                </FieldContent>
+              </Field>
+              <Field>
+                <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Фамилия</FieldLabel>
+                <FieldContent>
+                  <Input v-model="form.last_name" required />
+                </FieldContent>
+              </Field>
+            </FieldGroup>
+            <Field>
+              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Email</FieldLabel>
+              <FieldContent>
+                <Input v-model="form.email" type="email" required />
+              </FieldContent>
+            </Field>
+            <Field v-if="!editing">
+              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Пароль</FieldLabel>
+              <FieldContent>
+                <Input v-model="form.password" type="password" :required="!editing" minlength="6" />
+                <p class="text-xs text-muted-foreground">Минимум 6 символов</p>
+              </FieldContent>
+            </Field>
+            <FieldGroup class="grid gap-4 md:grid-cols-2">
+              <Field>
+                <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Роль</FieldLabel>
+                <FieldContent>
+                  <Select v-model="form.role" required>
+                    <SelectTrigger class="w-full">
+                      <SelectValue placeholder="Выберите роль" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="admin">Администратор</SelectItem>
+                      <SelectItem value="manager">Менеджер</SelectItem>
+                      <SelectItem value="ceo">CEO</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </FieldContent>
+              </Field>
+              <Field>
+                <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Статус</FieldLabel>
+                <FieldContent>
+                  <Select v-model="form.is_active">
+                    <SelectTrigger class="w-full">
+                      <SelectValue placeholder="Выберите статус" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem :value="true">Активен</SelectItem>
+                      <SelectItem :value="false">Неактивен</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </FieldContent>
+              </Field>
+            </FieldGroup>
+            <Field>
+              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Telegram ID (опционально)</FieldLabel>
+              <FieldContent>
+                <Input v-model="form.telegram_id" type="number" />
+              </FieldContent>
+            </Field>
+            <Field v-if="form.role === 'manager'">
+              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Города доступа</FieldLabel>
+              <FieldContent>
+                <div class="grid gap-2 md:grid-cols-2">
+                  <Label v-for="city in referenceStore.cities" :key="city.id" class="flex items-center gap-2 text-sm text-foreground">
+                    <input type="checkbox" :value="city.id" v-model="form.city_ids" class="h-4 w-4 rounded border-border" />
+                    <span>{{ city.name }}</span>
+                  </Label>
+                </div>
+              </FieldContent>
+            </Field>
+            <Field v-if="form.role === 'manager'">
+              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Филиалы доступа</FieldLabel>
+              <FieldContent>
+                <div class="grid gap-2 md:grid-cols-2">
+                  <Label v-for="branch in availableBranches" :key="branch.id" class="flex items-center gap-2 text-sm text-foreground">
+                    <input type="checkbox" :value="branch.id" v-model="form.branch_ids" class="h-4 w-4 rounded border-border" />
+                    <span>{{ branch.name }}{{ branch.city_name ? ` · ${branch.city_name}` : "" }}</span>
+                  </Label>
+                </div>
+                <p class="text-xs text-muted-foreground">Филиалы ограничены выбранными городами.</p>
+              </FieldContent>
+            </Field>
+          </FieldGroup>
+          <Button class="w-full" type="submit">
+            <Save :size="16" />
+            Сохранить
+          </Button>
+        </form>
+      </DialogContent>
+    </Dialog>
   </div>
 </template>
 <script setup>
 import { computed, onMounted, ref, watch } from "vue";
 import { Pencil, Plus, Save, Trash2 } from "lucide-vue-next";
 import api from "../api/client.js";
-import BaseModal from "../components/BaseModal.vue";
 import { useReferenceStore } from "../stores/reference.js";
 import { useAuthStore } from "../stores/auth.js";
-import Badge from "../components/ui/Badge.vue";
-import Button from "../components/ui/Button.vue";
-import Card from "../components/ui/Card.vue";
-import CardHeader from "../components/ui/CardHeader.vue";
-import CardTitle from "../components/ui/CardTitle.vue";
-import CardContent from "../components/ui/CardContent.vue";
+import Badge from "../components/ui/badge/Badge.vue";
+import Button from "../components/ui/button/Button.vue";
+import Card from "../components/ui/card/Card.vue";
+import CardContent from "../components/ui/card/CardContent.vue";
 import PageHeader from "../components/PageHeader.vue";
-import Input from "../components/ui/Input.vue";
-import Select from "../components/ui/Select.vue";
-import Table from "../components/ui/Table.vue";
-import TableBody from "../components/ui/TableBody.vue";
-import TableCell from "../components/ui/TableCell.vue";
-import TableHead from "../components/ui/TableHead.vue";
-import TableHeader from "../components/ui/TableHeader.vue";
-import TableRow from "../components/ui/TableRow.vue";
+import Input from "../components/ui/input/Input.vue";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../components/ui/dialog/index.js";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
+import Table from "../components/ui/table/Table.vue";
+import TableBody from "../components/ui/table/TableBody.vue";
+import TableCell from "../components/ui/table/TableCell.vue";
+import TableHead from "../components/ui/table/TableHead.vue";
+import TableHeader from "../components/ui/table/TableHeader.vue";
+import TableRow from "../components/ui/table/TableRow.vue";
+import { Field, FieldContent, FieldGroup, FieldLabel } from "../components/ui/field";
+import { Label } from "../components/ui/label";
 import { useNotifications } from "../composables/useNotifications.js";
 import { normalizeBoolean } from "../utils/format.js";
 const referenceStore = useReferenceStore();

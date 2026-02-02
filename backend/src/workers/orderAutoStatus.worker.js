@@ -53,6 +53,12 @@ async function updateOrderStatus(order, localDate) {
   const newStatus = order.status === "pending" ? "cancelled" : "completed";
   const completedAt = newStatus === "completed" ? new Date() : null;
   await db.query("UPDATE orders SET status = ?, completed_at = ?, auto_status_date = ? WHERE id = ?", [newStatus, completedAt, localDate, order.id]);
+  if (order.status !== newStatus) {
+    await db.query(
+      "INSERT INTO order_status_history (order_id, old_status, new_status, changed_by_type, changed_by_admin_id) VALUES (?, ?, ?, 'system', NULL)",
+      [order.id, order.status, newStatus],
+    );
+  }
   if (newStatus === "completed") {
     const orderTotal = parseFloat(order.total) || 0;
     const settings = await getSystemSettings();

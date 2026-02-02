@@ -4,40 +4,97 @@
       <CardContent class="space-y-4">
         <PageHeader title="Действия администраторов" description="История изменений в системе">
           <template #filters>
-            <div class="min-w-[200px] space-y-1">
-              <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Администратор</label>
-              <Select v-model="filters.admin_id">
-                <option value="">Все</option>
-                <option v-for="admin in admins" :key="admin.id" :value="admin.id">{{ admin.first_name }} {{ admin.last_name }}</option>
-              </Select>
+            <div class="min-w-[200px]">
+              <Field>
+                <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Администратор</FieldLabel>
+                <FieldContent>
+                  <Select v-model="filters.admin_id">
+                    <SelectTrigger class="w-full">
+                      <SelectValue placeholder="Все администраторы" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">Все</SelectItem>
+                      <SelectItem v-for="admin in admins" :key="admin.id" :value="admin.id">{{ admin.first_name }} {{ admin.last_name }}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </FieldContent>
+              </Field>
             </div>
-            <div class="min-w-[180px] space-y-1">
-              <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Тип действия</label>
-              <Select v-model="filters.action_type">
-                <option value="">Все</option>
-                <option value="create">Создание</option>
-                <option value="update">Изменение</option>
-                <option value="delete">Удаление</option>
-              </Select>
+            <div class="min-w-[180px]">
+              <Field>
+                <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Тип действия</FieldLabel>
+                <FieldContent>
+                  <Select v-model="filters.action_type">
+                    <SelectTrigger class="w-full">
+                      <SelectValue placeholder="Все типы" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">Все</SelectItem>
+                      <SelectItem value="create">Создание</SelectItem>
+                      <SelectItem value="update">Изменение</SelectItem>
+                      <SelectItem value="delete">Удаление</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </FieldContent>
+              </Field>
             </div>
-            <div class="min-w-[180px] space-y-1">
-              <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Объект</label>
-              <Select v-model="filters.object_type">
-                <option value="">Все</option>
-                <option value="category">Категория</option>
-                <option value="item">Товар</option>
-                <option value="modifier">Модификатор</option>
-                <option value="order">Заказ</option>
-                <option value="polygon">Полигон</option>
-                <option value="settings">Настройки</option>
-                <option value="user">Пользователь</option>
-                <option value="city">Город</option>
-                <option value="branch">Филиал</option>
-              </Select>
+            <div class="min-w-[180px]">
+              <Field>
+                <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Объект</FieldLabel>
+                <FieldContent>
+                  <Select v-model="filters.object_type">
+                    <SelectTrigger class="w-full">
+                      <SelectValue placeholder="Все объекты" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">Все</SelectItem>
+                      <SelectItem value="category">Категория</SelectItem>
+                      <SelectItem value="item">Товар</SelectItem>
+                      <SelectItem value="modifier">Модификатор</SelectItem>
+                      <SelectItem value="order">Заказ</SelectItem>
+                      <SelectItem value="polygon">Полигон</SelectItem>
+                      <SelectItem value="settings">Настройки</SelectItem>
+                      <SelectItem value="user">Пользователь</SelectItem>
+                      <SelectItem value="city">Город</SelectItem>
+                      <SelectItem value="branch">Филиал</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </FieldContent>
+              </Field>
             </div>
-            <div class="min-w-[220px] space-y-1">
-              <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Период</label>
-              <RangeCalendar v-model:from="filters.date_from" v-model:to="filters.date_to" />
+            <div class="min-w-[220px]">
+              <Field>
+                <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Период</FieldLabel>
+                <FieldContent>
+                  <Popover v-model:open="isRangeOpen">
+                    <PopoverTrigger asChild>
+                      <button
+                        type="button"
+                        class="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-background"
+                      >
+                        <span :class="rangeLabelClass">{{ rangeLabel }}</span>
+                        <CalendarIcon class="text-muted-foreground" :size="16" />
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent class="w-auto p-0" align="start">
+                      <div class="space-y-3 p-3">
+                        <Calendar
+                          :model-value="calendarRange"
+                          :number-of-months="2"
+                          :is-date-disabled="isFutureDateDisabled"
+                          locale="ru-RU"
+                          multiple
+                          @update:modelValue="handleRangeUpdate"
+                        />
+                        <div class="flex items-center justify-between text-xs text-muted-foreground">
+                          <span>{{ rangeHelperLabel }}</span>
+                          <button type="button" class="text-primary hover:underline" @click="clearDateRange">Очистить</button>
+                        </div>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </FieldContent>
+              </Field>
             </div>
             <div class="ml-auto flex flex-wrap items-center gap-2">
               <Button variant="outline" @click="resetFilters">
@@ -51,8 +108,12 @@
       </CardContent>
     </Card>
     <Card v-if="loading">
-      <CardContent class="py-12 text-center">
-        <div class="text-muted-foreground">Загрузка...</div>
+      <CardContent class="py-12">
+        <div class="space-y-2">
+          <Skeleton class="h-6 w-full" />
+          <Skeleton class="h-6 w-full" />
+          <Skeleton class="h-6 w-full" />
+        </div>
       </CardContent>
     </Card>
     <Card v-else-if="logs.length === 0">
@@ -61,7 +122,7 @@
       </CardContent>
     </Card>
     <Card v-else>
-      <CardContent class="p-0">
+      <CardContent class="!p-0">
         <Table>
           <TableHeader>
             <TableRow>
@@ -121,64 +182,72 @@
         </div>
       </CardContent>
     </Card>
-    <BaseModal v-model:open="detailsModal.open" :title="`Детали действия #${detailsModal.log?.id || ''}`">
-      <div v-if="detailsModal.log" class="space-y-4">
-        <div>
-          <div class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Дата и время</div>
-          <div class="text-sm">{{ formatDateTime(detailsModal.log.created_at) }}</div>
+    <Dialog v-model:open="detailsModal.open">
+      <DialogContent class="w-full max-w-3xl">
+        <DialogHeader>
+          <DialogTitle>Детали действия #{{ detailsModal.log?.id || "" }}</DialogTitle>
+        </DialogHeader>
+        <div v-if="detailsModal.log" class="space-y-4">
+          <div>
+            <div class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Дата и время</div>
+            <div class="text-sm">{{ formatDateTime(detailsModal.log.created_at) }}</div>
+          </div>
+          <div>
+            <div class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Администратор</div>
+            <div class="text-sm">{{ detailsModal.log.admin_name }} ({{ detailsModal.log.admin_email }})</div>
+          </div>
+          <div>
+            <div class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Действие</div>
+            <div class="text-sm">{{ getActionLabel(detailsModal.log.action) }}</div>
+          </div>
+          <div>
+            <div class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Объект</div>
+            <div class="text-sm">{{ getObjectLabel(detailsModal.log.object_type) }} #{{ detailsModal.log.object_id }}</div>
+          </div>
+          <div v-if="detailsModal.log.ip_address">
+            <div class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">IP адрес</div>
+            <div class="text-sm">{{ detailsModal.log.ip_address }}</div>
+          </div>
+          <div v-if="detailsModal.log.details">
+            <div class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Детали изменений</div>
+            <pre class="mt-2 max-h-96 overflow-auto rounded-md bg-muted p-4 text-xs">{{ formatJSON(detailsModal.log.details) }}</pre>
+          </div>
         </div>
-        <div>
-          <div class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Администратор</div>
-          <div class="text-sm">{{ detailsModal.log.admin_name }} ({{ detailsModal.log.admin_email }})</div>
-        </div>
-        <div>
-          <div class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Действие</div>
-          <div class="text-sm">{{ getActionLabel(detailsModal.log.action) }}</div>
-        </div>
-        <div>
-          <div class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Объект</div>
-          <div class="text-sm">{{ getObjectLabel(detailsModal.log.object_type) }} #{{ detailsModal.log.object_id }}</div>
-        </div>
-        <div v-if="detailsModal.log.ip_address">
-          <div class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">IP адрес</div>
-          <div class="text-sm">{{ detailsModal.log.ip_address }}</div>
-        </div>
-        <div v-if="detailsModal.log.details">
-          <div class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Детали изменений</div>
-          <pre class="mt-2 max-h-96 overflow-auto rounded-md bg-muted p-4 text-xs">{{ formatJSON(detailsModal.log.details) }}</pre>
-        </div>
-      </div>
-      <template #footer>
-        <Button variant="outline" @click="detailsModal.open = false">Закрыть</Button>
-      </template>
-    </BaseModal>
+        <DialogFooter>
+          <Button variant="outline" @click="detailsModal.open = false">Закрыть</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   </div>
 </template>
 <script setup>
 import api from "../api/client.js";
-import BaseModal from "../components/BaseModal.vue";
 import { useNotifications } from "../composables/useNotifications.js";
 import { formatDateTime, formatNumber } from "../utils/format.js";
-import Badge from "../components/ui/Badge.vue";
-import Button from "../components/ui/Button.vue";
-import Card from "../components/ui/Card.vue";
-import CardContent from "../components/ui/CardContent.vue";
-import CardHeader from "../components/ui/CardHeader.vue";
-import CardTitle from "../components/ui/CardTitle.vue";
+import Badge from "../components/ui/badge/Badge.vue";
+import Button from "../components/ui/button/Button.vue";
+import Card from "../components/ui/card/Card.vue";
+import CardContent from "../components/ui/card/CardContent.vue";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "../components/ui/dialog/index.js";
 import PageHeader from "../components/PageHeader.vue";
-import RangeCalendar from "../components/ui/RangeCalendar.vue";
-import Select from "../components/ui/Select.vue";
-import Table from "../components/ui/Table.vue";
-import TableBody from "../components/ui/TableBody.vue";
-import TableCell from "../components/ui/TableCell.vue";
-import TableHead from "../components/ui/TableHead.vue";
-import TableHeader from "../components/ui/TableHeader.vue";
-import TableRow from "../components/ui/TableRow.vue";
-import { onMounted, reactive, ref, watch } from "vue";
-import { Eye, RotateCcw } from "lucide-vue-next";
+import { Calendar } from "../components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popover";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
+import Table from "../components/ui/table/Table.vue";
+import TableBody from "../components/ui/table/TableBody.vue";
+import TableCell from "../components/ui/table/TableCell.vue";
+import { Field, FieldContent, FieldLabel } from "../components/ui/field";
+import Skeleton from "../components/ui/skeleton/Skeleton.vue";
+import TableHead from "../components/ui/table/TableHead.vue";
+import TableHeader from "../components/ui/table/TableHeader.vue";
+import TableRow from "../components/ui/table/TableRow.vue";
+import { computed, onMounted, reactive, ref, watch } from "vue";
+import { Calendar as CalendarIcon, Eye, RotateCcw } from "lucide-vue-next";
+import { DateFormatter, getLocalTimeZone, parseDate, today } from "@internationalized/date";
 const logs = ref([]);
 const admins = ref([]);
 const loading = ref(false);
+const isRangeOpen = ref(false);
 const { showErrorNotification } = useNotifications();
 const loadTimer = ref(null);
 const filters = reactive({
@@ -188,6 +257,56 @@ const filters = reactive({
   date_from: "",
   date_to: "",
 });
+const timeZone = getLocalTimeZone();
+const rangeFormatter = new DateFormatter("ru-RU", { dateStyle: "medium" });
+const normalizeRangeValues = (value) => {
+  const dates = Array.isArray(value) ? value : value ? [value] : [];
+  if (!dates.length) return [];
+  const trimmed = dates.slice(-2);
+  return trimmed.sort((a, b) => a.compare(b));
+};
+const calendarRange = computed({
+  get() {
+    const values = [];
+    if (filters.date_from) values.push(parseDate(filters.date_from));
+    if (filters.date_to) values.push(parseDate(filters.date_to));
+    return values.length ? values : undefined;
+  },
+  set(value) {
+    const normalized = normalizeRangeValues(value);
+    filters.date_from = normalized[0]?.toString() || "";
+    filters.date_to = normalized[1]?.toString() || "";
+  },
+});
+const handleRangeUpdate = (value) => {
+  calendarRange.value = value;
+  if (filters.date_from && filters.date_to) {
+    isRangeOpen.value = false;
+  }
+};
+const rangeLabel = computed(() => {
+  if (filters.date_from && filters.date_to) {
+    const from = rangeFormatter.format(parseDate(filters.date_from).toDate(timeZone));
+    const to = rangeFormatter.format(parseDate(filters.date_to).toDate(timeZone));
+    return `${from} — ${to}`;
+  }
+  if (filters.date_from) {
+    const from = rangeFormatter.format(parseDate(filters.date_from).toDate(timeZone));
+    return `${from} — ...`;
+  }
+  return "Выберите диапазон";
+});
+const rangeLabelClass = computed(() => (filters.date_from ? "text-foreground" : "text-muted-foreground"));
+const rangeHelperLabel = computed(() => {
+  if (filters.date_from && filters.date_to) return "Диапазон выбран";
+  if (filters.date_from) return "Выберите дату окончания";
+  return "Выберите дату начала";
+});
+const isFutureDateDisabled = (date) => date.compare(today(timeZone)) > 0;
+const clearDateRange = () => {
+  filters.date_from = "";
+  filters.date_to = "";
+};
 const pagination = reactive({
   page: 1,
   limit: 50,

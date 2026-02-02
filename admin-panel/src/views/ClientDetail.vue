@@ -1,12 +1,11 @@
 <template>
   <div class="space-y-6">
-    <PageHeader :title="`Клиент #${clientId}`" :description="clientTitle">
+    <PageHeader :title="clientNameForTitle" description="Данные профиля и лояльность">
       <template #actions>
         <Button variant="outline" size="sm" @click="goBack">
           <ArrowLeft :size="16" />
           Назад к клиентам
         </Button>
-        <Badge variant="secondary">ID: {{ clientId }}</Badge>
       </template>
     </PageHeader>
     <Card>
@@ -15,30 +14,39 @@
         <CardDescription>Регистрация: {{ formatDateTime(client?.created_at) || "—" }} · Город: {{ client?.city_name || "—" }}</CardDescription>
       </CardHeader>
       <CardContent class="p-3 space-y-4">
-        <div class="grid gap-4 md:grid-cols-2">
-          <div class="space-y-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Имя</label>
-            <Input v-model="form.first_name" />
-          </div>
-          <div class="space-y-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Фамилия</label>
-            <Input v-model="form.last_name" />
-          </div>
-          <div class="space-y-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Телефон</label>
-            <Input v-model="form.phone" />
-          </div>
-          <div class="space-y-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Email</label>
-            <Input v-model="form.email" />
-          </div>
-        </div>
+        <FieldGroup class="grid gap-4 md:grid-cols-2">
+          <Field>
+            <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Имя</FieldLabel>
+            <FieldContent>
+              <Input v-model="form.first_name" />
+            </FieldContent>
+          </Field>
+          <Field>
+            <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Фамилия</FieldLabel>
+            <FieldContent>
+              <Input v-model="form.last_name" />
+            </FieldContent>
+          </Field>
+          <Field>
+            <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Телефон</FieldLabel>
+            <FieldContent>
+              <Input v-model="form.phone" />
+            </FieldContent>
+          </Field>
+          <Field>
+            <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Email</FieldLabel>
+            <FieldContent>
+              <Input v-model="form.email" />
+            </FieldContent>
+          </Field>
+        </FieldGroup>
         <div class="flex flex-wrap items-center justify-between gap-3">
           <div class="text-sm text-muted-foreground">
             Бонусный баланс: <strong class="text-foreground">{{ formatNumber(client?.loyalty_balance) }}</strong>
           </div>
           <Button @click="saveClient" :disabled="saving">
-            <Save :size="16" />
+            <Spinner v-if="saving" class="h-4 w-4" />
+            <Save v-else :size="16" />
             {{ saving ? "Сохранение..." : "Сохранить" }}
           </Button>
         </div>
@@ -86,9 +94,7 @@
             <span>Прогресс до следующего уровня</span>
             <span>{{ Math.round((loyaltyStats?.progress_to_next_level || 0) * 100) }}%</span>
           </div>
-          <div class="mt-2 h-2 w-full rounded-full bg-muted">
-            <div class="h-2 rounded-full bg-primary" :style="{ width: `${Math.round((loyaltyStats?.progress_to_next_level || 0) * 100)}%` }"></div>
-          </div>
+          <Progress class="mt-2" :model-value="Math.round((loyaltyStats?.progress_to_next_level || 0) * 100)" />
         </div>
         <div>
           <div class="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">История уровней</div>
@@ -112,11 +118,15 @@
       </CardContent>
     </Card>
     <Card>
-      <CardHeader>
-        <CardTitle>История заказов</CardTitle>
-      </CardHeader>
-      <CardContent class="p-3 pt-0">
-        <div v-if="ordersLoading" class="text-sm text-muted-foreground">Загрузка...</div>
+      <CardContent class="!p-0">
+        <div class="border-b border-border/60 px-4 py-3 text-sm font-semibold text-foreground">История заказов</div>
+        <div v-if="ordersLoading" class="p-4">
+          <div class="space-y-2">
+            <Skeleton class="h-6 w-full" />
+            <Skeleton class="h-6 w-full" />
+            <Skeleton class="h-6 w-full" />
+          </div>
+        </div>
         <Table v-else>
           <TableHeader>
             <TableRow>
@@ -138,11 +148,15 @@
       </CardContent>
     </Card>
     <Card>
-      <CardHeader>
-        <CardTitle>История бонусов</CardTitle>
-      </CardHeader>
-      <CardContent class="p-3 pt-0">
-        <div v-if="bonusesLoading" class="text-sm text-muted-foreground">Загрузка...</div>
+      <CardContent class="!p-0">
+        <div class="border-b border-border/60 px-4 py-3 text-sm font-semibold text-foreground">История бонусов</div>
+        <div v-if="bonusesLoading" class="p-4">
+          <div class="space-y-2">
+            <Skeleton class="h-6 w-full" />
+            <Skeleton class="h-6 w-full" />
+            <Skeleton class="h-6 w-full" />
+          </div>
+        </div>
         <Table v-else>
           <TableHeader>
             <TableRow>
@@ -169,28 +183,48 @@
         </Table>
       </CardContent>
     </Card>
-    <BaseModal v-if="showAdjustModal" title="Корректировка баланса" subtitle="Изменение бонусов пользователя" @close="closeAdjustModal">
-      <form class="space-y-4" @submit.prevent="submitAdjustment">
-        <div class="space-y-2">
-          <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Тип операции</label>
-          <Select v-model="adjustForm.type">
-            <option value="earn">Начисление</option>
-            <option value="spend">Списание</option>
-          </Select>
-        </div>
-        <div class="space-y-2">
-          <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Сумма</label>
-          <Input v-model.number="adjustForm.amount" type="number" min="1" step="1" required />
-        </div>
-        <div class="space-y-2">
-          <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Причина</label>
-          <Input v-model="adjustForm.reason" type="text" required />
-        </div>
-        <Button class="w-full" type="submit" :disabled="adjustSaving">
-          {{ adjustSaving ? "Сохранение..." : "Сохранить" }}
-        </Button>
-      </form>
-    </BaseModal>
+    <Dialog v-if="showAdjustModal" :open="showAdjustModal" @update:open="(value) => (value ? null : closeAdjustModal())">
+      <DialogContent class="w-full max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Корректировка баланса</DialogTitle>
+          <DialogDescription>Изменение бонусов пользователя</DialogDescription>
+        </DialogHeader>
+        <form class="space-y-4" @submit.prevent="submitAdjustment">
+          <FieldGroup>
+            <Field>
+              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Тип операции</FieldLabel>
+              <FieldContent>
+                <Select v-model="adjustForm.type">
+                  <SelectTrigger class="w-full">
+                    <SelectValue placeholder="Выберите тип" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="earn">Начисление</SelectItem>
+                    <SelectItem value="spend">Списание</SelectItem>
+                  </SelectContent>
+                </Select>
+              </FieldContent>
+            </Field>
+            <Field>
+              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Сумма</FieldLabel>
+              <FieldContent>
+                <Input v-model.number="adjustForm.amount" type="number" min="1" step="1" required />
+              </FieldContent>
+            </Field>
+            <Field>
+              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Причина</FieldLabel>
+              <FieldContent>
+                <Input v-model="adjustForm.reason" type="text" required />
+              </FieldContent>
+            </Field>
+          </FieldGroup>
+          <Button class="w-full" type="submit" :disabled="adjustSaving">
+            <Spinner v-if="adjustSaving" class="h-4 w-4" />
+            <span>{{ adjustSaving ? "Сохранение..." : "Сохранить" }}</span>
+          </Button>
+        </form>
+      </DialogContent>
+    </Dialog>
   </div>
 </template>
 <script setup>
@@ -201,23 +235,27 @@ import api from "../api/client.js";
 import { useNotifications } from "../composables/useNotifications.js";
 import { useOrdersStore } from "../stores/orders.js";
 import { formatCurrency, formatDateTime, formatNumber } from "../utils/format.js";
-import Button from "../components/ui/Button.vue";
-import Card from "../components/ui/Card.vue";
-import CardContent from "../components/ui/CardContent.vue";
-import CardDescription from "../components/ui/CardDescription.vue";
-import CardHeader from "../components/ui/CardHeader.vue";
-import CardTitle from "../components/ui/CardTitle.vue";
-import Input from "../components/ui/Input.vue";
-import Select from "../components/ui/Select.vue";
-import Table from "../components/ui/Table.vue";
-import TableBody from "../components/ui/TableBody.vue";
-import TableCell from "../components/ui/TableCell.vue";
-import TableHead from "../components/ui/TableHead.vue";
-import TableHeader from "../components/ui/TableHeader.vue";
-import TableRow from "../components/ui/TableRow.vue";
-import Badge from "../components/ui/Badge.vue";
+import Button from "../components/ui/button/Button.vue";
+import Card from "../components/ui/card/Card.vue";
+import CardContent from "../components/ui/card/CardContent.vue";
+import CardDescription from "../components/ui/card/CardDescription.vue";
+import CardHeader from "../components/ui/card/CardHeader.vue";
+import CardTitle from "../components/ui/card/CardTitle.vue";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../components/ui/dialog/index.js";
+import Input from "../components/ui/input/Input.vue";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
+import Table from "../components/ui/table/Table.vue";
+import TableBody from "../components/ui/table/TableBody.vue";
+import TableCell from "../components/ui/table/TableCell.vue";
+import TableHead from "../components/ui/table/TableHead.vue";
+import TableHeader from "../components/ui/table/TableHeader.vue";
+import TableRow from "../components/ui/table/TableRow.vue";
+import Badge from "../components/ui/badge/Badge.vue";
 import PageHeader from "../components/PageHeader.vue";
-import BaseModal from "../components/BaseModal.vue";
+import { Field, FieldContent, FieldGroup, FieldLabel } from "../components/ui/field";
+import Progress from "../components/ui/progress/Progress.vue";
+import Skeleton from "../components/ui/skeleton/Skeleton.vue";
+import Spinner from "../components/ui/spinner/Spinner.vue";
 const route = useRoute();
 const router = useRouter();
 const { showErrorNotification } = useNotifications();
@@ -238,17 +276,15 @@ const adjustForm = reactive({
   amount: 0,
   reason: "",
 });
-const clientTitle = computed(() => {
-  if (!client.value) return "Данные профиля и лояльность";
-  const parts = [client.value.first_name, client.value.last_name].filter(Boolean).join(" ");
-  const phone = client.value.phone ? `· ${client.value.phone}` : "";
-  return `${parts || "Данные профиля"} ${phone}`.trim();
-});
 const clientNameForTitle = computed(() => {
   if (!client.value) return "Клиент";
   const parts = [client.value.first_name, client.value.last_name].filter(Boolean).join(" ");
   return parts ? `Клиент: ${parts}` : "Клиент";
 });
+const updateBreadcrumbs = () => {
+  const name = [client.value?.first_name, client.value?.last_name].filter(Boolean).join(" ").trim();
+  ordersStore.setBreadcrumbs([{ label: "Клиенты", to: "/clients" }, { label: name || "Клиент" }], route.name);
+};
 const updateDocumentTitle = (baseTitle) => {
   const count = ordersStore.newOrdersCount || 0;
   document.title = count > 0 ? `(${count}) ${baseTitle}` : baseTitle;
@@ -288,6 +324,7 @@ const loadClient = async () => {
     phone: client.value.phone || "",
     email: client.value.email || "",
   });
+  updateBreadcrumbs();
 };
 const loadOrders = async () => {
   ordersLoading.value = true;
@@ -375,5 +412,11 @@ watch(
     updateDocumentTitle(clientNameForTitle.value);
   },
   { immediate: true },
+);
+watch(
+  () => [client.value?.first_name, client.value?.last_name],
+  () => {
+    updateBreadcrumbs();
+  },
 );
 </script>

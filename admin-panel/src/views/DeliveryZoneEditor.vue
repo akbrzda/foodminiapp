@@ -17,24 +17,34 @@
         <CardTitle>Параметры полигона</CardTitle>
       </CardHeader>
       <CardContent class="flex-1 overflow-y-auto px-4 py-4 space-y-4">
-        <div class="space-y-2">
-          <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Название</label>
-          <Input v-model="form.name" placeholder="Центральная зона" required />
-        </div>
-        <div class="space-y-2">
-          <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Время доставки (мин)</label>
-          <Input v-model.number="form.delivery_time" type="number" min="0" required />
-        </div>
-        <div class="grid gap-4 md:grid-cols-2">
-          <div class="space-y-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Мин. сумма заказа (₽)</label>
-            <Input v-model.number="form.min_order_amount" type="number" min="0" step="10" />
-          </div>
-          <div class="space-y-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Стоимость доставки (₽)</label>
-            <Input v-model.number="form.delivery_cost" type="number" min="0" step="10" />
-          </div>
-        </div>
+        <FieldGroup>
+          <Field>
+            <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Название</FieldLabel>
+            <FieldContent>
+              <Input v-model="form.name" placeholder="Центральная зона" required />
+            </FieldContent>
+          </Field>
+          <Field>
+            <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Время доставки (мин)</FieldLabel>
+            <FieldContent>
+              <Input v-model.number="form.delivery_time" type="number" min="0" required />
+            </FieldContent>
+          </Field>
+          <FieldGroup class="grid gap-4 md:grid-cols-2">
+            <Field>
+              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Мин. сумма заказа (₽)</FieldLabel>
+              <FieldContent>
+                <Input v-model.number="form.min_order_amount" type="number" min="0" step="10" />
+              </FieldContent>
+            </Field>
+            <Field>
+              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Стоимость доставки (₽)</FieldLabel>
+              <FieldContent>
+                <Input v-model.number="form.delivery_cost" type="number" min="0" step="10" />
+              </FieldContent>
+            </Field>
+          </FieldGroup>
+        </FieldGroup>
         <div class="flex flex-wrap gap-2">
           <Button variant="secondary" @click="startDrawing">Перерисовать</Button>
           <Button variant="outline" @click="resetPolygon">Сбросить изменения</Button>
@@ -48,19 +58,21 @@
   </div>
 </template>
 <script setup>
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { Save } from "lucide-vue-next";
 import { useRoute, useRouter } from "vue-router";
 import api from "../api/client.js";
 import { useReferenceStore } from "../stores/reference.js";
 import { useNotifications } from "../composables/useNotifications.js";
-import Button from "../components/ui/Button.vue";
-import CardContent from "../components/ui/CardContent.vue";
-import CardDescription from "../components/ui/CardDescription.vue";
-import CardHeader from "../components/ui/CardHeader.vue";
-import CardTitle from "../components/ui/CardTitle.vue";
-import Input from "../components/ui/Input.vue";
+import { useTheme } from "../composables/useTheme.js";
+import { getMapColor, getTileLayer } from "../utils/leaflet.js";
+import Button from "../components/ui/button/Button.vue";
+import CardContent from "../components/ui/card/CardContent.vue";
+import CardHeader from "../components/ui/card/CardHeader.vue";
+import CardTitle from "../components/ui/card/CardTitle.vue";
+import Input from "../components/ui/input/Input.vue";
 import PageHeader from "../components/PageHeader.vue";
+import { Field, FieldContent, FieldGroup, FieldLabel } from "../components/ui/field";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "leaflet-draw";
@@ -100,6 +112,7 @@ const route = useRoute();
 const router = useRouter();
 const referenceStore = useReferenceStore();
 const { showErrorNotification, showSuccessNotification } = useNotifications();
+const { resolvedTheme } = useTheme();
 const branchId = computed(() => parseInt(route.params.branchId, 10));
 const polygonId = computed(() => route.params.polygonId);
 const cityId = computed(() => parseInt(route.query.cityId, 10));
@@ -117,6 +130,7 @@ let drawControl = null;
 let currentLayer = null;
 let originalPolygon = null;
 let backgroundLayer = null;
+let tileLayer = null;
 const goBack = () => {
   router.push({
     name: "delivery-zones",
@@ -139,7 +153,7 @@ const initMap = () => {
   const selectedBranch = branches.find((b) => b.id === branchId.value);
   const center = selectedBranch?.latitude && selectedBranch?.longitude ? [selectedBranch.latitude, selectedBranch.longitude] : [55.751244, 37.618423];
   map = L.map(container, { zoomControl: false, attributionControl: false }).setView(center, 13);
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 20 }).addTo(map);
+  tileLayer = getTileLayer(resolvedTheme.value, { maxZoom: 20 }).addTo(map);
   drawnItems = new L.FeatureGroup();
   map.addLayer(drawnItems);
   backgroundLayer = new L.FeatureGroup();
@@ -151,9 +165,9 @@ const initMap = () => {
         allowIntersection: false,
         showArea: false,
         shapeOptions: {
-          color: "#FFD200",
-          fillColor: "#FFD200",
-          fillOpacity: 0.25,
+          color: getMapColor(resolvedTheme.value, "accent"),
+          fillColor: getMapColor(resolvedTheme.value, "accentFill"),
+          fillOpacity: 1,
           weight: 3,
           opacity: 0.9,
         },
@@ -180,9 +194,9 @@ const renderPolygon = (polygon) => {
   const rawCoords = polygon.polygon.coordinates[0];
   const coords = rawCoords.map((coord) => [coord[0], coord[1]]);
   currentLayer = L.polygon(coords, {
-    color: "#FFD200",
-    fillColor: "#FFD200",
-    fillOpacity: 0.25,
+    color: getMapColor(resolvedTheme.value, "accent"),
+    fillColor: getMapColor(resolvedTheme.value, "accentFill"),
+    fillOpacity: 1,
     weight: 3,
     opacity: 0.9,
   });
@@ -192,9 +206,10 @@ const renderPolygon = (polygon) => {
 const renderBackgroundPolygons = (excludeId = null) => {
   if (!map || !backgroundLayer) return;
   backgroundLayer.clearLayers();
+  const muted = resolvedTheme.value === "dark" ? "#94a3b8" : "#cbd5e1";
   const style = {
-    color: "#94a3b8",
-    fillColor: "#94a3b8",
+    color: muted,
+    fillColor: muted,
     fillOpacity: 0.08,
     weight: 2,
     opacity: 0.6,
@@ -267,6 +282,20 @@ const savePolygon = async () => {
     showErrorNotification("Ошибка сохранения полигона");
   }
 };
+watch(
+  () => resolvedTheme.value,
+  () => {
+    if (!map) return;
+    if (tileLayer) {
+      tileLayer.remove();
+    }
+    tileLayer = getTileLayer(resolvedTheme.value, { maxZoom: 20 }).addTo(map);
+    if (originalPolygon) {
+      renderPolygon(originalPolygon);
+    }
+    renderBackgroundPolygons(originalPolygon?.id || null);
+  },
+);
 onMounted(async () => {
   try {
     await referenceStore.loadCities();
@@ -285,6 +314,7 @@ onUnmounted(() => {
     map.remove();
     map = null;
   }
+  tileLayer = null;
 });
 </script>
 <style scoped>

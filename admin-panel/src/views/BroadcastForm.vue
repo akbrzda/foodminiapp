@@ -18,29 +18,42 @@
         <CardTitle>Основные настройки</CardTitle>
       </CardHeader>
       <CardContent class="space-y-6">
-        <div class="space-y-2">
-          <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Название</label>
-          <Input v-model="form.name" placeholder="Возврат после 30 дней" required />
-        </div>
-        <div class="space-y-2">
-          <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Описание</label>
-          <Textarea v-model="form.description" rows="3" placeholder="Короткое описание цели рассылки" />
-        </div>
-        <div class="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-          <div class="space-y-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Тип</label>
-            <Select v-model="form.type">
-              <option value="manual">Ручная</option>
-              <option value="trigger">Триггерная</option>
-            </Select>
-          </div>
-          <div v-if="isEditing" class="space-y-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Статус</label>
-            <div>
-              <Badge variant="secondary">{{ statusLabel(form.status) }}</Badge>
-            </div>
-          </div>
-        </div>
+        <FieldGroup>
+          <Field>
+            <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Название</FieldLabel>
+            <FieldContent>
+              <Input v-model="form.name" placeholder="Возврат после 30 дней" required />
+            </FieldContent>
+          </Field>
+          <Field>
+            <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Описание</FieldLabel>
+            <FieldContent>
+              <Textarea v-model="form.description" rows="3" placeholder="Короткое описание цели рассылки" />
+            </FieldContent>
+          </Field>
+          <FieldGroup class="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+            <Field>
+              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Тип</FieldLabel>
+              <FieldContent>
+                <Select v-model="form.type">
+                  <SelectTrigger class="w-full">
+                    <SelectValue placeholder="Выберите тип" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="manual">Ручная</SelectItem>
+                    <SelectItem value="trigger">Триггерная</SelectItem>
+                  </SelectContent>
+                </Select>
+              </FieldContent>
+            </Field>
+            <Field v-if="isEditing">
+              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Статус</FieldLabel>
+              <FieldContent>
+                <Badge variant="secondary">{{ statusLabel(form.status) }}</Badge>
+              </FieldContent>
+            </Field>
+          </FieldGroup>
+        </FieldGroup>
       </CardContent>
     </Card>
 
@@ -49,13 +62,20 @@
         <CardTitle>Сегментация аудитории</CardTitle>
       </CardHeader>
       <CardContent class="space-y-6">
-        <div class="space-y-2">
-          <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Сохраненный сегмент</label>
-          <Select v-model="form.segment_id">
-            <option value="">Не выбран</option>
-            <option v-for="segment in segments" :key="segment.id" :value="segment.id">{{ segment.name }}</option>
-          </Select>
-        </div>
+        <Field>
+          <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Сохраненный сегмент</FieldLabel>
+          <FieldContent>
+            <Select v-model="form.segment_id">
+              <SelectTrigger class="w-full">
+                <SelectValue placeholder="Не выбран" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">Не выбран</SelectItem>
+                <SelectItem v-for="segment in segments" :key="segment.id" :value="segment.id">{{ segment.name }}</SelectItem>
+              </SelectContent>
+            </Select>
+          </FieldContent>
+        </Field>
         <div class="rounded-xl border border-border/60 bg-muted/20 p-4">
           <SegmentBuilder v-model="segmentConfig" />
         </div>
@@ -71,90 +91,107 @@
         <CardTitle>Контент сообщения</CardTitle>
       </CardHeader>
       <CardContent class="space-y-6">
-        <div class="space-y-2">
-          <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Текст сообщения</label>
-          <Textarea
-            ref="contentTextarea"
-            v-model="form.content_text"
-            rows="6"
-            placeholder="Привет, {first_name}!"
-            @click="updateCursor"
-            @keyup="updateCursor"
-            @focus="updateCursor"
-          />
-          <div class="space-y-2">
-            <div class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Плейсхолдеры</div>
-            <div class="flex flex-wrap gap-2">
-              <Button
-                v-for="placeholder in placeholders"
-                :key="placeholder.value"
-                type="button"
-                size="sm"
-                variant="outline"
-                @click="insertPlaceholder(placeholder.value)"
-              >
-                {{ placeholder.label }}
-              </Button>
+        <Field>
+          <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Текст сообщения</FieldLabel>
+          <FieldContent>
+            <Textarea
+              ref="contentTextarea"
+              v-model="form.content_text"
+              rows="6"
+              placeholder="Привет, {first_name}!"
+              @click="updateCursor"
+              @keyup="updateCursor"
+              @focus="updateCursor"
+            />
+            <div class="mt-2 space-y-2">
+              <div class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Плейсхолдеры</div>
+              <div class="flex flex-wrap gap-2">
+                <Button
+                  v-for="placeholder in placeholders"
+                  :key="placeholder.value"
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  @click="insertPlaceholder(placeholder.value)"
+                >
+                  {{ placeholder.label }}
+                </Button>
+              </div>
             </div>
-          </div>
-        </div>
-        <div class="space-y-2">
-          <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Изображение</label>
-          <div
-            class="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border bg-muted/40 px-4 py-6 text-center text-xs text-muted-foreground"
-            @dragover.prevent
-            @drop.prevent="onDrop"
-          >
-            <input ref="fileInput" type="file" accept="image/*" class="hidden" @change="onFileChange" />
-            <Button type="button" variant="outline" size="sm" @click="triggerFile">
-              <UploadCloud :size="16" />
-              Загрузить изображение
-            </Button>
-            <span>или перетащите файл сюда</span>
-            <span v-if="uploadState.error" class="text-xs text-red-600">{{ uploadState.error }}</span>
-            <span v-if="uploadState.loading" class="text-xs text-muted-foreground">Загрузка...</span>
-          </div>
-          <div v-if="uploadState.preview || form.content_image_url" class="mt-3 flex flex-wrap items-center gap-3">
-            <img :src="uploadState.preview || form.content_image_url" class="h-16 w-16 rounded-xl object-cover" alt="preview" />
-            <Input v-model="form.content_image_url" class="text-xs md:max-w-md" readonly />
-            <Button type="button" variant="ghost" size="icon" @click="clearImage">
-              <Trash2 :size="16" class="text-red-600" />
-            </Button>
-          </div>
-        </div>
-        <div class="space-y-3">
-          <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Кнопки</label>
-          <div v-if="!buttons.length" class="rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">Кнопок пока нет.</div>
-          <div v-for="(button, index) in buttons" :key="button.id" class="rounded-lg border border-border p-3">
-            <div class="flex flex-wrap items-center justify-between gap-2">
-              <div class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Кнопка #{{ index + 1 }}</div>
-              <Button type="button" size="icon" variant="ghost" @click="removeButton(index)">
+          </FieldContent>
+        </Field>
+        <Field>
+          <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Изображение</FieldLabel>
+          <FieldContent>
+            <div
+              class="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border bg-muted/40 px-4 py-6 text-center text-xs text-muted-foreground"
+              @dragover.prevent
+              @drop.prevent="onDrop"
+            >
+              <input ref="fileInput" type="file" accept="image/*" class="hidden" @change="onFileChange" />
+              <Button type="button" variant="outline" size="sm" @click="triggerFile">
+                <UploadCloud :size="16" />
+                Загрузить изображение
+              </Button>
+              <span>или перетащите файл сюда</span>
+              <span v-if="uploadState.error" class="text-xs text-red-600">{{ uploadState.error }}</span>
+              <span v-if="uploadState.loading" class="text-xs text-muted-foreground">Загрузка...</span>
+            </div>
+            <div v-if="uploadState.preview || form.content_image_url" class="mt-3 flex flex-wrap items-center gap-3">
+              <img :src="uploadState.preview || form.content_image_url" class="h-16 w-16 rounded-xl object-cover" alt="preview" />
+              <Input v-model="form.content_image_url" class="text-xs md:max-w-md" readonly />
+              <Button type="button" variant="ghost" size="icon" @click="clearImage">
                 <Trash2 :size="16" class="text-red-600" />
               </Button>
             </div>
-            <div class="mt-3 grid gap-3 md:grid-cols-3">
-              <div class="space-y-1">
-                <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Текст</label>
-                <Input v-model="button.text" placeholder="Перейти" />
+          </FieldContent>
+        </Field>
+        <Field>
+          <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Кнопки</FieldLabel>
+          <FieldContent>
+            <div v-if="!buttons.length" class="rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">Кнопок пока нет.</div>
+            <div v-for="(button, index) in buttons" :key="button.id" class="rounded-lg border border-border p-3">
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <div class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Кнопка #{{ index + 1 }}</div>
+                <Button type="button" size="icon" variant="ghost" @click="removeButton(index)">
+                  <Trash2 :size="16" class="text-red-600" />
+                </Button>
               </div>
-              <div class="space-y-1">
-                <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Тип</label>
-                <Select v-model="button.type">
-                  <option value="url">Ссылка</option>
-                  <option value="callback">Callback</option>
-                </Select>
-              </div>
-              <div class="space-y-1" v-if="button.type === 'url'">
-                <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">URL</label>
-                <Input v-model="button.url" placeholder="https://..." />
-              </div>
+              <FieldGroup class="mt-3 grid gap-3 md:grid-cols-3">
+                <Field>
+                  <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Текст</FieldLabel>
+                  <FieldContent>
+                    <Input v-model="button.text" placeholder="Перейти" />
+                  </FieldContent>
+                </Field>
+                <Field>
+                  <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Тип</FieldLabel>
+                  <FieldContent>
+                    <Select v-model="button.type">
+                      <SelectTrigger class="w-full">
+                        <SelectValue placeholder="Выберите тип" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="url">Ссылка</SelectItem>
+                        <SelectItem value="callback">Callback</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </FieldContent>
+                </Field>
+                <Field v-if="button.type === 'url'">
+                  <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">URL</FieldLabel>
+                  <FieldContent>
+                    <Input v-model="button.url" placeholder="https://..." />
+                  </FieldContent>
+                </Field>
+              </FieldGroup>
             </div>
-          </div>
-          <Button type="button" variant="outline" @click="addButton">
-            <Plus :size="16" />
-            Добавить кнопку
-          </Button>
-        </div>
+            <Button type="button" variant="outline" @click="addButton">
+              <Plus :size="16" />
+              Добавить кнопку
+            </Button>
+          </FieldContent>
+        </Field>
       </CardContent>
     </Card>
 
@@ -163,36 +200,64 @@
         <CardTitle>Планирование отправки</CardTitle>
       </CardHeader>
       <CardContent class="space-y-6">
-        <div class="flex gap-4">
-          <div class="space-y-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Дата отправки</label>
-            <RangeCalendar
-              :from="scheduledDate"
-              :to="scheduledDateTo"
-              :months="1"
-              :allowFuture="true"
-              @update:from="(value) => (condition.date_from = value)"
-              @update:to="(value) => (condition.date_to = value)"
-            />
-          </div>
-          <div class="space-y-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Время отправки</label>
-            <Input v-model="scheduledTime" type="time" />
-          </div>
-        </div>
-        <div class="grid gap-4 md:grid-cols-2">
-          <div class="space-y-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Учитывать часовой пояс</label>
-            <Select v-model="form.use_user_timezone">
-              <option :value="true">Да</option>
-              <option :value="false">Нет</option>
-            </Select>
-          </div>
-          <div class="space-y-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Час отправки (0-23)</label>
-            <Input v-model.number="form.target_hour" type="number" min="0" max="23" />
-          </div>
-        </div>
+        <FieldGroup class="grid gap-4 md:grid-cols-2">
+          <Field>
+            <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Дата отправки</FieldLabel>
+            <FieldContent>
+              <Popover v-model:open="isScheduleOpen">
+                <PopoverTrigger asChild>
+                  <Button variant="outline" class="w-full justify-start text-left font-normal" :class="!scheduledDate && 'text-muted-foreground'">
+                    <CalendarIcon :size="16" />
+                    {{ scheduledLabel }}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent class="w-auto p-0" align="start">
+                  <div class="space-y-3 p-3">
+                    <CalendarView
+                      :model-value="scheduledCalendar"
+                      :number-of-months="1"
+                      locale="ru-RU"
+                      initial-focus
+                      @update:modelValue="handleScheduleUpdate"
+                    />
+                    <div class="flex items-center justify-between text-xs text-muted-foreground">
+                      <span>{{ scheduledHelperLabel }}</span>
+                      <button type="button" class="text-primary hover:underline" @click="clearScheduledDate">Очистить</button>
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </FieldContent>
+          </Field>
+          <Field>
+            <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Время отправки</FieldLabel>
+            <FieldContent>
+              <Input v-model="scheduledTime" type="time" />
+            </FieldContent>
+          </Field>
+        </FieldGroup>
+        <FieldGroup class="grid gap-4 md:grid-cols-2">
+          <Field>
+            <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Учитывать часовой пояс</FieldLabel>
+            <FieldContent>
+              <Select v-model="form.use_user_timezone">
+                <SelectTrigger class="w-full">
+                  <SelectValue placeholder="Выберите вариант" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem :value="true">Да</SelectItem>
+                  <SelectItem :value="false">Нет</SelectItem>
+                </SelectContent>
+              </Select>
+            </FieldContent>
+          </Field>
+          <Field>
+            <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Час отправки (0-23)</FieldLabel>
+            <FieldContent>
+              <Input v-model.number="form.target_hour" type="number" min="0" max="23" />
+            </FieldContent>
+          </Field>
+        </FieldGroup>
       </CardContent>
     </Card>
 
@@ -201,33 +266,51 @@
         <CardTitle>Триггер</CardTitle>
       </CardHeader>
       <CardContent class="space-y-6">
-        <div class="grid gap-4 md:grid-cols-2">
-          <div class="space-y-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Тип триггера</label>
-            <Select v-model="form.trigger_type">
-              <option value="inactive_users">Отсутствие заказов</option>
-              <option value="birthday">День рождения</option>
-              <option value="new_registration">Новая регистрация</option>
-            </Select>
-          </div>
-          <div class="space-y-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Активность</label>
-            <Select v-model="form.is_active">
-              <option :value="true">Активна</option>
-              <option :value="false">Выключена</option>
-            </Select>
-          </div>
-        </div>
-        <div class="grid gap-4 md:grid-cols-2">
-          <div class="space-y-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Параметр</label>
-            <Input v-model.number="triggerFields.primary" type="number" :placeholder="triggerPlaceholder" />
-          </div>
-          <div class="space-y-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Время проверки</label>
-            <Input v-model="triggerFields.check_time" type="time" />
-          </div>
-        </div>
+        <FieldGroup class="grid gap-4 md:grid-cols-2">
+          <Field>
+            <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Тип триггера</FieldLabel>
+            <FieldContent>
+              <Select v-model="form.trigger_type">
+                <SelectTrigger class="w-full">
+                  <SelectValue placeholder="Выберите тип" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="inactive_users">Отсутствие заказов</SelectItem>
+                  <SelectItem value="birthday">День рождения</SelectItem>
+                  <SelectItem value="new_registration">Новая регистрация</SelectItem>
+                </SelectContent>
+              </Select>
+            </FieldContent>
+          </Field>
+          <Field>
+            <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Активность</FieldLabel>
+            <FieldContent>
+              <Select v-model="form.is_active">
+                <SelectTrigger class="w-full">
+                  <SelectValue placeholder="Выберите статус" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem :value="true">Активна</SelectItem>
+                  <SelectItem :value="false">Выключена</SelectItem>
+                </SelectContent>
+              </Select>
+            </FieldContent>
+          </Field>
+        </FieldGroup>
+        <FieldGroup class="grid gap-4 md:grid-cols-2">
+          <Field>
+            <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Параметр</FieldLabel>
+            <FieldContent>
+              <Input v-model.number="triggerFields.primary" type="number" :placeholder="triggerPlaceholder" />
+            </FieldContent>
+          </Field>
+          <Field>
+            <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Время проверки</FieldLabel>
+            <FieldContent>
+              <Input v-model="triggerFields.check_time" type="time" />
+            </FieldContent>
+          </Field>
+        </FieldGroup>
         <p class="text-xs text-muted-foreground">{{ triggerHint }}</p>
       </CardContent>
     </Card>
@@ -237,16 +320,20 @@
         <CardTitle>Тестирование</CardTitle>
       </CardHeader>
       <CardContent class="space-y-4">
-        <div class="grid gap-4 md:grid-cols-2">
-          <div class="space-y-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Telegram ID для теста</label>
-            <Input v-model="test.telegram_id" type="number" placeholder="123456789" />
-          </div>
-          <div class="space-y-2">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">ID пользователя для предпросмотра</label>
-            <Input v-model="test.user_id" type="number" placeholder="456" />
-          </div>
-        </div>
+        <FieldGroup class="grid gap-4 md:grid-cols-2">
+          <Field>
+            <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Telegram ID для теста</FieldLabel>
+            <FieldContent>
+              <Input v-model="test.telegram_id" type="number" placeholder="123456789" />
+            </FieldContent>
+          </Field>
+          <Field>
+            <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">ID пользователя для предпросмотра</FieldLabel>
+            <FieldContent>
+              <Input v-model="test.user_id" type="number" placeholder="456" />
+            </FieldContent>
+          </Field>
+        </FieldGroup>
         <div class="flex flex-wrap gap-2">
           <Button variant="outline" type="button" @click="previewCampaign">Предпросмотр</Button>
           <Button variant="outline" type="button" @click="sendTest">Отправить тест</Button>
@@ -271,26 +358,31 @@
 </template>
 <script setup>
 import { computed, onMounted, ref, watch } from "vue";
-import { ArrowLeft, Plus, Save, Send, Trash2, UploadCloud } from "lucide-vue-next";
+import { ArrowLeft, Calendar as CalendarIcon, Plus, Save, Send, Trash2, UploadCloud } from "lucide-vue-next";
+import { DateFormatter, getLocalTimeZone, parseDate as parseCalendarDate } from "@internationalized/date";
 import { useRoute, useRouter } from "vue-router";
 import api from "../api/client.js";
-import Badge from "../components/ui/Badge.vue";
-import Button from "../components/ui/Button.vue";
-import Card from "../components/ui/Card.vue";
-import CardContent from "../components/ui/CardContent.vue";
-import CardHeader from "../components/ui/CardHeader.vue";
-import CardTitle from "../components/ui/CardTitle.vue";
-import Input from "../components/ui/Input.vue";
+import Badge from "../components/ui/badge/Badge.vue";
+import Button from "../components/ui/button/Button.vue";
+import Card from "../components/ui/card/Card.vue";
+import CardContent from "../components/ui/card/CardContent.vue";
+import CardHeader from "../components/ui/card/CardHeader.vue";
+import CardTitle from "../components/ui/card/CardTitle.vue";
+import { Field, FieldContent, FieldGroup, FieldLabel } from "../components/ui/field";
+import Input from "../components/ui/input/Input.vue";
 import PageHeader from "../components/PageHeader.vue";
-import RangeCalendar from "../components/ui/RangeCalendar.vue";
-import Select from "../components/ui/Select.vue";
-import Textarea from "../components/ui/Textarea.vue";
+import { Calendar as CalendarView } from "../components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popover";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
+import Textarea from "../components/ui/textarea/Textarea.vue";
 import SegmentBuilder from "../components/broadcasts/SegmentBuilder.vue";
 import { useNotifications } from "../composables/useNotifications.js";
+import { useOrdersStore } from "../stores/orders.js";
 
 const route = useRoute();
 const router = useRouter();
-const { showErrorNotification, showSuccessNotification } = useNotifications();
+const { showErrorNotification, showSuccessNotification, showWarningNotification } = useNotifications();
+const ordersStore = useOrdersStore();
 
 const campaignId = computed(() => Number(route.params.id || 0));
 const isEditing = computed(() => Boolean(campaignId.value));
@@ -306,6 +398,32 @@ const cursorPosition = ref(0);
 const scheduledDate = ref("");
 const scheduledDateTo = ref("");
 const scheduledTime = ref("10:00");
+const isScheduleOpen = ref(false);
+const scheduleTimeZone = getLocalTimeZone();
+const scheduleFormatter = new DateFormatter("ru-RU", { dateStyle: "medium" });
+const scheduledCalendar = computed({
+  get() {
+    return scheduledDate.value ? parseCalendarDate(scheduledDate.value) : undefined;
+  },
+  set(value) {
+    scheduledDate.value = value ? value.toString() : "";
+  },
+});
+const scheduledLabel = computed(() => {
+  if (!scheduledDate.value) return "Выберите дату";
+  return scheduleFormatter.format(parseCalendarDate(scheduledDate.value).toDate(scheduleTimeZone));
+});
+const scheduledHelperLabel = computed(() => (scheduledDate.value ? "Дата выбрана" : "Выберите дату"));
+const handleScheduleUpdate = (value) => {
+  scheduledCalendar.value = value;
+  if (scheduledDate.value) {
+    isScheduleOpen.value = false;
+  }
+};
+const clearScheduledDate = () => {
+  scheduledDate.value = "";
+  scheduledDateTo.value = "";
+};
 const test = ref({
   telegram_id: "",
   user_id: "",
@@ -353,6 +471,14 @@ const statusLabel = (status) => {
 
 const pageTitle = computed(() => (isEditing.value ? "Редактирование рассылки" : "Новая рассылка"));
 const pageSubtitle = computed(() => (isEditing.value ? "Обновите параметры рассылки" : "Создайте маркетинговую рассылку"));
+const breadcrumbTitle = computed(() => {
+  const name = String(form.value.name || "").trim();
+  if (!isEditing.value && !name) return "Новая рассылка";
+  return name || "Рассылка";
+});
+const updateBreadcrumbs = () => {
+  ordersStore.setBreadcrumbs([{ label: "Рассылки", to: "/broadcasts" }, { label: "Редактирование " + breadcrumbTitle.value }], route.name);
+};
 
 const loadSegments = async () => {
   try {
@@ -389,6 +515,7 @@ const loadCampaign = async () => {
       : [];
     triggerFields.value = mapTriggerFields(campaign.trigger_type, campaign.trigger_config);
     syncScheduleFields(form.value.scheduled_at);
+    updateBreadcrumbs();
   } catch (error) {
     console.error("Ошибка загрузки рассылки:", error);
     showErrorNotification("Не удалось загрузить рассылку");
@@ -398,7 +525,7 @@ const loadCampaign = async () => {
 const calculateAudience = async () => {
   try {
     if (!segmentConfig.value?.conditions?.length) {
-      showErrorNotification("Добавьте условия сегментации");
+      showWarningNotification("Добавьте условия сегментации");
       return;
     }
     const response = await api.post("/api/broadcasts/segments/calculate", { config: segmentConfig.value });
@@ -433,11 +560,11 @@ const saveCampaign = async () => {
       is_active: Boolean(form.value.is_active),
     };
     if (!payload.name) {
-      showErrorNotification("Укажите название рассылки");
+      showWarningNotification("Укажите название рассылки");
       return;
     }
     if (!payload.segment_config?.conditions?.length) {
-      showErrorNotification("Добавьте условия сегментации");
+      showWarningNotification("Добавьте условия сегментации");
       return;
     }
     if (isEditing.value) {
@@ -460,7 +587,7 @@ const saveCampaign = async () => {
 
 const sendCampaign = async () => {
   if (!isEditing.value) {
-    showErrorNotification("Сначала сохраните рассылку");
+    showWarningNotification("Сначала сохраните рассылку");
     return;
   }
   sending.value = true;
@@ -477,11 +604,11 @@ const sendCampaign = async () => {
 
 const previewCampaign = async () => {
   if (!isEditing.value) {
-    showErrorNotification("Сначала сохраните рассылку");
+    showWarningNotification("Сначала сохраните рассылку");
     return;
   }
   if (!test.value.user_id) {
-    showErrorNotification("Укажите ID пользователя");
+    showWarningNotification("Укажите ID пользователя");
     return;
   }
   try {
@@ -495,11 +622,11 @@ const previewCampaign = async () => {
 
 const sendTest = async () => {
   if (!isEditing.value) {
-    showErrorNotification("Сначала сохраните рассылку");
+    showWarningNotification("Сначала сохраните рассылку");
     return;
   }
   if (!test.value.telegram_id) {
-    showErrorNotification("Укажите Telegram ID");
+    showWarningNotification("Укажите Telegram ID");
     return;
   }
   try {
@@ -520,7 +647,7 @@ const goBack = () => {
 
 const addButton = () => {
   if (buttons.value.length >= 8) {
-    showErrorNotification("Максимум 8 кнопок");
+    showWarningNotification("Максимум 8 кнопок");
     return;
   }
   buttons.value.push({ id: `${Date.now()}-${Math.random()}`, text: "", type: "url", url: "" });
@@ -575,14 +702,6 @@ const updateScheduledAt = () => {
   const timePart = scheduledTime.value || "10:00";
   form.value.scheduled_at = `${scheduledDate.value}T${timePart}`;
   scheduledDateTo.value = scheduledDate.value;
-};
-
-const handleScheduleFrom = (value) => {
-  scheduledDate.value = value;
-};
-
-const handleScheduleTo = (value) => {
-  if (value) scheduledDate.value = value;
 };
 
 const triggerFile = () => {
@@ -684,5 +803,13 @@ onMounted(async () => {
   await loadSegments();
   await loadCampaign();
   syncScheduleFields(form.value.scheduled_at);
+  updateBreadcrumbs();
 });
+watch(
+  () => [breadcrumbTitle.value, isEditing.value],
+  () => {
+    updateBreadcrumbs();
+  },
+  { immediate: true },
+);
 </script>

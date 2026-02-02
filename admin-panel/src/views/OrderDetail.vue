@@ -1,16 +1,21 @@
 <template>
   <div class="space-y-6">
-    <PageHeader :title="orderTitle" :description="orderSubtitle">
+    <PageHeader title="Детали заказа" description="Управление заказом и составом">
       <template #actions>
         <Button variant="outline" size="sm" @click="router.push('/orders')">
           <ArrowLeft :size="16" />
           Назад к заказам
         </Button>
-        <Badge variant="secondary">ID: {{ route.params.id }}</Badge>
       </template>
     </PageHeader>
     <Card v-if="!order">
-      <CardContent class="py-10 text-center text-sm text-muted-foreground">Загрузка...</CardContent>
+      <CardContent class="py-10">
+        <div class="space-y-2">
+          <Skeleton class="h-6 w-full" />
+          <Skeleton class="h-6 w-3/4" />
+          <Skeleton class="h-6 w-1/2" />
+        </div>
+      </CardContent>
     </Card>
     <div v-else class="space-y-6">
       <Card>
@@ -129,6 +134,36 @@
           </Table>
         </CardContent>
       </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>История статусов</CardTitle>
+        </CardHeader>
+        <CardContent class="pt-0">
+          <div v-if="statusHistory.length === 0" class="py-6 text-center text-sm text-muted-foreground">История статусов пока пуста</div>
+          <Table v-else>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Статус</TableHead>
+                <TableHead>Изменение</TableHead>
+                <TableHead>Время</TableHead>
+                <TableHead>Кем</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow v-for="entry in statusHistory" :key="entry.id">
+                <TableCell>
+                  <div class="font-medium text-foreground">{{ getStatusBadge(entry.new_status).label }}</div>
+                </TableCell>
+                <TableCell class="text-xs text-muted-foreground">
+                  {{ getStatusBadge(entry.old_status).label }} → {{ getStatusBadge(entry.new_status).label }}
+                </TableCell>
+                <TableCell class="text-xs text-muted-foreground">{{ formatDateTime(entry.changed_at) }}</TableCell>
+                <TableCell class="text-xs text-muted-foreground">{{ formatChangedBy(entry) }}</TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
       <div class="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
@@ -226,10 +261,15 @@
           <div class="space-y-2">
             <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Статус</label>
             <Select v-model="statusUpdate">
-              <option value="">Выберите статус</option>
-              <option v-for="option in availableStatuses" :key="option.value" :value="option.value">
-                {{ option.label }}
-              </option>
+              <SelectTrigger class="w-full">
+                <SelectValue placeholder="Выберите статус" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">Выберите статус</SelectItem>
+                <SelectItem v-for="option in availableStatuses" :key="option.value" :value="option.value">
+                  {{ option.label }}
+                </SelectItem>
+              </SelectContent>
             </Select>
           </div>
           <Button :disabled="!statusUpdate" @click="updateStatus">
@@ -247,22 +287,23 @@ import { useRoute, useRouter } from "vue-router";
 import { ArrowLeft, CircleCheck } from "lucide-vue-next";
 import api from "../api/client.js";
 import { formatCurrency, formatDateTime, formatNumber, formatPhone } from "../utils/format.js";
-import Badge from "../components/ui/Badge.vue";
-import Button from "../components/ui/Button.vue";
-import Card from "../components/ui/Card.vue";
-import CardContent from "../components/ui/CardContent.vue";
-import CardDescription from "../components/ui/CardDescription.vue";
-import CardHeader from "../components/ui/CardHeader.vue";
-import CardTitle from "../components/ui/CardTitle.vue";
-import Select from "../components/ui/Select.vue";
-import Separator from "../components/ui/Separator.vue";
-import Table from "../components/ui/Table.vue";
-import TableBody from "../components/ui/TableBody.vue";
-import TableCell from "../components/ui/TableCell.vue";
-import TableHead from "../components/ui/TableHead.vue";
-import TableHeader from "../components/ui/TableHeader.vue";
-import TableRow from "../components/ui/TableRow.vue";
+import Badge from "../components/ui/badge/Badge.vue";
+import Button from "../components/ui/button/Button.vue";
+import Card from "../components/ui/card/Card.vue";
+import CardContent from "../components/ui/card/CardContent.vue";
+import CardDescription from "../components/ui/card/CardDescription.vue";
+import CardHeader from "../components/ui/card/CardHeader.vue";
+import CardTitle from "../components/ui/card/CardTitle.vue";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
+import { Separator } from "@/components/ui/separator";
+import Table from "../components/ui/table/Table.vue";
+import TableBody from "../components/ui/table/TableBody.vue";
+import TableCell from "../components/ui/table/TableCell.vue";
+import TableHead from "../components/ui/table/TableHead.vue";
+import TableHeader from "../components/ui/table/TableHeader.vue";
+import TableRow from "../components/ui/table/TableRow.vue";
 import PageHeader from "../components/PageHeader.vue";
+import Skeleton from "../components/ui/skeleton/Skeleton.vue";
 import { useNotifications } from "../composables/useNotifications.js";
 import { useOrdersStore } from "../stores/orders.js";
 const route = useRoute();
@@ -279,6 +320,10 @@ const orderSubtitle = computed(() => {
   if (order.value?.created_at) return formatDateTime(order.value.created_at);
   return "Детали заказа";
 });
+const updateBreadcrumbs = () => {
+  const orderNumber = order.value?.order_number || route.params.id;
+  ordersStore.setBreadcrumbs([{ label: "Заказы", to: "/orders" }, { label: `Заказ #${orderNumber}` }], route.name);
+};
 const updateDocumentTitle = (baseTitle) => {
   const count = ordersStore.newOrdersCount || 0;
   document.title = count > 0 ? `(${count}) ${baseTitle}` : baseTitle;
@@ -306,6 +351,7 @@ const bonusEarnStatus = computed(() => {
   if (order.value.bonus_earn_locked) return "completed";
   return order.value.status === "cancelled" ? "cancelled" : "pending";
 });
+const statusHistory = computed(() => order.value?.status_history || []);
 const getStatusBadge = (status) => {
   const labels = {
     pending: "Новый",
@@ -330,6 +376,12 @@ const getStatusBadge = (status) => {
     class: "",
     style: styles[status] || { backgroundColor: "#E0E0E0", color: "#666666" },
   };
+};
+const formatChangedBy = (entry) => {
+  if (!entry) return "—";
+  if (entry.changed_by_type === "system") return "Система";
+  const parts = [entry.admin_first_name, entry.admin_last_name].filter(Boolean).join(" ").trim();
+  return parts || "Администратор";
 };
 const availableStatuses = computed(() => {
   if (!order.value) return [];
@@ -381,11 +433,18 @@ const loadOrder = async () => {
   try {
     const response = await api.get(`/api/orders/admin/${route.params.id}`);
     order.value = response.data.order;
+    updateBreadcrumbs();
   } catch (error) {
     console.error("Failed to load order:", error);
     showErrorNotification("Ошибка при загрузке заказа");
   }
 };
+watch(
+  () => order.value?.order_number,
+  () => {
+    updateBreadcrumbs();
+  },
+);
 const updateStatus = async () => {
   if (!statusUpdate.value) return;
   try {

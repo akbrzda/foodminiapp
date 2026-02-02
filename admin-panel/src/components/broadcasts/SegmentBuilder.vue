@@ -1,19 +1,27 @@
 <template>
   <div class="space-y-4">
-    <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Логика</label>
-
-    <div class="flex flex-wrap items-center gap-3">
-      <div class="space-y-1">
-        <Select v-model="localOperator">
-          <option value="AND">И</option>
-          <option value="OR">ИЛИ</option>
-        </Select>
-      </div>
-      <Button type="button" variant="outline" class="h-10" @click="addCondition">
-        <Plus :size="16" />
-        Добавить условие
-      </Button>
-    </div>
+    <Field>
+      <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Логика</FieldLabel>
+      <FieldContent>
+        <div class="flex flex-wrap items-center gap-3">
+          <div class="space-y-1">
+            <Select v-model="localOperator">
+              <SelectTrigger class="w-full">
+                <SelectValue placeholder="Логика" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="AND">И</SelectItem>
+                <SelectItem value="OR">ИЛИ</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <Button type="button" variant="outline" class="h-10" @click="addCondition">
+            <Plus :size="16" />
+            Добавить условие
+          </Button>
+        </div>
+      </FieldContent>
+    </Field>
 
     <div v-if="!conditions.length" class="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
       Добавьте хотя бы одно условие сегментации.
@@ -26,118 +34,169 @@
           <Trash2 :size="16" class="text-red-600" />
         </Button>
       </div>
-      <div class="mt-3 grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]">
-        <div class="space-y-1">
-          <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Тип</label>
-          <Select v-model="condition.type">
-            <option value="inactive_days">Нет заказов N дней</option>
-            <option value="active_in_period">Активные в периоде</option>
-            <option value="new_users">Новые пользователи</option>
-            <option value="total_spent">Сумма заказов</option>
-            <option value="avg_check">Средний чек</option>
-            <option value="order_count">Кол-во заказов</option>
-            <option value="city">Город</option>
-            <option value="branch">Филиал</option>
-            <option value="birthday_month">Месяц рождения</option>
-            <option value="birthday_range">Диапазон дат рождения</option>
-            <option value="loyalty_level">Уровень лояльности</option>
-            <option value="bonus_balance">Баланс бонусов</option>
-          </Select>
-        </div>
-        <div class="space-y-1" v-show="showOperator(condition)">
-          <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Оператор</label>
-          <Select v-model="condition.operator">
-            <option v-for="op in operatorOptions(condition.type)" :key="op" :value="op">{{ op }}</option>
-          </Select>
-        </div>
-        <div class="space-y-1" v-show="showValue(condition)">
-          <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Значение</label>
-          <Input v-model="condition.value" :type="valueInputType(condition.type)" placeholder="Введите значение" />
-        </div>
-      </div>
+      <FieldGroup class="mt-3 grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]">
+        <Field>
+          <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Тип</FieldLabel>
+          <FieldContent>
+            <Select v-model="condition.type">
+              <SelectTrigger class="w-full">
+                <SelectValue placeholder="Выберите тип" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="inactive_days">Нет заказов N дней</SelectItem>
+                <SelectItem value="active_in_period">Активные в периоде</SelectItem>
+                <SelectItem value="new_users">Новые пользователи</SelectItem>
+                <SelectItem value="total_spent">Сумма заказов</SelectItem>
+                <SelectItem value="avg_check">Средний чек</SelectItem>
+                <SelectItem value="order_count">Кол-во заказов</SelectItem>
+                <SelectItem value="city">Город</SelectItem>
+                <SelectItem value="branch">Филиал</SelectItem>
+                <SelectItem value="birthday_month">Месяц рождения</SelectItem>
+                <SelectItem value="birthday_range">Диапазон дат рождения</SelectItem>
+                <SelectItem value="loyalty_level">Уровень лояльности</SelectItem>
+                <SelectItem value="bonus_balance">Баланс бонусов</SelectItem>
+              </SelectContent>
+            </Select>
+          </FieldContent>
+        </Field>
+        <Field v-show="showOperator(condition)">
+          <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Оператор</FieldLabel>
+          <FieldContent>
+            <Select v-model="condition.operator">
+              <SelectTrigger class="w-full">
+                <SelectValue placeholder="Выберите оператор" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem v-for="op in operatorOptions(condition.type)" :key="op" :value="op">{{ op }}</SelectItem>
+              </SelectContent>
+            </Select>
+          </FieldContent>
+        </Field>
+        <Field v-show="showValue(condition)">
+          <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Значение</FieldLabel>
+          <FieldContent>
+            <Input v-model="condition.value" :type="valueInputType(condition.type)" placeholder="Введите значение" />
+          </FieldContent>
+        </Field>
+      </FieldGroup>
 
-      <div v-if="requiresBetween(condition)" class="mt-3 grid gap-4 md:grid-cols-2">
-        <div class="space-y-1">
-          <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">От</label>
-          <Input v-model="condition.value_from" type="number" placeholder="0" />
-        </div>
-        <div class="space-y-1">
-          <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">До</label>
-          <Input v-model="condition.value_to" type="number" placeholder="0" />
-        </div>
-      </div>
+      <FieldGroup v-if="requiresBetween(condition)" class="mt-3 grid gap-4 md:grid-cols-2">
+        <Field>
+          <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">От</FieldLabel>
+          <FieldContent>
+            <Input v-model="condition.value_from" type="number" placeholder="0" />
+          </FieldContent>
+        </Field>
+        <Field>
+          <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">До</FieldLabel>
+          <FieldContent>
+            <Input v-model="condition.value_to" type="number" placeholder="0" />
+          </FieldContent>
+        </Field>
+      </FieldGroup>
 
-      <div v-if="needsDateRange(condition.type)" class="mt-3 space-y-2">
-        <div class="space-y-1">
-          <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Период</label>
-          <RangeCalendar
-            :from="condition.date_from"
-            :to="condition.date_to"
-            :months="1"
-            class="max-w-xl"
-            @update:from="(value) => (condition.date_from = value)"
-            @update:to="(value) => (condition.date_to = value)"
-          />
+      <Field v-if="needsDateRange(condition.type)" class="mt-3">
+        <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Период</FieldLabel>
+        <FieldContent>
+          <div class="max-w-xl rounded-md border border-border bg-card">
+            <CalendarView
+              :model-value="getConditionRange(condition)"
+              :number-of-months="1"
+              locale="ru-RU"
+              multiple
+              @update:modelValue="(value) => updateConditionRange(condition, value)"
+            />
+          </div>
           <div class="text-xs text-muted-foreground">С: {{ condition.date_from || "—" }} · По: {{ condition.date_to || "—" }}</div>
-        </div>
-      </div>
+        </FieldContent>
+      </Field>
 
-      <div v-if="needsCity(condition.type)" class="mt-3 space-y-1">
-        <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Город</label>
-        <div class="grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+      <Field v-if="needsCity(condition.type)" class="mt-3">
+        <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Город</FieldLabel>
+        <FieldContent>
+          <div class="grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+            <Select v-model="condition.value">
+              <SelectTrigger class="w-full">
+                <SelectValue placeholder="Выберите город" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">Выберите город</SelectItem>
+                <SelectItem v-for="city in referenceStore.cities" :key="city.id" :value="city.id">{{ city.name }}</SelectItem>
+              </SelectContent>
+            </Select>
+            <Input v-if="condition.operator === 'IN'" v-model="condition.value_list" placeholder="1,2,3" />
+          </div>
+          <p v-if="condition.operator === 'IN'" class="text-xs text-muted-foreground">Для IN укажите ID городов через запятую.</p>
+        </FieldContent>
+      </Field>
+
+      <Field v-if="needsBranch(condition.type)" class="mt-3">
+        <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Филиал</FieldLabel>
+        <FieldContent>
+          <div class="grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+            <Select v-model="condition.value">
+              <SelectTrigger class="w-full">
+                <SelectValue placeholder="Выберите филиал" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">Выберите филиал</SelectItem>
+                <SelectItem v-for="branch in branches" :key="branch.id" :value="branch.id">
+                  {{ branch.name }}{{ branch.city_name ? ` · ${branch.city_name}` : "" }}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <Input v-if="condition.operator === 'IN'" v-model="condition.value_list" placeholder="10,11" />
+          </div>
+          <p v-if="condition.operator === 'IN'" class="text-xs text-muted-foreground">Для IN укажите ID филиалов через запятую.</p>
+        </FieldContent>
+      </Field>
+
+      <Field v-if="condition.type === 'birthday_month'" class="mt-3">
+        <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Месяц</FieldLabel>
+        <FieldContent>
           <Select v-model="condition.value">
-            <option value="">Выберите город</option>
-            <option v-for="city in referenceStore.cities" :key="city.id" :value="city.id">{{ city.name }}</option>
+            <SelectTrigger class="w-full">
+              <SelectValue placeholder="Выберите месяц" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem v-for="month in months" :key="month.value" :value="month.value">{{ month.label }}</SelectItem>
+            </SelectContent>
           </Select>
-          <Input v-if="condition.operator === 'IN'" v-model="condition.value_list" placeholder="1,2,3" />
-        </div>
-        <p v-if="condition.operator === 'IN'" class="text-xs text-muted-foreground">Для IN укажите ID городов через запятую.</p>
-      </div>
+        </FieldContent>
+      </Field>
 
-      <div v-if="needsBranch(condition.type)" class="mt-3 space-y-1">
-        <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Филиал</label>
-        <div class="grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-          <Select v-model="condition.value">
-            <option value="">Выберите филиал</option>
-            <option v-for="branch in branches" :key="branch.id" :value="branch.id">
-              {{ branch.name }}{{ branch.city_name ? ` · ${branch.city_name}` : "" }}
-            </option>
-          </Select>
-          <Input v-if="condition.operator === 'IN'" v-model="condition.value_list" placeholder="10,11" />
-        </div>
-        <p v-if="condition.operator === 'IN'" class="text-xs text-muted-foreground">Для IN укажите ID филиалов через запятую.</p>
-      </div>
-
-      <div v-if="condition.type === 'birthday_month'" class="mt-3 space-y-1">
-        <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Месяц</label>
-        <Select v-model="condition.value">
-          <option v-for="month in months" :key="month.value" :value="month.value">{{ month.label }}</option>
-        </Select>
-      </div>
-
-      <div v-if="condition.type === 'loyalty_level'" class="mt-3 space-y-1">
-        <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Уровень</label>
-        <div class="grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-          <Select v-model="condition.value">
-            <option value="1">Бронза</option>
-            <option value="2">Серебро</option>
-            <option value="3">Золото</option>
-          </Select>
-          <Input v-if="condition.operator === 'IN'" v-model="condition.value_list" placeholder="1,2,3" />
-        </div>
-        <p v-if="condition.operator === 'IN'" class="text-xs text-muted-foreground">Для IN укажите ID уровней через запятую.</p>
-      </div>
+      <Field v-if="condition.type === 'loyalty_level'" class="mt-3">
+        <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Уровень</FieldLabel>
+        <FieldContent>
+          <div class="grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+            <Select v-model="condition.value">
+              <SelectTrigger class="w-full">
+                <SelectValue placeholder="Выберите уровень" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="1">Бронза</SelectItem>
+                <SelectItem value="2">Серебро</SelectItem>
+                <SelectItem value="3">Золото</SelectItem>
+              </SelectContent>
+            </Select>
+            <Input v-if="condition.operator === 'IN'" v-model="condition.value_list" placeholder="1,2,3" />
+          </div>
+          <p v-if="condition.operator === 'IN'" class="text-xs text-muted-foreground">Для IN укажите ID уровней через запятую.</p>
+        </FieldContent>
+      </Field>
     </div>
   </div>
 </template>
 <script setup>
 import { computed, onMounted, ref, watch } from "vue";
 import { Plus, Trash2 } from "lucide-vue-next";
+import { parseDate as parseCalendarDate } from "@internationalized/date";
 import { useReferenceStore } from "../../stores/reference.js";
-import Button from "../ui/Button.vue";
-import Input from "../ui/Input.vue";
-import RangeCalendar from "../ui/RangeCalendar.vue";
-import Select from "../ui/Select.vue";
+import Button from "../ui/button/Button.vue";
+import { Field, FieldContent, FieldGroup, FieldLabel } from "../ui/field";
+import Input from "../ui/input/Input.vue";
+import { Calendar as CalendarView } from "../ui/calendar";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 
 const props = defineProps({
   modelValue: { type: Object, default: () => ({ operator: "AND", conditions: [] }) },
@@ -215,6 +274,26 @@ const normalizeValueList = (value) => {
     .map((item) => item.trim())
     .filter(Boolean)
     .map((item) => (Number.isFinite(Number(item)) ? Number(item) : item));
+};
+
+const normalizeRangeValues = (value) => {
+  const dates = Array.isArray(value) ? value : value ? [value] : [];
+  if (!dates.length) return [];
+  const trimmed = dates.slice(-2);
+  return trimmed.sort((a, b) => a.compare(b));
+};
+
+const getConditionRange = (condition) => {
+  const values = [];
+  if (condition.date_from) values.push(parseCalendarDate(condition.date_from));
+  if (condition.date_to) values.push(parseCalendarDate(condition.date_to));
+  return values.length ? values : undefined;
+};
+
+const updateConditionRange = (condition, value) => {
+  const normalized = normalizeRangeValues(value);
+  condition.date_from = normalized[0]?.toString() || "";
+  condition.date_to = normalized[1]?.toString() || "";
 };
 
 const buildConfig = () => {
