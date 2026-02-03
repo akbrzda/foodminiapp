@@ -338,7 +338,7 @@ const selectedBranchId = ref("");
 const shiftMeta = ref(null);
 const searchInputRef = ref(null);
 const branchDialogOpen = ref(false);
-const branchSelectionRestored = ref(false);
+const storedBranchId = ref("");
 const cancelDialog = ref({ open: false, order: null, loading: false });
 let searchTimer = null;
 
@@ -380,29 +380,30 @@ const branchOptions = computed(() => {
   });
 });
 
+const branchesReady = computed(() => {
+  if (referenceStore.cities.length === 0) return false;
+  return referenceStore.cities.every((city) => Array.isArray(referenceStore.branchesByCity?.[city.id]));
+});
+
+const readStoredBranch = () => {
+  storedBranchId.value = localStorage.getItem("shift_selected_branch_id") || "";
+};
+
 const restoreBranchSelection = () => {
-  if (selectedBranchId.value || branchSelectionRestored.value) return;
-  const storedBranch = localStorage.getItem("shift_selected_branch_id");
-  if (storedBranch) {
-    const exists = branchOptions.value.some((branch) => String(branch.id) === String(storedBranch));
+  if (!branchesReady.value || selectedBranchId.value) return;
+  if (storedBranchId.value) {
+    const exists = branchOptions.value.some((branch) => String(branch.id) === String(storedBranchId.value));
     if (exists) {
-      selectedBranchId.value = String(storedBranch);
-      branchSelectionRestored.value = true;
+      selectedBranchId.value = String(storedBranchId.value);
       return;
     }
-    if (branchOptions.value.length === 0) return;
-    branchDialogOpen.value = true;
-    branchSelectionRestored.value = true;
-    return;
   }
   if (branchOptions.value.length === 1) {
     selectedBranchId.value = String(branchOptions.value[0].id);
-    branchSelectionRestored.value = true;
     return;
   }
   if (branchOptions.value.length > 0) {
     branchDialogOpen.value = true;
-    branchSelectionRestored.value = true;
   }
 };
 
@@ -1040,6 +1041,7 @@ watch(
 );
 
 onMounted(async () => {
+  readStoredBranch();
   await referenceStore.fetchCitiesAndBranches();
   restoreBranchSelection();
   ordersStore.connectWebSocket();
@@ -1047,6 +1049,12 @@ onMounted(async () => {
 
 watch(
   () => branchOptions.value.length,
+  () => {
+    restoreBranchSelection();
+  },
+);
+watch(
+  () => branchesReady.value,
   () => {
     restoreBranchSelection();
   },
