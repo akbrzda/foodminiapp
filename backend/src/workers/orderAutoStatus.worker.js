@@ -1,5 +1,5 @@
 import db from "../config/database.js";
-import { earnBonuses, cancelOrderBonuses, getLoyaltyLevelsFromDb } from "../utils/bonuses.js";
+import { earnBonuses, cancelOrderBonuses, getLoyaltyLevelsFromDb } from "../modules/loyalty/services/loyaltyService.js";
 import { getSystemSettings } from "../utils/settings.js";
 import { logger } from "../utils/logger.js";
 

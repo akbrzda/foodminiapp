@@ -5,13 +5,13 @@
 </template>
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
-import { useAuthStore } from "./stores/auth";
-import { useCartStore } from "./stores/cart";
-import { useLoyaltyStore } from "./stores/loyalty";
-import { useLocationStore } from "./stores/location";
-import { useSettingsStore } from "./stores/settings";
-import { citiesAPI, userStateAPI } from "./api/endpoints";
-import { wsService } from "./services/websocket";
+import { useAuthStore } from "@/modules/auth/stores/auth.js";
+import { useCartStore } from "@/modules/cart/stores/cart.js";
+import { useLoyaltyStore } from "@/modules/loyalty/stores/loyalty.js";
+import { useLocationStore } from "@/modules/location/stores/location.js";
+import { useSettingsStore } from "@/modules/settings/stores/settings.js";
+import { citiesAPI, userStateAPI } from "@/shared/api/endpoints.js";
+import { wsService } from "@/shared/services/websocket.js";
 const authStore = useAuthStore();
 const cartStore = useCartStore();
 const loyaltyStore = useLoyaltyStore();

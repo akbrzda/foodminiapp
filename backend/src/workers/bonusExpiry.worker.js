@@ -1,7 +1,6 @@
 import db from "../config/database.js";
-import { invalidateBonusCache } from "../utils/bonuses.js";
 import { logSystem } from "../utils/logger.js";
-import { logLoyaltyEvent } from "../utils/loyaltyLogs.js";
+import { expireBonusesForUser } from "../modules/loyalty/services/loyaltyService.js";
 
 const CHECK_INTERVAL_MS = 10 * 60 * 1000;
 const RUN_HOUR = 4;
@@ -39,44 +38,12 @@ async function processExpiredBonuses() {
         const connection = await db.getConnection();
         try {
           await connection.beginTransaction();
-          const [users] = await connection.query("SELECT loyalty_balance FROM users WHERE id = ? FOR UPDATE", [userId]);
-          if (users.length === 0) {
-            await connection.rollback();
-            continue;
-          }
-          const [expiredEarns] = await connection.query(
-            "SELECT id, remaining_amount, expires_at FROM loyalty_transactions WHERE user_id = ? AND type IN ('earn','registration','birthday') AND status = 'completed' AND expires_at <= NOW() AND remaining_amount > 0",
-            [userId],
-          );
-          let expiredTotal = 0;
-          for (const earn of expiredEarns) {
-            const amount = Math.floor(parseFloat(earn.remaining_amount) || 0);
-            if (amount <= 0) continue;
-            expiredTotal += amount;
-            await connection.query("UPDATE loyalty_transactions SET remaining_amount = 0 WHERE id = ?", [earn.id]);
-            await connection.query(
-              `INSERT INTO loyalty_transactions
-               (user_id, type, status, amount, related_transaction_id, description, expires_at)
-               VALUES (?, 'expire', 'completed', ?, ?, 'Истечение бонусов', ?)`,
-              [userId, amount, earn.id, earn.expires_at],
-            );
-          }
-          if (expiredTotal > 0) {
-            const currentBalance = parseFloat(users[0].loyalty_balance) || 0;
-            const newBalance = currentBalance - expiredTotal;
-            await connection.query("UPDATE users SET loyalty_balance = ? WHERE id = ?", [newBalance, userId]);
+          const result = await expireBonusesForUser(userId, connection);
+          if (result.expiredTotal > 0) {
             await connection.commit();
-            await invalidateBonusCache(userId);
-            logSystem("info", "bonus", `Списано ${expiredTotal} бонусов по истечению у пользователя ${userId}`, {
+            logSystem("info", "bonus", `Списано ${result.expiredTotal} бонусов по истечению у пользователя ${userId}`, {
               userId,
-              amount: expiredTotal,
-            });
-            await logLoyaltyEvent({
-              eventType: "bonus_expired",
-              userId,
-              oldValue: String(currentBalance),
-              newValue: String(newBalance),
-              metadata: { amount: expiredTotal },
+              amount: result.expiredTotal,
             });
           } else {
             await connection.rollback();

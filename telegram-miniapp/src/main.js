@@ -7,7 +7,7 @@ const app = createApp(App);
 const pinia = createPinia();
 app.use(pinia);
 app.use(router);
-import { useTelegramStore } from "./stores/telegram.js";
+import { useTelegramStore } from "@/shared/stores/telegram.js";
 const telegramStore = useTelegramStore();
 telegramStore.initTelegram();
 if (window.Telegram?.WebApp) {

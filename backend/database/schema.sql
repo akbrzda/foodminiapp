@@ -606,6 +606,16 @@ CREATE TABLE `order_items` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `order_number_sequence` (
+  `id` int NOT NULL,
+  `last_number` int NOT NULL DEFAULT '0',
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+INSERT INTO `order_number_sequence` (`id`, `last_number`) VALUES (1, 0);
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `orders` (
   `id` int NOT NULL AUTO_INCREMENT,
   `order_number` varchar(4) COLLATE utf8mb4_unicode_ci NOT NULL,
@@ -644,7 +654,6 @@ CREATE TABLE `orders` (
   `bonus_earn_amount` decimal(10,2) DEFAULT '0.00' COMMENT 'Зафиксированная сумма начисления при первом delivered',
   `bonus_earn_locked` tinyint(1) DEFAULT '0' COMMENT 'Флаг блокировки для защиты от дублирования начислений',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `order_number` (`order_number`),
   KEY `city_id` (`city_id`),
   KEY `branch_id` (`branch_id`),
   KEY `delivery_address_id` (`delivery_address_id`),
