@@ -115,6 +115,7 @@ import { useRouter } from "vue-router";
 import { useCartStore } from "@/modules/cart/stores/cart.js";
 import { useLoyaltyStore } from "@/modules/loyalty/stores/loyalty.js";
 import { useLocationStore } from "@/modules/location/stores/location.js";
+import { useMenuStore } from "@/modules/menu/stores/menu.js";
 import { useSettingsStore } from "@/modules/settings/stores/settings.js";
 import { useKeyboardHandler } from "@/shared/composables/useKeyboardHandler";
 import { hapticFeedback } from "@/shared/services/telegram.js";
@@ -124,6 +125,7 @@ import { calculateDeliveryCost, getThresholds, normalizeTariffs, findTariffForAm
 const router = useRouter();
 const cartStore = useCartStore();
 const locationStore = useLocationStore();
+const menuStore = useMenuStore();
 const loyaltyStore = useLoyaltyStore();
 const settingsStore = useSettingsStore();
 const { isKeyboardOpen } = useKeyboardHandler();
@@ -191,6 +193,10 @@ const isCurrentTariff = (tariff) => {
 const bonusChangeRequested = ref(false);
 onMounted(async () => {
   await loadBonusBalance();
+  if (menuStore.items?.length) {
+    // Обновляем позиции корзины на основе актуального меню, чтобы подтянуть правильные цены и изображения.
+    cartStore.refreshPricesFromMenu(menuStore.items);
+  }
   // Обновляем баланс при возвращении в приложение, чтобы не использовать старые данные
   document.addEventListener("visibilitychange", handleVisibilityChange);
   if (isDelivery.value && !locationStore.deliveryZone && locationStore.deliveryCoords && locationStore.selectedCity?.id) {
@@ -448,6 +454,16 @@ watch(
     }
     bonusChangeRequested.value = false;
   },
+);
+
+watch(
+  () => menuStore.items,
+  (items) => {
+    if (Array.isArray(items) && items.length > 0) {
+      cartStore.refreshPricesFromMenu(items);
+    }
+  },
+  { deep: true },
 );
 
 watch(
