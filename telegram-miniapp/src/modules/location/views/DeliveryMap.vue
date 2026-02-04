@@ -131,6 +131,22 @@ function normalizeCoords(coords) {
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
   return { lat, lon, lng: lon };
 }
+async function ensureTariffs() {
+  if (!locationStore.deliveryZone || !locationStore.deliveryCoords || !locationStore.selectedCity?.id) return;
+  if (Array.isArray(locationStore.deliveryZone.tariffs) && locationStore.deliveryZone.tariffs.length > 0) return;
+  try {
+    const response = await addressesAPI.checkDeliveryZone(
+      locationStore.deliveryCoords.lat,
+      locationStore.deliveryCoords.lng,
+      locationStore.selectedCity.id,
+    );
+    if (!response?.data?.available || !response?.data?.polygon) return;
+    const zone = { ...response.data.polygon, tariffs: response.data.tariffs || [] };
+    locationStore.setDeliveryZone(zone);
+  } catch (error) {
+    console.error("Failed to refresh delivery tariffs:", error);
+  }
+}
 onMounted(async () => {
   locationStore.setDeliveryType("delivery");
   await initMap();
@@ -144,6 +160,7 @@ onMounted(async () => {
   } else if (!deliveryAddress.value && mapInstance) {
     queueReverseGeocode();
   }
+  await ensureTariffs();
 });
 function goBack() {
   router.back();
@@ -297,12 +314,13 @@ async function confirmAddress() {
       const lngValue = selectedLocation.value.lng ?? selectedLocation.value.lon;
       const response = await addressesAPI.checkDeliveryZone(selectedLocation.value.lat, lngValue, locationStore.selectedCity.id);
       if (!response.data?.available || !response.data?.polygon) {
-        deliveryZoneError.value = "Адрес не входит в зону доставки";
+        deliveryZoneError.value = response.data?.message || "Адрес не входит в зону доставки";
         locationStore.setDeliveryZone(null);
         hapticFeedback("error");
         return;
       }
-      locationStore.setDeliveryZone(response.data.polygon);
+      const zone = { ...response.data.polygon, tariffs: response.data.tariffs || [] };
+      locationStore.setDeliveryZone(zone);
     } catch (error) {
       console.error("Failed to update delivery zone:", error);
       deliveryZoneError.value = "Не удалось проверить зону доставки";
@@ -367,7 +385,6 @@ async function loadDeliveryPolygons(L) {
             `
           <b>${polygon.branch_name}</b><br>
           Доставка: ${polygon.delivery_time} мин<br>
-          Стоимость: ${polygon.delivery_cost}₽
         `,
             { autoPan: false },
           );

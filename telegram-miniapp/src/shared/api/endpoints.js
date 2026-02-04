@@ -39,8 +39,8 @@ export const menuAPI = {
   getItems(categoryId) {
     return api.get(`/menu/categories/${categoryId}/items`);
   },
-  getItemDetails(itemId) {
-    return api.get(`/menu/items/${itemId}`);
+  getItemDetails(itemId, params = {}) {
+    return api.get(`/menu/items/${itemId}`, { params });
   },
   getModifiers(itemId) {
     return api.get(`/menu/items/${itemId}/modifiers`);
@@ -86,8 +86,12 @@ export const addressesAPI = {
   deleteAddress(addressId) {
     return api.delete(`/users/me/addresses/${addressId}`);
   },
-  checkDeliveryZone(lat, lng, cityId) {
-    return api.post("/polygons/check-delivery", { latitude: lat, longitude: lng, city_id: cityId });
+  checkDeliveryZone(lat, lng, cityId, cartAmount) {
+    const payload = { latitude: lat, longitude: lng, city_id: cityId };
+    if (Number.isFinite(Number(cartAmount))) {
+      payload.cart_amount = cartAmount;
+    }
+    return api.post("/polygons/check-delivery", payload);
   },
 };
 export const geocodeAPI = {

@@ -801,8 +801,8 @@ const loadPolygons = async () => {
         const name = props.name || `Полигон #${props.id || ""}`;
         const branchName = props.branch_name || "";
         const deliveryTime = props.delivery_time || 30;
-        const minOrder = props.min_order_amount || 0;
-        const deliveryCost = props.delivery_cost || 0;
+        const minOrder = 0;
+        const tariffsCount = Number(props.tariffs_count || 0);
         const isBlocked = Boolean(props.is_blocked);
         const isInactive = props.is_active === 0 || props.is_active === false;
         let statusBadge = "";
@@ -820,7 +820,7 @@ const loadPolygons = async () => {
         <div class="grid gap-1 text-xs text-muted-foreground">
           <div>Время доставки: ${deliveryTime} мин</div>
             <div style="background: inherit;">Мин. заказ: ${minOrder} ₽</div>
-          <div>Доставка: ${deliveryCost} ₽</div>
+          <div>Тарифы: ${tariffsCount} шт.</div>
         </div>
         ${statusBadge}
       </div>

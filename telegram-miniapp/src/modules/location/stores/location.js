@@ -158,6 +158,9 @@ export const useLocationStore = defineStore("location", {
       }
     },
     setDeliveryZone(zone) {
+      if (zone && !Array.isArray(zone.tariffs)) {
+        zone = { ...zone, tariffs: [] };
+      }
       this.deliveryZone = zone;
       localStorage.setItem("deliveryZone", JSON.stringify(zone || null));
       if (this.selectedCity?.id) {

@@ -61,8 +61,10 @@ router.get("/", async (req, res, next) => {
     if (!city_id) {
       return res.status(400).json({ error: "city_id is required" });
     }
-    const cacheKey =
-      branch_id && fulfillment_type ? `menu:city:${city_id}:branch:${branch_id}:fulfillment:${fulfillment_type}` : `menu:city:${city_id}`;
+    const cacheKeyParts = [`menu:city:${city_id}`];
+    if (branch_id) cacheKeyParts.push(`branch:${branch_id}`);
+    if (fulfillment_type) cacheKeyParts.push(`fulfillment:${fulfillment_type}`);
+    const cacheKey = cacheKeyParts.join(":");
     const cachedMenu = await getMenuCache(cacheKey);
     if (cachedMenu) {
       res.setHeader("X-Cache", "HIT");
@@ -385,6 +387,8 @@ router.get("/categories/:categoryId/items", async (req, res, next) => {
 router.get("/items/:id", async (req, res, next) => {
   try {
     const itemId = req.params.id;
+    const { city_id, fulfillment_type } = req.query;
+    const fulfillmentType = fulfillment_type || "delivery";
     const [items] = await db.query(
       `SELECT id, category_id, name, description, price, image_url, 
               weight, weight_value, weight_unit, calories, sort_order, is_active, created_at, updated_at
@@ -396,6 +400,18 @@ router.get("/items/:id", async (req, res, next) => {
       return res.status(404).json({ error: "Item not found" });
     }
     const item = items[0];
+    if (city_id) {
+      const [prices] = await db.query(
+        `SELECT price FROM menu_item_prices
+         WHERE item_id = ?
+           AND (city_id = ? OR city_id IS NULL)
+           AND fulfillment_type = ?
+         ORDER BY city_id DESC
+         LIMIT 1`,
+        [itemId, city_id, fulfillmentType],
+      );
+      item.price = prices.length > 0 ? prices[0].price : null;
+    }
     const [variants] = await db.query(
       `SELECT id, item_id, name, price, weight_value, weight_unit, sort_order, is_active
        FROM item_variants
@@ -403,6 +419,20 @@ router.get("/items/:id", async (req, res, next) => {
        ORDER BY sort_order, name`,
       [itemId],
     );
+    if (city_id) {
+      for (const variant of variants) {
+        const [variantPrices] = await db.query(
+          `SELECT price FROM menu_variant_prices
+           WHERE variant_id = ?
+             AND (city_id = ? OR city_id IS NULL)
+             AND fulfillment_type = ?
+           ORDER BY city_id DESC
+           LIMIT 1`,
+          [variant.id, city_id, fulfillmentType],
+        );
+        variant.price = variantPrices.length > 0 ? variantPrices[0].price : null;
+      }
+    }
     const [modifierGroups] = await db.query(
       `SELECT mg.id, mg.name, mg.type, mg.is_required, mg.is_active
        FROM modifier_groups mg
@@ -419,6 +449,25 @@ router.get("/items/:id", async (req, res, next) => {
          ORDER BY sort_order, name`,
         [group.id],
       );
+      if (modifiers.length > 0) {
+        const modifierIds = modifiers.map((modifier) => modifier.id);
+        const [variantPrices] = await db.query(
+          `SELECT modifier_id, variant_id, price
+           FROM menu_modifier_variant_prices
+           WHERE modifier_id IN (${modifierIds.map(() => "?").join(",")})`,
+          modifierIds,
+        );
+        const pricesByModifier = new Map();
+        variantPrices.forEach((row) => {
+          if (!pricesByModifier.has(row.modifier_id)) {
+            pricesByModifier.set(row.modifier_id, []);
+          }
+          pricesByModifier.get(row.modifier_id).push({ variant_id: row.variant_id, price: row.price });
+        });
+        modifiers.forEach((modifier) => {
+          modifier.variant_prices = pricesByModifier.get(modifier.id) || [];
+        });
+      }
       group.modifiers = modifiers;
     }
     const [oldModifiers] = await db.query(

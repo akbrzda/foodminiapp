@@ -71,13 +71,12 @@ FoodMiniApp — система онлайн‑заказа еды с Telegram Mi
 
 ## База данных
 
-Источник истины для чистого проекта — `backend/database/schema.sql`.
-Дампы `schemas/local.sql` и `schemas/vps.sql` синхронизированы по структуре с этой схемой и используются как снимки окружений.
+Схема для деплоя чистого проекта — `backend/database/schema.sql`.
 
 ### Ключевые таблицы
 
 - `users`, `user_states`, `delivery_addresses` — пользователи и их данные.
-- `cities`, `branches`, `delivery_polygons` — доставка.
+- `cities`, `branches`, `delivery_polygons`, `delivery_tariffs` — доставка и тарифные ступени.
 - `cities.timezone`, `users.timezone` — IANA‑таймзоны для корректных рассылок и расчёта смены.
 - `menu_categories`, `menu_items`, `item_variants`, `modifier_groups`, `modifiers`, `menu_modifiers` — меню.
 - `orders`, `order_items`, `order_item_modifiers`, `order_status_history` — заказы и история статусов.
@@ -183,6 +182,22 @@ FoodMiniApp — система онлайн‑заказа еды с Telegram Mi
 - Публичный API модуля (используется бэкендом и воркерами): начисление/списание, уровни, расчеты, корректировки.
 - Роутинг клиента и админа подключен через модульные `routes.js`.
 
+## Доставка и тарифы
+
+Система доставки использует ступенчатые тарифы по сумме заказа. Поле `delivery_polygons.delivery_cost` и `delivery_polygons.min_order_amount` сохраняются для совместимости, но в расчётах не используются (минимум фиксирован как 0 ₽).
+
+### API тарифов доставки
+
+**Публичные**
+
+- `POST /api/polygons/check-delivery` — проверка доставки по координатам, возвращает полигон и тарифы; принимает опциональный `cart_amount` для расчёта текущей стоимости.
+
+**Административные**
+
+- `GET /api/polygons/admin/:id/tariffs` — получить тарифные ступени полигона.
+- `PUT /api/polygons/admin/:id/tariffs` — полная замена тарифных ступеней с валидацией диапазонов.
+- `POST /api/polygons/admin/:id/tariffs/copy` — копирование тарифов из другого полигона того же филиала.
+
 ## Админ‑панель
 
 - Управление меню, заказами, клиентами, городами и филиалами.
@@ -208,7 +223,11 @@ FoodMiniApp — система онлайн‑заказа еды с Telegram Mi
 
 ## Документация
 
-- `docs/bonus.md` — основная спецификация лояльности.
-- `docs/doc.md` — общее ТЗ проекта (ссылается на `bonus.md`).
-- `docs/menu.md` — спецификация меню.
+- `docs/doc.md` — общее ТЗ проекта
+- `docs/design_system.md` — спецификация дизайн‑системы.
+- `docs/bonus.md` — спецификация модуля лояльности.
+- `docs/menu.md` — спецификация модуля управления меню.
+- `docs/delivery_zone.md` — спецификация модуля зон доставок.
+- `docs/newsletter.md` — спецификация модуля рассылок.
+- `docs/shift_page.md` — спецификация страницы текущей смены.
 - `docs/roadmap.md` — план развития.

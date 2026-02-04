@@ -130,20 +130,6 @@
                 <Input v-model.number="form.delivery_time" type="number" min="0" required />
               </FieldContent>
             </Field>
-            <FieldGroup class="grid gap-4 md:grid-cols-2">
-              <Field>
-                <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Мин. сумма заказа (₽)</FieldLabel>
-                <FieldContent>
-                  <Input v-model.number="form.min_order_amount" type="number" min="0" step="10" />
-                </FieldContent>
-              </Field>
-              <Field>
-                <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Стоимость доставки (₽)</FieldLabel>
-                <FieldContent>
-                  <Input v-model.number="form.delivery_cost" type="number" min="0" step="10" />
-                </FieldContent>
-              </Field>
-            </FieldGroup>
           </FieldGroup>
           <Button class="w-full" type="submit">
             <Save :size="16" />
@@ -210,14 +196,34 @@
     <PolygonSidebar
       :is-open="showSidebar"
       :polygon="selectedPolygon"
+      :tariffs="selectedTariffs"
+      :tariffs-loading="tariffsLoading"
+      :tariff-sources="availableTariffSources"
       :city-branches="branches"
       @close="closeSidebar"
       @save="savePolygonFromSidebar"
+      @edit-tariffs="openTariffEditor"
+      @copy-tariffs="openTariffCopy"
       @block="showBlockModalFromSidebar"
       @unblock="unblockPolygonFromSidebar"
       @delete="deletePolygonFromSidebar"
       @transfer="transferPolygon"
       @redraw="startRedrawPolygon"
+    />
+    <DeliveryTariffEditorDialog
+      :open="tariffEditorOpen"
+      :tariffs="selectedTariffs"
+      @close="tariffEditorOpen = false"
+      @save="saveTariffs"
+    />
+    <DeliveryTariffCopyDialog
+      :open="tariffCopyOpen"
+      :sources="availableTariffSources"
+      :preview-tariffs="tariffCopyPreview"
+      :selected-source-id="tariffCopySource"
+      @close="closeTariffCopy"
+      @select="selectTariffCopySource"
+      @confirm="confirmTariffCopy"
     />
   </div>
 </template>
@@ -227,6 +233,8 @@ import { Lock, Plus, Save } from "lucide-vue-next";
 import { parseDate as parseCalendarDate } from "@internationalized/date";
 import api from "@/shared/api/client.js";
 import PolygonSidebar from "@/shared/components/PolygonSidebar.vue";
+import DeliveryTariffEditorDialog from "@/modules/delivery/components/DeliveryTariffEditorDialog.vue";
+import DeliveryTariffCopyDialog from "@/modules/delivery/components/DeliveryTariffCopyDialog.vue";
 import { useReferenceStore } from "@/shared/stores/reference.js";
 import { useRoute, useRouter } from "vue-router";
 import Button from "@/shared/components/ui/button/Button.vue";
@@ -292,8 +300,6 @@ const leftTab = ref("zones");
 const form = ref({
   name: "",
   delivery_time: 30,
-  min_order_amount: 0,
-  delivery_cost: 0,
 });
 const blockForm = ref({
   blockType: "permanent",
@@ -334,6 +340,22 @@ const selectedPolygons = ref([]);
 const showSidebar = ref(false);
 const selectedPolygon = ref(null);
 const editingPolygonId = ref(null);
+const selectedTariffs = ref([]);
+const tariffsLoading = ref(false);
+const tariffEditorOpen = ref(false);
+const tariffCopyOpen = ref(false);
+const tariffCopySource = ref("");
+const tariffCopyPreview = ref([]);
+const availableTariffSources = computed(() => {
+  if (!selectedPolygon.value) return [];
+  const pool = allPolygons.value.length ? allPolygons.value : polygons.value;
+  return pool.filter(
+    (polygon) =>
+      polygon.branch_id === selectedPolygon.value.branch_id &&
+      polygon.id !== selectedPolygon.value.id &&
+      Number(polygon.tariffs_count || 0) > 0,
+  );
+});
 let map = null;
 let drawnItems = null;
 let tileLayer = null;
@@ -567,8 +589,8 @@ const renderPolygonsOnMap = () => {
         <div class="text-xs text-muted-foreground">${polygon.branch_name || ""}</div>
         <div class="grid gap-1 text-xs text-muted-foreground">
           <div>Время доставки: ${polygon.delivery_time || 30} мин</div>
-            <div style="background: inherit;">Мин. заказ: ${polygon.min_order_amount || 0} ₽</div>
-          <div>Доставка: ${polygon.delivery_cost || 0} ₽</div>
+            <div style="background: inherit;">Мин. заказ: 0 ₽</div>
+          <div>Тарифы: ${Number(polygon.tariffs_count || 0)} шт.</div>
         </div>
         ${statusBadge}
       </div>
@@ -743,6 +765,19 @@ const getPluralForm = (count) => {
   const titles = ["полигон", "полигона", "полигонов"];
   return titles[count % 100 > 4 && count % 100 < 20 ? 2 : cases[Math.min(count % 10, 5)]];
 };
+const loadTariffsForPolygon = async (polygonId) => {
+  if (!polygonId) return;
+  tariffsLoading.value = true;
+  try {
+    const response = await api.get(`/api/polygons/admin/${polygonId}/tariffs`);
+    selectedTariffs.value = response.data?.tariffs || [];
+  } catch (error) {
+    console.error("Ошибка загрузки тарифов:", error);
+    showErrorNotification("Не удалось загрузить тарифы");
+  } finally {
+    tariffsLoading.value = false;
+  }
+};
 const openPolygonSidebar = (polygon) => {
   const branchName = branches.value.find((branch) => branch.id === polygon.branch_id)?.name || "";
   const enrichedPolygon = {
@@ -754,20 +789,77 @@ const openPolygonSidebar = (polygon) => {
   }
   selectedPolygon.value = enrichedPolygon;
   showSidebar.value = true;
+  selectedTariffs.value = [];
+  loadTariffsForPolygon(enrichedPolygon.id);
 };
 const closeSidebar = () => {
   stopPolygonEditing();
   showSidebar.value = false;
   setTimeout(() => {
     selectedPolygon.value = null;
+    selectedTariffs.value = [];
   }, 300);
+};
+const openTariffEditor = () => {
+  if (!selectedPolygon.value) return;
+  tariffEditorOpen.value = true;
+};
+const saveTariffs = async (payload) => {
+  if (!selectedPolygon.value) return;
+  try {
+    const response = await api.put(`/api/polygons/admin/${selectedPolygon.value.id}/tariffs`, { tariffs: payload });
+    selectedTariffs.value = response.data?.tariffs || [];
+    tariffEditorOpen.value = false;
+    showSuccessNotification("Тарифы сохранены");
+    await loadPolygons();
+    await loadAllPolygons();
+  } catch (error) {
+    console.error("Ошибка сохранения тарифов:", error);
+    const message = error?.response?.data?.errors?.[0] || "Ошибка сохранения тарифов";
+    showErrorNotification(message);
+  }
+};
+const openTariffCopy = () => {
+  tariffCopyOpen.value = true;
+  tariffCopySource.value = "";
+  tariffCopyPreview.value = [];
+};
+const closeTariffCopy = () => {
+  tariffCopyOpen.value = false;
+  tariffCopySource.value = "";
+  tariffCopyPreview.value = [];
+};
+const selectTariffCopySource = async (value) => {
+  tariffCopySource.value = value;
+  tariffCopyPreview.value = [];
+  if (!value) return;
+  try {
+    const response = await api.get(`/api/polygons/admin/${value}/tariffs`);
+    tariffCopyPreview.value = response.data?.tariffs || [];
+  } catch (error) {
+    console.error("Ошибка предпросмотра тарифов:", error);
+    showErrorNotification("Не удалось загрузить тарифы для копирования");
+  }
+};
+const confirmTariffCopy = async (value) => {
+  if (!selectedPolygon.value || !value) return;
+  try {
+    const response = await api.post(`/api/polygons/admin/${selectedPolygon.value.id}/tariffs/copy`, { source_polygon_id: value });
+    selectedTariffs.value = response.data?.tariffs || [];
+    closeTariffCopy();
+    showSuccessNotification("Тарифы скопированы");
+    await loadPolygons();
+    await loadAllPolygons();
+  } catch (error) {
+    console.error("Ошибка копирования тарифов:", error);
+    const message = error?.response?.data?.error || "Не удалось скопировать тарифы";
+    showErrorNotification(message);
+  }
 };
 const savePolygonFromSidebar = async (data) => {
   try {
     const payload = {
-      delivery_cost: data.delivery_cost,
       delivery_time: data.delivery_time,
-      min_order_amount: data.min_order_amount,
       is_active: data.is_active ? 1 : 0,
     };
     if (editingPolygonId.value === data.id && currentLayer) {
@@ -851,8 +943,6 @@ const closeModal = () => {
   form.value = {
     name: "",
     delivery_time: 30,
-    min_order_amount: 0,
-    delivery_cost: 0,
   };
 };
 const submitPolygon = async () => {
@@ -861,8 +951,6 @@ const submitPolygon = async () => {
       branch_id: parseInt(branchId.value),
       name: form.value.name,
       delivery_time: form.value.delivery_time,
-      min_order_amount: form.value.min_order_amount,
-      delivery_cost: form.value.delivery_cost,
       polygon: currentLayer ? currentLayer.toGeoJSON().geometry.coordinates[0] : editing.value?.polygon?.coordinates?.[0] || [],
     };
     if (editing.value) {

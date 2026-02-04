@@ -14,12 +14,13 @@
             {{ tag.name }}
           </span>
         </div>
-        <p class="item-description" v-if="item.description">{{ item.description }}</p>
         <p class="item-composition" v-if="item.composition">Состав: {{ item.composition }}</p>
         <p class="item-weight" v-if="displayWeight">{{ displayWeight }}</p>
-        <div class="kbju" v-if="kbjuLine">
-          <div class="kbju-title">КБЖУ на 100{{ kbjuUnitLabel }} / на порцию</div>
-          <div class="kbju-values">{{ kbjuLine }}</div>
+        <div class="kbju" v-if="kbjuPer100 || kbjuPerServing">
+          <div class="kbju-title">КБЖУ на 100{{ kbjuUnitLabel }}</div>
+          <div class="kbju-values">{{ kbjuPer100 || "—" }}</div>
+          <div class="kbju-title">КБЖУ на порцию</div>
+          <div class="kbju-values">{{ kbjuPerServing || "—" }}</div>
         </div>
         <div v-if="item.in_stop_list" class="item-stop">Временно недоступно</div>
       </div>
@@ -43,53 +44,93 @@
           <span class="required-star">*</span>
         </h2>
         <div class="modifiers">
-          <label
+          <div
             v-for="modifier in group.modifiers"
             :key="modifier.id"
-            :class="['modifier-item', { active: isModifierSelected(group.id, modifier.id), disabled: isModifierUnavailable(modifier) }]"
+            class="modifier-card"
+            :class="{
+              active: isModifierSelected(group.id, modifier.id),
+              disabled: isModifierUnavailable(modifier),
+            }"
+            @click="increaseModifier(group, modifier)"
           >
-            <input
-              :type="group.type === 'single' ? 'radio' : 'checkbox'"
-              :name="`group-${group.id}`"
-              :value="modifier.id"
-              :checked="isModifierSelected(group.id, modifier.id)"
-              :disabled="isModifierUnavailable(modifier)"
-              @change="toggleModifier(group, modifier)"
-            />
-            <img v-if="modifier.image_url" :src="normalizeImageUrl(modifier.image_url)" :alt="modifier.name" class="modifier-image" />
-            <span class="modifier-name">
+            <div v-if="getModifierCount(group.id, modifier.id) > 0" class="modifier-count-badge">x{{ getModifierCount(group.id, modifier.id) }}</div>
+            <div class="modifier-card-image">
+              <img v-if="modifier.image_url" :src="normalizeImageUrl(modifier.image_url)" :alt="modifier.name" />
+            </div>
+            <div class="modifier-card-name">
               {{ modifier.name }}
-              <span v-if="getModifierWeight(modifier)" class="modifier-weight">· {{ getModifierWeight(modifier) }}</span>
-            </span>
-            <span class="modifier-price" v-if="getModifierPrice(modifier) > 0">+{{ formatPrice(getModifierPrice(modifier)) }} ₽</span>
+              <span v-if="getModifierWeight(modifier)" class="modifier-weight">{{ getModifierWeight(modifier) }}</span>
+            </div>
+            <div class="modifier-card-footer" :class="{ 'has-controls': getModifierCount(group.id, modifier.id) > 0 }">
+              <button
+                v-if="getModifierCount(group.id, modifier.id) > 0"
+                type="button"
+                class="modifier-ctrl"
+                @click.stop="decreaseModifier(group, modifier)"
+              >
+                <Minus size="12" />
+              </button>
+              <span v-else class="modifier-ctrl-placeholder"></span>
+              <span class="modifier-card-price">{{ formatPrice(getModifierPrice(modifier)) }} ₽</span>
+              <button
+                v-if="getModifierCount(group.id, modifier.id) > 0"
+                type="button"
+                class="modifier-ctrl"
+                @click.stop="increaseModifier(group, modifier)"
+              >
+                <Plus size="12" />
+              </button>
+              <span v-else class="modifier-ctrl-placeholder"></span>
+            </div>
             <span v-if="isModifierUnavailable(modifier)" class="modifier-stop">Недоступно</span>
-          </label>
+          </div>
         </div>
       </div>
       <div class="section" v-for="group in optionalModifierGroups" :key="group.id">
         <h2 class="section-title">{{ group.name }}</h2>
         <div class="modifiers">
-          <label
+          <div
             v-for="modifier in group.modifiers"
             :key="modifier.id"
-            :class="['modifier-item', { active: isModifierSelected(group.id, modifier.id), disabled: isModifierUnavailable(modifier) }]"
+            class="modifier-card"
+            :class="{
+              active: isModifierSelected(group.id, modifier.id),
+              disabled: isModifierUnavailable(modifier),
+            }"
+            @click="increaseModifier(group, modifier)"
           >
-            <input
-              :type="group.type === 'single' ? 'radio' : 'checkbox'"
-              :name="`group-${group.id}`"
-              :value="modifier.id"
-              :checked="isModifierSelected(group.id, modifier.id)"
-              :disabled="isModifierUnavailable(modifier)"
-              @change="toggleModifier(group, modifier)"
-            />
-            <img v-if="modifier.image_url" :src="normalizeImageUrl(modifier.image_url)" :alt="modifier.name" class="modifier-image" />
-            <span class="modifier-name">
+            <div v-if="getModifierCount(group.id, modifier.id) > 0" class="modifier-count-badge">x{{ getModifierCount(group.id, modifier.id) }}</div>
+            <div class="modifier-card-image">
+              <img v-if="modifier.image_url" :src="normalizeImageUrl(modifier.image_url)" :alt="modifier.name" />
+            </div>
+            <div class="modifier-card-name">
               {{ modifier.name }}
               <span v-if="getModifierWeight(modifier)" class="modifier-weight">· {{ getModifierWeight(modifier) }}</span>
-            </span>
-            <span class="modifier-price" v-if="getModifierPrice(modifier) > 0">+{{ formatPrice(getModifierPrice(modifier)) }} ₽</span>
+            </div>
+            <div class="modifier-card-footer" :class="{ 'has-controls': getModifierCount(group.id, modifier.id) > 0 }">
+              <button
+                v-if="getModifierCount(group.id, modifier.id) > 0"
+                type="button"
+                class="modifier-ctrl"
+                @click.stop="decreaseModifier(group, modifier)"
+              >
+                <Minus size="12" />
+              </button>
+              <span v-else class="modifier-ctrl-placeholder"></span>
+              <span class="modifier-card-price">{{ formatPrice(getModifierPrice(modifier)) }} ₽</span>
+              <button
+                v-if="getModifierCount(group.id, modifier.id) > 0"
+                type="button"
+                class="modifier-ctrl"
+                @click.stop="increaseModifier(group, modifier)"
+              >
+                <Plus size="12" />
+              </button>
+              <span v-else class="modifier-ctrl-placeholder"></span>
+            </div>
             <span v-if="isModifierUnavailable(modifier)" class="modifier-stop">Недоступно</span>
-          </label>
+          </div>
         </div>
       </div>
     </div>
@@ -101,11 +142,11 @@
           </button>
         </div>
         <div v-else class="quantity-button-wrapper">
-          <button class="qty-btn" :disabled="!canOrder" @click="decreaseQuantity">−</button>
+          <button class="qty-btn" :disabled="!canOrder" @click="decreaseQuantity"><Minus size="12" /></button>
           <div class="qty-info">
             <span class="qty-price"> {{ formatPrice(cartItem.totalPrice) }} ₽ × {{ cartItem.quantity }} </span>
           </div>
-          <button class="qty-btn" :disabled="!canOrder" @click="increaseQuantity">+</button>
+          <button class="qty-btn" :disabled="!canOrder" @click="increaseQuantity"><Plus size="12" /></button>
         </div>
         <button v-if="ordersEnabled && cartStore.itemsCount > 0" class="cart-btn" @click="goToCart">
           <ShoppingCart :size="24" />
@@ -118,7 +159,7 @@
 <script setup>
 import { ref, computed, onMounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { ShoppingCart } from "lucide-vue-next";
+import { ShoppingCart, Minus, Plus } from "lucide-vue-next";
 import { useCartStore } from "@/modules/cart/stores/cart.js";
 import { useMenuStore } from "@/modules/menu/stores/menu.js";
 import { useLocationStore } from "@/modules/location/stores/location.js";
@@ -161,7 +202,7 @@ const kbjuUnitLabel = computed(() => {
   const unit = selectedVariant.value?.weight_unit || item.value?.weight_unit;
   return unit === "ml" || unit === "l" ? "мл" : "г";
 });
-const kbjuLine = computed(() => {
+const kbjuPer100 = computed(() => {
   const source = selectedVariant.value || item.value;
   if (!source) return "";
   const values = {
@@ -169,25 +210,35 @@ const kbjuLine = computed(() => {
     proteins: source.proteins_per_100g,
     fats: source.fats_per_100g,
     carbs: source.carbs_per_100g,
-    caloriesServing: source.calories_per_serving,
-    proteinsServing: source.proteins_per_serving,
-    fatsServing: source.fats_per_serving,
-    carbsServing: source.carbs_per_serving,
   };
   const hasData = Object.values(values).some((value) => Number.isFinite(Number(value)));
   if (!hasData) return "";
-  const formatPair = (label, per100, perServing) => {
-    if (per100 === null && perServing === null) return "";
+  const formatPair = (label, per100) => {
+    if (per100 === null || per100 === undefined) return "";
     const first = Number.isFinite(Number(per100)) ? formatPrice(per100) : "—";
-    const second = Number.isFinite(Number(perServing)) ? formatPrice(perServing) : "—";
-    return `${label}: ${first} (${second})`;
+    return `${label}: ${first}`;
   };
-  return [
-    formatPair("К", values.calories, values.caloriesServing),
-    formatPair("Б", values.proteins, values.proteinsServing),
-    formatPair("Ж", values.fats, values.fatsServing),
-    formatPair("У", values.carbs, values.carbsServing),
-  ]
+  return [formatPair("К", values.calories), formatPair("Б", values.proteins), formatPair("Ж", values.fats), formatPair("У", values.carbs)]
+    .filter(Boolean)
+    .join(" • ");
+});
+const kbjuPerServing = computed(() => {
+  const source = selectedVariant.value || item.value;
+  if (!source) return "";
+  const values = {
+    calories: source.calories_per_serving,
+    proteins: source.proteins_per_serving,
+    fats: source.fats_per_serving,
+    carbs: source.carbs_per_serving,
+  };
+  const hasData = Object.values(values).some((value) => Number.isFinite(Number(value)));
+  if (!hasData) return "";
+  const formatPair = (label, value) => {
+    if (value === null || value === undefined) return "";
+    const first = Number.isFinite(Number(value)) ? formatPrice(value) : "—";
+    return `${label}: ${first}`;
+  };
+  return [formatPair("К", values.calories), formatPair("Б", values.proteins), formatPair("Ж", values.fats), formatPair("У", values.carbs)]
     .filter(Boolean)
     .join(" • ");
 });
@@ -219,16 +270,30 @@ function getSelectedModifiersArray() {
   const modifiers = [];
   if (item.value?.modifier_groups) {
     for (const group of item.value.modifier_groups) {
-      const selectedIds = selectedModifiers.value[group.id] || [];
-      for (const modifierId of selectedIds) {
-        const modifier = group.modifiers.find((m) => m.id === modifierId);
-        if (modifier) {
+      const groupMap = selectedModifiers.value[group.id] || {};
+      for (const [modifierId, count] of Object.entries(groupMap)) {
+        const qty = Number(count) || 0;
+        if (qty <= 0) continue;
+        const modifier = group.modifiers.find((m) => m.id === Number(modifierId));
+        if (!modifier) continue;
+        let weightValue = modifier.weight ?? null;
+        let weightUnit = modifier.weight_unit ?? null;
+        if (selectedVariant.value && Array.isArray(modifier.variant_prices)) {
+          const match = modifier.variant_prices.find((price) => price.variant_id === selectedVariant.value.id);
+          if (match) {
+            weightValue = match.weight ?? weightValue;
+            weightUnit = match.weight_unit ?? weightUnit;
+          }
+        }
+        for (let i = 0; i < qty; i += 1) {
           modifiers.push({
             id: modifier.id,
             name: modifier.name,
             price: getModifierPrice(modifier),
             group_id: group.id,
             group_name: group.name,
+            weight_value: weightValue,
+            weight_unit: weightUnit,
           });
         }
       }
@@ -297,7 +362,9 @@ async function loadItem() {
       item.value = allItems.find((entry) => entry.id === itemId) || null;
       if (item.value) return;
     }
-    const response = await menuAPI.getItemDetails(route.params.id);
+    const fulfillmentType = locationStore.isPickup ? "pickup" : "delivery";
+    const cityId = locationStore.selectedCity?.id || null;
+    const response = await menuAPI.getItemDetails(route.params.id, { city_id: cityId, fulfillment_type: fulfillmentType });
     item.value = response.data.item;
   } catch (err) {
     console.error("Failed to load item:", err);
@@ -310,39 +377,47 @@ function selectVariant(variant) {
   hapticFeedback("light");
   selectedVariant.value = variant;
 }
-function toggleModifier(group, modifier) {
+const getGroupTotalCount = (groupId) => {
+  const groupMap = selectedModifiers.value[groupId] || {};
+  return Object.values(groupMap).reduce((sum, value) => sum + (Number(value) || 0), 0);
+};
+const getModifierCount = (groupId, modifierId) => {
+  const groupMap = selectedModifiers.value[groupId] || {};
+  return Number(groupMap[modifierId] || 0);
+};
+const increaseModifier = (group, modifier) => {
   hapticFeedback("light");
   if (isModifierUnavailable(modifier)) return;
   const newSelectedModifiers = { ...selectedModifiers.value };
+  const groupMap = { ...(newSelectedModifiers[group.id] || {}) };
   if (group.type === "single") {
-    newSelectedModifiers[group.id] = [modifier.id];
-  } else {
-    if (!newSelectedModifiers[group.id]) {
-      newSelectedModifiers[group.id] = [];
-    } else {
-      newSelectedModifiers[group.id] = [...newSelectedModifiers[group.id]];
-    }
-    const index = newSelectedModifiers[group.id].indexOf(modifier.id);
-    if (index > -1) {
-      newSelectedModifiers[group.id].splice(index, 1);
-    } else {
-      if (group.max_selections && newSelectedModifiers[group.id].length >= group.max_selections) {
-        return;
-      }
-      newSelectedModifiers[group.id].push(modifier.id);
-    }
+    newSelectedModifiers[group.id] = { [modifier.id]: 1 };
+    selectedModifiers.value = newSelectedModifiers;
+    return;
   }
+  if (group.max_selections && getGroupTotalCount(group.id) >= group.max_selections) {
+    return;
+  }
+  const current = Number(groupMap[modifier.id] || 0);
+  groupMap[modifier.id] = current + 1;
+  newSelectedModifiers[group.id] = groupMap;
   selectedModifiers.value = newSelectedModifiers;
-}
-function isModifierSelected(groupId, modifierId) {
-  if (!item.value?.modifier_groups) return false;
-  const group = item.value.modifier_groups.find((g) => g.id === groupId);
-  if (!group) return false;
-  if (group.type === "single") {
-    return selectedModifiers.value[groupId]?.[0] === modifierId;
+};
+const decreaseModifier = (group, modifier) => {
+  hapticFeedback("light");
+  const newSelectedModifiers = { ...selectedModifiers.value };
+  const groupMap = { ...(newSelectedModifiers[group.id] || {}) };
+  const current = Number(groupMap[modifier.id] || 0);
+  if (current <= 1) {
+    delete groupMap[modifier.id];
   } else {
-    return selectedModifiers.value[groupId]?.includes(modifierId) || false;
+    groupMap[modifier.id] = current - 1;
   }
+  newSelectedModifiers[group.id] = groupMap;
+  selectedModifiers.value = newSelectedModifiers;
+};
+function isModifierSelected(groupId, modifierId) {
+  return getModifierCount(groupId, modifierId) > 0;
 }
 function isVariantUnavailable(variant) {
   if (!variant) return true;
@@ -434,10 +509,11 @@ const canAddToCart = computed(() => {
   }
   if (item.value.modifier_groups) {
     for (const group of item.value.modifier_groups) {
-      const selectedCount = selectedModifiers.value[group.id]?.length || 0;
+      const selectedCount = getGroupTotalCount(group.id);
       const minSelections = group.is_required ? Math.max(1, group.min_selections || 1) : group.min_selections || 0;
       if (selectedCount < minSelections) return false;
       if (group.max_selections && selectedCount > group.max_selections) return false;
+      if (group.type === "single" && selectedCount > 1) return false;
     }
   }
   if (item.value.in_stop_list) return false;
@@ -459,13 +535,13 @@ const totalPrice = computed(() => {
   }
   if (item.value?.modifier_groups) {
     for (const group of item.value.modifier_groups) {
-      const selectedIds = selectedModifiers.value[group.id] || [];
-      if (selectedIds.length > 0) {
-        for (const modifierId of selectedIds) {
-          const modifier = group.modifiers.find((m) => m.id === modifierId);
-          if (modifier) {
-            price += getModifierPrice(modifier);
-          }
+      const groupMap = selectedModifiers.value[group.id] || {};
+      for (const [modifierId, count] of Object.entries(groupMap)) {
+        const qty = Number(count) || 0;
+        if (qty <= 0) continue;
+        const modifier = group.modifiers.find((m) => m.id === Number(modifierId));
+        if (modifier) {
+          price += getModifierPrice(modifier) * qty;
         }
       }
     }
@@ -701,65 +777,110 @@ function formatModifierWeight(value, unit) {
   cursor: not-allowed;
 }
 .modifiers {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.modifier-card {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-}
-.modifier-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px;
+  gap: 4px;
   border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-md);
+  border-radius: var(--border-radius-lg);
   background: var(--color-background);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: border-color 0.2s;
+  height: 178px;
+  padding: 4px;
 }
-.modifier-item.disabled {
+.modifier-card.disabled {
   opacity: 0.6;
+  pointer-events: none;
 }
-.modifier-image {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
+.modifier-card.active {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 1px rgba(255, 210, 0, 0.25);
+}
+.modifier-count-badge {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  background: var(--color-primary);
+  color: var(--color-text-primary);
+  font-size: 12px;
+  line-height: 1;
+  font-weight: 600;
+  border-radius: 999px;
+}
+.modifier-card-image {
+  width: 100%;
+  height: 104px;
+  border-radius: var(--border-radius-md);
+  background: var(--color-background-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.modifier-card-image img {
+  width: 100%;
+  height: 100%;
   object-fit: cover;
 }
-.modifier-item:hover {
-  background: var(--color-background-secondary);
-}
-.modifier-item.active {
-  border-color: var(--color-primary);
-  background: var(--color-background-secondary);
-}
-.modifier-item input[type="radio"],
-.modifier-item input[type="checkbox"] {
-  width: 20px;
-  height: 20px;
-  cursor: pointer;
-  accent-color: var(--color-primary);
-}
-.modifier-name {
-  flex: 1;
-  font-size: var(--font-size-body);
+.modifier-card-name {
+  font-size: var(--font-size-caption);
   color: var(--color-text-primary);
+  text-align: center;
+  line-height: 1.2;
+  min-height: 30px;
 }
 .modifier-weight {
   font-size: var(--font-size-caption);
   color: var(--color-text-secondary);
   margin-left: 6px;
 }
-.modifier-price {
-  margin-left: auto;
-  font-size: var(--font-size-body);
-  font-weight: var(--font-weight-regular);
-  color: var(--color-text-secondary);
-  white-space: nowrap;
+.modifier-card-footer {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 32px;
+}
+.modifier-card-price {
+  font-size: var(--font-size-caption);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  text-align: center;
+}
+.modifier-ctrl {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--border-radius-sm);
+  border: 1px solid var(--color-primary);
+  background: var(--color-primary);
+  color: var(--color-text-primary);
+  font-size: 16px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.modifier-ctrl-placeholder {
+  width: 24px;
+  height: 24px;
 }
 .modifier-stop {
-  margin-left: auto;
+  margin-top: 6px;
   font-size: 11px;
-  color: #c0392b;
+  color: var(--color-error);
+  text-align: center;
 }
 .footer {
   position: fixed;

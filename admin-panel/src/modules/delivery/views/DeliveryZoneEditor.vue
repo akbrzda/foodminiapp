@@ -13,42 +13,81 @@
     <div
       class="absolute right-4 top-4 bottom-4 z-20 w-[360px] max-w-[calc(100%-2rem)] overflow-hidden rounded-xl border border-border bg-background/95 shadow-xl backdrop-blur flex flex-col"
     >
-      <CardHeader class="border-b border-border px-4 py-4">
+      <CardHeader class="border-b border-border px-4 py-4 space-y-3">
         <CardTitle>Параметры полигона</CardTitle>
+        <div class="flex flex-wrap gap-2">
+          <button
+            type="button"
+            class="rounded-full border px-3 py-1 text-xs font-medium transition"
+            :class="activeTab === 'general' ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:text-foreground'"
+            @click="activeTab = 'general'"
+          >
+            Общая информация
+          </button>
+          <button
+            type="button"
+            class="rounded-full border px-3 py-1 text-xs font-medium transition"
+            :class="activeTab === 'delivery' ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:text-foreground'"
+            @click="activeTab = 'delivery'"
+          >
+            Доставка
+          </button>
+        </div>
       </CardHeader>
       <CardContent class="flex-1 overflow-y-auto px-4 py-4 space-y-4">
-        <FieldGroup>
-          <Field>
-            <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Название</FieldLabel>
-            <FieldContent>
-              <Input v-model="form.name" placeholder="Центральная зона" required />
-            </FieldContent>
-          </Field>
-          <Field>
-            <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Время доставки (мин)</FieldLabel>
-            <FieldContent>
-              <Input v-model.number="form.delivery_time" type="number" min="0" required />
-            </FieldContent>
-          </Field>
-          <FieldGroup class="grid gap-4 md:grid-cols-2">
+        <template v-if="activeTab === 'general'">
+          <FieldGroup>
             <Field>
-              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Мин. сумма заказа (₽)</FieldLabel>
+              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Название</FieldLabel>
               <FieldContent>
-                <Input v-model.number="form.min_order_amount" type="number" min="0" step="10" />
+                <Input v-model="form.name" placeholder="Центральная зона" required />
               </FieldContent>
             </Field>
             <Field>
-              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Стоимость доставки (₽)</FieldLabel>
+              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Время доставки (мин)</FieldLabel>
               <FieldContent>
-                <Input v-model.number="form.delivery_cost" type="number" min="0" step="10" />
+                <Input v-model.number="form.delivery_time" type="number" min="0" required />
               </FieldContent>
             </Field>
           </FieldGroup>
-        </FieldGroup>
-        <div class="flex flex-wrap gap-2">
-          <Button variant="secondary" @click="startDrawing">Перерисовать</Button>
-          <Button variant="outline" @click="resetPolygon">Сбросить изменения</Button>
-        </div>
+          <div class="flex flex-wrap gap-2">
+            <Button variant="secondary" @click="startDrawing">Перерисовать</Button>
+            <Button variant="outline" @click="resetPolygon">Сбросить изменения</Button>
+          </div>
+        </template>
+        <template v-else>
+          <div v-if="polygonId === 'new'" class="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
+            Сначала сохраните полигон, чтобы настроить тарифы доставки.
+          </div>
+          <template v-else>
+            <div class="space-y-2">
+              <p class="text-sm font-medium text-foreground">Стоимость доставки</p>
+              <div v-if="tariffsLoading" class="text-xs text-muted-foreground">Загрузка тарифов...</div>
+              <div v-else-if="tariffs.length === 0" class="text-sm text-muted-foreground">Тарифы не настроены.</div>
+              <div v-else class="flex flex-wrap items-center gap-2">
+                <div
+                  v-for="(tariff, index) in visibleTariffs"
+                  :key="tariff.id || index"
+                  class="rounded-full border px-3 py-1 text-xs font-semibold"
+                  :class="tariff.delivery_cost === 0 ? 'border-emerald-400 text-emerald-500' : 'border-border text-muted-foreground'"
+                >
+                  <span v-if="tariff.ellipsis">• • •</span>
+                  <span v-else>{{ tariff.delivery_cost }} ₽</span>
+                </div>
+              </div>
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <Button variant="secondary" @click="openTariffEditor">
+                <Edit :size="16" />
+                {{ tariffs.length ? "Редактировать тарифы" : "Добавить ступень" }}
+              </Button>
+              <Button v-if="tariffs.length === 0 && availableTariffSources.length" variant="outline" @click="openTariffCopy">
+                <Copy :size="16" />
+                Скопировать тарифы
+              </Button>
+            </div>
+          </template>
+        </template>
         <Button class="w-full" :disabled="!currentLayer" @click="savePolygon">
           <Save :size="16" />
           Сохранить
@@ -56,10 +95,25 @@
       </CardContent>
     </div>
   </div>
+  <DeliveryTariffEditorDialog
+    :open="tariffEditorOpen"
+    :tariffs="tariffs"
+    @close="tariffEditorOpen = false"
+    @save="saveTariffs"
+  />
+  <DeliveryTariffCopyDialog
+    :open="tariffCopyOpen"
+    :sources="availableTariffSources"
+    :preview-tariffs="tariffCopyPreview"
+    :selected-source-id="tariffCopySource"
+    @close="closeTariffCopy"
+    @select="selectTariffCopySource"
+    @confirm="confirmTariffCopy"
+  />
 </template>
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
-import { Save } from "lucide-vue-next";
+import { Copy, Edit, Save } from "lucide-vue-next";
 import { useRoute, useRouter } from "vue-router";
 import api from "@/shared/api/client.js";
 import { useReferenceStore } from "@/shared/stores/reference.js";
@@ -73,6 +127,8 @@ import CardTitle from "@/shared/components/ui/card/CardTitle.vue";
 import Input from "@/shared/components/ui/input/Input.vue";
 import PageHeader from "@/shared/components/PageHeader.vue";
 import { Field, FieldContent, FieldGroup, FieldLabel } from "@/shared/components/ui/field";
+import DeliveryTariffEditorDialog from "@/modules/delivery/components/DeliveryTariffEditorDialog.vue";
+import DeliveryTariffCopyDialog from "@/modules/delivery/components/DeliveryTariffCopyDialog.vue";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "leaflet-draw";
@@ -119,11 +175,25 @@ const cityId = computed(() => parseInt(route.query.cityId, 10));
 const form = ref({
   name: "",
   delivery_time: 30,
-  min_order_amount: 0,
-  delivery_cost: 0,
 });
 const branchPolygons = ref([]);
 const pageTitle = computed(() => (polygonId.value === "new" ? "Новый полигон" : "Редактировать полигон"));
+const activeTab = ref("general");
+const tariffs = ref([]);
+const tariffsLoading = ref(false);
+const tariffEditorOpen = ref(false);
+const tariffCopyOpen = ref(false);
+const tariffCopySource = ref("");
+const tariffCopyPreview = ref([]);
+const availableTariffSources = computed(() => {
+  if (!branchPolygons.value.length || polygonId.value === "new") return [];
+  const currentId = parseInt(polygonId.value, 10);
+  return branchPolygons.value.filter((polygon) => polygon.id !== currentId && Number(polygon.tariffs_count || 0) > 0);
+});
+const visibleTariffs = computed(() => {
+  if (!tariffs.value || tariffs.value.length <= 5) return tariffs.value || [];
+  return [...tariffs.value.slice(0, 3), { ellipsis: true }, tariffs.value[tariffs.value.length - 1]];
+});
 let map = null;
 let drawnItems = null;
 let drawControl = null;
@@ -238,10 +308,72 @@ const loadPolygon = async () => {
   form.value = {
     name: polygon.name || "",
     delivery_time: polygon.delivery_time || 30,
-    min_order_amount: polygon.min_order_amount || 0,
-    delivery_cost: polygon.delivery_cost || 0,
   };
   renderPolygon(polygon);
+  await loadTariffs();
+};
+const loadTariffs = async () => {
+  if (polygonId.value === "new") return;
+  tariffsLoading.value = true;
+  try {
+    const response = await api.get(`/api/polygons/admin/${polygonId.value}/tariffs`);
+    tariffs.value = response.data?.tariffs || [];
+  } catch (error) {
+    console.error("Ошибка загрузки тарифов:", error);
+    showErrorNotification("Не удалось загрузить тарифы");
+  } finally {
+    tariffsLoading.value = false;
+  }
+};
+const openTariffEditor = () => {
+  tariffEditorOpen.value = true;
+};
+const saveTariffs = async (payload) => {
+  try {
+    const response = await api.put(`/api/polygons/admin/${polygonId.value}/tariffs`, { tariffs: payload });
+    tariffs.value = response.data?.tariffs || [];
+    tariffEditorOpen.value = false;
+    showSuccessNotification("Тарифы сохранены");
+  } catch (error) {
+    console.error("Ошибка сохранения тарифов:", error);
+    const message = error?.response?.data?.errors?.[0] || "Ошибка сохранения тарифов";
+    showErrorNotification(message);
+  }
+};
+const openTariffCopy = () => {
+  tariffCopyOpen.value = true;
+  tariffCopySource.value = "";
+  tariffCopyPreview.value = [];
+};
+const closeTariffCopy = () => {
+  tariffCopyOpen.value = false;
+  tariffCopySource.value = "";
+  tariffCopyPreview.value = [];
+};
+const selectTariffCopySource = async (value) => {
+  tariffCopySource.value = value;
+  tariffCopyPreview.value = [];
+  if (!value) return;
+  try {
+    const response = await api.get(`/api/polygons/admin/${value}/tariffs`);
+    tariffCopyPreview.value = response.data?.tariffs || [];
+  } catch (error) {
+    console.error("Ошибка предпросмотра тарифов:", error);
+    showErrorNotification("Не удалось загрузить тарифы для копирования");
+  }
+};
+const confirmTariffCopy = async (value) => {
+  if (!value) return;
+  try {
+    const response = await api.post(`/api/polygons/admin/${polygonId.value}/tariffs/copy`, { source_polygon_id: value });
+    tariffs.value = response.data?.tariffs || [];
+    closeTariffCopy();
+    showSuccessNotification("Тарифы скопированы");
+  } catch (error) {
+    console.error("Ошибка копирования тарифов:", error);
+    const message = error?.response?.data?.error || "Не удалось скопировать тарифы";
+    showErrorNotification(message);
+  }
 };
 const startDrawing = () => {
   if (!map || !drawControl) return;
@@ -264,8 +396,6 @@ const savePolygon = async () => {
     branch_id: branchId.value,
     name: form.value.name,
     delivery_time: form.value.delivery_time,
-    min_order_amount: form.value.min_order_amount,
-    delivery_cost: form.value.delivery_cost,
     polygon: currentLayer.toGeoJSON().geometry.coordinates[0],
   };
   try {

@@ -36,6 +36,12 @@
               <span class="text-sm text-foreground">{{ editForm.is_active ? "Активен" : "Неактивен" }}</span>
             </Label>
           </div>
+          <div>
+            <p class="text-xs text-muted-foreground mb-2">Время доставки</p>
+            <Input v-model.number="editForm.delivery_time" type="number" min="0" class="max-w-[200px]" />
+            <p class="text-xs text-muted-foreground mt-1">00:{{ String(editForm.delivery_time || 0).padStart(2, "0") }}:00</p>
+          </div>
+          <Button class="w-full" variant="outline" @click="emit('redraw', polygon)"> Перерисовать </Button>
           <div v-if="isBlocked" class="rounded-lg border border-orange-200 bg-orange-50 dark:border-orange-900 dark:bg-orange-950/20 p-4">
             <p class="text-sm font-medium text-orange-900 dark:text-orange-100 mb-2">🔒 Полигон заблокирован</p>
             <p v-if="polygon?.block_reason" class="text-sm text-orange-800 dark:text-orange-200 mb-1">{{ polygon.block_reason }}</p>
@@ -43,21 +49,35 @@
           </div>
         </div>
         <div v-else-if="activeTab === 'delivery'" class="space-y-4">
-          <div>
-            <p class="text-xs text-muted-foreground mb-2">Плата за доставку</p>
-            <Input v-model.number="editForm.delivery_cost" type="number" min="0" step="10" class="max-w-[200px]" />
+          <div class="space-y-2">
+            <p class="text-xs text-muted-foreground">Стоимость доставки</p>
+            <div v-if="tariffsLoading" class="text-xs text-muted-foreground">Загрузка тарифов...</div>
+            <div v-else-if="tariffs.length === 0" class="text-xs text-muted-foreground">Тарифы не настроены.</div>
+            <div v-else class="flex flex-wrap items-center gap-2">
+              <div
+                v-for="(tariff, index) in visibleTariffs"
+                :key="tariff.id || index"
+                class="rounded-full border px-3 py-1 text-xs font-semibold"
+                :class="tariff.delivery_cost === 0 ? 'border-emerald-400 text-emerald-500' : 'border-border text-muted-foreground'"
+              >
+                <span v-if="tariff.ellipsis">• • •</span>
+                <div v-else class="flex flex-col items-center leading-tight">
+                  <span>{{ tariff.delivery_cost }} ₽</span>
+                  <span class="text-[10px] text-muted-foreground">от {{ tariff.amount_from }} ₽</span>
+                </div>
+              </div>
+            </div>
           </div>
-          <div>
-            <p class="text-xs text-muted-foreground mb-2">Дополнительное время</p>
-            <Input v-model.number="editForm.delivery_time" type="number" min="0" class="max-w-[200px]" />
-            <p class="text-xs text-muted-foreground mt-1">00:{{ String(editForm.delivery_time || 0).padStart(2, "0") }}:00</p>
+          <div class="flex flex-wrap gap-2">
+            <Button variant="secondary" class="flex-1" @click="emit('edit-tariffs', polygon)">
+              <Edit3 :size="16" />
+              {{ tariffs.length ? "Редактировать" : "Добавить" }}
+            </Button>
+            <Button v-if="tariffs.length === 0 && tariffSources.length" variant="outline" class="flex-1" @click="emit('copy-tariffs', polygon)">
+              <Copy :size="16" />
+              Скопировать
+            </Button>
           </div>
-          <div>
-            <p class="text-xs text-muted-foreground mb-2">Минимальный заказ</p>
-            <Input v-model.number="editForm.min_order_amount" type="number" min="0" step="10" class="max-w-[200px]" />
-            <p class="text-xs text-muted-foreground mt-1">Нет</p>
-          </div>
-          <Button class="w-full" variant="outline" @click="emit('redraw', polygon)"> Перерисовать </Button>
         </div>
         <div v-else class="space-y-4">
           <div class="space-y-2">
@@ -78,14 +98,12 @@
             Переключить
           </Button>
         </div>
-        <div class="pt-2">
-          <Button class="w-full" @click="saveChanges">
-            <Save :size="16" />
-            Сохранить
-          </Button>
-        </div>
       </div>
       <div class="border-t border-border p-4 space-y-2 bg-muted/30">
+        <Button class="w-full" @click="saveChanges">
+          <Save :size="16" />
+          Сохранить
+        </Button>
         <Button class="w-full" variant="outline" @click="emit(isBlocked ? 'unblock' : 'block', polygon)">
           <Unlock v-if="isBlocked" :size="16" />
           <Lock v-else :size="16" />
@@ -101,7 +119,7 @@
 </template>
 <script setup>
 import { ref, computed, watch } from "vue";
-import { Lock, Save, Trash2, Unlock, X } from "lucide-vue-next";
+import { Copy, Edit3, Lock, Save, Trash2, Unlock, X } from "lucide-vue-next";
 import Button from "@/shared/components/ui/button/Button.vue";
 import Input from "@/shared/components/ui/input/Input.vue";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/components/ui/select";
@@ -109,12 +127,21 @@ import { Label } from "@/shared/components/ui/label";
 const props = defineProps({
   isOpen: Boolean,
   polygon: Object,
+  tariffs: {
+    type: Array,
+    default: () => [],
+  },
+  tariffsLoading: Boolean,
+  tariffSources: {
+    type: Array,
+    default: () => [],
+  },
   cityBranches: {
     type: Array,
     default: () => [],
   },
 });
-const emit = defineEmits(["close", "save", "block", "unblock", "delete", "transfer", "redraw"]);
+const emit = defineEmits(["close", "save", "block", "unblock", "delete", "transfer", "redraw", "edit-tariffs", "copy-tariffs"]);
 const transferBranchId = ref("");
 const activeTab = ref("general");
 const tabs = [
@@ -123,11 +150,14 @@ const tabs = [
   { id: "transfer", label: "Переключение" },
 ];
 const editForm = ref({
-  delivery_cost: 0,
   delivery_time: 30,
-  min_order_amount: 0,
   courier_reward: 0,
   is_active: true,
+});
+const visibleTariffs = computed(() => {
+  if (!props.tariffs || props.tariffs.length <= 5) return props.tariffs || [];
+  const list = props.tariffs || [];
+  return [...list.slice(0, 3), { ellipsis: true }, list[list.length - 1]];
 });
 const isBlocked = computed(() => {
   if (!props.polygon?.is_blocked) return false;
@@ -142,13 +172,10 @@ watch(
   (newPolygon) => {
     if (newPolygon) {
       editForm.value = {
-        delivery_cost: newPolygon.delivery_cost || 0,
         delivery_time: newPolygon.delivery_time || 30,
-        min_order_amount: newPolygon.min_order_amount || 0,
         is_active: newPolygon.is_active === null || newPolygon.is_active === undefined ? true : Boolean(newPolygon.is_active),
       };
       transferBranchId.value = "";
-      activeTab.value = "general";
     }
   },
   { immediate: true },

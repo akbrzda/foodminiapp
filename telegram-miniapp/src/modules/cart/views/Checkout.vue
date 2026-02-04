@@ -135,9 +135,6 @@
           <span>Итого к оплате</span>
           <span>{{ formatPrice(finalTotalPrice) }} ₽</span>
         </div>
-        <div class="summary-info" v-if="orderType === 'delivery' && !isMinOrderReached">
-          <span class="delivery-time">Минимальная сумма заказа: {{ formatPrice(minOrderAmount) }} ₽</span>
-        </div>
       </div>
     </div>
     <div class="footer" :class="{ 'hidden-on-keyboard': isKeyboardOpen }" v-if="ordersEnabled && orderType">
@@ -160,6 +157,7 @@ import { useKeyboardHandler } from "@/shared/composables/useKeyboardHandler";
 import { citiesAPI, addressesAPI, ordersAPI, menuAPI, bonusesAPI } from "@/shared/api/endpoints.js";
 import { hapticFeedback } from "@/shared/services/telegram.js";
 import { formatPrice } from "@/shared/utils/format";
+import { calculateDeliveryCost } from "@/shared/utils/deliveryTariffs";
 const router = useRouter();
 const cartStore = useCartStore();
 const locationStore = useLocationStore();
@@ -178,7 +176,7 @@ const paymentMethod = ref("cash");
 const changeFrom = ref(null);
 const paymentError = ref("");
 const orderComment = ref("");
-const deliveryCost = ref(0);
+const deliveryTariffs = computed(() => locationStore.deliveryZone?.tariffs || []);
 const submitting = ref(false);
 const deliveryTime = ref(0);
 const minOrderAmount = ref(0);
@@ -212,9 +210,7 @@ const canSubmitOrder = computed(() => {
   }
 });
 const isMinOrderReached = computed(() => {
-  if (orderType.value !== "delivery") return true;
-  if (!minOrderAmount.value) return true;
-  return summarySubtotal.value >= minOrderAmount.value;
+  return true;
 });
 const appliedBonusToUse = computed(() => {
   if (!bonusesEnabled.value) return 0;
@@ -223,6 +219,8 @@ const appliedBonusToUse = computed(() => {
   const maxByPercent = Math.floor(cartStore.totalPrice * loyaltyStore.maxRedeemPercent);
   return Math.min(cartStore.bonusUsage.bonusToUse, maxByPercent, balanceLimit);
 });
+const effectiveSubtotal = computed(() => Math.max(0, summarySubtotal.value - appliedBonusToUse.value));
+const deliveryCost = computed(() => (orderType.value === "delivery" ? calculateDeliveryCost(deliveryTariffs.value, effectiveSubtotal.value) : 0));
 const deliveryCostForSummary = computed(() => (orderType.value === "delivery" ? deliveryCost.value : 0));
 const finalTotalPrice = computed(() => {
   const subtotal = cartStore.totalPrice;
@@ -304,13 +302,15 @@ onMounted(async () => {
         locationStore.selectedCity.id,
       );
       if (checkResponse.data?.available && checkResponse.data?.polygon) {
-        applyDeliveryZone(checkResponse.data.polygon);
-        locationStore.setDeliveryZone(checkResponse.data.polygon);
+        const zone = { ...checkResponse.data.polygon, tariffs: checkResponse.data.tariffs || [] };
+        applyDeliveryZone(zone);
+        locationStore.setDeliveryZone(zone);
       }
     } catch (error) {
       console.error("Failed to refresh delivery zone:", error);
     }
   }
+  await ensureTariffs();
   if (bonusesEnabled.value) {
     loyaltyStore.refreshFromProfile();
   }
@@ -340,7 +340,6 @@ watch(
   async (newType) => {
     if (newType === "pickup") {
       await loadBranches();
-      deliveryCost.value = 0;
       deliveryTime.value = 0;
       minOrderAmount.value = 0;
       assemblyTime.value = 0;
@@ -364,7 +363,6 @@ watch(
     if (orderType.value !== "delivery") {
       addressValidated.value = false;
       inDeliveryZone.value = false;
-      deliveryCost.value = 0;
       return;
     }
     deliveryAddress.value = locationStore.deliveryAddress || "";
@@ -410,6 +408,13 @@ watch(
     }
   },
 );
+watch(
+  () => [summarySubtotal.value, locationStore.deliveryZone],
+  async () => {
+    await ensureTariffs();
+  },
+  { deep: true },
+);
 async function refreshBonusBalance() {
   if (!bonusesEnabled.value) {
     bonusBalance.value = 0;
@@ -445,7 +450,6 @@ function selectOrderType(type) {
     }
   } else if (type === "pickup") {
     selectedBranch.value = locationStore.selectedBranch || null;
-    deliveryCost.value = 0;
     deliveryTime.value = 0;
     minOrderAmount.value = 0;
     assemblyTime.value = 0;
@@ -479,11 +483,30 @@ function applyBranchTimes(branch) {
 }
 function applyDeliveryZone(zone) {
   if (orderType.value !== "delivery") return;
-  deliveryCost.value = parseFloat(zone?.delivery_cost || 0);
   deliveryTime.value = parseInt(zone?.delivery_time || 0);
-  minOrderAmount.value = parseFloat(zone?.min_order_amount || 0);
+  minOrderAmount.value = 0;
   prepTime.value = parseInt(zone?.prep_time || 0);
   assemblyTime.value = parseInt(zone?.assembly_time || 0);
+}
+async function ensureTariffs() {
+  if (orderType.value !== "delivery") return;
+  if (!locationStore.deliveryZone || !locationStore.deliveryCoords || !locationStore.selectedCity?.id) return;
+  if (Array.isArray(locationStore.deliveryZone.tariffs) && locationStore.deliveryZone.tariffs.length > 0) return;
+  try {
+    const response = await addressesAPI.checkDeliveryZone(
+      locationStore.deliveryCoords.lat,
+      locationStore.deliveryCoords.lng,
+      locationStore.selectedCity.id,
+      summarySubtotal.value,
+    );
+    if (response.data?.available && response.data?.polygon) {
+      const zone = { ...response.data.polygon, tariffs: response.data.tariffs || [] };
+      locationStore.setDeliveryZone(zone);
+      applyDeliveryZone(zone);
+    }
+  } catch (error) {
+    console.error("Failed to refresh delivery tariffs:", error);
+  }
 }
 async function submitOrder() {
   if (!canSubmitOrder.value || submitting.value) return;

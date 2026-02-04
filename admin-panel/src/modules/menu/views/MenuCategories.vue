@@ -79,7 +79,23 @@
             <Field>
               <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Изображение</FieldLabel>
               <FieldContent>
-                <Input v-model="form.image_url" placeholder="URL изображения категории (опционально)" />
+                <div
+                  class="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border bg-muted/40 px-4 py-6 text-center text-xs text-muted-foreground"
+                  @dragover.prevent
+                  @drop.prevent="onDrop"
+                >
+                  <input ref="fileInput" type="file" accept="image/*" class="hidden" @change="onFileChange" />
+                  <Button type="button" variant="outline" size="sm" @click="triggerFile">
+                    <UploadCloud :size="16" />
+                    Загрузить изображение
+                  </Button>
+                  <span>или перетащите файл сюда</span>
+                  <span v-if="uploadState.error" class="text-xs text-red-600">{{ uploadState.error }}</span>
+                  <span v-if="uploadState.loading" class="text-xs text-muted-foreground">Загрузка...</span>
+                </div>
+                <div v-if="uploadState.preview || form.image_url" class="mt-3 flex items-center gap-3">
+                  <img :src="normalizeImageUrl(uploadState.preview || form.image_url)" class="h-16 w-16 rounded-xl object-cover" alt="preview" />
+                </div>
               </FieldContent>
             </Field>
             <FieldGroup class="grid gap-4 md:grid-cols-2">
@@ -132,7 +148,7 @@
 </template>
 <script setup>
 import { computed, onMounted, ref, watch } from "vue";
-import { Pencil, Plus, Save, Trash2 } from "lucide-vue-next";
+import { Pencil, Plus, Save, Trash2, UploadCloud } from "lucide-vue-next";
 import api from "@/shared/api/client.js";
 import Badge from "@/shared/components/ui/badge/Badge.vue";
 import Button from "@/shared/components/ui/button/Button.vue";
@@ -152,7 +168,7 @@ import Textarea from "@/shared/components/ui/textarea/Textarea.vue";
 import { Field, FieldContent, FieldGroup, FieldLabel } from "@/shared/components/ui/field";
 import { Label } from "@/shared/components/ui/label";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
-import { formatNumber, normalizeBoolean } from "@/shared/utils/format.js";
+import { formatNumber, normalizeBoolean, normalizeImageUrl } from "@/shared/utils/format.js";
 import { useReferenceStore } from "@/shared/stores/reference.js";
 import { useOrdersStore } from "@/modules/orders/stores/orders.js";
 const referenceStore = useReferenceStore();
@@ -162,6 +178,8 @@ const categories = ref([]);
 const showModal = ref(false);
 const editing = ref(null);
 const saving = ref(false);
+const fileInput = ref(null);
+const uploadState = ref({ loading: false, error: null, preview: null });
 const form = ref({
   name: "",
   description: "",
@@ -194,6 +212,7 @@ const loadCategories = async () => {
 };
 const openModal = async (category = null) => {
   editing.value = category;
+  uploadState.value = { loading: false, error: null, preview: null };
   form.value = category
     ? {
         name: category.name,
@@ -225,6 +244,46 @@ const openModal = async (category = null) => {
 };
 const closeModal = () => {
   showModal.value = false;
+};
+const triggerFile = () => {
+  fileInput.value?.click();
+};
+const onDrop = (event) => {
+  const file = event.dataTransfer?.files?.[0];
+  if (file) {
+    handleFile(file);
+  }
+};
+const onFileChange = (event) => {
+  const file = event.target.files?.[0];
+  if (file) {
+    handleFile(file);
+  }
+};
+const handleFile = async (file) => {
+  if (!file.type.startsWith("image/")) {
+    uploadState.value.error = "Только изображения";
+    return;
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    uploadState.value.error = "Файл больше 10MB";
+    return;
+  }
+  uploadState.value = { loading: true, error: null, preview: URL.createObjectURL(file) };
+  try {
+    const categoryId = editing.value?.id || "temp";
+    const formData = new FormData();
+    formData.append("image", file);
+    const response = await api.post(`/api/uploads/menu-categories/${categoryId}`, formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+    const uploadedUrl = response.data?.data?.url || "";
+    form.value.image_url = uploadedUrl;
+    uploadState.value = { loading: false, error: null, preview: uploadedUrl };
+  } catch (error) {
+    console.error("Failed to upload category image:", error);
+    uploadState.value = { loading: false, error: "Ошибка загрузки", preview: null };
+  }
 };
 const submitCategory = async () => {
   saving.value = true;

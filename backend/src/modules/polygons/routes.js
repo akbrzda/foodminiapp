@@ -3,6 +3,7 @@ import db from "../../config/database.js";
 import { authenticateToken, requireRole, checkCityAccess } from "../../middleware/auth.js";
 import redis from "../../config/redis.js";
 import axios from "axios";
+import { findTariffForAmount, getNextThreshold, validateTariffs } from "./utils/deliveryTariffs.js";
 const router = express.Router();
 const parseGeoJson = (value) => {
   if (!value) return null;
@@ -16,6 +17,32 @@ const parseGeoJson = (value) => {
   }
   return value;
 };
+const getPolygonMeta = async (polygonId) => {
+  const [rows] = await db.query(
+    `SELECT dp.id, dp.branch_id, b.city_id
+     FROM delivery_polygons dp
+     JOIN branches b ON dp.branch_id = b.id
+     WHERE dp.id = ?`,
+    [polygonId],
+  );
+  return rows[0] || null;
+};
+const getTariffsByPolygonId = async (polygonId) => {
+  const [rows] = await db.query(
+    `SELECT id, polygon_id, amount_from, amount_to, delivery_cost
+     FROM delivery_tariffs
+     WHERE polygon_id = ?
+     ORDER BY amount_from`,
+    [polygonId],
+  );
+  return (rows || []).map((row) => ({
+    id: row.id,
+    polygon_id: row.polygon_id,
+    amount_from: row.amount_from,
+    amount_to: row.amount_to === null ? null : Number(row.amount_to),
+    delivery_cost: row.delivery_cost,
+  }));
+};
 router.get("/city/:cityId", async (req, res, next) => {
   try {
     const cityId = req.params.cityId;
@@ -24,7 +51,8 @@ router.get("/city/:cityId", async (req, res, next) => {
               ST_AsGeoJSON(dp.polygon) as polygon,
               dp.delivery_time,
               dp.min_order_amount, dp.delivery_cost,
-              b.name as branch_name
+              b.name as branch_name,
+              (SELECT COUNT(*) FROM delivery_tariffs dt WHERE dt.polygon_id = dp.id) as tariffs_count
        FROM delivery_polygons dp
        JOIN branches b ON dp.branch_id = b.id
        WHERE b.city_id = ? AND dp.is_active = TRUE AND b.is_active = TRUE
@@ -49,7 +77,8 @@ router.get("/branch/:branchId", async (req, res, next) => {
       `SELECT id, branch_id, name, 
               ST_AsGeoJSON(polygon) as polygon,
               delivery_time,
-              min_order_amount, delivery_cost
+              min_order_amount, delivery_cost,
+              (SELECT COUNT(*) FROM delivery_tariffs dt WHERE dt.polygon_id = delivery_polygons.id) as tariffs_count
        FROM delivery_polygons
        WHERE branch_id = ? AND is_active = TRUE
          AND (is_blocked = FALSE OR 
@@ -260,7 +289,7 @@ router.post("/reverse", async (req, res, next) => {
 });
 router.post("/check-delivery", async (req, res, next) => {
   try {
-    const { latitude, longitude, city_id } = req.body;
+    const { latitude, longitude, city_id, cart_amount } = req.body;
     const lat = Number(latitude);
     const lon = Number(longitude);
     const cityId = Number(city_id);
@@ -286,7 +315,7 @@ router.post("/check-delivery", async (req, res, next) => {
                 (dp.blocked_from IS NOT NULL AND dp.blocked_until IS NOT NULL 
                  AND NOW() NOT BETWEEN dp.blocked_from AND dp.blocked_until))
            AND ST_Contains(dp.polygon, ST_GeomFromText(?, 4326))
-         ORDER BY dp.delivery_cost, dp.delivery_time
+         ORDER BY dp.delivery_time, dp.id
          LIMIT 1`,
         [cityId, point],
       );
@@ -304,10 +333,37 @@ router.post("/check-delivery", async (req, res, next) => {
         message: "Delivery is not available to this address",
       });
     }
+    const [tariffsRows] = await db.query(
+      `SELECT id, polygon_id, amount_from, amount_to, delivery_cost
+       FROM delivery_tariffs
+       WHERE polygon_id = ?
+       ORDER BY amount_from`,
+      [polygon.id],
+    );
+    const tariffs = (tariffsRows || []).map((row) => ({
+      id: row.id,
+      polygon_id: row.polygon_id,
+      amount_from: row.amount_from,
+      amount_to: row.amount_to === null ? null : Number(row.amount_to),
+      delivery_cost: row.delivery_cost,
+    }));
+    if (tariffs.length === 0) {
+      return res.json({
+        available: false,
+        message: "Тарифы доставки не настроены",
+      });
+    }
+    const cartAmountValue = Number.isFinite(Number(cart_amount)) ? Number(cart_amount) : null;
+    const currentTariff = cartAmountValue === null ? null : findTariffForAmount(tariffs, cartAmountValue);
+    const deliveryCost = currentTariff ? currentTariff.delivery_cost : null;
+    const nextThreshold = currentTariff ? getNextThreshold(tariffs, cartAmountValue) : null;
     res.json({
       available: true,
       polygon,
       coords_swapped: coordsSwapped,
+      tariffs,
+      delivery_cost: deliveryCost,
+      next_threshold: nextThreshold,
     });
   } catch (error) {
     next(error);
@@ -331,7 +387,8 @@ router.get("/admin/all", authenticateToken, requireRole("admin", "manager", "ceo
               dp.delivery_time,
               dp.min_order_amount, dp.delivery_cost, dp.is_active,
               dp.is_blocked, dp.blocked_from, dp.blocked_until, dp.block_reason,
-              b.city_id, b.name as branch_name
+              b.city_id, b.name as branch_name,
+              (SELECT COUNT(*) FROM delivery_tariffs dt WHERE dt.polygon_id = dp.id) as tariffs_count
        FROM delivery_polygons dp
        JOIN branches b ON dp.branch_id = b.id
        ${cityFilter}
@@ -365,7 +422,8 @@ router.get("/admin/branch/:branchId", authenticateToken, requireRole("admin", "m
                 delivery_time,
                 min_order_amount, delivery_cost, is_active,
                 is_blocked, blocked_from, blocked_until, block_reason,
-                created_at, updated_at
+                created_at, updated_at,
+                (SELECT COUNT(*) FROM delivery_tariffs dt WHERE dt.polygon_id = delivery_polygons.id) as tariffs_count
          FROM delivery_polygons
          WHERE branch_id = ?
          ORDER BY name`,
@@ -380,9 +438,107 @@ router.get("/admin/branch/:branchId", authenticateToken, requireRole("admin", "m
     next(error);
   }
 });
+router.get("/admin/:id/tariffs", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
+  try {
+    const polygonId = req.params.id;
+    const meta = await getPolygonMeta(polygonId);
+    if (!meta) {
+      return res.status(404).json({ error: "Polygon not found" });
+    }
+    if (req.user.role === "manager" && !req.user.cities.includes(meta.city_id)) {
+      return res.status(403).json({ error: "You do not have access to this city" });
+    }
+    const tariffs = await getTariffsByPolygonId(polygonId);
+    res.json({ tariffs });
+  } catch (error) {
+    next(error);
+  }
+});
+router.put("/admin/:id/tariffs", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
+  const connection = await db.getConnection();
+  try {
+    const polygonId = req.params.id;
+    const meta = await getPolygonMeta(polygonId);
+    if (!meta) {
+      return res.status(404).json({ error: "Polygon not found" });
+    }
+    if (req.user.role === "manager" && !req.user.cities.includes(meta.city_id)) {
+      return res.status(403).json({ error: "You do not have access to this city" });
+    }
+    const { tariffs = [] } = req.body;
+    const { valid, errors, normalized } = validateTariffs(tariffs);
+    if (!valid) {
+      return res.status(400).json({ error: "Validation error", errors });
+    }
+    await connection.beginTransaction();
+    await connection.query("DELETE FROM delivery_tariffs WHERE polygon_id = ?", [polygonId]);
+    for (const tariff of normalized) {
+      await connection.query(
+        `INSERT INTO delivery_tariffs (polygon_id, amount_from, amount_to, delivery_cost)
+         VALUES (?, ?, ?, ?)`,
+        [polygonId, tariff.amount_from, tariff.amount_to, tariff.delivery_cost],
+      );
+    }
+    await connection.commit();
+    const saved = await getTariffsByPolygonId(polygonId);
+    res.json({ tariffs: saved });
+  } catch (error) {
+    await connection.rollback();
+    next(error);
+  } finally {
+    connection.release();
+  }
+});
+router.post("/admin/:id/tariffs/copy", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
+  const connection = await db.getConnection();
+  try {
+    const polygonId = req.params.id;
+    const sourcePolygonId = Number(req.body?.source_polygon_id);
+    if (!Number.isFinite(sourcePolygonId)) {
+      return res.status(400).json({ error: "source_polygon_id is required" });
+    }
+    const targetMeta = await getPolygonMeta(polygonId);
+    const sourceMeta = await getPolygonMeta(sourcePolygonId);
+    if (!targetMeta || !sourceMeta) {
+      return res.status(404).json({ error: "Polygon not found" });
+    }
+    if (req.user.role === "manager") {
+      if (!req.user.cities.includes(targetMeta.city_id) || !req.user.cities.includes(sourceMeta.city_id)) {
+        return res.status(403).json({ error: "You do not have access to this city" });
+      }
+    }
+    if (targetMeta.branch_id !== sourceMeta.branch_id) {
+      return res.status(400).json({ error: "Полигон-источник должен быть в том же филиале" });
+    }
+    const [targetCountRows] = await connection.query("SELECT COUNT(*) as count FROM delivery_tariffs WHERE polygon_id = ?", [polygonId]);
+    if ((targetCountRows[0]?.count || 0) > 0) {
+      return res.status(400).json({ error: "У целевого полигона уже есть тарифы" });
+    }
+    const sourceTariffs = await getTariffsByPolygonId(sourcePolygonId);
+    if (sourceTariffs.length === 0) {
+      return res.status(400).json({ error: "У полигона-источника нет тарифов" });
+    }
+    await connection.beginTransaction();
+    for (const tariff of sourceTariffs) {
+      await connection.query(
+        `INSERT INTO delivery_tariffs (polygon_id, amount_from, amount_to, delivery_cost)
+         VALUES (?, ?, ?, ?)`,
+        [polygonId, tariff.amount_from, tariff.amount_to, tariff.delivery_cost],
+      );
+    }
+    await connection.commit();
+    const saved = await getTariffsByPolygonId(polygonId);
+    res.json({ tariffs: saved });
+  } catch (error) {
+    await connection.rollback();
+    next(error);
+  } finally {
+    connection.release();
+  }
+});
 router.post("/admin", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
   try {
-    const { branch_id, name, polygon, delivery_time, min_order_amount, delivery_cost } = req.body;
+    const { branch_id, name, polygon, delivery_time } = req.body;
     if (!branch_id || !polygon) {
       return res.status(400).json({
         error: "branch_id and polygon are required",
@@ -403,13 +559,15 @@ router.post("/admin", authenticateToken, requireRole("admin", "manager", "ceo"),
       });
     }
     const coordinates = polygon.map((coord) => `${coord[0]} ${coord[1]}`).join(", ");
+    const safeMinOrderAmount = 0;
+    const safeDeliveryCost = 0;
     const wkt = `POLYGON((${coordinates}))`;
     const [result] = await db.query(
       `INSERT INTO delivery_polygons 
          (branch_id, name, polygon, delivery_time, 
           min_order_amount, delivery_cost)
          VALUES (?, ?, ST_GeomFromText(?, 4326), ?, ?, ?)`,
-      [branch_id, name || null, wkt, delivery_time || 30, min_order_amount || 0, delivery_cost || 0],
+      [branch_id, name || null, wkt, delivery_time || 30, safeMinOrderAmount, safeDeliveryCost],
     );
     const [newPolygon] = await db.query(
       `SELECT id, branch_id, name, 
@@ -472,11 +630,11 @@ router.put("/admin/:id", authenticateToken, requireRole("admin", "manager", "ceo
     }
     if (min_order_amount !== undefined) {
       updates.push("min_order_amount = ?");
-      values.push(min_order_amount);
+      values.push(0);
     }
     if (delivery_cost !== undefined) {
       updates.push("delivery_cost = ?");
-      values.push(delivery_cost);
+      values.push(0);
     }
     if (is_active !== undefined) {
       updates.push("is_active = ?");

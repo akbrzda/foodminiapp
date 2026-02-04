@@ -7,6 +7,9 @@
     <div v-else class="cart-content">
       <div class="items">
         <div v-for="(item, index) in cartStore.items" :key="index" class="cart-item">
+          <div class="item-media" v-if="item.image_url">
+            <img :src="normalizeImageUrl(item.image_url)" :alt="item.name" />
+          </div>
           <div class="item-info">
             <h3>{{ item.name }}</h3>
             <div class="variant" v-if="item.variant_name">
@@ -15,8 +18,8 @@
             <div class="weight" v-if="getItemWeight(item)">
               <span class="weight-text">{{ getItemWeight(item) }}</span>
             </div>
-            <div class="modifiers" v-if="item.modifiers?.length">
-              <div v-for="mod in item.modifiers" :key="`${mod.id}-${mod.group_id}`" class="modifier">+ {{ mod.name }}</div>
+            <div class="modifiers" v-if="getModifierSummary(item).length">
+              <div class="modifier">{{ getModifierSummary(item).join(", ") }}</div>
             </div>
             <div class="price">{{ getItemTotalPrice(item) }} ₽</div>
           </div>
@@ -64,6 +67,22 @@
         </div>
         <div class="summary-warning" v-if="isDelivery && !isMinOrderReached">Минимальная сумма заказа: {{ formatPrice(minOrderAmount) }} ₽</div>
       </div>
+      <div class="delivery-tariff-widget" v-if="isDelivery && deliveryTariffs.length >= 2">
+        <div class="tariff-title">Стоимость доставки</div>
+        <div v-if="deliveryCost === 0" class="tariff-subtitle">У вас бесплатная доставка</div>
+        <div v-else class="tariff-subtitle">Еще {{ formatPrice(nextThreshold?.delta || 0) }} ₽ к заказу для понижения стоимости доставки</div>
+        <div class="tariff-pills">
+          <div
+            v-for="(tariff, index) in normalizedTariffs"
+            :key="index"
+            class="tariff-pill"
+            :class="{ free: tariff.delivery_cost === 0, current: isCurrentTariff(tariff) }"
+          >
+            <span>{{ formatPrice(tariff.delivery_cost) }} ₽</span>
+            <span v-if="isCurrentTariff(tariff)" class="tariff-current">сейчас</span>
+          </div>
+        </div>
+      </div>
       <button class="checkout-btn" :class="{ 'hidden-on-keyboard': isKeyboardOpen }" @click="checkout" :disabled="isDelivery && !isMinOrderReached">
         Перейти к оформлению
       </button>
@@ -91,7 +110,7 @@
 </template>
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
-import { X, Info } from "lucide-vue-next";
+import { X } from "lucide-vue-next";
 import { useRouter } from "vue-router";
 import { useCartStore } from "@/modules/cart/stores/cart.js";
 import { useLoyaltyStore } from "@/modules/loyalty/stores/loyalty.js";
@@ -100,7 +119,8 @@ import { useSettingsStore } from "@/modules/settings/stores/settings.js";
 import { useKeyboardHandler } from "@/shared/composables/useKeyboardHandler";
 import { hapticFeedback } from "@/shared/services/telegram.js";
 import { bonusesAPI, addressesAPI } from "@/shared/api/endpoints.js";
-import { formatPrice } from "@/shared/utils/format";
+import { formatPrice, normalizeImageUrl } from "@/shared/utils/format";
+import { calculateDeliveryCost, getThresholds, normalizeTariffs, findTariffForAmount } from "@/shared/utils/deliveryTariffs";
 const router = useRouter();
 const cartStore = useCartStore();
 const locationStore = useLocationStore();
@@ -149,19 +169,26 @@ const finalCartTotal = computed(() => {
 });
 const maxRedeemPercentLabel = computed(() => Math.round(loyaltyStore.maxRedeemPercent * 100));
 const isDelivery = computed(() => locationStore.deliveryType === "delivery");
+const deliveryTariffs = computed(() => locationStore.deliveryZone?.tariffs || []);
+const effectiveSubtotal = computed(() => Math.max(0, cartStore.totalPrice - appliedBonusToUse.value));
 const deliveryCost = computed(() => {
   if (!isDelivery.value) return 0;
-  return parseFloat(locationStore.deliveryZone?.delivery_cost || 0);
+  return calculateDeliveryCost(deliveryTariffs.value, effectiveSubtotal.value);
 });
-const minOrderAmount = computed(() => {
-  if (!isDelivery.value) return 0;
-  return parseFloat(locationStore.deliveryZone?.min_order_amount || 0);
-});
-const isMinOrderReached = computed(() => {
-  if (!isDelivery.value) return true;
-  if (!minOrderAmount.value) return true;
-  return cartStore.totalPrice >= minOrderAmount.value;
-});
+const minOrderAmount = computed(() => 0);
+const isMinOrderReached = computed(() => true);
+const thresholds = computed(() => getThresholds(deliveryTariffs.value, effectiveSubtotal.value));
+const nextThreshold = computed(() => (thresholds.value.length > 0 ? thresholds.value[0] : null));
+const normalizedTariffs = computed(() => normalizeTariffs(deliveryTariffs.value));
+const currentTariff = computed(() => findTariffForAmount(deliveryTariffs.value, effectiveSubtotal.value));
+const isCurrentTariff = (tariff) => {
+  if (!tariff || !currentTariff.value) return false;
+  const current = currentTariff.value;
+  const currentTo = current.amount_to ?? null;
+  const targetTo = tariff.amount_to ?? null;
+  return current.amount_from === tariff.amount_from && currentTo === targetTo && current.delivery_cost === tariff.delivery_cost;
+};
+const bonusChangeRequested = ref(false);
 onMounted(async () => {
   await loadBonusBalance();
   // Обновляем баланс при возвращении в приложение, чтобы не использовать старые данные
@@ -174,12 +201,14 @@ onMounted(async () => {
         locationStore.selectedCity.id,
       );
       if (checkResponse.data?.available && checkResponse.data?.polygon) {
-        locationStore.setDeliveryZone(checkResponse.data.polygon);
+        const zone = { ...checkResponse.data.polygon, tariffs: checkResponse.data.tariffs || [] };
+        locationStore.setDeliveryZone(zone);
       }
     } catch (error) {
       console.error("Failed to load delivery zone in cart:", error);
     }
   }
+  await ensureTariffs();
 });
 onUnmounted(() => {
   document.removeEventListener("visibilitychange", handleVisibilityChange);
@@ -248,6 +277,32 @@ function formatWeightValue(value, unit) {
   if (!unitLabel) return "";
   return `${formatPrice(parsedValue)} ${unitLabel}`;
 }
+function getModifierSummary(item) {
+  if (!item || !Array.isArray(item.modifiers)) return [];
+  // Группируем одинаковые допы, чтобы показывать их одной строкой с количеством.
+  const grouped = new Map();
+  for (const mod of item.modifiers) {
+    if (!mod || typeof mod !== "object") continue;
+    const id = mod.id ?? mod.modifier_id ?? mod.old_modifier_id ?? mod.name ?? "modifier";
+    const key = [id, mod.group_id ?? "", mod.weight_value ?? "", mod.weight_unit ?? ""].join("|");
+    const prev = grouped.get(key);
+    if (prev) {
+      prev.count += 1;
+      continue;
+    }
+    grouped.set(key, {
+      name: mod.name || "Доп",
+      count: 1,
+      weight_value: mod.weight_value ?? mod.weight ?? null,
+      weight_unit: mod.weight_unit ?? null,
+    });
+  }
+  return Array.from(grouped.values()).map((entry) => {
+    const weightLabel = formatWeightValue(entry.weight_value, entry.weight_unit);
+    const label = weightLabel ? `${entry.name} ${weightLabel}` : entry.name;
+    return `${label} (х${entry.count})`;
+  });
+}
 function getItemWeight(item) {
   if (!item) return "";
   const valueWeight = formatWeightValue(item.weight_value, item.weight_unit);
@@ -260,6 +315,7 @@ function toggleBonusInfo() {
 function enableBonusUsage() {
   if (maxBonusToUse.value === 0) return;
   hapticFeedback("light");
+  bonusChangeRequested.value = true;
   useBonuses.value = true;
   partialBonusInput.value = String(appliedBonusToUse.value || maxBonusToUse.value);
   showPartialModal.value = true;
@@ -278,6 +334,7 @@ function applyPreset(multiplier) {
 }
 function confirmPartialBonus() {
   const value = normalizePartialValue(partialBonusInput.value);
+  bonusChangeRequested.value = true;
   useBonuses.value = value > 0;
   bonusToUse.value = value;
   showPartialModal.value = false;
@@ -325,6 +382,7 @@ async function loadMaxUsable() {
   }
 }
 function onBonusToggle() {
+  bonusChangeRequested.value = true;
   if (!useBonuses.value) {
     bonusToUse.value = 0;
     showPartialModal.value = false;
@@ -332,6 +390,25 @@ function onBonusToggle() {
   }
   if (maxBonusToUse.value > 0) {
     bonusToUse.value = maxBonusToUse.value;
+  }
+}
+async function ensureTariffs() {
+  if (!isDelivery.value) return;
+  if (!locationStore.deliveryZone || !locationStore.deliveryCoords || !locationStore.selectedCity?.id) return;
+  if (Array.isArray(locationStore.deliveryZone.tariffs) && locationStore.deliveryZone.tariffs.length > 0) return;
+  try {
+    const response = await addressesAPI.checkDeliveryZone(
+      locationStore.deliveryCoords.lat,
+      locationStore.deliveryCoords.lng,
+      locationStore.selectedCity.id,
+      cartStore.totalPrice,
+    );
+    if (response.data?.available && response.data?.polygon) {
+      const zone = { ...response.data.polygon, tariffs: response.data.tariffs || [] };
+      locationStore.setDeliveryZone(zone);
+    }
+  } catch (error) {
+    console.error("Failed to refresh delivery tariffs:", error);
   }
 }
 watch(
@@ -360,6 +437,18 @@ watch(
     showPartialModal.value = false;
   },
 );
+watch(
+  () => appliedBonusToUse.value,
+  (nextValue, prevValue) => {
+    if (!bonusChangeRequested.value || !isDelivery.value) return;
+    const beforeCost = calculateDeliveryCost(deliveryTariffs.value, Math.max(0, cartStore.totalPrice - prevValue));
+    const afterCost = calculateDeliveryCost(deliveryTariffs.value, Math.max(0, cartStore.totalPrice - nextValue));
+    if (afterCost > beforeCost) {
+      alert(`Внимание! После списания бонусов стоимость доставки изменится с ${beforeCost} ₽ на ${afterCost} ₽`);
+    }
+    bonusChangeRequested.value = false;
+  },
+);
 
 watch(
   () => [cartStore.items.length, cartStore.totalPrice, deliveryCost.value],
@@ -367,6 +456,7 @@ watch(
     if (bonusesEnabled.value && cartStore.items.length > 0) {
       await loadMaxUsable();
     }
+    await ensureTariffs();
   },
   { deep: true },
 );
@@ -389,16 +479,35 @@ watch(
   padding: 16px 12px 100px;
 }
 .items {
-  margin-bottom: 16px;
+  margin-bottom: 8px;
 }
 .cart-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px;
+  padding: 8px;
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius-md);
   margin-bottom: 12px;
+  gap: 12px;
+}
+.item-media {
+  width: 64px;
+  height: 64px;
+  flex-shrink: 0;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.item-media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 .item-info {
   flex: 1;
@@ -410,9 +519,6 @@ watch(
   margin-bottom: 4px;
 }
 .modifiers {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
   margin-top: 4px;
 }
 .variant {
@@ -434,8 +540,7 @@ watch(
 .modifier {
   font-size: var(--font-size-small);
   color: var(--color-text-secondary);
-  padding: 2px 8px;
-  border-radius: var(--border-radius-sm);
+  line-height: 1.3;
 }
 .price {
   font-weight: var(--font-weight-semibold);
@@ -470,10 +575,10 @@ watch(
   color: var(--color-text-primary);
 }
 .summary {
-  padding: 16px;
+  padding: 8px;
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius-md);
-  margin-bottom: 16px;
+  margin-bottom: 8px;
 }
 .summary-row {
   display: flex;
@@ -499,8 +604,8 @@ watch(
   margin-top: 8px;
 }
 .bonus-section {
-  margin-bottom: 16px;
-  padding: 16px;
+  margin-bottom: 8px;
+  padding: 8px;
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius-md);
   background: var(--color-background);
@@ -707,6 +812,57 @@ watch(
   font-size: var(--font-size-h3);
   font-weight: var(--font-weight-semibold);
   cursor: pointer;
+}
+.delivery-tariff-widget {
+  margin: 8px 0 8px;
+  padding: 16px 12px;
+  border-radius: 18px;
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  text-align: center;
+}
+.tariff-title {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--color-text-primary);
+  margin-bottom: 4px;
+}
+.tariff-subtitle {
+  font-size: 14px;
+  color: var(--color-text-secondary);
+  margin-bottom: 16px;
+}
+.tariff-pills {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.tariff-pill {
+  min-width: 86px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  font-weight: 700;
+  background: var(--color-background);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: center;
+}
+.tariff-pill.current {
+  border-color: var(--color-success);
+  background: var(--color-success);
+  color: #ffffff;
+}
+.tariff-pill.free {
+  color: var(--color-text-secondary);
+}
+.tariff-current {
+  font-size: 11px;
+  font-weight: 600;
 }
 .checkout-btn {
   width: 100%;

@@ -80,34 +80,7 @@ async function initMap() {
   const center = getCityCenter();
   mapInstance = L.map(mapContainerRef.value, { zoomControl: false, attributionControl: false }).setView(center, 12);
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(mapInstance);
-  await loadDeliveryPolygons(L);
   setMarkers(L);
-}
-async function loadDeliveryPolygons(L) {
-  if (!locationStore.selectedCity?.id) return;
-  try {
-    const response = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3000"}/api/polygons/city/${locationStore.selectedCity.id}`);
-    if (!response.ok) return;
-    const data = await response.json();
-    if (!data.polygons || !data.polygons.length) return;
-    data.polygons.forEach((polygon) => {
-      if (polygon.polygon && polygon.polygon.coordinates) {
-        const coords = polygon.polygon.coordinates[0].map((coord) => [coord[0], coord[1]]);
-        L.polygon(coords, {
-          color: "#10b981",
-          fillColor: "#10b981",
-          fillOpacity: 0.1,
-          weight: 2,
-        }).addTo(mapInstance).bindPopup(`
-          <b>${polygon.branch_name}</b><br>
-          Доставка: ${polygon.delivery_time} мин<br>
-          Стоимость: ${polygon.delivery_cost}₽
-        `);
-      }
-    });
-  } catch (error) {
-    console.error("Failed to load delivery polygons:", error);
-  }
 }
 function setMarkers(L) {
   markers.forEach((marker) => marker.remove());

@@ -139,7 +139,6 @@
             </div>
             <div v-if="uploadState.preview || form.content_image_url" class="mt-3 flex flex-wrap items-center gap-3">
               <img :src="uploadState.preview || form.content_image_url" class="h-16 w-16 rounded-xl object-cover" alt="preview" />
-              <Input v-model="form.content_image_url" class="text-xs md:max-w-md" readonly />
               <Button type="button" variant="ghost" size="icon" @click="clearImage">
                 <Trash2 :size="16" class="text-red-600" />
               </Button>

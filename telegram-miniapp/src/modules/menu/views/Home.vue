@@ -162,6 +162,7 @@ import { hapticFeedback } from "@/shared/services/telegram.js";
 import { wsService } from "@/shared/services/websocket.js";
 import AppHeader from "@/shared/components/AppHeader.vue";
 import { formatPrice, normalizeImageUrl } from "@/shared/utils/format";
+import { calculateDeliveryCost } from "@/shared/utils/deliveryTariffs";
 const router = useRouter();
 const route = useRoute();
 const authStore = useAuthStore();
@@ -353,7 +354,8 @@ function resolveDeliveryType() {
 }
 const deliveryCost = computed(() => {
   if (locationStore.deliveryType !== "delivery") return 0;
-  return parseFloat(locationStore.deliveryZone?.delivery_cost || 0);
+  const tariffs = locationStore.deliveryZone?.tariffs || [];
+  return calculateDeliveryCost(tariffs, cartStore.totalPrice);
 });
 const cartTotalWithDelivery = computed(() => {
   return cartStore.totalPrice + deliveryCost.value;

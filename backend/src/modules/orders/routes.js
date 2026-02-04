@@ -16,7 +16,34 @@ import {
 import { logger, adminActionLogger } from "../../utils/logger.js";
 import { addTelegramNotification } from "../../queues/config.js";
 import { getSystemSettings } from "../../utils/settings.js";
+import { findTariffForAmount } from "../polygons/utils/deliveryTariffs.js";
 const router = express.Router();
+
+const getTariffsByPolygonId = async (polygonId) => {
+  const [rows] = await db.query(
+    `SELECT id, polygon_id, amount_from, amount_to, delivery_cost
+     FROM delivery_tariffs
+     WHERE polygon_id = ?
+     ORDER BY amount_from`,
+    [polygonId],
+  );
+  return (rows || []).map((row) => ({
+    id: row.id,
+    polygon_id: row.polygon_id,
+    amount_from: row.amount_from,
+    amount_to: row.amount_to === null ? null : Number(row.amount_to),
+    delivery_cost: row.delivery_cost,
+  }));
+};
+
+const resolveDeliveryCost = async (polygonId, amount) => {
+  const tariffs = await getTariffsByPolygonId(polygonId);
+  if (tariffs.length === 0) {
+    return { deliveryCost: null, tariffs: [] };
+  }
+  const tariff = findTariffForAmount(tariffs, amount);
+  return { deliveryCost: tariff ? tariff.delivery_cost : null, tariffs };
+};
 
 const getTimeZoneOffset = (date, timeZone) => {
   const formatter = new Intl.DateTimeFormat("en-US", {
@@ -261,7 +288,7 @@ async function calculateOrderCost(items, { cityId, fulfillmentType, bonusToUse =
 }
 router.post("/calculate", authenticateToken, async (req, res, next) => {
   try {
-    const { items, bonus_to_use = 0, delivery_cost = 0, order_type, delivery_polygon_id, city_id, timezone_offset } = req.body;
+    const { items, bonus_to_use = 0, order_type, delivery_polygon_id, city_id, timezone_offset } = req.body;
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: "Items are required" });
     }
@@ -285,14 +312,14 @@ router.post("/calculate", authenticateToken, async (req, res, next) => {
       fulfillmentType,
       bonusToUse: effectiveBonusToUse,
     });
+    let deliveryCost = 0;
     if (orderType === "delivery" && delivery_polygon_id) {
-      const [polygons] = await db.query("SELECT min_order_amount FROM delivery_polygons WHERE id = ?", [delivery_polygon_id]);
-      const minOrderAmount = parseFloat(polygons[0]?.min_order_amount) || 0;
-      if (minOrderAmount > 0 && subtotal < minOrderAmount) {
-        return res.status(400).json({
-          error: `Minimum order amount is ${minOrderAmount}`,
-        });
+      const amountForTariff = Math.floor(total);
+      const { deliveryCost: resolvedCost } = await resolveDeliveryCost(delivery_polygon_id, amountForTariff);
+      if (resolvedCost === null) {
+        return res.status(400).json({ error: "Тарифы доставки не настроены" });
       }
+      deliveryCost = resolvedCost;
     }
     if (settings.bonuses_enabled && effectiveBonusToUse > 0) {
       const bonusValidation = await validateBonusUsage(req.user.id, effectiveBonusToUse, subtotal, maxUsePercent);
@@ -300,7 +327,7 @@ router.post("/calculate", authenticateToken, async (req, res, next) => {
         return res.status(400).json({ error: bonusValidation.error });
       }
     }
-    const finalTotal = total + parseFloat(delivery_cost);
+    const finalTotal = total + parseFloat(deliveryCost);
     let earnedBonuses = 0;
     if (settings.bonuses_enabled) {
       const baseAmount = subtotal - bonusUsed;
@@ -308,7 +335,7 @@ router.post("/calculate", authenticateToken, async (req, res, next) => {
     }
     res.json({
       subtotal,
-      delivery_cost: parseFloat(delivery_cost),
+      delivery_cost: parseFloat(deliveryCost),
       bonus_spent: bonusUsed,
       total: finalTotal,
       bonuses_to_earn: earnedBonuses,
@@ -456,7 +483,7 @@ router.post("/", authenticateToken, async (req, res, next) => {
             error: "Delivery is not available to this address",
           });
         }
-        deliveryCost = parseFloat(deliveryPolygon.delivery_cost) || 0;
+        deliveryCost = 0;
       } catch (geoError) {
         console.error("Geocoding error:", geoError);
       }
@@ -468,21 +495,21 @@ router.post("/", authenticateToken, async (req, res, next) => {
       fulfillmentType,
       bonusToUse: effectiveBonusToUse,
     });
-    if (order_type === "delivery" && deliveryPolygon) {
-      const minOrderAmount = parseFloat(deliveryPolygon.min_order_amount) || 0;
-      if (minOrderAmount > 0 && subtotal < minOrderAmount) {
-        await connection.rollback();
-        return res.status(400).json({
-          error: `Minimum order amount is ${minOrderAmount}`,
-        });
-      }
-    }
     if (settings.bonuses_enabled && effectiveBonusToUse > 0) {
       const bonusValidation = await validateBonusUsage(req.user.id, effectiveBonusToUse, subtotal, maxUsePercent);
       if (!bonusValidation.valid) {
         await connection.rollback();
         return res.status(400).json({ error: bonusValidation.error });
       }
+    }
+    if (order_type === "delivery" && deliveryPolygon) {
+      const amountForTariff = Math.floor(total);
+      const { deliveryCost: resolvedCost } = await resolveDeliveryCost(deliveryPolygon.id, amountForTariff);
+      if (resolvedCost === null) {
+        await connection.rollback();
+        return res.status(400).json({ error: "Тарифы доставки не настроены" });
+      }
+      deliveryCost = resolvedCost;
     }
     const finalTotal = total + deliveryCost;
     let earnedBonuses = 0;

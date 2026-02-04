@@ -122,3 +122,5 @@ docker-compose down         # Остановка
 - Команды в терминале всегда выполняй из корневой папки соответствующего сервиса
 - Всегд придерживаться технической документации и не импровизировать без согласования
 - Пиши лаконичные и понятные коммиты, отражающие суть изменений
+- If code file more than 500 lines split it into several files logically;
+- When writing code, always use context7 MCP server.

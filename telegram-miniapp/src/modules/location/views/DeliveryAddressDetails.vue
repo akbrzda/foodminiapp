@@ -73,12 +73,13 @@ async function save() {
   try {
     const response = await addressesAPI.checkDeliveryZone(coords.lat, coords.lng, locationStore.selectedCity.id);
     if (!response?.data?.available || !response?.data?.polygon) {
-      deliveryZoneError.value = "Адрес не входит в зону доставки";
+      deliveryZoneError.value = response?.data?.message || "Адрес не входит в зону доставки";
       locationStore.setDeliveryZone(null);
       hapticFeedback("error");
       return;
     }
-    locationStore.setDeliveryZone(response.data.polygon);
+    const zone = { ...response.data.polygon, tariffs: response.data.tariffs || [] };
+    locationStore.setDeliveryZone(zone);
   } catch (error) {
     console.error("Failed to update delivery zone:", error);
     deliveryZoneError.value = "Не удалось проверить зону доставки";

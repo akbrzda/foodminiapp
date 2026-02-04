@@ -209,7 +209,6 @@
                     class="h-16 w-16 rounded-xl object-cover"
                     alt="preview"
                   />
-                  <Input v-model="modifierForm.image_url" class="text-xs" placeholder="URL изображения" />
                 </div>
               </FieldContent>
             </Field>

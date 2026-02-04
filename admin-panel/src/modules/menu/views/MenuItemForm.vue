@@ -64,7 +64,6 @@
                   </div>
                   <div v-if="uploadState.preview || form.image_url" class="mt-3 flex items-center gap-3">
                     <img :src="normalizeImageUrl(uploadState.preview || form.image_url)" class="h-16 w-16 rounded-xl object-cover" alt="preview" />
-                    <Input v-model="form.image_url" class="text-xs" />
                   </div>
                 </FieldContent>
               </Field>
