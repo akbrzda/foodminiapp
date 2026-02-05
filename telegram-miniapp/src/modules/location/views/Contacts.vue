@@ -43,8 +43,8 @@
                 <div class="detail-label">Телефоны</div>
                 <div class="detail-value">
                   <div v-if="getPhones(branch).length === 0">Нет контактов</div>
-                  <a v-for="phone in getPhones(branch)" :key="phone" class="phone-link" :href="`tel:${normalizePhone(phone)}`">
-                    {{ phone }}
+                  <a v-for="phone in getPhones(branch)" :key="phone.value" class="phone-link" :href="`tel:${phone.tel}`">
+                    {{ phone.label }}
                   </a>
                 </div>
               </div>
@@ -68,6 +68,7 @@ import { useRouter } from "vue-router";
 import { ChevronDown, Clock, MapPin, Phone } from "lucide-vue-next";
 import { useLocationStore } from "@/modules/location/stores/location.js";
 import { citiesAPI } from "@/shared/api/endpoints.js";
+import { formatPhone, normalizePhone } from "@/shared/utils/phone.js";
 import { hapticFeedback } from "@/shared/services/telegram.js";
 import { normalizeTariffs } from "@/shared/utils/deliveryTariffs";
 import { formatWorkHoursLines, normalizeWorkHours } from "@/shared/utils/workingHours";
@@ -238,11 +239,16 @@ function getPhones(branch) {
   return raw
     .split(/[;,]/)
     .map((value) => value.trim())
-    .filter(Boolean);
-}
-function normalizePhone(value) {
-  if (!value) return "";
-  return value.replace(/[^\d+]/g, "");
+    .filter(Boolean)
+    .map((value) => {
+      const tel = normalizePhone(value);
+      return {
+        value,
+        tel: tel || value,
+        label: formatPhone(value) || value,
+      };
+    })
+    .filter((item) => item.tel);
 }
 function buildDisplayBranch(branch) {
   const displayAddress = normalizeAddress(branch.address);

@@ -3,7 +3,10 @@
     <div class="profile-content">
       <div class="form-card phone-card">
         <label class="field-label">Телефон</label>
-        <div class="field-value">{{ formatPhone(authStore.user?.phone) || "—" }}</div>
+        <a v-if="authStore.user?.phone" class="field-value" :href="`tel:${normalizePhone(authStore.user?.phone)}`">
+          {{ formatPhone(authStore.user?.phone) }}
+        </a>
+        <div v-else class="field-value">—</div>
       </div>
       <div class="form-card">
         <label class="field-label" for="first-name">Имя</label>
@@ -36,7 +39,7 @@ import { useRouter } from "vue-router";
 import { useAuthStore } from "@/modules/auth/stores/auth.js";
 import { authAPI } from "@/shared/api/endpoints.js";
 import { hapticFeedback } from "@/shared/services/telegram.js";
-import { formatPhone } from "@/shared/utils/phone";
+import { formatPhone, normalizePhone } from "@/shared/utils/phone";
 const router = useRouter();
 const authStore = useAuthStore();
 const saving = ref(false);

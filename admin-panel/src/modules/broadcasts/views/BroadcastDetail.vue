@@ -94,7 +94,14 @@
             <TableRow v-for="message in messages" :key="message.id">
               <TableCell>
                 <div class="text-sm">{{ message.first_name }} {{ message.last_name }}</div>
-                <div class="text-xs text-muted-foreground">{{ message.phone || "—" }}</div>
+                <a
+                  v-if="normalizePhone(message.phone)"
+                  class="text-xs text-muted-foreground hover:underline"
+                  :href="`tel:${normalizePhone(message.phone)}`"
+                >
+                  {{ formatPhone(message.phone) }}
+                </a>
+                <div v-else class="text-xs text-muted-foreground">—</div>
               </TableCell>
               <TableCell>{{ statusLabel(message.status) }}</TableCell>
               <TableCell>{{ formatDateTime(message.sent_at) || "—" }}</TableCell>
@@ -124,7 +131,14 @@
             <TableRow v-for="conversion in conversions" :key="conversion.id">
               <TableCell>
                 <div class="text-sm">{{ conversion.first_name }} {{ conversion.last_name }}</div>
-                <div class="text-xs text-muted-foreground">{{ conversion.phone || "—" }}</div>
+                <a
+                  v-if="normalizePhone(conversion.phone)"
+                  class="text-xs text-muted-foreground hover:underline"
+                  :href="`tel:${normalizePhone(conversion.phone)}`"
+                >
+                  {{ formatPhone(conversion.phone) }}
+                </a>
+                <div v-else class="text-xs text-muted-foreground">—</div>
               </TableCell>
               <TableCell>#{{ conversion.order_number }}</TableCell>
               <TableCell>{{ formatCurrency(conversion.order_total || 0) }}</TableCell>
@@ -157,7 +171,7 @@ import TableHeader from "@/shared/components/ui/table/TableHeader.vue";
 import TableRow from "@/shared/components/ui/table/TableRow.vue";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
 import { useOrdersStore } from "@/modules/orders/stores/orders.js";
-import { formatCurrency, formatDateTime, formatNumber } from "@/shared/utils/format.js";
+import { formatCurrency, formatDateTime, formatNumber, formatPhone, normalizePhone } from "@/shared/utils/format.js";
 
 const route = useRoute();
 const router = useRouter();

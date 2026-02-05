@@ -45,7 +45,14 @@
             </div>
             <div class="flex items-center justify-between">
               <span class="text-muted-foreground">Телефон</span>
-              <span>{{ formatPhone(order.user_phone) }}</span>
+              <a
+                v-if="normalizePhone(order.user_phone)"
+                class="text-foreground hover:underline"
+                :href="`tel:${normalizePhone(order.user_phone)}`"
+              >
+                {{ formatPhone(order.user_phone) }}
+              </a>
+              <span v-else>—</span>
             </div>
           </CardContent>
         </Card>
@@ -286,7 +293,7 @@ import { ref, computed, onMounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ArrowLeft, CircleCheck } from "lucide-vue-next";
 import api from "@/shared/api/client.js";
-import { formatCurrency, formatDateTime, formatNumber, formatPhone } from "@/shared/utils/format.js";
+import { formatCurrency, formatDateTime, formatNumber, formatPhone, normalizePhone } from "@/shared/utils/format.js";
 import Badge from "@/shared/components/ui/badge/Badge.vue";
 import Button from "@/shared/components/ui/button/Button.vue";
 import Card from "@/shared/components/ui/card/Card.vue";

@@ -63,7 +63,8 @@
             <Field>
               <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Телефон</FieldLabel>
               <FieldContent>
-                <Input v-model="form.phone" placeholder="+7 (999) 123-45-67" />
+                <Input v-model="form.phone" placeholder="+7 (900) 909-22-22" @input="handlePhoneInput" />
+                <p v-if="phoneError" class="text-xs text-red-500">{{ phoneError }}</p>
               </FieldContent>
             </Field>
             <FieldGroup class="grid gap-4 md:grid-cols-2">
@@ -157,7 +158,7 @@ import { useNotifications } from "@/shared/composables/useNotifications.js";
 import { useReferenceStore } from "@/shared/stores/reference.js";
 import { useTheme } from "@/shared/composables/useTheme.js";
 import { createMarkerIcon, getTileLayer } from "@/shared/utils/leaflet.js";
-import { normalizeBoolean } from "@/shared/utils/format.js";
+import { formatPhoneInput, isValidPhone, normalizeBoolean, normalizePhone } from "@/shared/utils/format.js";
 
 const route = useRoute();
 const router = useRouter();
@@ -171,6 +172,7 @@ const pageTitle = computed(() => (isEditing.value ? "Редактировать 
 const pageSubtitle = computed(() => (isEditing.value ? "Изменение данных филиала" : "Создание филиала"));
 
 const saving = ref(false);
+const phoneError = ref("");
 const cityId = ref(route.query.cityId ? Number(route.query.cityId) : null);
 const form = ref({
   name: "",
@@ -360,7 +362,7 @@ const loadBranch = async () => {
       address: branch.address || "",
       latitude: branch.latitude ? Number(branch.latitude) : null,
       longitude: branch.longitude ? Number(branch.longitude) : null,
-      phone: branch.phone || "",
+      phone: branch.phone ? formatPhoneInput(branch.phone) : "",
       working_hours: workingHours,
       prep_time: Number(branch.prep_time || 0),
       assembly_time: Number(branch.assembly_time || 0),
@@ -383,6 +385,12 @@ const submitBranch = async () => {
   }
   saving.value = true;
   try {
+    phoneError.value = "";
+    const phoneDigits = String(form.value.phone || "").replace(/\D/g, "");
+    if (phoneDigits.length > 1 && !isValidPhone(form.value.phone)) {
+      phoneError.value = "Некорректный номер телефона";
+      return;
+    }
     const workingHours = {};
     form.value.working_hours.forEach((schedule) => {
       if (schedule.day && schedule.open && schedule.close) {
@@ -394,7 +402,7 @@ const submitBranch = async () => {
       address: form.value.address,
       latitude: form.value.latitude,
       longitude: form.value.longitude,
-      phone: form.value.phone,
+      phone: phoneDigits.length > 1 ? normalizePhone(form.value.phone) : "",
       working_hours: Object.keys(workingHours).length > 0 ? workingHours : null,
       prep_time: form.value.prep_time || 0,
       assembly_time: form.value.assembly_time || 0,
@@ -412,6 +420,12 @@ const submitBranch = async () => {
     showErrorNotification(error.response?.data?.error || "Ошибка сохранения филиала");
   } finally {
     saving.value = false;
+  }
+};
+const handlePhoneInput = (event) => {
+  form.value.phone = formatPhoneInput(event.target?.value || form.value.phone);
+  if (phoneError.value) {
+    phoneError.value = "";
   }
 };
 

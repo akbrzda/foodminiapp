@@ -43,6 +43,11 @@ const getTariffsByPolygonId = async (polygonId) => {
     delivery_cost: row.delivery_cost,
   }));
 };
+const denyManagerWrite = (req, res) => {
+  if (req.user.role !== "manager") return false;
+  res.status(403).json({ error: "Недостаточно прав для выполнения действия" });
+  return true;
+};
 router.get("/city/:cityId", async (req, res, next) => {
   try {
     const cityId = req.params.cityId;
@@ -514,6 +519,7 @@ router.get("/admin/:id/tariffs", authenticateToken, requireRole("admin", "manage
 router.put("/admin/:id/tariffs", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
   const connection = await db.getConnection();
   try {
+    if (denyManagerWrite(req, res)) return;
     const polygonId = req.params.id;
     const meta = await getPolygonMeta(polygonId);
     if (!meta) {
@@ -549,6 +555,7 @@ router.put("/admin/:id/tariffs", authenticateToken, requireRole("admin", "manage
 router.post("/admin/:id/tariffs/copy", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
   const connection = await db.getConnection();
   try {
+    if (denyManagerWrite(req, res)) return;
     const polygonId = req.params.id;
     const sourcePolygonId = Number(req.body?.source_polygon_id);
     if (!Number.isFinite(sourcePolygonId)) {
@@ -595,6 +602,7 @@ router.post("/admin/:id/tariffs/copy", authenticateToken, requireRole("admin", "
 });
 router.post("/admin", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
   try {
+    if (denyManagerWrite(req, res)) return;
     const { branch_id, name, polygon, delivery_time } = req.body;
     if (!branch_id || !polygon) {
       return res.status(400).json({
@@ -647,6 +655,7 @@ router.post("/admin", authenticateToken, requireRole("admin", "manager", "ceo"),
 });
 router.put("/admin/:id", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
   try {
+    if (denyManagerWrite(req, res)) return;
     const polygonId = req.params.id;
     const { name, polygon, delivery_time, min_order_amount, delivery_cost, is_active } = req.body;
     const [polygons] = await db.query(
@@ -926,6 +935,7 @@ router.post("/admin/bulk-unblock", authenticateToken, requireRole("admin", "mana
 });
 router.post("/admin/:id/transfer", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
   try {
+    if (denyManagerWrite(req, res)) return;
     const polygonId = req.params.id;
     const { new_branch_id } = req.body;
     if (!new_branch_id) {
@@ -985,6 +995,7 @@ router.post("/admin/:id/transfer", authenticateToken, requireRole("admin", "mana
 });
 router.delete("/admin/:id", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
   try {
+    if (denyManagerWrite(req, res)) return;
     const polygonId = req.params.id;
     const [polygons] = await db.query(
       `SELECT dp.id, b.city_id

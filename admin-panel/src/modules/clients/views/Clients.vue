@@ -54,7 +54,17 @@
                 <div class="font-medium text-foreground">{{ client.first_name }} {{ client.last_name }}</div>
                 <div class="text-xs text-muted-foreground">ID: {{ client.id }}</div>
               </TableCell>
-              <TableCell>{{ formatPhone(client.phone) || "—" }}</TableCell>
+              <TableCell>
+                <a
+                  v-if="normalizePhone(client.phone)"
+                  class="text-foreground hover:underline"
+                  :href="`tel:${normalizePhone(client.phone)}`"
+                  @click.stop
+                >
+                  {{ formatPhone(client.phone) }}
+                </a>
+                <span v-else>—</span>
+              </TableCell>
               <TableCell>
                 <Badge variant="secondary">{{ client.city_name || "—" }}</Badge>
               </TableCell>
@@ -79,7 +89,7 @@ import { ChevronRight, Search } from "lucide-vue-next";
 import api from "@/shared/api/client.js";
 import { useReferenceStore } from "@/shared/stores/reference.js";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
-import { formatNumber, formatPhone } from "@/shared/utils/format.js";
+import { formatNumber, formatPhone, normalizePhone } from "@/shared/utils/format.js";
 import Badge from "@/shared/components/ui/badge/Badge.vue";
 import Button from "@/shared/components/ui/button/Button.vue";
 import Card from "@/shared/components/ui/card/Card.vue";

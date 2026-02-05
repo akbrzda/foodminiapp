@@ -83,10 +83,10 @@
             <p class="branch-status" :class="{ closed: !branch.isOpen }">
               {{ branch.isOpen ? "Открыто" : "Закрыто" }}
             </p>
-            <p class="branch-phone" v-if="branch.phone">
+            <a v-if="branch.phone" class="branch-phone" :href="`tel:${normalizePhone(branch.phone)}`" @click.stop>
               <Phone :size="14" />
-              {{ branch.phone }}
-            </p>
+              {{ formatPhone(branch.phone) }}
+            </a>
           </button>
         </div>
       </div>
@@ -160,6 +160,7 @@ import { useKeyboardHandler } from "@/shared/composables/useKeyboardHandler";
 import { citiesAPI, addressesAPI, ordersAPI, menuAPI, bonusesAPI } from "@/shared/api/endpoints.js";
 import { hapticFeedback } from "@/shared/services/telegram.js";
 import { formatPrice } from "@/shared/utils/format";
+import { formatPhone, normalizePhone } from "@/shared/utils/phone";
 import { calculateDeliveryCost } from "@/shared/utils/deliveryTariffs";
 import { getBranchOpenState, normalizeWorkHours } from "@/shared/utils/workingHours";
 const router = useRouter();

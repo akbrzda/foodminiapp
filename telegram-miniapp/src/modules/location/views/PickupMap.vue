@@ -19,6 +19,9 @@
       </button>
       <div class="sheet-title">{{ selectedBranch.displayName || selectedBranch.name }}</div>
       <div class="sheet-address">{{ selectedBranch.displayAddress || selectedBranch.address }}</div>
+      <a v-if="selectedBranch.phone" class="sheet-phone" :href="`tel:${normalizePhone(selectedBranch.phone)}`">
+        {{ formatPhone(selectedBranch.phone) }}
+      </a>
       <div class="sheet-status" :class="selectedBranch.isOpen ? 'open' : 'closed'">
         {{ selectedBranch.isOpen ? "Открыто" : "Закрыто" }}
       </div>
@@ -28,7 +31,6 @@
         </template>
         <template v-else>Время работы уточняйте</template>
       </div>
-      <div class="sheet-phone">{{ selectedBranch.phone || "+7 (800) 777-70-55" }}</div>
       <button class="primary-btn" @click="confirmPickup">Заберу отсюда</button>
     </div>
   </div>
@@ -38,6 +40,7 @@ import { ref, computed, onMounted } from "vue";
 import { X, MapPin } from "lucide-vue-next";
 import { useRouter } from "vue-router";
 import { useLocationStore } from "@/modules/location/stores/location.js";
+import { formatPhone, normalizePhone } from "@/shared/utils/phone.js";
 import { citiesAPI } from "@/shared/api/endpoints.js";
 import { hapticFeedback } from "@/shared/services/telegram.js";
 import { formatWorkHoursLines, getBranchOpenState, normalizeWorkHours } from "@/shared/utils/workingHours";
@@ -344,8 +347,8 @@ async function loadLeaflet() {
 }
 .sheet-phone {
   font-size: var(--font-size-small);
-  color: var(--color-primary);
-  margin-bottom: 12px;
+  color: var(--color-text-secondary);
+  margin-bottom: 6px;
 }
 .primary-btn {
   width: 100%;

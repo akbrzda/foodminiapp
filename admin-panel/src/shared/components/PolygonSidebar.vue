@@ -31,17 +31,17 @@
         <div v-if="activeTab === 'general'" class="space-y-4">
           <div>
             <p class="text-xs text-muted-foreground mb-2">Статус</p>
-            <Label class="flex items-center gap-2 cursor-pointer">
-              <input v-model="editForm.is_active" type="checkbox" class="h-4 w-4 rounded border-gray-300" />
+            <Label class="flex items-center gap-2 cursor-pointer" :class="readOnly ? 'opacity-60 cursor-not-allowed' : ''">
+              <input v-model="editForm.is_active" type="checkbox" class="h-4 w-4 rounded border-gray-300" :disabled="readOnly" />
               <span class="text-sm text-foreground">{{ editForm.is_active ? "Активен" : "Неактивен" }}</span>
             </Label>
           </div>
           <div>
             <p class="text-xs text-muted-foreground mb-2">Время доставки</p>
-            <Input v-model.number="editForm.delivery_time" type="number" min="0" class="max-w-[200px]" />
+            <Input v-model.number="editForm.delivery_time" type="number" min="0" class="max-w-[200px]" :disabled="readOnly" />
             <p class="text-xs text-muted-foreground mt-1">00:{{ String(editForm.delivery_time || 0).padStart(2, "0") }}:00</p>
           </div>
-          <Button class="w-full" variant="outline" @click="emit('redraw', polygon)"> Перерисовать </Button>
+          <Button v-if="!readOnly" class="w-full" variant="outline" @click="emit('redraw', polygon)"> Перерисовать </Button>
           <div v-if="isBlocked" class="rounded-lg border border-orange-200 bg-orange-50 dark:border-orange-900 dark:bg-orange-950/20 p-4">
             <p class="text-sm font-medium text-orange-900 dark:text-orange-100 mb-2">🔒 Полигон заблокирован</p>
             <p v-if="polygon?.block_reason" class="text-sm text-orange-800 dark:text-orange-200 mb-1">{{ polygon.block_reason }}</p>
@@ -68,7 +68,7 @@
               </div>
             </div>
           </div>
-          <div class="flex flex-wrap gap-2">
+          <div v-if="!readOnly" class="flex flex-wrap gap-2">
             <Button variant="secondary" class="flex-1" @click="emit('edit-tariffs', polygon)">
               <Edit3 :size="16" />
               {{ tariffs.length ? "Редактировать" : "Добавить" }}
@@ -100,7 +100,7 @@
         </div>
       </div>
       <div class="border-t border-border p-4 space-y-2 bg-muted/30">
-        <Button class="w-full" @click="saveChanges">
+        <Button v-if="!readOnly" class="w-full" @click="saveChanges">
           <Save :size="16" />
           Сохранить
         </Button>
@@ -109,7 +109,7 @@
           <Lock v-else :size="16" />
           {{ isBlocked ? "Разблокировать" : "Заблокировать" }}
         </Button>
-        <Button class="w-full" variant="destructive" @click="emit('delete', polygon)">
+        <Button v-if="!readOnly" class="w-full" variant="destructive" @click="emit('delete', polygon)">
           <Trash2 :size="16" />
           Удалить полигон
         </Button>
@@ -132,6 +132,7 @@ const props = defineProps({
     default: () => [],
   },
   tariffsLoading: Boolean,
+  readOnly: Boolean,
   tariffSources: {
     type: Array,
     default: () => [],
@@ -144,11 +145,17 @@ const props = defineProps({
 const emit = defineEmits(["close", "save", "block", "unblock", "delete", "transfer", "redraw", "edit-tariffs", "copy-tariffs"]);
 const transferBranchId = ref("");
 const activeTab = ref("general");
-const tabs = [
-  { id: "general", label: "Общая информация" },
-  { id: "delivery", label: "Доставка" },
-  { id: "transfer", label: "Переключение" },
-];
+const tabs = computed(() => {
+  const baseTabs = [
+    { id: "general", label: "Общая информация" },
+    { id: "delivery", label: "Доставка" },
+    { id: "transfer", label: "Переключение" },
+  ];
+  if (props.readOnly) {
+    return baseTabs.filter((tab) => tab.id !== "transfer");
+  }
+  return baseTabs;
+});
 const editForm = ref({
   delivery_time: 30,
   courier_reward: 0,
@@ -180,6 +187,14 @@ watch(
   },
   { immediate: true },
 );
+watch(
+  () => props.readOnly,
+  (value) => {
+    if (value && activeTab.value === "transfer") {
+      activeTab.value = "general";
+    }
+  },
+);
 const formatDateTime = (dateTimeStr) => {
   if (!dateTimeStr) return "";
   const date = new Date(dateTimeStr);
@@ -192,12 +207,14 @@ const formatDateTime = (dateTimeStr) => {
   });
 };
 const saveChanges = () => {
+  if (props.readOnly) return;
   emit("save", {
     id: props.polygon.id,
     ...editForm.value,
   });
 };
 const handleTransfer = () => {
+  if (props.readOnly) return;
   if (!transferBranchId.value || parseInt(transferBranchId.value) === props.polygon?.branch_id) return;
   emit("transfer", {
     polygonId: props.polygon.id,

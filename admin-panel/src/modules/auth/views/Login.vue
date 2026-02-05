@@ -55,7 +55,7 @@ const form = reactive({
 const handleLogin = async () => {
   const ok = await authStore.login(form);
   if (ok) {
-    router.push({ name: "orders" });
+    router.push({ name: "dashboard" });
   }
 };
 </script>

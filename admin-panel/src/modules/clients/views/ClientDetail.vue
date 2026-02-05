@@ -30,7 +30,8 @@
           <Field>
             <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Телефон</FieldLabel>
             <FieldContent>
-              <Input v-model="form.phone" />
+              <Input v-model="form.phone" @input="handlePhoneInput" placeholder="+7 (900) 909-22-22" />
+              <p v-if="phoneError" class="text-xs text-red-500">{{ phoneError }}</p>
             </FieldContent>
           </Field>
           <Field>
@@ -234,7 +235,7 @@ import { ArrowLeft, Save } from "lucide-vue-next";
 import api from "@/shared/api/client.js";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
 import { useOrdersStore } from "@/modules/orders/stores/orders.js";
-import { formatCurrency, formatDateTime, formatNumber } from "@/shared/utils/format.js";
+import { formatCurrency, formatDateTime, formatNumber, formatPhoneInput, isValidPhone, normalizePhone } from "@/shared/utils/format.js";
 import Button from "@/shared/components/ui/button/Button.vue";
 import Card from "@/shared/components/ui/card/Card.vue";
 import CardContent from "@/shared/components/ui/card/CardContent.vue";
@@ -270,6 +271,7 @@ const bonusesLoading = ref(false);
 const saving = ref(false);
 const showAdjustModal = ref(false);
 const adjustSaving = ref(false);
+const phoneError = ref("");
 const adjustForm = reactive({
   type: "earn",
   amount: 0,
@@ -320,7 +322,7 @@ const loadClient = async () => {
   Object.assign(form, {
     first_name: client.value.first_name || "",
     last_name: client.value.last_name || "",
-    phone: client.value.phone || "",
+    phone: client.value.phone ? formatPhoneInput(client.value.phone) : "",
     email: client.value.email || "",
   });
   updateBreadcrumbs();
@@ -350,10 +352,26 @@ const loadLoyalty = async () => {
 const saveClient = async () => {
   saving.value = true;
   try {
-    const response = await api.put(`/api/admin/clients/${clientId}`, form);
+    phoneError.value = "";
+    const phoneDigits = String(form.phone || "").replace(/\D/g, "");
+    if (phoneDigits.length > 1 && !isValidPhone(form.phone)) {
+      phoneError.value = "Некорректный номер телефона";
+      return;
+    }
+    const payload = {
+      ...form,
+      phone: phoneDigits.length > 1 ? normalizePhone(form.phone) : "",
+    };
+    const response = await api.put(`/api/admin/clients/${clientId}`, payload);
     client.value = response.data.user;
   } finally {
     saving.value = false;
+  }
+};
+const handlePhoneInput = (event) => {
+  form.phone = formatPhoneInput(event.target?.value || form.phone);
+  if (phoneError.value) {
+    phoneError.value = "";
   }
 };
 const openAdjustModal = () => {

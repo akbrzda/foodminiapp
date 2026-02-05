@@ -95,11 +95,12 @@
             </div>
           </div>
           <div v-if="branchId" class="pt-3 border-t border-border">
-            <Button v-if="polygons.length < 3" class="w-full" size="sm" @click="startDrawing">
+            <Button v-if="!isManager && polygons.length < 3" class="w-full" size="sm" @click="startDrawing">
               <Plus :size="16" />
               Добавить полигон
             </Button>
-            <p v-else class="text-center text-xs text-muted-foreground">Максимум 3 полигона на филиал</p>
+            <p v-else-if="!isManager" class="text-center text-xs text-muted-foreground">Максимум 3 полигона на филиал</p>
+            <p v-else class="text-center text-xs text-muted-foreground">Редактирование доступно только администратору и CEO</p>
           </div>
           <div v-if="filteredPolygons.length > 0" class="pt-2 text-xs text-muted-foreground text-center">
             {{ filteredPolygons.length }} {{ getPluralForm(filteredPolygons.length) }}
@@ -200,6 +201,7 @@
       :tariffs-loading="tariffsLoading"
       :tariff-sources="availableTariffSources"
       :city-branches="branches"
+      :read-only="isManager"
       @close="closeSidebar"
       @save="savePolygonFromSidebar"
       @edit-tariffs="openTariffEditor"
@@ -236,6 +238,7 @@ import PolygonSidebar from "@/shared/components/PolygonSidebar.vue";
 import DeliveryTariffEditorDialog from "@/modules/delivery/components/DeliveryTariffEditorDialog.vue";
 import DeliveryTariffCopyDialog from "@/modules/delivery/components/DeliveryTariffCopyDialog.vue";
 import { useReferenceStore } from "@/shared/stores/reference.js";
+import { useAuthStore } from "@/shared/stores/auth.js";
 import { useRoute, useRouter } from "vue-router";
 import Button from "@/shared/components/ui/button/Button.vue";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/shared/components/ui/dialog/index.js";
@@ -283,10 +286,12 @@ if (L?.GeometryUtil?.readableArea && !L.GeometryUtil.__patched) {
   L.GeometryUtil.__patched = true;
 }
 const referenceStore = useReferenceStore();
+const authStore = useAuthStore();
 const route = useRoute();
 const router = useRouter();
 const { showErrorNotification, showSuccessNotification, showWarningNotification } = useNotifications();
 const { resolvedTheme } = useTheme();
+const isManager = computed(() => authStore.role === "manager");
 const cityId = ref("");
 const branchId = ref("");
 const branches = ref([]);
@@ -367,6 +372,11 @@ let branchesRequestId = 0;
 let drawControlVisible = true;
 const modalTitle = computed(() => (editing.value ? "Редактировать полигон" : "Новый полигон"));
 const modalSubtitle = computed(() => (editing.value ? "Измените параметры полигона" : "Добавьте зону доставки"));
+const ensureEditAccess = (message) => {
+  if (!isManager.value) return true;
+  showWarningNotification(message || "Недостаточно прав для выполнения действия");
+  return false;
+};
 const filteredPolygons = computed(() => {
   const polygonsList = branchId.value
     ? polygons.value
@@ -481,7 +491,8 @@ const initMap = () => {
   }
   drawnItems = new L.FeatureGroup();
   map.addLayer(drawnItems);
-  if (branchId.value) {
+  if (branchId.value && !isManager.value) {
+    drawControlVisible = true;
     drawControl = new L.Control.Draw({
       edit: {
         featureGroup: drawnItems,
@@ -519,9 +530,11 @@ const initMap = () => {
       showModal.value = true;
       editing.value = null;
     });
+  } else if (isManager.value) {
+    drawControlVisible = false;
   }
   renderPolygonsOnMap();
-  if (branchId.value) {
+  if (branchId.value && !isManager.value) {
     editHandler = new L.EditToolbar.Edit(map, {
       featureGroup: drawnItems,
       selectedPathOptions: {
@@ -602,6 +615,7 @@ const renderPolygonsOnMap = () => {
 };
 const startDrawing = () => {
   if (!branchId.value) return;
+  if (!ensureEditAccess("Недостаточно прав для создания полигона")) return;
   router.push({
     name: "delivery-zone-editor",
     params: { branchId: branchId.value, polygonId: "new" },
@@ -609,6 +623,7 @@ const startDrawing = () => {
   });
 };
 const editPolygon = (polygon) => {
+  if (!ensureEditAccess("Недостаточно прав для редактирования полигона")) return;
   router.push({
     name: "delivery-zone-editor",
     params: { branchId: branchId.value, polygonId: polygon.id },
@@ -616,6 +631,7 @@ const editPolygon = (polygon) => {
   });
 };
 const deletePolygon = async (polygon) => {
+  if (!ensureEditAccess("Недостаточно прав для удаления полигона")) return;
   if (!confirm("Удалить полигон?")) return;
   try {
     await api.delete(`/api/polygons/admin/${polygon.id}`);
@@ -802,10 +818,12 @@ const closeSidebar = () => {
 };
 const openTariffEditor = () => {
   if (!selectedPolygon.value) return;
+  if (!ensureEditAccess("Недостаточно прав для редактирования тарифов")) return;
   tariffEditorOpen.value = true;
 };
 const saveTariffs = async (payload) => {
   if (!selectedPolygon.value) return;
+  if (!ensureEditAccess("Недостаточно прав для сохранения тарифов")) return;
   try {
     const response = await api.put(`/api/polygons/admin/${selectedPolygon.value.id}/tariffs`, { tariffs: payload });
     selectedTariffs.value = response.data?.tariffs || [];
@@ -820,6 +838,7 @@ const saveTariffs = async (payload) => {
   }
 };
 const openTariffCopy = () => {
+  if (!ensureEditAccess("Недостаточно прав для копирования тарифов")) return;
   tariffCopyOpen.value = true;
   tariffCopySource.value = "";
   tariffCopyPreview.value = [];
@@ -843,6 +862,7 @@ const selectTariffCopySource = async (value) => {
 };
 const confirmTariffCopy = async (value) => {
   if (!selectedPolygon.value || !value) return;
+  if (!ensureEditAccess("Недостаточно прав для копирования тарифов")) return;
   try {
     const response = await api.post(`/api/polygons/admin/${selectedPolygon.value.id}/tariffs/copy`, { source_polygon_id: value });
     selectedTariffs.value = response.data?.tariffs || [];
@@ -857,6 +877,7 @@ const confirmTariffCopy = async (value) => {
   }
 };
 const savePolygonFromSidebar = async (data) => {
+  if (!ensureEditAccess("Недостаточно прав для редактирования полигона")) return;
   try {
     const payload = {
       delivery_time: data.delivery_time,
@@ -885,10 +906,12 @@ const unblockPolygonFromSidebar = async (polygon) => {
   await unblockPolygon(polygon);
 };
 const deletePolygonFromSidebar = async (polygon) => {
+  if (!ensureEditAccess("Недостаточно прав для удаления полигона")) return;
   closeSidebar();
   await deletePolygon(polygon);
 };
 const transferPolygon = async (data) => {
+  if (!ensureEditAccess("Недостаточно прав для переноса полигона")) return;
   try {
     await api.post(`/api/polygons/admin/${data.polygonId}/transfer`, {
       new_branch_id: data.newBranchId,
@@ -902,6 +925,7 @@ const transferPolygon = async (data) => {
   }
 };
 const startRedrawPolygon = (polygon) => {
+  if (!ensureEditAccess("Недостаточно прав для редактирования полигона")) return;
   if (!polygon?.id) return;
   const layer = polygonLayers.get(polygon.id);
   if (!layer) return;
@@ -946,6 +970,7 @@ const closeModal = () => {
   };
 };
 const submitPolygon = async () => {
+  if (!ensureEditAccess("Недостаточно прав для сохранения полигона")) return;
   try {
     const payload = {
       branch_id: parseInt(branchId.value),

@@ -5,7 +5,7 @@
         <PageHeader title="Филиалы" description="Управление филиалами и временем приготовления">
           <template #actions>
             <Badge variant="secondary">Всего: {{ branches.length }}</Badge>
-            <Button class="w-full md:w-auto" :disabled="!cityId" @click="goToCreate">
+            <Button v-if="!isManager" class="w-full md:w-auto" :disabled="!cityId" @click="goToCreate">
               <Plus :size="16" />
               Добавить филиал
             </Button>
@@ -53,7 +53,14 @@
               <TableCell>
                 <div class="flex items-center gap-2 text-sm text-muted-foreground">
                   <Phone :size="14" />
-                  {{ branch.phone || "—" }}
+                  <a
+                    v-if="normalizePhone(branch.phone)"
+                    class="text-foreground hover:underline"
+                    :href="`tel:${normalizePhone(branch.phone)}`"
+                  >
+                    {{ formatPhone(branch.phone) }}
+                  </a>
+                  <span v-else>—</span>
                 </div>
                 <div v-if="branch.latitude && branch.longitude" class="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
                   <MapPin :size="14" />
@@ -75,7 +82,7 @@
                 </Badge>
               </TableCell>
               <TableCell class="text-right">
-                <div class="flex justify-end gap-2">
+                <div v-if="!isManager" class="flex justify-end gap-2">
                   <Button variant="ghost" size="icon" @click="goToEdit(branch)">
                     <Pencil :size="16" />
                   </Button>
@@ -83,6 +90,7 @@
                     <Trash2 :size="16" class="text-red-600" />
                   </Button>
                 </div>
+                <span v-else class="text-xs text-muted-foreground">—</span>
               </TableCell>
             </TableRow>
           </TableBody>
@@ -92,7 +100,7 @@
   </div>
 </template>
 <script setup>
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { MapPin, Pencil, Phone, Plus, Trash2 } from "lucide-vue-next";
 import { useRouter } from "vue-router";
 import api from "@/shared/api/client.js";
@@ -111,13 +119,17 @@ import TableHeader from "@/shared/components/ui/table/TableHeader.vue";
 import TableRow from "@/shared/components/ui/table/TableRow.vue";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
 import { useReferenceStore } from "@/shared/stores/reference.js";
+import { useAuthStore } from "@/shared/stores/auth.js";
+import { formatPhone, normalizePhone } from "@/shared/utils/format.js";
 
 const router = useRouter();
 const referenceStore = useReferenceStore();
+const authStore = useAuthStore();
 const { showErrorNotification, showSuccessNotification } = useNotifications();
 
 const cityId = ref("");
 const branches = ref([]);
+const isManager = computed(() => authStore.role === "manager");
 let branchesRequestId = 0;
 
 const loadBranches = async () => {

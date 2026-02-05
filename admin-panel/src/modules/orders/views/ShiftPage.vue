@@ -3,7 +3,29 @@
     <header class="sticky top-0 z-30 border-b border-border bg-background/90 backdrop-blur">
       <div class="flex h-[72px] items-center justify-between gap-6 px-6">
         <div class="flex items-center gap-4">
-          <div class="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">PD</div>
+          <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary text-sm font-semibold">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              class="lucide lucide-panda-icon lucide-panda"
+            >
+              <path d="M11.25 17.25h1.5L12 18z" />
+              <path d="m15 12 2 2" />
+              <path d="M18 6.5a.5.5 0 0 0-.5-.5" />
+              <path
+                d="M20.69 9.67a4.5 4.5 0 1 0-7.04-5.5 8.35 8.35 0 0 0-3.3 0 4.5 4.5 0 1 0-7.04 5.5C2.49 11.2 2 12.88 2 14.5 2 19.47 6.48 22 12 22s10-2.53 10-7.5c0-1.62-.48-3.3-1.3-4.83"
+              />
+              <path d="M6 6.5a.495.495 0 0 1 .5-.5" />
+              <path d="m9 12-2 2" />
+            </svg>
+          </div>
           <div class="min-w-0">
             <div class="text-base font-semibold text-foreground">Текущая смена</div>
             <div class="text-xs text-muted-foreground">Оперативное управление заказами</div>
@@ -163,7 +185,14 @@
                   </div>
                   <div class="flex items-center gap-2 text-sm text-muted-foreground">
                     <Phone :size="14" />
-                    <span>{{ formatPhone(order.user_phone) || "—" }}</span>
+                    <a
+                      v-if="normalizePhone(order.user_phone)"
+                      class="text-foreground hover:underline"
+                      :href="`tel:${normalizePhone(order.user_phone)}`"
+                    >
+                      {{ formatPhone(order.user_phone) }}
+                    </a>
+                    <span v-else>—</span>
                   </div>
                   <div v-if="order.delivery_comment || order.comment" class="flex items-center gap-2 text-sm text-muted-foreground">
                     <MessageSquare :size="14" />
@@ -297,7 +326,7 @@ import { useOrdersStore } from "@/modules/orders/stores/orders.js";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
 import { useTheme } from "@/shared/composables/useTheme.js";
 import { createMarkerIcon, getMapColor, getTileLayer } from "@/shared/utils/leaflet.js";
-import { formatCurrency, formatPhone } from "@/shared/utils/format.js";
+import { formatCurrency, formatPhone, normalizePhone } from "@/shared/utils/format.js";
 import Badge from "@/shared/components/ui/badge/Badge.vue";
 import Button from "@/shared/components/ui/button/Button.vue";
 import Input from "@/shared/components/ui/input/Input.vue";

@@ -83,6 +83,9 @@ body {
   min-height: 100vh;
   background-color: hsl(var(--background));
 }
+a[href^="tel:"] {
+  text-decoration: none;
+}
 #app .leaflet-container {
   background: hsl(var(--background));
   font-family: "Montserrat", sans-serif;

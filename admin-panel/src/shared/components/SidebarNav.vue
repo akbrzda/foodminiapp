@@ -3,10 +3,30 @@
     <div class="flex h-full flex-col">
       <div :class="['flex items-center', isCollapsed ? 'justify-center py-4' : 'min-h-[72px] gap-3 px-4']">
         <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-          <UtensilsCrossed :size="20" />
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="24"
+            height="24"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            class="lucide lucide-panda-icon lucide-panda"
+          >
+            <path d="M11.25 17.25h1.5L12 18z" />
+            <path d="m15 12 2 2" />
+            <path d="M18 6.5a.5.5 0 0 0-.5-.5" />
+            <path
+              d="M20.69 9.67a4.5 4.5 0 1 0-7.04-5.5 8.35 8.35 0 0 0-3.3 0 4.5 4.5 0 1 0-7.04 5.5C2.49 11.2 2 12.88 2 14.5 2 19.47 6.48 22 12 22s10-2.53 10-7.5c0-1.62-.48-3.3-1.3-4.83"
+            />
+            <path d="M6 6.5a.495.495 0 0 1 .5-.5" />
+            <path d="m9 12-2 2" />
+          </svg>
         </div>
         <div v-if="!isCollapsed" class="min-w-0">
-          <p class="truncate text-base font-semibold text-foreground">FoodMiniApp</p>
+          <p class="truncate text-base font-semibold text-foreground">Panda Pizza</p>
           <p class="text-xs text-muted-foreground">Админ-панель</p>
         </div>
       </div>
@@ -87,7 +107,7 @@ import {
   FileText,
   LayoutDashboard,
   Layers,
-  ListChecks,
+  Ban,
   ListTree,
   Map,
   MapPinned,
@@ -110,8 +130,8 @@ import {
 } from "@/shared/components/ui/dropdown-menu";
 
 const props = defineProps({
-  isOpen: { type: Boolean, default: true },
-  isCollapsed: { type: Boolean, default: false },
+  isOpen: { type: Boolean, default: false },
+  isCollapsed: { type: Boolean, default: true },
 });
 
 const emit = defineEmits(["navigate", "close"]);
@@ -137,21 +157,21 @@ const navSections = computed(() => {
       id: "operations",
       title: "Операции",
       items: [
-        { label: "Аналитика", to: "/dashboard", icon: LayoutDashboard },
+        { label: "Дашборд", to: "/", icon: LayoutDashboard },
         { label: "Заказы", to: "/orders", icon: ClipboardList, badge: newOrdersCount.value },
         { label: "Клиенты", to: "/clients", icon: Users },
-        { label: "Рассылки", to: "/broadcasts", icon: Megaphone },
+        { label: "Рассылки", to: "/broadcasts", icon: Megaphone, visible: !isManager.value },
       ],
     },
     {
       id: "menu",
       title: "Меню",
       items: [
-        { label: "Категории", to: "/menu/categories", icon: ListTree },
-        { label: "Позиции", to: "/menu/items", icon: UtensilsCrossed },
-        { label: "Модификаторы", to: "/menu/modifiers", icon: Layers },
-        { label: "Теги", to: "/menu/tags", icon: Tag },
-        { label: "Стоп-лист", to: "/menu/stop-list", icon: ListChecks },
+        { label: "Категории", to: "/menu/categories", icon: ListTree, visible: !isManager.value },
+        { label: "Позиции", to: "/menu/items", icon: UtensilsCrossed, visible: !isManager.value },
+        { label: "Модификаторы", to: "/menu/modifiers", icon: Layers, visible: !isManager.value },
+        { label: "Теги", to: "/menu/tags", icon: Tag, visible: !isManager.value },
+        { label: "Стоп-лист", to: "/menu/stop-list", icon: Ban },
       ],
     },
     {
@@ -159,7 +179,7 @@ const navSections = computed(() => {
       title: "Справочники",
       items: [
         { label: "Города", to: "/cities", icon: MapPinned, visible: !isManager.value },
-        { label: "Филиалы", to: "/branches", icon: Building2, visible: !isManager.value },
+        { label: "Филиалы", to: "/branches", icon: Building2 },
         { label: "Зоны доставки", to: "/delivery-zones", icon: Map },
       ],
     },

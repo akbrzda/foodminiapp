@@ -278,6 +278,9 @@ router.post("/users", requireRole("admin", "ceo"), async (req, res, next) => {
         error: "Invalid role. Must be one of: admin, manager, ceo",
       });
     }
+    if (req.user.role === "ceo" && role === "admin") {
+      return res.status(403).json({ error: "CEO не может создавать администраторов" });
+    }
     const [existingUsers] = await db.query("SELECT id FROM admin_users WHERE email = ?", [email]);
     if (existingUsers.length > 0) {
       return res.status(400).json({ error: "Email already exists" });
@@ -298,6 +301,9 @@ router.post("/users", requireRole("admin", "ceo"), async (req, res, next) => {
       managerBranchIds = branch_ids;
     }
     const passwordHash = await bcrypt.hash(password, 10);
+    if (req.user.role === "ceo" && eruda_enabled !== undefined) {
+      return res.status(403).json({ error: "CEO не может включать Eruda" });
+    }
     if (eruda_enabled === true && !telegram_id) {
       return res.status(400).json({ error: "Для включения Eruda нужен Telegram ID" });
     }
@@ -336,6 +342,9 @@ router.put("/users/:id", requireRole("admin", "ceo"), async (req, res, next) => 
     if (existingUsers.length === 0) {
       return res.status(404).json({ error: "User not found" });
     }
+    if (req.user.role === "ceo" && existingUsers[0].role === "admin") {
+      return res.status(403).json({ error: "CEO не может изменять администраторов" });
+    }
     const updates = [];
     const values = [];
     if (email !== undefined) {
@@ -366,6 +375,9 @@ router.put("/users/:id", requireRole("admin", "ceo"), async (req, res, next) => 
           error: "Invalid role. Must be one of: admin, manager, ceo",
         });
       }
+      if (req.user.role === "ceo" && role === "admin") {
+        return res.status(403).json({ error: "CEO не может назначать роль администратора" });
+      }
       updates.push("role = ?");
       values.push(role);
     }
@@ -375,6 +387,9 @@ router.put("/users/:id", requireRole("admin", "ceo"), async (req, res, next) => 
       values.push(normalizedTelegramId);
     }
     if (eruda_enabled !== undefined) {
+      if (req.user.role === "ceo") {
+        return res.status(403).json({ error: "CEO не может включать Eruda" });
+      }
       const normalizedTelegramId = telegram_id === "" ? null : telegram_id;
       const effectiveTelegramId = telegram_id !== undefined ? normalizedTelegramId : existingUsers[0].telegram_id;
       if (eruda_enabled === true && !effectiveTelegramId) {
@@ -467,9 +482,12 @@ router.put("/users/:id", requireRole("admin", "ceo"), async (req, res, next) => 
 router.delete("/users/:id", requireRole("admin", "ceo"), async (req, res, next) => {
   try {
     const userId = req.params.id;
-    const [users] = await db.query("SELECT id FROM admin_users WHERE id = ?", [userId]);
+    const [users] = await db.query("SELECT id, role FROM admin_users WHERE id = ?", [userId]);
     if (users.length === 0) {
       return res.status(404).json({ error: "User not found" });
+    }
+    if (req.user.role === "ceo" && users[0].role === "admin") {
+      return res.status(403).json({ error: "CEO не может удалять администраторов" });
     }
     if (req.user.id === parseInt(userId)) {
       return res.status(400).json({ error: "Cannot delete yourself" });

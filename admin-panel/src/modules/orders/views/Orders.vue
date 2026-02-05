@@ -136,7 +136,15 @@
               </TableCell>
               <TableCell>{{ order.city_name || "—" }}</TableCell>
               <TableCell>
-                <div>{{ formatPhone(order.user_phone) || "—" }}</div>
+                <a
+                  v-if="normalizePhone(order.user_phone)"
+                  class="text-foreground hover:underline"
+                  :href="`tel:${normalizePhone(order.user_phone)}`"
+                  @click.stop
+                >
+                  {{ formatPhone(order.user_phone) }}
+                </a>
+                <div v-else>—</div>
                 <div class="text-xs text-muted-foreground">{{ order.branch_name || "" }}</div>
               </TableCell>
               <TableCell>
@@ -167,7 +175,7 @@ import api from "@/shared/api/client.js";
 import { useReferenceStore } from "@/shared/stores/reference.js";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
 import { useOrdersStore } from "@/modules/orders/stores/orders.js";
-import { formatCurrency, formatDateTime, formatNumber, formatPhone } from "@/shared/utils/format.js";
+import { formatCurrency, formatDateTime, formatNumber, formatPhone, normalizePhone } from "@/shared/utils/format.js";
 import Badge from "@/shared/components/ui/badge/Badge.vue";
 import Button from "@/shared/components/ui/button/Button.vue";
 import Card from "@/shared/components/ui/card/Card.vue";

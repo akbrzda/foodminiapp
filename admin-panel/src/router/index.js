@@ -39,7 +39,14 @@ const router = createRouter({
       path: "/shift",
       component: ShiftLayout,
       meta: { requiresAuth: true, fullBleed: true },
-      children: [{ path: "", name: "shift-page", component: ShiftPage, meta: { title: "Текущая смена", fullBleed: true } }],
+      children: [
+        {
+          path: "",
+          name: "shift-page",
+          component: ShiftPage,
+          meta: { title: "Текущая смена", fullBleed: true, roles: ["admin", "ceo", "manager"] },
+        },
+      ],
     },
     {
       path: "/",
@@ -47,8 +54,18 @@ const router = createRouter({
       meta: { requiresAuth: true },
       children: [
         { path: "", redirect: "/dashboard" },
-        { path: "dashboard", name: "dashboard", component: Dashboard, meta: { title: "Панель управления", subtitle: "Статистика и обзор" } },
-        { path: "orders", name: "orders", component: Orders, meta: { title: "Заказы", subtitle: "Реальные заявки и статусы" } },
+        {
+          path: "dashboard",
+          name: "dashboard",
+          component: Dashboard,
+          meta: { title: "Панель управления", subtitle: "Статистика и обзор", roles: ["admin", "ceo", "manager"] },
+        },
+        {
+          path: "orders",
+          name: "orders",
+          component: Orders,
+          meta: { title: "Заказы", subtitle: "Реальные заявки и статусы", roles: ["admin", "ceo", "manager"] },
+        },
         {
           path: "orders/:id",
           name: "order-detail",
@@ -56,6 +73,7 @@ const router = createRouter({
           meta: {
             title: "Детали заказа",
             subtitle: "Подробная информация",
+            roles: ["admin", "ceo", "manager"],
             breadcrumbs: [{ label: "Заказы", to: "/orders" }, { label: "Детали заказа" }],
           },
         },
@@ -63,7 +81,7 @@ const router = createRouter({
           path: "clients",
           name: "clients",
           component: Clients,
-          meta: { title: "Клиенты", subtitle: "Контакты и лояльность", roles: ["admin", "ceo"] },
+          meta: { title: "Клиенты", subtitle: "Контакты и лояльность", roles: ["admin", "ceo", "manager"] },
         },
         {
           path: "clients/:id",
@@ -72,7 +90,7 @@ const router = createRouter({
           meta: {
             title: "Клиент",
             subtitle: "Данные и история",
-            roles: ["admin", "ceo"],
+            roles: ["admin", "ceo", "manager"],
             breadcrumbs: [{ label: "Клиенты", to: "/clients" }, { label: "Клиент" }],
           },
         },
@@ -108,7 +126,7 @@ const router = createRouter({
           path: "branches",
           name: "branches",
           component: Branches,
-          meta: { title: "Филиалы", subtitle: "Рестораны и точки самовывоза", roles: ["admin", "ceo"] },
+          meta: { title: "Филиалы", subtitle: "Рестораны и точки самовывоза", roles: ["admin", "ceo", "manager"] },
         },
         {
           path: "branches/new",
@@ -136,21 +154,38 @@ const router = createRouter({
           path: "delivery-zones",
           name: "delivery-zones",
           component: DeliveryZones,
-          meta: { title: "Зоны доставки", subtitle: "Полигоны на карте", sidebarCollapsed: true, fullBleed: true },
+          meta: {
+            title: "Зоны доставки",
+            subtitle: "Полигоны на карте",
+            sidebarCollapsed: true,
+            fullBleed: true,
+            roles: ["admin", "ceo", "manager"],
+          },
         },
         {
           path: "delivery-zones/:branchId/:polygonId",
           name: "delivery-zone-editor",
           component: DeliveryZoneEditor,
-          meta: { title: "Полигон доставки", subtitle: "Редактирование зоны", sidebarCollapsed: true, fullBleed: true },
+          meta: {
+            title: "Полигон доставки",
+            subtitle: "Редактирование зоны",
+            sidebarCollapsed: true,
+            fullBleed: true,
+            roles: ["admin", "ceo"],
+          },
         },
         {
           path: "menu/categories",
           name: "menu-categories",
           component: MenuCategories,
-          meta: { title: "Категории", subtitle: "Структура меню по городам" },
+          meta: { title: "Категории", subtitle: "Структура меню по городам", roles: ["admin", "ceo"] },
         },
-        { path: "menu/items", name: "menu-items", component: MenuItems, meta: { title: "Позиции", subtitle: "Карточки блюд и варианты" } },
+        {
+          path: "menu/items",
+          name: "menu-items",
+          component: MenuItems,
+          meta: { title: "Позиции", subtitle: "Карточки блюд и варианты", roles: ["admin", "ceo"] },
+        },
         {
           path: "menu/items/:id",
           name: "menu-item-form",
@@ -158,17 +193,33 @@ const router = createRouter({
           meta: {
             title: "Позиция меню",
             subtitle: "Создание и редактирование",
+            roles: ["admin", "ceo"],
             breadcrumbs: [{ label: "Позиции", to: "/menu/items" }, { label: "Позиция меню" }],
           },
         },
-        { path: "menu/modifiers", name: "menu-modifiers", component: MenuModifiers, meta: { title: "Модификаторы", subtitle: "Группы и допы" } },
-        { path: "menu/tags", name: "menu-tags", component: MenuTags, meta: { title: "Теги", subtitle: "Метки для фильтрации блюд" } },
-        { path: "menu/stop-list", name: "menu-stop-list", component: MenuStopList, meta: { title: "Стоп-лист", subtitle: "Недоступные позиции" } },
+        {
+          path: "menu/modifiers",
+          name: "menu-modifiers",
+          component: MenuModifiers,
+          meta: { title: "Модификаторы", subtitle: "Группы и допы", roles: ["admin", "ceo"] },
+        },
+        { path: "menu/tags", name: "menu-tags", component: MenuTags, meta: { title: "Теги", subtitle: "Метки для фильтрации блюд", roles: ["admin", "ceo"] } },
+        {
+          path: "menu/stop-list",
+          name: "menu-stop-list",
+          component: MenuStopList,
+          meta: { title: "Стоп-лист", subtitle: "Недоступные позиции", roles: ["admin", "ceo", "manager"] },
+        },
         {
           path: "broadcasts",
           name: "broadcasts",
           component: Broadcasts,
-          meta: { title: "Рассылки", subtitle: "Маркетинговые кампании", breadcrumbs: [{ label: "Рассылки", to: "/broadcasts" }] },
+          meta: {
+            title: "Рассылки",
+            subtitle: "Маркетинговые кампании",
+            roles: ["admin", "ceo"],
+            breadcrumbs: [{ label: "Рассылки", to: "/broadcasts" }],
+          },
         },
         {
           path: "broadcasts/new",
@@ -177,6 +228,7 @@ const router = createRouter({
           meta: {
             title: "Новая рассылка",
             subtitle: "Создание кампании",
+            roles: ["admin", "ceo"],
             breadcrumbs: [{ label: "Рассылки", to: "/broadcasts" }, { label: "Новая рассылка" }],
           },
         },
@@ -187,6 +239,7 @@ const router = createRouter({
           meta: {
             title: "Редактирование рассылки",
             subtitle: "Настройка кампании",
+            roles: ["admin", "ceo"],
             breadcrumbs: [{ label: "Рассылки", to: "/broadcasts" }, { label: "Редактирование" }],
           },
         },
@@ -197,6 +250,7 @@ const router = createRouter({
           meta: {
             title: "Статистика рассылки",
             subtitle: "Детальный отчет",
+            roles: ["admin", "ceo"],
             breadcrumbs: [{ label: "Рассылки", to: "/broadcasts" }, { label: "Статистика" }],
           },
         },
@@ -207,6 +261,7 @@ const router = createRouter({
           meta: {
             title: "Сегменты",
             subtitle: "Сохраненные аудитории",
+            roles: ["admin", "ceo"],
             breadcrumbs: [{ label: "Рассылки", to: "/broadcasts" }, { label: "Сегменты" }],
           },
         },
@@ -217,6 +272,7 @@ const router = createRouter({
           meta: {
             title: "Дашборд рассылок",
             subtitle: "Сводная аналитика",
+            roles: ["admin", "ceo"],
             breadcrumbs: [{ label: "Рассылки", to: "/broadcasts" }, { label: "Дашборд" }],
           },
         },
@@ -253,7 +309,7 @@ router.beforeEach((to) => {
     return { name: "orders" };
   }
   if (to.meta.roles && authStore.role && !to.meta.roles.includes(authStore.role)) {
-    return { name: "orders" };
+    return { name: "not-found" };
   }
   return true;
 });

@@ -103,10 +103,20 @@
               </TableCell>
               <TableCell class="text-right">
                 <div class="flex justify-end gap-2">
-                  <Button variant="ghost" size="icon" @click="openModal(user)">
+                  <Button
+                    v-if="!(authStore.role === 'ceo' && user.role === 'admin')"
+                    variant="ghost"
+                    size="icon"
+                    @click="openModal(user)"
+                  >
                     <Pencil :size="16" />
                   </Button>
-                  <Button v-if="user.id !== authStore.user?.id" variant="ghost" size="icon" @click="deleteUser(user)">
+                  <Button
+                    v-if="user.id !== authStore.user?.id && !(authStore.role === 'ceo' && user.role === 'admin')"
+                    variant="ghost"
+                    size="icon"
+                    @click="deleteUser(user)"
+                  >
                     <Trash2 :size="16" class="text-red-600" />
                   </Button>
                 </div>
@@ -155,12 +165,12 @@
               <Field>
                 <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Роль</FieldLabel>
                 <FieldContent>
-                  <Select v-model="form.role" required>
+                  <Select v-model="form.role" required :disabled="authStore.role === 'ceo' && Boolean(editing)">
                     <SelectTrigger class="w-full">
                       <SelectValue placeholder="Выберите роль" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="admin">Администратор</SelectItem>
+                      <SelectItem v-if="authStore.role !== 'ceo'" value="admin">Администратор</SelectItem>
                       <SelectItem value="manager">Менеджер</SelectItem>
                       <SelectItem value="ceo">CEO</SelectItem>
                     </SelectContent>
@@ -189,21 +199,22 @@
                 <p class="text-xs text-muted-foreground">Используется для доступа к Eruda в mini app.</p>
               </FieldContent>
             </Field>
-            <Field>
-              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Eruda</FieldLabel>
-              <FieldContent>
-                <Select v-model="form.eruda_enabled" :disabled="!hasTelegramId">
-                  <SelectTrigger class="w-full">
-                    <SelectValue placeholder="Выберите статус" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem :value="true">Включено</SelectItem>
-                    <SelectItem :value="false">Выключено</SelectItem>
-                  </SelectContent>
-                </Select>
-                <p v-if="!hasTelegramId" class="text-xs text-muted-foreground">Для включения нужен Telegram ID.</p>
-              </FieldContent>
-            </Field>
+              <Field>
+                <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Eruda</FieldLabel>
+                <FieldContent>
+                  <Select v-model="form.eruda_enabled" :disabled="!hasTelegramId || authStore.role === 'ceo'">
+                    <SelectTrigger class="w-full">
+                      <SelectValue placeholder="Выберите статус" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem :value="true">Включено</SelectItem>
+                      <SelectItem :value="false">Выключено</SelectItem>
+                    </SelectContent>
+                  </Select>
+                <p v-if="authStore.role === 'ceo'" class="text-xs text-muted-foreground">CEO не может включать Eruda.</p>
+                <p v-else-if="!hasTelegramId" class="text-xs text-muted-foreground">Для включения нужен Telegram ID.</p>
+                </FieldContent>
+              </Field>
             <Field v-if="form.role === 'manager'">
               <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Города доступа</FieldLabel>
               <FieldContent>
@@ -325,6 +336,9 @@ const loadUsers = async () => {
   }
 };
 const openModal = (user = null) => {
+  if (authStore.role === "ceo" && user?.role === "admin") {
+    return;
+  }
   editing.value = user;
   if (user) {
     form.value = {
