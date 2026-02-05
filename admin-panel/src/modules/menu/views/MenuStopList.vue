@@ -352,14 +352,13 @@ const form = ref({
   branch_id: "",
   type: "",
   reason: "",
-  fulfillment_types: ["delivery", "pickup", "dine_in"],
+  fulfillment_types: ["pickup", "delivery"],
   auto_remove: false,
   remove_at: null,
 });
 const fulfillmentOptions = [
-  { value: "delivery", label: "Доставка" },
   { value: "pickup", label: "Самовывоз" },
-  { value: "dine_in", label: "В зале" },
+  { value: "delivery", label: "Доставка" },
 ];
 const hours = Array.from({ length: 24 }, (_, index) => String(index).padStart(2, "0"));
 const minutes = Array.from({ length: 60 }, (_, index) => String(index).padStart(2, "0"));
@@ -477,7 +476,7 @@ const resetForm = () => {
     branch_id: "",
     type: "",
     reason: "",
-    fulfillment_types: ["delivery", "pickup", "dine_in"],
+    fulfillment_types: ["pickup", "delivery"],
     auto_remove: false,
     remove_at: null,
   };

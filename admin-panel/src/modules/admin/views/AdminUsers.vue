@@ -184,7 +184,7 @@
               <FieldContent>
                 <div class="grid gap-2 md:grid-cols-2">
                   <Label v-for="city in referenceStore.cities" :key="city.id" class="flex items-center gap-2 text-sm text-foreground">
-                    <input type="checkbox" :value="city.id" v-model="form.city_ids" class="h-4 w-4 rounded border-border" />
+                    <input type="checkbox" :value="Number(city.id)" v-model="form.city_ids" class="h-4 w-4 rounded border-border" />
                     <span>{{ city.name }}</span>
                   </Label>
                 </div>
@@ -195,7 +195,7 @@
               <FieldContent>
                 <div class="grid gap-2 md:grid-cols-2">
                   <Label v-for="branch in availableBranches" :key="branch.id" class="flex items-center gap-2 text-sm text-foreground">
-                    <input type="checkbox" :value="branch.id" v-model="form.branch_ids" class="h-4 w-4 rounded border-border" />
+                    <input type="checkbox" :value="Number(branch.id)" v-model="form.branch_ids" class="h-4 w-4 rounded border-border" />
                     <span>{{ branch.name }}{{ branch.city_name ? ` · ${branch.city_name}` : "" }}</span>
                   </Label>
                 </div>
@@ -309,8 +309,8 @@ const openModal = (user = null) => {
       role: user.role,
       is_active: normalizeBoolean(user.is_active, true),
       telegram_id: user.telegram_id || "",
-      city_ids: user.cities?.map((c) => c.id) || [],
-      branch_ids: user.branches?.map((branch) => branch.id) || [],
+      city_ids: (user.cities || []).map((c) => Number(c.id)).filter(Number.isFinite),
+      branch_ids: (user.branches || []).map((branch) => Number(branch.id)).filter(Number.isFinite),
     };
   } else {
     form.value = {

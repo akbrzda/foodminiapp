@@ -32,13 +32,7 @@ export const useCartStore = defineStore("cart", {
               const group = menuItem.modifier_groups?.find((g) => g.modifiers?.some((m) => m.id === modifierId));
               const modifier = group?.modifiers?.find((m) => m.id === modifierId);
               if (!modifier) return mod;
-              let price = parseFloat(modifier.price) || 0;
-              if (variant && Array.isArray(modifier.variant_prices)) {
-                const match = modifier.variant_prices.find((p) => p.variant_id === variant.id);
-                if (match && match.price !== undefined && match.price !== null) {
-                  price = parseFloat(match.price) || 0;
-                }
-              }
+              const price = parseFloat(modifier.price) || 0;
               modifiersTotal += price;
               if (typeof mod === "number") return mod;
               return { ...mod, price };

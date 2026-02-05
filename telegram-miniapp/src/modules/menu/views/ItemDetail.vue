@@ -194,6 +194,18 @@ const requiredModifierGroups = computed(() => {
   if (!item.value?.modifier_groups) return [];
   return item.value.modifier_groups.filter((g) => g.is_required);
 });
+const normalizeNumber = (value) => {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+};
+const getGroupMax = (group) => {
+  const max = normalizeNumber(group?.max_selections);
+  return max !== null && max > 0 ? max : null;
+};
+const getGroupMin = (group) => {
+  const min = normalizeNumber(group?.min_selections);
+  return min !== null && min > 0 ? min : 0;
+};
 const displayImageUrl = computed(() => {
   if (item.value?.image_url) return normalizeImageUrl(item.value.image_url);
   const fallbackItem = menuStore.getItemById?.(parseInt(route.params.id, 10));
@@ -277,15 +289,8 @@ function getSelectedModifiersArray() {
         if (qty <= 0) continue;
         const modifier = group.modifiers.find((m) => m.id === Number(modifierId));
         if (!modifier) continue;
-        let weightValue = modifier.weight ?? null;
-        let weightUnit = modifier.weight_unit ?? null;
-        if (selectedVariant.value && Array.isArray(modifier.variant_prices)) {
-          const match = modifier.variant_prices.find((price) => price.variant_id === selectedVariant.value.id);
-          if (match) {
-            weightValue = match.weight ?? weightValue;
-            weightUnit = match.weight_unit ?? weightUnit;
-          }
-        }
+        const weightValue = modifier.weight ?? null;
+        const weightUnit = modifier.weight_unit ?? null;
         for (let i = 0; i < qty; i += 1) {
           modifiers.push({
             id: modifier.id,
@@ -396,10 +401,11 @@ const increaseModifier = (group, modifier) => {
     selectedModifiers.value = newSelectedModifiers;
     return;
   }
-  if (group.max_selections && getGroupTotalCount(group.id) >= group.max_selections) {
+  const current = Number(groupMap[modifier.id] || 0);
+  const groupMax = getGroupMax(group);
+  if (groupMax !== null && current >= groupMax) {
     return;
   }
-  const current = Number(groupMap[modifier.id] || 0);
   groupMap[modifier.id] = current + 1;
   newSelectedModifiers[group.id] = groupMap;
   selectedModifiers.value = newSelectedModifiers;
@@ -430,21 +436,10 @@ function isModifierUnavailable(modifier) {
 }
 function getModifierPrice(modifier) {
   if (!modifier) return 0;
-  if (selectedVariant.value && Array.isArray(modifier.variant_prices)) {
-    const match = modifier.variant_prices.find((price) => price.variant_id === selectedVariant.value.id);
-    if (match && match.price !== undefined && match.price !== null) {
-      return parseFloat(match.price) || 0;
-    }
-  }
   return parseFloat(modifier.price) || 0;
 }
 function getModifierWeight(modifier) {
   if (!modifier) return "";
-  if (selectedVariant.value && Array.isArray(modifier.variant_prices)) {
-    const match = modifier.variant_prices.find((price) => price.variant_id === selectedVariant.value.id);
-    const variantWeight = formatModifierWeight(match?.weight, match?.weight_unit);
-    if (variantWeight) return variantWeight;
-  }
   return formatModifierWeight(modifier.weight, modifier.weight_unit);
 }
 function increaseQuantity() {
@@ -511,9 +506,15 @@ const canAddToCart = computed(() => {
   if (item.value.modifier_groups) {
     for (const group of item.value.modifier_groups) {
       const selectedCount = getGroupTotalCount(group.id);
-      const minSelections = group.is_required ? Math.max(1, group.min_selections || 1) : group.min_selections || 0;
+      const minValue = getGroupMin(group);
+      const minSelections = group.is_required ? Math.max(1, minValue || 1) : minValue || 0;
       if (selectedCount < minSelections) return false;
-      if (group.max_selections && selectedCount > group.max_selections) return false;
+      const groupMax = getGroupMax(group);
+      if (groupMax !== null) {
+        const groupMap = selectedModifiers.value[group.id] || {};
+        const exceedsMax = Object.values(groupMap).some((value) => Number(value || 0) > groupMax);
+        if (exceedsMax) return false;
+      }
       if (group.type === "single" && selectedCount > 1) return false;
     }
   }

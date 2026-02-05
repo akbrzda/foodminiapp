@@ -192,7 +192,7 @@
                     <input
                       v-model="form.category_ids"
                       type="checkbox"
-                      :value="category.id"
+                      :value="Number(category.id)"
                       class="h-4 w-4 rounded border-border text-primary focus:ring-primary"
                     />
                     {{ category.name }}
@@ -303,7 +303,7 @@
                 <input
                   v-model="form.modifier_group_ids"
                   type="checkbox"
-                  :value="group.id"
+                  :value="Number(group.id)"
                   class="h-4 w-4 rounded border-border text-primary focus:ring-primary"
                 />
                 {{ group.name }}
@@ -324,7 +324,7 @@
                   <input
                     v-model="form.disabled_modifier_ids"
                     type="checkbox"
-                    :value="modifier.id"
+                    :value="Number(modifier.id)"
                     class="h-4 w-4 rounded border-border text-primary focus:ring-primary"
                   />
                   {{ modifier.name }} <span class="text-xs text-muted-foreground">· отключить</span>
@@ -346,7 +346,7 @@
                 <input
                   v-model="form.city_ids"
                   type="checkbox"
-                  :value="city.id"
+                  :value="Number(city.id)"
                   class="h-4 w-4 rounded border-border text-primary focus:ring-primary"
                 />
                 {{ city.name }}
@@ -356,113 +356,65 @@
         </Card>
         <Card v-if="isEditing">
           <CardHeader>
-            <CardTitle class="text-base">Цены</CardTitle>
-            <CardDescription>Установка цен по городам и способам получения</CardDescription>
+            <CardTitle class="text-base">{{ hasVariants ? "Цены вариаций" : "Цены" }}</CardTitle>
+            <CardDescription>
+              {{ hasVariants ? "Редактируйте цены для выбранного города" : "Редактируйте цены позиции для выбранного города" }}
+            </CardDescription>
           </CardHeader>
-          <CardContent class="pt-6">
-            <div class="space-y-4">
-              <div v-for="(priceItem, index) in form.prices" :key="index" class="flex items-end gap-2 p-3 border rounded-lg">
-                <Field class="flex-1">
-                  <FieldLabel class="text-xs text-muted-foreground">Город</FieldLabel>
-                  <FieldContent>
-                    <Select v-model="priceItem.city_id">
-                      <SelectTrigger class="w-full">
-                        <SelectValue placeholder="Все города" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem :value="null">Все города</SelectItem>
-                        <SelectItem v-for="city in referenceStore.cities" :key="city.id" :value="city.id">{{ city.name }}</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </FieldContent>
-                </Field>
-                <Field class="flex-1">
-                  <FieldLabel class="text-xs text-muted-foreground">Способ получения</FieldLabel>
-                  <FieldContent>
-                    <Select v-model="priceItem.fulfillment_type">
-                      <SelectTrigger class="w-full">
-                        <SelectValue placeholder="Способ" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="delivery">Доставка</SelectItem>
-                        <SelectItem value="pickup">Самовывоз</SelectItem>
-                        <SelectItem value="dine_in">В зале</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </FieldContent>
-                </Field>
-                <Field class="flex-1">
-                  <FieldLabel class="text-xs text-muted-foreground">Цена</FieldLabel>
-                  <FieldContent>
-                    <Input v-model.number="priceItem.price" type="number" step="0.01" placeholder="0.00" />
-                  </FieldContent>
-                </Field>
-                <Button variant="ghost" size="icon" @click="form.prices.splice(index, 1)">
-                  <Trash2 :size="16" class="text-red-600" />
-                </Button>
-              </div>
-              <Button variant="outline" class="w-full" @click="addPrice">
-                <Plus :size="16" />
-                Добавить цену
-              </Button>
+          <CardContent class="space-y-4">
+            <div class="flex flex-wrap items-center gap-3">
+              <div class="text-sm text-muted-foreground">Город</div>
+              <Select v-model="selectedCityId" :disabled="activeCities.length === 0">
+                <SelectTrigger class="w-64">
+                  <SelectValue placeholder="Выберите город" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem v-for="city in activeCities" :key="city.id" :value="city.id">{{ city.name }}</SelectItem>
+                </SelectContent>
+              </Select>
+              <div v-if="activeCities.length === 0" class="text-xs text-muted-foreground">Сначала включите хотя бы один город.</div>
             </div>
-          </CardContent>
-        </Card>
-        <Card v-if="isEditing && form.variants.length > 0">
-          <CardHeader>
-            <CardTitle class="text-base">Цены вариаций</CardTitle>
-            <CardDescription>Укажите цены для каждой вариации по городам и способам получения</CardDescription>
-          </CardHeader>
-          <CardContent class="space-y-6">
-            <div v-for="(variant, variantIndex) in form.variants" :key="variant.id || variantIndex" class="space-y-4">
-              <div class="text-sm font-semibold text-foreground">
-                {{ variant.name || `Вариация ${variantIndex + 1}` }}
+            <div v-if="selectedCityId" class="space-y-4">
+              <div v-if="hasVariants" class="space-y-4">
+                <div v-for="(variant, variantIndex) in form.variants" :key="variant.id || variantIndex" class="space-y-3 rounded-lg border p-3">
+                  <div class="flex flex-wrap items-center justify-between gap-2">
+                    <div class="text-sm font-semibold text-foreground">{{ variant.name || `Вариация ${variantIndex + 1}` }}</div>
+                    <div class="text-xs text-muted-foreground">Базовая цена: {{ formatPrice(variant.price) }}</div>
+                  </div>
+                  <div class="grid gap-3 md:grid-cols-3">
+                    <Field v-for="type in fulfillmentTypes" :key="type.value">
+                      <FieldLabel class="text-xs text-muted-foreground">{{ type.label }}</FieldLabel>
+                      <FieldContent>
+                        <Input
+                          v-model.number="getOrCreateVariantPriceEntry(variant, selectedCityId, type.value).price"
+                          type="number"
+                          step="0.01"
+                          placeholder="0.00"
+                        />
+                      </FieldContent>
+                    </Field>
+                  </div>
+                </div>
               </div>
-              <div v-if="!variant.prices || variant.prices.length === 0" class="text-xs text-muted-foreground">Цены не заданы</div>
-              <div v-for="(priceItem, index) in variant.prices" :key="index" class="flex items-end gap-2 p-3 border rounded-lg">
-                <Field class="flex-1">
-                  <FieldLabel class="text-xs text-muted-foreground">Город</FieldLabel>
-                  <FieldContent>
-                    <Select v-model="priceItem.city_id">
-                      <SelectTrigger class="w-full">
-                        <SelectValue placeholder="Все города" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem :value="null">Все города</SelectItem>
-                        <SelectItem v-for="city in referenceStore.cities" :key="city.id" :value="city.id">{{ city.name }}</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </FieldContent>
-                </Field>
-                <Field class="flex-1">
-                  <FieldLabel class="text-xs text-muted-foreground">Способ получения</FieldLabel>
-                  <FieldContent>
-                    <Select v-model="priceItem.fulfillment_type">
-                      <SelectTrigger class="w-full">
-                        <SelectValue placeholder="Способ" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="delivery">Доставка</SelectItem>
-                        <SelectItem value="pickup">Самовывоз</SelectItem>
-                        <SelectItem value="dine_in">В зале</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </FieldContent>
-                </Field>
-                <Field class="flex-1">
-                  <FieldLabel class="text-xs text-muted-foreground">Цена</FieldLabel>
-                  <FieldContent>
-                    <Input v-model.number="priceItem.price" type="number" step="0.01" placeholder="0.00" />
-                  </FieldContent>
-                </Field>
-                <Button variant="ghost" size="icon" @click="variant.prices.splice(index, 1)">
-                  <Trash2 :size="16" class="text-red-600" />
-                </Button>
+              <div v-else class="space-y-3 rounded-lg border p-3">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <div class="text-sm font-semibold text-foreground">Цена позиции</div>
+                  <div class="text-xs text-muted-foreground">Базовая цена: {{ formatPrice(getBaseItemPrice()) }}</div>
+                </div>
+                <div class="grid gap-3 md:grid-cols-3">
+                  <Field v-for="type in fulfillmentTypes" :key="type.value">
+                    <FieldLabel class="text-xs text-muted-foreground">{{ type.label }}</FieldLabel>
+                    <FieldContent>
+                      <Input
+                        v-model.number="getOrCreateItemPriceEntry(selectedCityId, type.value).price"
+                        type="number"
+                        step="0.01"
+                        placeholder="0.00"
+                      />
+                    </FieldContent>
+                  </Field>
+                </div>
               </div>
-              <Button variant="outline" class="w-full" @click="addVariantPrice(variant)">
-                <Plus :size="16" />
-                Добавить цену вариации
-              </Button>
             </div>
           </CardContent>
         </Card>
@@ -476,7 +428,7 @@
           <CardContent>
             <div class="grid gap-2 md:grid-cols-2">
               <Label v-for="tag in tags" :key="tag.id" class="flex items-center gap-2 text-sm text-foreground">
-                <input v-model="form.tag_ids" type="checkbox" :value="tag.id" class="h-4 w-4 rounded border-border text-primary focus:ring-primary" />
+                <input v-model="form.tag_ids" type="checkbox" :value="Number(tag.id)" class="h-4 w-4 rounded border-border text-primary focus:ring-primary" />
                 <Badge :style="`background-color: ${tag.color_hex}`">{{ tag.name }}</Badge>
               </Label>
             </div>
@@ -527,8 +479,15 @@ const activeTab = ref(0);
 const fileInput = ref(null);
 const uploadState = ref({ loading: false, error: null, preview: null });
 const tabLabels = ["Основное", "Вариации", "Модификаторы", "Доступность и цены", "Теги"];
+const allowedFulfillmentValues = ["pickup", "delivery"];
+const fulfillmentTypes = [
+  { value: "pickup", label: "Самовывоз" },
+  { value: "delivery", label: "Доставка" },
+];
 const itemId = computed(() => route.params.id);
 const isEditing = computed(() => !!itemId.value && itemId.value !== "new");
+const selectedCityId = ref(null);
+const initialDisabledModifierIds = ref([]);
 const form = ref({
   name: "",
   description: "",
@@ -556,6 +515,9 @@ const form = ref({
 });
 const modalTitle = computed(() => (isEditing.value ? "Редактировать позицию" : "Новая позиция"));
 const modalSubtitle = computed(() => (isEditing.value ? "Измените параметры позиции" : "Создайте позицию меню"));
+const hasVariants = computed(() => form.value.variants.length > 0);
+const activeCityIds = computed(() => (Array.isArray(form.value.city_ids) ? form.value.city_ids.map((id) => Number(id)).filter(Number.isFinite) : []));
+const activeCities = computed(() => referenceStore.cities.filter((city) => activeCityIds.value.includes(city.id)));
 const formTitle = computed(() => {
   if (!isEditing.value) return "Новая позиция";
   const name = String(form.value.name || "").trim();
@@ -580,11 +542,77 @@ const normalizeIsActive = (value, fallback = true) => {
   if (typeof value === "string") return value === "1" || value.toLowerCase() === "true";
   return Boolean(value);
 };
+const normalizeIdArray = (value) => {
+  if (!Array.isArray(value)) return [];
+  return value.map((id) => Number(id)).filter(Number.isFinite);
+};
 const normalizeImageUrl = (url) => {
   if (!url) return "";
   if (url.startsWith("http://") || url.startsWith("https://")) return url;
   const base = (import.meta.env.VITE_UPLOADS_URL || import.meta.env.VITE_API_URL || window.location.origin).replace(/\/$/, "");
   return url.startsWith("/") ? `${base}${url}` : `${base}/${url}`;
+};
+const normalizeCityId = (value) => {
+  if (value === null || value === undefined || value === "") return null;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+};
+const formatPrice = (value) => {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return "0 ₽";
+  return `${numeric.toFixed(0)} ₽`;
+};
+const getBaseItemPrice = () => {
+  if (!Array.isArray(form.value.prices)) return 0;
+  const baseDelivery = form.value.prices.find(
+    (price) => normalizeCityId(price.city_id) === null && price.fulfillment_type === "delivery" && price.price !== null && price.price !== undefined,
+  );
+  if (baseDelivery) return Number(baseDelivery.price) || 0;
+  const baseAny = form.value.prices.find((price) => normalizeCityId(price.city_id) === null && price.price !== null && price.price !== undefined);
+  if (baseAny) return Number(baseAny.price) || 0;
+  const fallback = form.value.prices.find((price) => price.price !== null && price.price !== undefined);
+  return fallback ? Number(fallback.price) || 0 : 0;
+};
+const getOrCreatePriceEntry = (list, cityId, fulfillmentType, basePrice) => {
+  if (!Array.isArray(list)) return { city_id: cityId, fulfillment_type: fulfillmentType, price: basePrice || 0 };
+  const normalizedCityId = normalizeCityId(cityId);
+  let entry = list.find(
+    (price) => normalizeCityId(price.city_id) === normalizedCityId && price.fulfillment_type === fulfillmentType,
+  );
+  if (!entry) {
+    entry = {
+      city_id: normalizedCityId,
+      fulfillment_type: fulfillmentType,
+      price: basePrice || 0,
+    };
+    list.push(entry);
+  }
+  return entry;
+};
+const ensureItemPricesForCity = (cityId) => {
+  const normalizedCityId = normalizeCityId(cityId);
+  if (normalizedCityId === null) return;
+  const basePrice = getBaseItemPrice();
+  fulfillmentTypes.forEach((type) => {
+    getOrCreatePriceEntry(form.value.prices, normalizedCityId, type.value, basePrice);
+  });
+};
+const ensureVariantPricesForCity = (variant, cityId) => {
+  const normalizedCityId = normalizeCityId(cityId);
+  if (normalizedCityId === null || !variant) return;
+  const basePrice = Number(variant.price) || 0;
+  if (!Array.isArray(variant.prices)) variant.prices = [];
+  fulfillmentTypes.forEach((type) => {
+    getOrCreatePriceEntry(variant.prices, normalizedCityId, type.value, basePrice);
+  });
+};
+const getOrCreateItemPriceEntry = (cityId, fulfillmentType) => {
+  const basePrice = getBaseItemPrice();
+  return getOrCreatePriceEntry(form.value.prices, cityId, fulfillmentType, basePrice);
+};
+const getOrCreateVariantPriceEntry = (variant, cityId, fulfillmentType) => {
+  if (!Array.isArray(variant.prices)) variant.prices = [];
+  return getOrCreatePriceEntry(variant.prices, cityId, fulfillmentType, Number(variant.price) || 0);
 };
 const goBack = () => {
   router.push({ name: "menu-items" });
@@ -641,7 +669,7 @@ const loadItem = async () => {
     );
     const variantsWithPrices = variants.map((variant, index) => ({
       ...variant,
-      prices: variantPricesResponses[index] || [],
+      prices: (variantPricesResponses[index] || []).filter((price) => allowedFulfillmentValues.includes(price.fulfillment_type)),
     }));
     form.value = {
       name: item.name,
@@ -660,14 +688,16 @@ const loadItem = async () => {
       carbs_per_serving: item.carbs_per_serving,
       sort_order: item.sort_order || 0,
       is_active: normalizeIsActive(item.is_active),
-      category_ids: categoriesRes.data.category_ids || [],
+      category_ids: normalizeIdArray(categoriesRes.data.category_ids),
       variants: variantsWithPrices,
-      modifier_group_ids: modifiersRes.data.modifier_group_ids || [],
-      disabled_modifier_ids: (disabledModsRes.data.modifiers || []).map((modifier) => modifier.id),
-      city_ids: citiesRes.data.city_ids || [],
-      tag_ids: tagsRes.data.tag_ids || [],
-      prices: pricesRes.data.prices || [],
+      modifier_group_ids: normalizeIdArray(modifiersRes.data.modifier_group_ids),
+      disabled_modifier_ids: normalizeIdArray((disabledModsRes.data.modifiers || []).map((modifier) => modifier.id)),
+      city_ids: normalizeIdArray(citiesRes.data.city_ids),
+      tag_ids: normalizeIdArray(tagsRes.data.tag_ids),
+      prices: (pricesRes.data.prices || []).filter((price) => allowedFulfillmentValues.includes(price.fulfillment_type)),
     };
+    selectedCityId.value = form.value.city_ids.length ? form.value.city_ids[0] : null;
+    initialDisabledModifierIds.value = [...form.value.disabled_modifier_ids];
   } catch (error) {
     console.error("Failed to load item:", error);
     showErrorNotification("Ошибка при загрузке позиции");
@@ -721,14 +751,17 @@ const saveModifiers = async (savedItemId) => {
 const saveDisabledModifiers = async (savedItemId) => {
   const selectedGroups = modifierGroups.value.filter((group) => form.value.modifier_group_ids.includes(group.id));
   const allModifierIds = selectedGroups.flatMap((group) => group.modifiers?.map((modifier) => modifier.id) || []);
-  const disabledIds = new Set(form.value.disabled_modifier_ids);
-  for (const modifierId of allModifierIds) {
-    if (disabledIds.has(modifierId)) {
-      await api.post(`/api/menu/admin/items/${savedItemId}/disabled-modifiers`, { modifier_id: modifierId });
-    } else {
-      await api.delete(`/api/menu/admin/items/${savedItemId}/disabled-modifiers/${modifierId}`);
-    }
-  }
+  const desiredDisabledIds = new Set(form.value.disabled_modifier_ids);
+  const initialDisabledIds = new Set(initialDisabledModifierIds.value || []);
+  const toDisable = allModifierIds.filter((id) => desiredDisabledIds.has(id) && !initialDisabledIds.has(id));
+  const toEnable = allModifierIds.filter((id) => !desiredDisabledIds.has(id) && initialDisabledIds.has(id));
+  await Promise.all(
+    toDisable.map((modifierId) => api.post(`/api/menu/admin/items/${savedItemId}/disabled-modifiers`, { modifier_id: modifierId })),
+  );
+  await Promise.all(
+    toEnable.map((modifierId) => api.delete(`/api/menu/admin/items/${savedItemId}/disabled-modifiers/${modifierId}`)),
+  );
+  initialDisabledModifierIds.value = [...form.value.disabled_modifier_ids];
 };
 const saveCities = async (savedItemId) => {
   await api.put(`/api/menu/admin/items/${savedItemId}/cities`, { city_ids: form.value.city_ids });
@@ -737,13 +770,20 @@ const saveTags = async (savedItemId) => {
   await api.put(`/api/menu/admin/items/${savedItemId}/tags`, { tag_ids: form.value.tag_ids });
 };
 const savePrices = async (savedItemId) => {
+  const requests = [];
   for (const priceItem of form.value.prices) {
-    await api.post(`/api/menu/admin/items/${savedItemId}/prices`, {
-      city_id: priceItem.city_id,
-      fulfillment_type: priceItem.fulfillment_type,
-      price: priceItem.price,
-    });
+    if (!priceItem || !priceItem.fulfillment_type) continue;
+    if (priceItem.price === null || priceItem.price === undefined || priceItem.price === "") continue;
+    if (!allowedFulfillmentValues.includes(priceItem.fulfillment_type)) continue;
+    requests.push(
+      api.post(`/api/menu/admin/items/${savedItemId}/prices`, {
+        city_id: priceItem.city_id,
+        fulfillment_type: priceItem.fulfillment_type,
+        price: priceItem.price,
+      }),
+    );
   }
+  await Promise.all(requests);
 };
 const saveVariantPrices = async () => {
   for (const variant of form.value.variants) {
@@ -752,7 +792,8 @@ const saveVariantPrices = async () => {
     const cleanedPrices = variant.prices.filter(
       (priceItem) => priceItem && priceItem.fulfillment_type && priceItem.price !== null && priceItem.price !== undefined && priceItem.price !== "",
     );
-    await api.put(`/api/menu/admin/variants/${variant.id}/prices`, { prices: cleanedPrices });
+    const payload = cleanedPrices.filter((priceItem) => allowedFulfillmentValues.includes(priceItem.fulfillment_type));
+    await api.put(`/api/menu/admin/variants/${variant.id}/prices`, { prices: payload });
   }
 };
 const saveAll = async () => {
@@ -761,11 +802,7 @@ const saveAll = async () => {
     const savedItemId = await saveItem();
     if (!savedItemId) return;
     await saveVariants(savedItemId);
-    await saveModifiers(savedItemId);
-    await saveCities(savedItemId);
-    await savePrices(savedItemId);
-    await saveVariantPrices();
-    await saveTags(savedItemId);
+    await Promise.all([saveModifiers(savedItemId), saveCities(savedItemId), savePrices(savedItemId), saveVariantPrices(), saveTags(savedItemId)]);
     showSuccessNotification("Позиция сохранена");
   } catch (error) {
     console.error("Failed to save all item data:", error);
@@ -774,24 +811,9 @@ const saveAll = async () => {
     saving.value = false;
   }
 };
-const addPrice = () => {
-  form.value.prices.push({
-    city_id: null,
-    fulfillment_type: "delivery",
-    price: 0,
-  });
-};
-const addVariantPrice = (variant) => {
-  if (!Array.isArray(variant.prices)) variant.prices = [];
-  variant.prices.push({
-    city_id: null,
-    fulfillment_type: "delivery",
-    price: 0,
-  });
-};
 const selectedModifierGroups = computed(() => modifierGroups.value.filter((group) => form.value.modifier_group_ids.includes(group.id)));
 const addVariant = () => {
-  form.value.variants.push({
+  const newVariant = {
     name: "",
     price: 0,
     weight_value: null,
@@ -805,7 +827,10 @@ const addVariant = () => {
     fats_per_serving: null,
     carbs_per_serving: null,
     prices: [],
-  });
+  };
+  form.value.variants.push(newVariant);
+  const cityIds = form.value.city_ids || [];
+  cityIds.forEach((cityId) => ensureVariantPricesForCity(newVariant, cityId));
 };
 const removeVariant = (index) => {
   form.value.variants.splice(index, 1);
@@ -863,6 +888,38 @@ onMounted(async () => {
     showErrorNotification("Ошибка загрузки данных формы");
   }
 });
+watch(
+  () => activeCityIds.value,
+  (next, prev) => {
+    const prevSet = new Set(prev || []);
+    const nextSet = new Set(next || []);
+    const added = next.filter((id) => !prevSet.has(id));
+    if (added.length) {
+      if (hasVariants.value) {
+        form.value.variants.forEach((variant) => {
+          added.forEach((cityId) => ensureVariantPricesForCity(variant, cityId));
+        });
+      } else {
+        added.forEach((cityId) => ensureItemPricesForCity(cityId));
+      }
+    }
+    if (selectedCityId.value && !nextSet.has(Number(selectedCityId.value))) {
+      selectedCityId.value = next.length ? next[0] : null;
+    }
+  },
+  { immediate: true },
+);
+watch(
+  () => selectedCityId.value,
+  (next) => {
+    if (!next) return;
+    if (hasVariants.value) {
+      form.value.variants.forEach((variant) => ensureVariantPricesForCity(variant, next));
+    } else {
+      ensureItemPricesForCity(next);
+    }
+  },
+);
 watch(
   () => [formTitle.value, ordersStore.newOrdersCount],
   () => {

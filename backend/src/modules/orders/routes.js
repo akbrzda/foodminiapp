@@ -407,15 +407,19 @@ async function calculateOrderCost(items, { cityId, fulfillmentType, bonusToUse =
         if (newModifiers.length > 0) {
           const modifier = newModifiers[0];
           let modifierPrice = parseFloat(modifier.price);
-          if (variant_id) {
-            const [variantModifierPrices] = await db.query(
-              `SELECT price FROM menu_modifier_variant_prices
-               WHERE modifier_id = ? AND variant_id = ?
+          if (cityId) {
+            const [cityModifierPrices] = await db.query(
+              `SELECT price, is_active
+               FROM menu_modifier_prices
+               WHERE modifier_id = ? AND city_id = ?
                LIMIT 1`,
-              [modifier.id, variant_id],
+              [modifier.id, cityId],
             );
-            if (variantModifierPrices.length > 0) {
-              modifierPrice = parseFloat(variantModifierPrices[0].price);
+            if (cityModifierPrices.length > 0) {
+              if (!cityModifierPrices[0].is_active) {
+                throw new Error(`Modifier ${modifier.id} is not available in this city`);
+              }
+              modifierPrice = parseFloat(cityModifierPrices[0].price);
             }
           }
           modifiersTotal += modifierPrice;

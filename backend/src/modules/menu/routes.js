@@ -61,6 +61,7 @@ router.get("/", async (req, res, next) => {
     if (!city_id) {
       return res.status(400).json({ error: "city_id is required" });
     }
+    const cityId = Number(city_id);
     const cacheKeyParts = [`menu:city:${city_id}`];
     if (branch_id) cacheKeyParts.push(`branch:${branch_id}`);
     if (fulfillment_type) cacheKeyParts.push(`fulfillment:${fulfillment_type}`);
@@ -227,16 +228,29 @@ router.get("/", async (req, res, next) => {
             [group.id],
           );
           const activeModifiers = modifiers.filter((mod) => !disabledIds.includes(mod.id));
-          for (const modifier of activeModifiers) {
-            if (variants.length > 0) {
-              const [variantPrices] = await db.query(
-                `SELECT variant_id, price, weight, weight_unit
-                 FROM menu_modifier_variant_prices
-                 WHERE modifier_id = ?`,
-                [modifier.id],
-              );
-              modifier.variant_prices = variantPrices;
-            }
+          let modifiersWithCity = activeModifiers;
+          if (cityId && activeModifiers.length > 0) {
+            const modifierIds = activeModifiers.map((mod) => mod.id);
+            const [cityPrices] = await db.query(
+              `SELECT modifier_id, price, is_active
+               FROM menu_modifier_prices
+               WHERE city_id = ?
+                 AND modifier_id IN (${modifierIds.map(() => "?").join(",")})`,
+              [cityId, ...modifierIds],
+            );
+            const pricesByModifier = new Map(cityPrices.map((row) => [row.modifier_id, row]));
+            modifiersWithCity = activeModifiers.filter((modifier) => {
+              const priceRow = pricesByModifier.get(modifier.id);
+              if (priceRow && !priceRow.is_active) {
+                return false;
+              }
+              if (priceRow) {
+                modifier.price = priceRow.price;
+              }
+              return true;
+            });
+          }
+          for (const modifier of modifiersWithCity) {
             if (branch_id) {
               const stopListQuery = fulfillment_type
                 ? `SELECT id FROM menu_stop_list
@@ -257,7 +271,7 @@ router.get("/", async (req, res, next) => {
               modifier.in_stop_list = false;
             }
           }
-          group.modifiers = activeModifiers;
+          group.modifiers = modifiersWithCity;
         }
         item.modifier_groups = modifierGroups;
         const [oldModifiers] = await db.query(
@@ -360,7 +374,7 @@ router.get("/categories/:categoryId/items", async (req, res, next) => {
       );
       item.variants = variants;
       const [modifierGroups] = await db.query(
-        `SELECT mg.id, mg.name, mg.type, mg.is_required, mg.is_active
+        `SELECT mg.id, mg.name, mg.type, mg.is_required, mg.min_selections, mg.max_selections, mg.is_active
          FROM modifier_groups mg
          JOIN item_modifier_groups img ON mg.id = img.modifier_group_id
          WHERE img.item_id = ? AND mg.is_active = TRUE
@@ -434,7 +448,7 @@ router.get("/items/:id", async (req, res, next) => {
       }
     }
     const [modifierGroups] = await db.query(
-      `SELECT mg.id, mg.name, mg.type, mg.is_required, mg.is_active
+      `SELECT mg.id, mg.name, mg.type, mg.is_required, mg.min_selections, mg.max_selections, mg.is_active
        FROM modifier_groups mg
        JOIN item_modifier_groups img ON mg.id = img.modifier_group_id
        WHERE img.item_id = ? AND mg.is_active = TRUE
@@ -449,26 +463,30 @@ router.get("/items/:id", async (req, res, next) => {
          ORDER BY sort_order, name`,
         [group.id],
       );
-      if (modifiers.length > 0) {
+      if (city_id && modifiers.length > 0) {
         const modifierIds = modifiers.map((modifier) => modifier.id);
-        const [variantPrices] = await db.query(
-          `SELECT modifier_id, variant_id, price
-           FROM menu_modifier_variant_prices
-           WHERE modifier_id IN (${modifierIds.map(() => "?").join(",")})`,
-          modifierIds,
+        const [cityPrices] = await db.query(
+          `SELECT modifier_id, price, is_active
+           FROM menu_modifier_prices
+           WHERE city_id = ?
+             AND modifier_id IN (${modifierIds.map(() => "?").join(",")})`,
+          [city_id, ...modifierIds],
         );
-        const pricesByModifier = new Map();
-        variantPrices.forEach((row) => {
-          if (!pricesByModifier.has(row.modifier_id)) {
-            pricesByModifier.set(row.modifier_id, []);
+        const pricesByModifier = new Map(cityPrices.map((row) => [row.modifier_id, row]));
+        const filteredModifiers = modifiers.filter((modifier) => {
+          const priceRow = pricesByModifier.get(modifier.id);
+          if (priceRow && !priceRow.is_active) {
+            return false;
           }
-          pricesByModifier.get(row.modifier_id).push({ variant_id: row.variant_id, price: row.price });
+          if (priceRow) {
+            modifier.price = priceRow.price;
+          }
+          return true;
         });
-        modifiers.forEach((modifier) => {
-          modifier.variant_prices = pricesByModifier.get(modifier.id) || [];
-        });
+        group.modifiers = filteredModifiers;
+      } else {
+        group.modifiers = modifiers;
       }
-      group.modifiers = modifiers;
     }
     const [oldModifiers] = await db.query(
       `SELECT id, item_id, name, price, is_required, is_active
@@ -1314,7 +1332,7 @@ router.post("/admin/items/:itemId/variants", authenticateToken, requireRole("adm
           );
         }
       } else if (price !== undefined && price !== null) {
-        const fulfillmentTypes = ["delivery", "pickup", "dine_in"];
+        const fulfillmentTypes = ["delivery", "pickup"];
         for (const fulfillmentType of fulfillmentTypes) {
           await connection.query(
             `INSERT INTO menu_variant_prices (variant_id, city_id, fulfillment_type, price)
@@ -1451,7 +1469,7 @@ router.put("/admin/items/:itemId/variants", authenticateToken, requireRole("admi
           }
         } else if (!variant.id || !existingIds.has(variant.id)) {
           if (payload.price !== undefined && payload.price !== null) {
-            const fulfillmentTypes = ["delivery", "pickup", "dine_in"];
+            const fulfillmentTypes = ["delivery", "pickup"];
             for (const fulfillmentType of fulfillmentTypes) {
               await connection.query(
                 `INSERT INTO menu_variant_prices (variant_id, city_id, fulfillment_type, price)
@@ -2368,7 +2386,7 @@ router.post("/admin/items/:itemId/prices", authenticateToken, requireRole("admin
     if (!fulfillment_type || price === undefined) {
       return res.status(400).json({ error: "fulfillment_type and price are required" });
     }
-    if (!["delivery", "pickup", "dine_in"].includes(fulfillment_type)) {
+    if (!["delivery", "pickup"].includes(fulfillment_type)) {
       return res.status(400).json({ error: "Invalid fulfillment_type" });
     }
     const [items] = await db.query("SELECT id FROM menu_items WHERE id = ?", [itemId]);
@@ -2426,7 +2444,7 @@ router.post("/admin/variants/:variantId/prices", authenticateToken, requireRole(
     if (!fulfillment_type || price === undefined) {
       return res.status(400).json({ error: "fulfillment_type and price are required" });
     }
-    if (!["delivery", "pickup", "dine_in"].includes(fulfillment_type)) {
+    if (!["delivery", "pickup"].includes(fulfillment_type)) {
       return res.status(400).json({ error: "Invalid fulfillment_type" });
     }
     const [variants] = await db.query("SELECT id FROM item_variants WHERE id = ?", [variantId]);
@@ -2465,7 +2483,7 @@ router.put("/admin/variants/:variantId/prices", authenticateToken, requireRole("
       if (!fulfillment_type || price === undefined || price === null) {
         continue;
       }
-      if (!["delivery", "pickup", "dine_in"].includes(fulfillment_type)) {
+      if (!["delivery", "pickup"].includes(fulfillment_type)) {
         await connection.rollback();
         return res.status(400).json({ error: "Invalid fulfillment_type" });
       }
@@ -2485,48 +2503,88 @@ router.put("/admin/variants/:variantId/prices", authenticateToken, requireRole("
     connection.release();
   }
 });
-router.post("/admin/modifiers/:modifierId/variant-prices", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
+router.get("/admin/modifiers/:modifierId/prices", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
   try {
     const modifierId = req.params.modifierId;
-    const { variant_id, price, weight, weight_unit } = req.body;
-    if (!variant_id || price === undefined) {
-      return res.status(400).json({ error: "variant_id and price are required" });
+    const [prices] = await db.query(
+      `SELECT mmp.id, mmp.city_id, c.name as city_name, mmp.price, mmp.is_active, mmp.created_at, mmp.updated_at
+       FROM menu_modifier_prices mmp
+       LEFT JOIN cities c ON c.id = mmp.city_id
+       WHERE mmp.modifier_id = ?
+       ORDER BY c.name`,
+      [modifierId],
+    );
+    res.json({ prices });
+  } catch (error) {
+    next(error);
+  }
+});
+router.post("/admin/modifiers/:modifierId/prices", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
+  try {
+    const modifierId = req.params.modifierId;
+    const { city_id, price, is_active } = req.body;
+    if (!city_id || price === undefined) {
+      return res.status(400).json({ error: "city_id and price are required" });
     }
     const [modifiers] = await db.query("SELECT id FROM modifiers WHERE id = ?", [modifierId]);
     if (modifiers.length === 0) {
       return res.status(404).json({ error: "Modifier not found" });
     }
-    const [variants] = await db.query("SELECT id FROM item_variants WHERE id = ?", [variant_id]);
-    if (variants.length === 0) {
-      return res.status(404).json({ error: "Variant not found" });
+    const [cities] = await db.query("SELECT id FROM cities WHERE id = ?", [city_id]);
+    if (cities.length === 0) {
+      return res.status(404).json({ error: "City not found" });
+    }
+    if (req.user.role === "manager" && !req.user.cities.includes(parseInt(city_id))) {
+      return res.status(403).json({ error: "You do not have access to this city" });
     }
     await db.query(
-      `INSERT INTO menu_modifier_variant_prices (modifier_id, variant_id, price, weight, weight_unit)
-       VALUES (?, ?, ?, ?, ?)
-       ON DUPLICATE KEY UPDATE 
-         price = VALUES(price),
-         weight = VALUES(weight),
-         weight_unit = VALUES(weight_unit)`,
-      [modifierId, variant_id, price, weight || null, weight_unit || null],
+      `INSERT INTO menu_modifier_prices (modifier_id, city_id, price, is_active)
+       VALUES (?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE price = VALUES(price), is_active = VALUES(is_active)`,
+      [modifierId, city_id, price, is_active !== undefined ? is_active : true],
     );
     await invalidateAllMenuCache();
-    res.json({ message: "Modifier variant price saved successfully" });
+    res.json({ message: "Modifier price saved successfully" });
   } catch (error) {
     next(error);
   }
 });
-router.get("/admin/modifiers/:modifierId/variant-prices", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
+router.put("/admin/modifiers/:modifierId/cities", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
   try {
     const modifierId = req.params.modifierId;
-    const [prices] = await db.query(
-      `SELECT mmvp.id, mmvp.variant_id, iv.name as variant_name, mmvp.price, mmvp.weight, mmvp.weight_unit, mmvp.created_at, mmvp.updated_at
-       FROM menu_modifier_variant_prices mmvp
-       JOIN item_variants iv ON iv.id = mmvp.variant_id
-       WHERE mmvp.modifier_id = ?
-       ORDER BY iv.sort_order, iv.name`,
-      [modifierId],
-    );
-    res.json({ prices });
+    const { city_ids } = req.body;
+    if (!Array.isArray(city_ids)) {
+      return res.status(400).json({ error: "city_ids must be an array" });
+    }
+    const [modifiers] = await db.query("SELECT id, price FROM modifiers WHERE id = ?", [modifierId]);
+    if (modifiers.length === 0) {
+      return res.status(404).json({ error: "Modifier not found" });
+    }
+    if (!managerHasCityAccess(req.user, city_ids)) {
+      return res.status(403).json({ error: "You do not have access to these cities" });
+    }
+    const basePrice = modifiers[0].price ?? 0;
+    const connection = await db.getConnection();
+    try {
+      await connection.beginTransaction();
+      await connection.query("UPDATE menu_modifier_prices SET is_active = FALSE WHERE modifier_id = ?", [modifierId]);
+      for (const cityId of city_ids) {
+        await connection.query(
+          `INSERT INTO menu_modifier_prices (modifier_id, city_id, price, is_active)
+           VALUES (?, ?, ?, TRUE)
+           ON DUPLICATE KEY UPDATE is_active = VALUES(is_active)`,
+          [modifierId, cityId, basePrice],
+        );
+      }
+      await connection.commit();
+      await invalidateAllMenuCache();
+      res.json({ message: "Modifier cities updated successfully" });
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
   } catch (error) {
     next(error);
   }
@@ -2647,7 +2705,7 @@ router.post("/admin/stop-list", authenticateToken, requireRole("admin", "manager
     if (!["item", "variant", "modifier"].includes(entity_type)) {
       return res.status(400).json({ error: "Invalid entity_type" });
     }
-    const allowedFulfillment = ["delivery", "pickup", "dine_in"];
+    const allowedFulfillment = ["delivery", "pickup"];
     const normalizedFulfillment = Array.isArray(fulfillment_types)
       ? Array.from(new Set(fulfillment_types.filter((type) => allowedFulfillment.includes(type))))
       : null;
@@ -2848,7 +2906,8 @@ router.put("/admin/items/:itemId/cities", authenticateToken, requireRole("admin"
     const connection = await db.getConnection();
     try {
       await connection.beginTransaction();
-      await connection.query("DELETE FROM menu_item_cities WHERE item_id = ?", [itemId]);
+      // Сохраняем историю городов: помечаем все существующие как неактивные.
+      await connection.query("UPDATE menu_item_cities SET is_active = FALSE WHERE item_id = ?", [itemId]);
       for (const cityId of city_ids) {
         await connection.query(
           `INSERT INTO menu_item_cities (item_id, city_id, is_active)

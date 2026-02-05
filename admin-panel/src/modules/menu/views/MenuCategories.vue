@@ -128,7 +128,7 @@
                     <input
                       v-model="form.city_ids"
                       type="checkbox"
-                      :value="city.id"
+                      :value="Number(city.id)"
                       class="h-4 w-4 rounded border-border text-primary focus:ring-primary"
                     />
                     {{ city.name }}
@@ -228,12 +228,15 @@ const openModal = async (category = null) => {
         image_url: "",
         sort_order: 0,
         is_active: true,
-        city_ids: referenceStore.cities.map((city) => city.id),
+        city_ids: referenceStore.cities.map((city) => Number(city.id)).filter(Number.isFinite),
       };
   if (category) {
     try {
       const response = await api.get(`/api/menu/admin/categories/${category.id}/cities`);
-      const activeCityIds = (response.data.cities || []).filter((city) => city.is_active).map((city) => city.city_id);
+      const activeCityIds = (response.data.cities || [])
+        .filter((city) => city.is_active)
+        .map((city) => Number(city.city_id))
+        .filter(Number.isFinite);
       form.value.city_ids = activeCityIds;
     } catch (error) {
       console.error("Failed to load category cities:", error);

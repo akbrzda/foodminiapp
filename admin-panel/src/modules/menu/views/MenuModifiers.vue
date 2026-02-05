@@ -60,7 +60,7 @@
               <Button variant="ghost" size="icon" @click="editModifier(group, modifier)">
                 <Pencil :size="16" />
               </Button>
-              <Button variant="ghost" size="icon" @click="openVariantPricesModal(modifier)">
+              <Button variant="ghost" size="icon" @click="openCityPricesModal(modifier)">
                 <Settings2 :size="16" />
               </Button>
               <Button variant="ghost" size="icon" @click="deleteModifier(modifier)">
@@ -220,41 +220,46 @@
         </form>
       </DialogContent>
     </Dialog>
-    <Dialog v-if="showVariantPricesModal" :open="showVariantPricesModal" @update:open="(value) => (value ? null : closeVariantPricesModal())">
+    <Dialog v-if="showCityPricesModal" :open="showCityPricesModal" @update:open="(value) => (value ? null : closeCityPricesModal())">
       <DialogContent class="w-full max-w-4xl">
         <DialogHeader>
-          <DialogTitle>Цены по вариациям</DialogTitle>
-          <DialogDescription>Настройка цен модификатора</DialogDescription>
+          <DialogTitle>Цены по городам</DialogTitle>
+          <DialogDescription>Настройка цен и доступности модификатора</DialogDescription>
         </DialogHeader>
-        <form class="space-y-4" @submit.prevent="submitVariantPrices">
-          <div v-if="variantPriceRows.length === 0" class="text-sm text-muted-foreground">Нет доступных вариаций</div>
-          <div v-for="row in variantPriceRows" :key="row.variant_id" class="grid gap-3 md:grid-cols-[1fr_auto_auto_auto] items-end">
-            <div class="space-y-1">
-              <div class="text-sm font-medium text-foreground">{{ row.variant_name }}</div>
+        <form class="space-y-4" @submit.prevent="submitCityPrices">
+          <div class="space-y-2">
+            <div class="text-sm text-muted-foreground">Доступность по городам</div>
+            <div class="grid gap-2 md:grid-cols-2">
+              <Label v-for="city in referenceStore.cities" :key="city.id" class="flex items-center gap-2 text-sm text-foreground">
+                <input
+                  v-model="modifierCityIds"
+                  type="checkbox"
+                  :value="Number(city.id)"
+                  class="h-4 w-4 rounded border-border text-primary focus:ring-primary"
+                />
+                {{ city.name }}
+              </Label>
             </div>
-            <div class="space-y-1">
-              <Label class="text-xs text-muted-foreground">Цена</Label>
-              <Input v-model.number="row.price" type="number" step="0.01" placeholder="0.00" />
-            </div>
-            <div class="space-y-1">
-              <Label class="text-xs text-muted-foreground">Вес</Label>
-              <Input v-model.number="row.weight" type="number" step="0.01" placeholder="—" />
-            </div>
-            <div class="space-y-1">
-              <Label class="text-xs text-muted-foreground">Ед.</Label>
-              <Select v-model="row.weight_unit">
-                <SelectTrigger class="w-full">
-                  <SelectValue placeholder="—" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">—</SelectItem>
-                  <SelectItem value="g">г</SelectItem>
-                  <SelectItem value="kg">кг</SelectItem>
-                  <SelectItem value="ml">мл</SelectItem>
-                  <SelectItem value="l">л</SelectItem>
-                  <SelectItem value="pcs">шт</SelectItem>
-                </SelectContent>
-              </Select>
+          </div>
+          <div class="flex flex-wrap items-center gap-3">
+            <div class="text-sm text-muted-foreground">Город</div>
+            <Select v-model="selectedCityId" :disabled="modifierCityIds.length === 0">
+              <SelectTrigger class="w-64">
+                <SelectValue placeholder="Выберите город" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem v-for="city in activeCities" :key="city.id" :value="city.id">{{ city.name }}</SelectItem>
+              </SelectContent>
+            </Select>
+            <div v-if="modifierCityIds.length === 0" class="text-xs text-muted-foreground">Сначала включите хотя бы один город.</div>
+          </div>
+          <div v-if="selectedCityId" class="space-y-2">
+            <div class="text-xs text-muted-foreground">Базовая цена: {{ formatCurrency(activeModifierForPrices?.price || 0) }}</div>
+            <div class="grid gap-3 md:grid-cols-2">
+              <div class="space-y-1">
+                <Label class="text-xs text-muted-foreground">Цена</Label>
+                <Input v-model.number="getOrCreateModifierCityPrice(selectedCityId).price" type="number" step="0.01" placeholder="0.00" />
+              </div>
             </div>
           </div>
           <Button class="w-full" type="submit" :disabled="saving">
@@ -281,24 +286,27 @@ import Input from "@/shared/components/ui/input/Input.vue";
 import PageHeader from "@/shared/components/PageHeader.vue";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/components/ui/select";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
-import { formatCurrency } from "@/shared/utils/format.js";
+import { formatCurrency, normalizeBoolean } from "@/shared/utils/format.js";
 import { Field, FieldContent, FieldGroup, FieldLabel } from "@/shared/components/ui/field";
 import { Label } from "@/shared/components/ui/label";
 import Spinner from "@/shared/components/ui/spinner/Spinner.vue";
 import { useOrdersStore } from "@/modules/orders/stores/orders.js";
+import { useReferenceStore } from "@/shared/stores/reference.js";
 const groups = ref([]);
 const { showErrorNotification, showSuccessNotification } = useNotifications();
 const ordersStore = useOrdersStore();
+const referenceStore = useReferenceStore();
 const showModal = ref(false);
 const showModifierModal = ref(false);
-const showVariantPricesModal = ref(false);
+const showCityPricesModal = ref(false);
 const editing = ref(null);
 const activeGroup = ref(null);
 const editingModifier = ref(null);
 const activeModifierForPrices = ref(null);
 const fileInput = ref(null);
-const variantPriceRows = ref([]);
-const allVariants = ref([]);
+const modifierCityIds = ref([]);
+const modifierCityPrices = ref([]);
+const selectedCityId = ref(null);
 const saving = ref(false);
 const uploadState = ref({
   loading: false,
@@ -329,10 +337,6 @@ const normalizeImageUrl = (url) => {
 const modalTitle = computed(() => (editing.value ? "Редактировать группу" : "Новая группа"));
 const modalSubtitle = computed(() => (editing.value ? "Параметры группы" : "Создайте группу модификаторов"));
 const modalNameTitle = computed(() => {
-  if (showVariantPricesModal.value) {
-    const name = String(activeModifierForPrices.value?.name || "").trim();
-    return name ? `Цены модификатора: ${name}` : "Цены модификатора";
-  }
   if (showModifierModal.value) {
     const name = String(modifierForm.value.name || "").trim();
     if (editingModifier.value && name) return `Модификатор: ${name}`;
@@ -351,6 +355,24 @@ const updateDocumentTitle = (baseTitle) => {
   const count = ordersStore.newOrdersCount || 0;
   document.title = count > 0 ? `(${count}) ${baseTitle}` : baseTitle;
 };
+const activeCities = computed(() => referenceStore.cities.filter((city) => modifierCityIds.value.includes(city.id)));
+const normalizeCityId = (value) => {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+};
+const getOrCreateModifierCityPrice = (cityId) => {
+  const normalizedCityId = normalizeCityId(cityId);
+  if (!normalizedCityId) return { city_id: cityId, price: activeModifierForPrices.value?.price || 0 };
+  let entry = modifierCityPrices.value.find((price) => normalizeCityId(price.city_id) === normalizedCityId);
+  if (!entry) {
+    entry = {
+      city_id: normalizedCityId,
+      price: activeModifierForPrices.value?.price || 0,
+    };
+    modifierCityPrices.value.push(entry);
+  }
+  return entry;
+};
 const loadGroups = async () => {
   try {
     const response = await api.get("/api/menu/admin/modifier-groups");
@@ -360,19 +382,14 @@ const loadGroups = async () => {
     showErrorNotification(`Ошибка при загрузке групп: ${error.response?.data?.error || error.message}`);
   }
 };
-const loadVariants = async () => {
-  if (allVariants.value.length > 0) return;
-  const response = await api.get("/api/menu/admin/variants");
-  allVariants.value = response.data.variants || [];
-};
 const openModal = (group = null) => {
   editing.value = group;
   form.value = group
     ? {
         name: group.name,
         type: group.type,
-        is_required: group.is_required,
-        is_global: group.is_global || false,
+        is_required: normalizeBoolean(group.is_required, false),
+        is_global: normalizeBoolean(group.is_global, false),
         min_selections: group.min_selections || 0,
         max_selections: group.max_selections || 1,
       }
@@ -431,36 +448,40 @@ const editModifier = (group, modifier) => {
 const closeModifierModal = () => {
   showModifierModal.value = false;
 };
-const openVariantPricesModal = async (modifier) => {
+const openCityPricesModal = async (modifier) => {
   try {
     saving.value = true;
-    await loadVariants();
-    const response = await api.get(`/api/menu/admin/modifiers/${modifier.id}/variant-prices`);
+    await referenceStore.fetchCitiesAndBranches();
+    const response = await api.get(`/api/menu/admin/modifiers/${modifier.id}/prices`);
     const existingPrices = response.data.prices || [];
-    const priceByVariant = new Map(existingPrices.map((price) => [price.variant_id, price]));
-    variantPriceRows.value = allVariants.value.map((variant) => {
-      const existing = priceByVariant.get(variant.id);
-      return {
-        variant_id: variant.id,
-        variant_name: variant.name,
-        price: existing?.price ?? null,
-        weight: existing?.weight ?? null,
-        weight_unit: existing?.weight_unit ?? "",
-      };
-    });
+    modifierCityPrices.value = existingPrices.map((price) => ({
+      city_id: normalizeCityId(price.city_id),
+      price: price.price,
+      is_active: Number(price.is_active) === 1 || price.is_active === true,
+    }));
+    modifierCityIds.value = existingPrices
+      .filter((price) => Number(price.is_active) === 1 || price.is_active === true)
+      .map((price) => normalizeCityId(price.city_id))
+      .filter(Number.isFinite);
+    selectedCityId.value = modifierCityIds.value.length ? modifierCityIds.value[0] : null;
+    if (selectedCityId.value) {
+      getOrCreateModifierCityPrice(selectedCityId.value);
+    }
     activeModifierForPrices.value = modifier;
-    showVariantPricesModal.value = true;
+    showCityPricesModal.value = true;
   } catch (error) {
-    console.error("Failed to load variant prices:", error);
-    showErrorNotification("Ошибка при загрузке цен вариаций");
+    console.error("Failed to load modifier prices:", error);
+    showErrorNotification("Ошибка при загрузке цен модификатора");
   } finally {
     saving.value = false;
   }
 };
-const closeVariantPricesModal = () => {
-  showVariantPricesModal.value = false;
+const closeCityPricesModal = () => {
+  showCityPricesModal.value = false;
   activeModifierForPrices.value = null;
-  variantPriceRows.value = [];
+  modifierCityPrices.value = [];
+  modifierCityIds.value = [];
+  selectedCityId.value = null;
 };
 const triggerFile = () => {
   fileInput.value?.click();
@@ -537,24 +558,24 @@ const submitModifier = async () => {
     showErrorNotification(`Ошибка при сохранении модификатора: ${error.response?.data?.error || error.message}`);
   }
 };
-const submitVariantPrices = async () => {
+const submitCityPrices = async () => {
   if (!activeModifierForPrices.value) return;
   saving.value = true;
   try {
-    for (const row of variantPriceRows.value) {
-      if (row.price === null || row.price === undefined || row.price === "") continue;
-      await api.post(`/api/menu/admin/modifiers/${activeModifierForPrices.value.id}/variant-prices`, {
-        variant_id: row.variant_id,
-        price: row.price,
-        weight: row.weight,
-        weight_unit: row.weight_unit || null,
+    await api.put(`/api/menu/admin/modifiers/${activeModifierForPrices.value.id}/cities`, { city_ids: modifierCityIds.value });
+    for (const cityId of modifierCityIds.value) {
+      const entry = getOrCreateModifierCityPrice(cityId);
+      if (entry.price === null || entry.price === undefined || entry.price === "") continue;
+      await api.post(`/api/menu/admin/modifiers/${activeModifierForPrices.value.id}/prices`, {
+        city_id: cityId,
+        price: entry.price,
       });
     }
-    showSuccessNotification("Цены вариаций сохранены");
-    closeVariantPricesModal();
+    showSuccessNotification("Цены модификатора сохранены");
+    closeCityPricesModal();
   } catch (error) {
-    console.error("Failed to save variant prices:", error);
-    showErrorNotification("Ошибка при сохранении цен вариаций");
+    console.error("Failed to save modifier prices:", error);
+    showErrorNotification("Ошибка при сохранении цен модификатора");
   } finally {
     saving.value = false;
   }
@@ -576,6 +597,26 @@ watch(
     updateDocumentTitle(modalNameTitle.value || "Модификаторы");
   },
   { immediate: true },
+);
+watch(
+  () => modifierCityIds.value,
+  (next, prev) => {
+    const prevSet = new Set(prev || []);
+    const nextSet = new Set(next || []);
+    const added = next.filter((id) => !prevSet.has(id));
+    added.forEach((cityId) => getOrCreateModifierCityPrice(cityId));
+    if (selectedCityId.value && !nextSet.has(selectedCityId.value)) {
+      selectedCityId.value = next.length ? next[0] : null;
+    }
+  },
+  { deep: true },
+);
+watch(
+  () => selectedCityId.value,
+  (next) => {
+    if (!next) return;
+    getOrCreateModifierCityPrice(next);
+  },
 );
 onMounted(loadGroups);
 </script>
