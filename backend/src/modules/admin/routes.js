@@ -30,7 +30,7 @@ router.get("/users", requireRole("admin", "ceo"), async (req, res, next) => {
     const { role, is_active } = req.query;
     let query = `
       SELECT au.id, au.email, au.first_name, au.last_name, au.role, 
-             au.is_active, au.telegram_id, au.branch_id, au.created_at, au.updated_at
+             au.is_active, au.telegram_id, au.eruda_enabled, au.branch_id, au.created_at, au.updated_at
       FROM admin_users au
       WHERE 1=1
     `;
@@ -78,7 +78,7 @@ router.get("/users/:id", requireRole("admin", "ceo"), async (req, res, next) => 
     const userId = req.params.id;
     const [users] = await db.query(
       `SELECT id, email, first_name, last_name, role, is_active, 
-              telegram_id, branch_id, created_at, updated_at
+              telegram_id, eruda_enabled, branch_id, created_at, updated_at
        FROM admin_users WHERE id = ?`,
       [userId],
     );
@@ -133,7 +133,7 @@ router.get("/clients", requireRole("admin", "manager", "ceo"), async (req, res, 
       params.push(city_id);
     }
     const query = `
-      SELECT u.id, u.phone, u.first_name, u.last_name, u.email, u.loyalty_balance,
+      SELECT u.id, u.phone, u.first_name, u.last_name, u.email, u.telegram_id, u.loyalty_balance,
              COALESCE(oc.orders_count, 0) as orders_count,
              lo.created_at as last_order_at,
              c.name as city_name
@@ -179,7 +179,7 @@ router.get("/clients/:id", requireRole("admin", "manager", "ceo"), async (req, r
       return res.status(403).json({ error: "You do not have access to this user" });
     }
     const [users] = await db.query(
-      `SELECT u.id, u.phone, u.first_name, u.last_name, u.email, u.loyalty_balance, u.created_at,
+      `SELECT u.id, u.phone, u.first_name, u.last_name, u.email, u.telegram_id, u.loyalty_balance, u.created_at,
               c.name as city_name
        FROM users u
        LEFT JOIN orders o ON o.id = (
@@ -217,7 +217,7 @@ router.put("/clients/:id", requireRole("admin", "manager", "ceo"), async (req, r
       userId,
     ]);
     const [updated] = await db.query(
-      `SELECT u.id, u.phone, u.first_name, u.last_name, u.email, u.loyalty_balance, u.created_at,
+      `SELECT u.id, u.phone, u.first_name, u.last_name, u.email, u.telegram_id, u.loyalty_balance, u.created_at,
               c.name as city_name
        FROM users u
        LEFT JOIN orders o ON o.id = (
@@ -266,7 +266,7 @@ router.get("/clients/:id/orders", requireRole("admin", "manager", "ceo"), async 
 });
 router.post("/users", requireRole("admin", "ceo"), async (req, res, next) => {
   try {
-    const { email, password, first_name, last_name, role, telegram_id, cities, branch_ids } = req.body;
+    const { email, password, first_name, last_name, role, telegram_id, eruda_enabled, cities, branch_ids } = req.body;
     if (!email || !password || !first_name || !last_name || !role) {
       return res.status(400).json({
         error: "Email, password, first_name, last_name, and role are required",
@@ -298,10 +298,13 @@ router.post("/users", requireRole("admin", "ceo"), async (req, res, next) => {
       managerBranchIds = branch_ids;
     }
     const passwordHash = await bcrypt.hash(password, 10);
+    if (eruda_enabled === true && !telegram_id) {
+      return res.status(400).json({ error: "Для включения Eruda нужен Telegram ID" });
+    }
     const [result] = await db.query(
-      `INSERT INTO admin_users (email, password_hash, first_name, last_name, role, telegram_id, branch_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [email, passwordHash, first_name, last_name, role, telegram_id || null, null],
+      `INSERT INTO admin_users (email, password_hash, first_name, last_name, role, telegram_id, eruda_enabled, branch_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [email, passwordHash, first_name, last_name, role, telegram_id || null, eruda_enabled === true, null],
     );
     const newUserId = result.insertId;
     if (role === "manager" && cities && cities.length > 0) {
@@ -316,7 +319,7 @@ router.post("/users", requireRole("admin", "ceo"), async (req, res, next) => {
     }
     const [newUser] = await db.query(
       `SELECT id, email, first_name, last_name, role, is_active, 
-              telegram_id, branch_id, created_at, updated_at
+              telegram_id, eruda_enabled, branch_id, created_at, updated_at
        FROM admin_users WHERE id = ?`,
       [newUserId],
     );
@@ -328,8 +331,8 @@ router.post("/users", requireRole("admin", "ceo"), async (req, res, next) => {
 router.put("/users/:id", requireRole("admin", "ceo"), async (req, res, next) => {
   try {
     const userId = req.params.id;
-    const { email, password, first_name, last_name, role, telegram_id, is_active, cities, branch_ids } = req.body;
-    const [existingUsers] = await db.query("SELECT id, role, branch_id FROM admin_users WHERE id = ?", [userId]);
+    const { email, password, first_name, last_name, role, telegram_id, eruda_enabled, is_active, cities, branch_ids } = req.body;
+    const [existingUsers] = await db.query("SELECT id, role, branch_id, telegram_id FROM admin_users WHERE id = ?", [userId]);
     if (existingUsers.length === 0) {
       return res.status(404).json({ error: "User not found" });
     }
@@ -370,6 +373,15 @@ router.put("/users/:id", requireRole("admin", "ceo"), async (req, res, next) => 
       const normalizedTelegramId = telegram_id === "" ? null : telegram_id;
       updates.push("telegram_id = ?");
       values.push(normalizedTelegramId);
+    }
+    if (eruda_enabled !== undefined) {
+      const normalizedTelegramId = telegram_id === "" ? null : telegram_id;
+      const effectiveTelegramId = telegram_id !== undefined ? normalizedTelegramId : existingUsers[0].telegram_id;
+      if (eruda_enabled === true && !effectiveTelegramId) {
+        return res.status(400).json({ error: "Для включения Eruda нужен Telegram ID" });
+      }
+      updates.push("eruda_enabled = ?");
+      values.push(eruda_enabled === true);
     }
     if (is_active !== undefined) {
       updates.push("is_active = ?");

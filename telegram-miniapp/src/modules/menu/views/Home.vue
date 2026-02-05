@@ -128,7 +128,7 @@
         </div>
       </div>
       <div class="loading" v-if="menuStore.loading">Меню загружается...</div>
-      <div class="empty" v-if="!menuStore.loading && menuStore.categories.length === 0">Меню загружается...</div>
+      <div class="empty" v-if="!menuStore.loading && menuStore.categories.length === 0">Меню пустое</div>
     </div>
     <button
       v-if="ordersEnabled && cartStore.itemsCount > 0"

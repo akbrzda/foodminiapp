@@ -66,7 +66,7 @@
       <div class="delivery-tariff-widget" v-if="isDelivery && deliveryTariffs.length >= 2">
         <div class="tariff-title">Стоимость доставки</div>
         <div v-if="deliveryCost === 0" class="tariff-subtitle">У вас бесплатная доставка</div>
-        <div v-else class="tariff-subtitle">До бесплатной доставки еще {{ formatPrice(nextThreshold?.delta || 0) }} ₽</div>
+        <div v-else class="tariff-subtitle">Добавьте еще на {{ formatPrice(nextThreshold?.delta || 0) }} ₽, чтобы снизить стоимость доставки</div>
         <div class="tariff-pills">
           <div
             v-for="(tariff, index) in normalizedTariffs"

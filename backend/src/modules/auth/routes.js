@@ -64,6 +64,7 @@ router.post("/telegram", async (req, res, next) => {
     );
     let userId;
     let user;
+    let isNewUser = false;
     if (users.length > 0) {
       userId = users[0].id;
       user = users[0];
@@ -97,6 +98,7 @@ router.post("/telegram", async (req, res, next) => {
         }
       }
     } else {
+      isNewUser = true;
       const [result] = await db.query("INSERT INTO users (telegram_id, phone, first_name, last_name) VALUES (?, ?, ?, ?)", [
         id,
         null,
@@ -114,13 +116,15 @@ router.post("/telegram", async (req, res, next) => {
       );
       user = newUser[0];
     }
-    try {
-      const systemSettings = await getSystemSettings();
-      if (systemSettings.bonuses_enabled) {
-        await grantRegistrationBonus(userId, null);
+    if (isNewUser) {
+      try {
+        const systemSettings = await getSystemSettings();
+        if (systemSettings.bonuses_enabled) {
+          await grantRegistrationBonus(userId, null);
+        }
+      } catch (bonusError) {
+        console.error("Failed to grant registration bonus:", bonusError);
       }
-    } catch (bonusError) {
-      console.error("Failed to grant registration bonus:", bonusError);
     }
     const token = jwt.sign(
       {
@@ -136,6 +140,39 @@ router.post("/telegram", async (req, res, next) => {
     next(error);
   }
 });
+router.post("/eruda", async (req, res, next) => {
+  try {
+    const { initData } = req.body || {};
+    if (!initData) {
+      return res.json({ enabled: false });
+    }
+    const parsedUser = parseTelegramUser(initData);
+    if (!parsedUser?.telegram_id) {
+      return res.json({ enabled: false });
+    }
+    const botToken = process.env.TELEGRAM_BOT_TOKEN;
+    if (botToken) {
+      const isValid = validateTelegramData(initData, botToken);
+      if (!isValid) {
+        return res.json({ enabled: false });
+      }
+    }
+    const [admins] = await db.query(
+      `SELECT id, eruda_enabled, is_active
+       FROM admin_users
+       WHERE telegram_id = ?
+       LIMIT 1`,
+      [parsedUser.telegram_id],
+    );
+    if (admins.length === 0) {
+      return res.json({ enabled: false });
+    }
+    const admin = admins[0];
+    res.json({ enabled: Boolean(admin.is_active) && Boolean(admin.eruda_enabled) });
+  } catch (error) {
+    next(error);
+  }
+});
 router.post("/admin/login", async (req, res, next) => {
   try {
     const { email, password } = req.body;
@@ -143,7 +180,7 @@ router.post("/admin/login", async (req, res, next) => {
       return res.status(400).json({ error: "Email and password are required" });
     }
     const [users] = await db.query(
-      `SELECT id, email, password_hash, first_name, last_name, role, is_active, branch_id
+      `SELECT id, email, password_hash, first_name, last_name, role, is_active, branch_id, telegram_id, eruda_enabled
        FROM admin_users WHERE email = ?`,
       [email],
     );

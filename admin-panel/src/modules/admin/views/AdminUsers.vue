@@ -58,6 +58,7 @@
               <TableHead>Пользователь</TableHead>
               <TableHead>Роль</TableHead>
               <TableHead>Статус</TableHead>
+              <TableHead>Eruda</TableHead>
               <TableHead>Доступ</TableHead>
               <TableHead class="text-right">Действия</TableHead>
             </TableRow>
@@ -78,6 +79,14 @@
                   :class="user.is_active ? 'bg-emerald-100 text-emerald-700 border-transparent' : 'bg-muted text-muted-foreground border-transparent'"
                 >
                   {{ user.is_active ? "Активен" : "Неактивен" }}
+                </Badge>
+              </TableCell>
+              <TableCell>
+                <Badge
+                  variant="secondary"
+                  :class="user.eruda_enabled ? 'bg-emerald-100 text-emerald-700 border-transparent' : 'bg-muted text-muted-foreground border-transparent'"
+                >
+                  {{ user.eruda_enabled ? "Включено" : "Выключено" }}
                 </Badge>
               </TableCell>
               <TableCell>
@@ -177,6 +186,22 @@
               <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Telegram ID (опционально)</FieldLabel>
               <FieldContent>
                 <Input v-model="form.telegram_id" type="number" />
+                <p class="text-xs text-muted-foreground">Используется для доступа к Eruda в mini app.</p>
+              </FieldContent>
+            </Field>
+            <Field>
+              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Eruda</FieldLabel>
+              <FieldContent>
+                <Select v-model="form.eruda_enabled" :disabled="!hasTelegramId">
+                  <SelectTrigger class="w-full">
+                    <SelectValue placeholder="Выберите статус" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem :value="true">Включено</SelectItem>
+                    <SelectItem :value="false">Выключено</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p v-if="!hasTelegramId" class="text-xs text-muted-foreground">Для включения нужен Telegram ID.</p>
               </FieldContent>
             </Field>
             <Field v-if="form.role === 'manager'">
@@ -254,6 +279,7 @@ const form = ref({
   role: "manager",
   is_active: true,
   telegram_id: "",
+  eruda_enabled: false,
   city_ids: [],
   branch_ids: [],
 });
@@ -309,6 +335,7 @@ const openModal = (user = null) => {
       role: user.role,
       is_active: normalizeBoolean(user.is_active, true),
       telegram_id: user.telegram_id || "",
+      eruda_enabled: normalizeBoolean(user.eruda_enabled, false),
       city_ids: (user.cities || []).map((c) => Number(c.id)).filter(Number.isFinite),
       branch_ids: (user.branches || []).map((branch) => Number(branch.id)).filter(Number.isFinite),
     };
@@ -321,6 +348,7 @@ const openModal = (user = null) => {
       role: "manager",
       is_active: true,
       telegram_id: "",
+      eruda_enabled: false,
       city_ids: [],
       branch_ids: [],
     };
@@ -340,6 +368,7 @@ const submitUser = async () => {
       role: form.value.role,
       is_active: form.value.is_active,
       telegram_id: form.value.telegram_id ? Number(form.value.telegram_id) : null,
+      eruda_enabled: Boolean(form.value.eruda_enabled),
       cities: form.value.city_ids,
       branch_ids: form.value.branch_ids || [],
     };
@@ -360,6 +389,7 @@ const submitUser = async () => {
     showErrorNotification(error.response?.data?.error || "Ошибка сохранения пользователя");
   }
 };
+const hasTelegramId = computed(() => Boolean(String(form.value.telegram_id || "").trim()));
 const deleteUser = async (user) => {
   if (!confirm(`Удалить пользователя "${user.first_name} ${user.last_name}"?`)) return;
   try {
@@ -395,6 +425,14 @@ watch(
     if (role !== "manager") {
       form.value.city_ids = [];
       form.value.branch_ids = [];
+    }
+  },
+);
+watch(
+  () => form.value.telegram_id,
+  (telegramId) => {
+    if (!telegramId) {
+      form.value.eruda_enabled = false;
     }
   },
 );
