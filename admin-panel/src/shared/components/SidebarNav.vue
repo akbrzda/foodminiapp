@@ -157,7 +157,7 @@ const navSections = computed(() => {
       id: "operations",
       title: "Операции",
       items: [
-        { label: "Дашборд", to: "/", icon: LayoutDashboard },
+        { label: "Дашборд", to: "/dashboard", icon: LayoutDashboard },
         { label: "Заказы", to: "/orders", icon: ClipboardList, badge: newOrdersCount.value },
         { label: "Клиенты", to: "/clients", icon: Users },
         { label: "Рассылки", to: "/broadcasts", icon: Megaphone, visible: !isManager.value },
