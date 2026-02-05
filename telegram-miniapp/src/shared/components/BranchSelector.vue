@@ -117,7 +117,7 @@ async function loadBranches() {
     });
     locationStore.setBranches(branches.value);
   } catch (error) {
-    console.error("Failed to load branches:", error);
+    console.error("Не удалось загрузить филиалы:", error);
   } finally {
     loading.value = false;
   }

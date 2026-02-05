@@ -378,7 +378,7 @@ async function loadItem() {
     const response = await menuAPI.getItemDetails(route.params.id, { city_id: cityId, fulfillment_type: fulfillmentType });
     item.value = response.data.item;
   } catch (err) {
-    console.error("Failed to load item:", err);
+    console.error("Не удалось загрузить блюдо:", err);
     error.value = "Не удалось загрузить позицию";
   } finally {
     loading.value = false;

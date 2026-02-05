@@ -32,7 +32,7 @@ export function initTelegramSDK() {
     miniAppReady();
     return { launchParams };
   } catch (error) {
-    console.error("Failed to initialize Telegram SDK:", error);
+    console.error("Не удалось инициализировать Telegram SDK:", error);
     return { launchParams: null };
   }
 }
@@ -55,7 +55,7 @@ export function showBackButton(onClick) {
       onBackButtonClick(onClick);
     }
   } catch (error) {
-    console.error("Failed to show back button:", error);
+    console.error("Не удалось показать кнопку назад:", error);
   }
 }
 export function hideBackButton() {
@@ -64,7 +64,7 @@ export function hideBackButton() {
       hideBackButtonSdk();
     }
   } catch (error) {
-    console.error("Failed to hide back button:", error);
+    console.error("Не удалось скрыть кнопку назад:", error);
   }
 }
 export function showMainButton(text, onClick) {
@@ -77,7 +77,7 @@ export function showMainButton(text, onClick) {
       onMainButtonClick(onClick);
     }
   } catch (error) {
-    console.error("Failed to show main button:", error);
+    console.error("Не удалось показать основную кнопку:", error);
   }
 }
 export function hideMainButton() {
@@ -86,7 +86,7 @@ export function hideMainButton() {
       setMainButtonParams({ isVisible: false });
     }
   } catch (error) {
-    console.error("Failed to hide main button:", error);
+    console.error("Не удалось скрыть основную кнопку:", error);
   }
 }
 export function hapticFeedback(type = "light") {
@@ -114,6 +114,6 @@ export function hapticFeedback(type = "light") {
         hapticFeedbackImpactOccurred("light");
     }
   } catch (error) {
-    console.error("Failed to trigger haptic feedback:", error);
+    console.error("Не удалось запустить тактильную отдачу:", error);
   }
 }

@@ -336,7 +336,7 @@ onMounted(async () => {
         locationStore.setDeliveryZone(zone);
       }
     } catch (error) {
-      console.error("Failed to refresh delivery zone:", error);
+      console.error("Не удалось обновить зону доставки:", error);
     }
   }
   await ensureTariffs();
@@ -430,7 +430,7 @@ async function refreshCartPricesForOrderType() {
     });
     cartStore.refreshPricesFromMenu(allItems);
   } catch (error) {
-    console.error("Failed to refresh cart prices:", error);
+    console.error("Не удалось обновить цены корзины:", error);
   }
 }
 watch(
@@ -509,7 +509,7 @@ async function loadBranches() {
       };
     });
   } catch (error) {
-    console.error("Failed to load branches:", error);
+    console.error("Не удалось загрузить филиалы:", error);
   } finally {
     loadingBranches.value = false;
   }
@@ -547,7 +547,7 @@ async function ensureTariffs() {
       applyDeliveryZone(zone);
     }
   } catch (error) {
-    console.error("Failed to refresh delivery tariffs:", error);
+    console.error("Не удалось обновить тарифы доставки:", error);
   }
 }
 async function submitOrder() {
@@ -650,11 +650,11 @@ async function submitOrder() {
     cartStore.clearCart();
     router.push("/");
   } catch (error) {
-    console.error("Failed to create order:", error);
+    console.error("Не удалось создать заказ:", error);
     hapticFeedback("error");
     let errorMessage = "Ошибка при оформлении заказа";
     const errorTranslations = {
-      "Delivery is not available to this address": "Доставка по этому адресу недоступна. Возможно, адрес находится вне зоны доставки.",
+      "Delivery is not available to this address": "Доставка по этому адресу недоступна.",
       "delivery address is required for delivery orders": "Укажите адрес доставки",
       "branch_id is required for pickup orders": "Выберите филиал для самовывоза",
       "Cart is empty": "Корзина пуста",
@@ -674,7 +674,8 @@ async function submitOrder() {
         errorMessage = errorTranslations[serverError] || serverError;
       }
     } else if (error.message) {
-      errorMessage = error.message;
+      const hasLatin = /[A-Za-z]/.test(error.message);
+      errorMessage = hasLatin ? "Произошла ошибка" : error.message;
     }
     alert(errorMessage);
   } finally {

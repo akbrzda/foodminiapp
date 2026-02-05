@@ -276,7 +276,7 @@ async function loadActiveOrder() {
     const active = orders.filter((order) => order.status !== "completed" && order.status !== "cancelled");
     activeOrders.value = active;
   } catch (error) {
-    console.error("Failed to load active order:", error);
+    console.error("Не удалось загрузить активный заказ:", error);
   }
 }
 function setupOrderStatusListener() {
@@ -400,8 +400,8 @@ async function loadMenu() {
     await nextTick();
     setupIntersectionObserver();
   } catch (error) {
-    console.error("Failed to load menu:", error);
-    menuStore.setError(error.message);
+    console.error("Не удалось загрузить меню:", error);
+    menuStore.setError("Не удалось загрузить меню");
   } finally {
     menuStore.setLoading(false);
   }

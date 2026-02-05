@@ -201,7 +201,7 @@ async function loadData() {
     transactions.value = historyResponse.data.transactions || [];
     historyHasMore.value = Boolean(historyResponse.data.has_more);
   } catch (error) {
-    console.error("Failed to load bonus data:", error);
+    console.error("Не удалось загрузить данные бонусов:", error);
   } finally {
     loading.value = false;
   }
@@ -218,7 +218,7 @@ async function loadMoreHistory() {
     historyPage.value = nextPage;
     historyHasMore.value = Boolean(response.data.has_more);
   } catch (error) {
-    console.error("Failed to load bonus history:", error);
+    console.error("Не удалось загрузить историю бонусов:", error);
   } finally {
     loadingMore.value = false;
   }

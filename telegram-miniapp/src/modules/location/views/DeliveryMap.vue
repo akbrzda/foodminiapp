@@ -144,7 +144,7 @@ async function ensureTariffs() {
     const zone = { ...response.data.polygon, tariffs: response.data.tariffs || [] };
     locationStore.setDeliveryZone(zone);
   } catch (error) {
-    console.error("Failed to refresh delivery tariffs:", error);
+    console.error("Не удалось обновить тарифы доставки:", error);
   }
 }
 onMounted(async () => {
@@ -322,7 +322,7 @@ async function confirmAddress() {
       const zone = { ...response.data.polygon, tariffs: response.data.tariffs || [] };
       locationStore.setDeliveryZone(zone);
     } catch (error) {
-      console.error("Failed to update delivery zone:", error);
+      console.error("Не удалось обновить зону доставки:", error);
       deliveryZoneError.value = "Не удалось проверить зону доставки";
       hapticFeedback("error");
       return;
@@ -391,7 +391,7 @@ async function loadDeliveryPolygons(L) {
       }
     });
   } catch (error) {
-    console.error("Failed to load delivery polygons:", error);
+    console.error("Не удалось загрузить полигоны доставки:", error);
   }
 }
 function setMapCenter(lat, lon) {
@@ -452,7 +452,7 @@ async function locateUser() {
     if (error?.code === 1) {
       setStoredGeoPermission("denied");
     }
-    console.error("Failed to detect user location:", error);
+    console.error("Не удалось определить местоположение пользователя:", error);
   }
 }
 async function fetchAddressSuggestions(query) {
@@ -466,7 +466,7 @@ async function fetchAddressSuggestions(query) {
     const start = performance.now();
     const response = await fetch(buildNominatimUrl(query));
     if (!response.ok) {
-      throw new Error("Address search failed");
+      throw new Error("Не удалось выполнить поиск адреса");
     }
     const data = await response.json();
     const elapsed = Math.round(performance.now() - start);
@@ -481,20 +481,20 @@ async function fetchAddressSuggestions(query) {
     if (searchId === lastSearchId) {
       addressSuggestions.value = [];
     }
-    console.error("Failed to search address:", error);
+    console.error("Не удалось найти адрес:", error);
   }
 }
 async function geocodeAddress(query) {
   try {
     const response = await fetch(buildNominatimUrl(query, 1));
     if (!response.ok) {
-      throw new Error("Geocode failed");
+      throw new Error("Не удалось выполнить геокодирование");
     }
     const data = await response.json();
     if (!data.length) return null;
     return formatAddressSuggestion(data[0]);
   } catch (error) {
-    console.error("Failed to geocode address:", error);
+    console.error("Не удалось геокодировать адрес:", error);
     return null;
   }
 }
@@ -516,7 +516,7 @@ async function reverseGeocode(lat, lon) {
       signal: reverseController.signal,
     });
     if (!response.ok) {
-      throw new Error("Reverse geocode failed");
+      throw new Error("Не удалось выполнить обратное геокодирование");
     }
     const data = await response.json();
     const suggestion =
@@ -530,7 +530,7 @@ async function reverseGeocode(lat, lon) {
     return suggestion;
   } catch (error) {
     if (error?.name !== "AbortError") {
-      console.error("Failed to reverse geocode:", error);
+      console.error("Не удалось выполнить обратное геокодирование:", error);
     }
     return null;
   }

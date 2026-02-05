@@ -122,7 +122,7 @@ async function loadBonusBalance() {
     const response = await bonusesAPI.getBalance();
     bonusBalance.value = response.data.balance || 0;
   } catch (error) {
-    console.error("Failed to load bonus balance:", error);
+    console.error("Не удалось загрузить бонусный баланс:", error);
   }
 }
 function toggleMenu() {
@@ -136,7 +136,7 @@ async function openCityPopup() {
     const response = await citiesAPI.getCities();
     cities.value = response.data.cities || [];
   } catch (error) {
-    console.error("Failed to load cities:", error);
+    console.error("Не удалось загрузить города:", error);
   }
 }
 function closeCityPopup() {
@@ -151,7 +151,7 @@ async function selectCity(city) {
     const response = await citiesAPI.getBranches(city.id);
     locationStore.setBranches(response.data.branches || []);
   } catch (error) {
-    console.error("Failed to load branches:", error);
+    console.error("Не удалось загрузить филиалы:", error);
   }
 }
 function handleOpenCityPopup() {

@@ -72,7 +72,7 @@ async function loadRemoteState() {
     }
     lastSyncedPayload.value = JSON.stringify(stateToSync.value);
   } catch (error) {
-    console.error("Failed to load user state:", error);
+    console.error("Не удалось загрузить состояние пользователя:", error);
   } finally {
     isHydrated.value = true;
   }
@@ -90,7 +90,7 @@ function scheduleSync() {
       await userStateAPI.updateState(payload);
       lastSyncedPayload.value = payloadString;
     } catch (error) {
-      console.error("Failed to sync user state:", error);
+      console.error("Не удалось синхронизировать состояние пользователя:", error);
     }
   }, 600);
 }
@@ -103,7 +103,7 @@ onMounted(async () => {
   try {
     await loadRemoteState();
   } catch (error) {
-    console.error("Failed to initialize app state:", error);
+    console.error("Не удалось инициализировать состояние приложения:", error);
   }
   applyDeliveryTypeSettings();
   setupWebSocket();

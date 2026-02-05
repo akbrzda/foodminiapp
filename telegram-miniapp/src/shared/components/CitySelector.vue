@@ -102,7 +102,7 @@ async function loadCities() {
       calculateDistances();
     }
   } catch (error) {
-    console.error("Failed to load cities:", error);
+    console.error("Не удалось загрузить города:", error);
   } finally {
     loading.value = false;
   }
@@ -162,7 +162,7 @@ async function selectCity(city) {
     emit("citySelected", city);
   } catch (error) {
     hapticFeedback("error");
-    console.error("Failed to select city:", error);
+    console.error("Не удалось выбрать город:", error);
   }
 }
 function closeDialog() {

@@ -24,7 +24,7 @@ class WebSocketService {
     try {
       this.ws = new WebSocket(`${wsUrl}?token=${encodeURIComponent(token)}`);
       this.ws.onopen = () => {
-        console.log("WebSocket connected");
+        console.log("WebSocket подключен");
         this.isConnecting = false;
         this.reconnectAttempts = 0;
         this.emit("connected");
@@ -32,39 +32,39 @@ class WebSocketService {
       this.ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          console.log("WebSocket message:", data);
+          console.log("Сообщение WebSocket:", data);
           if (data.type) {
             this.emit(data.type, data.data);
           }
         } catch (error) {
-          console.error("Failed to parse WebSocket message:", error);
+          console.error("Не удалось разобрать сообщение WebSocket:", error);
         }
       };
       this.ws.onerror = (error) => {
-        console.error("WebSocket error:", error);
+        console.error("Ошибка WebSocket:", error);
         this.isConnecting = false;
         this.emit("error", error);
       };
       this.ws.onclose = () => {
-        console.log("WebSocket disconnected");
+        console.log("WebSocket отключен");
         this.isConnecting = false;
         this.emit("disconnected");
         this.scheduleReconnect(token);
       };
     } catch (error) {
-      console.error("Failed to create WebSocket:", error);
+      console.error("Не удалось создать WebSocket:", error);
       this.isConnecting = false;
       this.scheduleReconnect(token);
     }
   }
   scheduleReconnect(token) {
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-      console.error("Max reconnect attempts reached");
+      console.error("Достигнут максимум попыток переподключения");
       this.emit("max-reconnect-attempts");
       return;
     }
     this.reconnectAttempts++;
-    console.log(`Reconnecting in ${this.reconnectDelay}ms (attempt ${this.reconnectAttempts})`);
+    console.log(`Переподключение через ${this.reconnectDelay}мс (попытка ${this.reconnectAttempts})`);
     setTimeout(() => {
       this.connect(token);
     }, this.reconnectDelay);
@@ -80,7 +80,7 @@ class WebSocketService {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type, payload }));
     } else {
-      console.warn("WebSocket is not connected");
+      console.warn("WebSocket не подключен");
     }
   }
   on(event, callback) {
@@ -103,7 +103,7 @@ class WebSocketService {
       try {
         callback(data);
       } catch (error) {
-        console.error(`Error in WebSocket listener for ${event}:`, error);
+        console.error(`Ошибка обработчика WebSocket для события ${event}:`, error);
       }
     });
   }

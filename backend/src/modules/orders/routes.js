@@ -677,7 +677,7 @@ router.post("/", authenticateToken, async (req, res, next) => {
         if (!deliveryPolygon) {
           await connection.rollback();
           return res.status(400).json({
-            error: "Delivery is not available to this address",
+            error: "Доставка по этому адресу недоступна.",
           });
         }
         if (!deliveryPolygon.branch_id) {
@@ -806,7 +806,15 @@ router.post("/", authenticateToken, async (req, res, next) => {
             `INSERT INTO order_item_modifiers 
              (order_item_id, modifier_id, modifier_name, modifier_price, modifier_group_id, modifier_weight, modifier_weight_unit)
              VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [orderItemId, modifier.id, modifier.name, modifier.price, modifier.group_id || null, modifier.weight_value || null, modifier.weight_unit || null],
+            [
+              orderItemId,
+              modifier.id,
+              modifier.name,
+              modifier.price,
+              modifier.group_id || null,
+              modifier.weight_value || null,
+              modifier.weight_unit || null,
+            ],
           );
         }
       }
@@ -1462,7 +1470,9 @@ const handleOrderStatusUpdate = async (req, res, next, forcedStatus = null) => {
             await removeEarnedBonuses(orderData, null, loyaltyLevels);
           }
           if (status === "completed" && oldStatus !== "completed" && orderTotal > 0) {
-            await db.query("UPDATE loyalty_transactions SET status = 'completed' WHERE order_id = ? AND type = 'spend' AND status = 'pending'", [orderId]);
+            await db.query("UPDATE loyalty_transactions SET status = 'completed' WHERE order_id = ? AND type = 'spend' AND status = 'pending'", [
+              orderId,
+            ]);
             if (orderData.bonus_earn_amount && orderData.bonus_earn_amount > 0) {
               await redeliveryEarnBonuses(orderData, null, loyaltyLevels);
             } else {

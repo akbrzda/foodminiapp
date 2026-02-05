@@ -83,7 +83,7 @@ async function loadBranches() {
       }
     }
   } catch (error) {
-    console.error("Failed to load branches:", error);
+    console.error("Не удалось загрузить филиалы:", error);
   }
 }
 async function initMap() {

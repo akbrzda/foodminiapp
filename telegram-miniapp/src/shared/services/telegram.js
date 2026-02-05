@@ -225,7 +225,7 @@ export function requestContact({ timeoutMs = 10000 } = {}) {
       console.log("[requestContact] custom_method_invoked payload:", payload);
       const result = payload?.result;
       if (!result) {
-        console.log("[requestContact] No result in payload");
+        console.log("[requestContact] В payload нет результата");
         return;
       }
       try {
@@ -236,14 +236,14 @@ export function requestContact({ timeoutMs = 10000 } = {}) {
         const contactRaw = params.get("contact");
         console.log("[requestContact] Contact raw:", contactRaw);
         if (!contactRaw) {
-          console.log("[requestContact] No contact in params");
+          console.log("[requestContact] В параметрах нет контакта");
           return;
         }
         const contact = JSON.parse(contactRaw);
         console.log("[requestContact] Parsed contact:", contact);
         finish(contact?.phone_number || null);
       } catch (error) {
-        console.error("[requestContact] Failed to parse contact result:", error, "result:", result);
+        console.error("[requestContact] Не удалось разобрать результат контакта:", error, "result:", result);
       }
     };
     timer = setTimeout(() => {
@@ -257,7 +257,7 @@ export function requestContact({ timeoutMs = 10000 } = {}) {
       console.log("[requestContact] Calling webApp.requestContact...");
       webApp.requestContact();
     } catch (error) {
-      console.error("[requestContact] Error calling requestContact:", error);
+      console.error("[requestContact] Ошибка при вызове requestContact:", error);
       finish(null);
     }
   });

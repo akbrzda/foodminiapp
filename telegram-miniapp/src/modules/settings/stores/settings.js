@@ -57,7 +57,7 @@ export const useSettingsStore = defineStore("settings", {
         const systemResponse = await settingsAPI.getSettings();
         this.applySettings(systemResponse.data?.settings || {});
       } catch (error) {
-        console.error("Failed to load settings:", error);
+        console.error("Не удалось загрузить настройки:", error);
         this.applySettings({});
       }
     },

@@ -82,7 +82,7 @@ async function saveProfile() {
       saveMessage.value = "";
     }, 3000);
   } catch (error) {
-    console.error("Failed to update profile:", error);
+    console.error("Не удалось обновить профиль:", error);
     hapticFeedback("error");
     saveError.value = error.response?.data?.error || "Не удалось сохранить профиль";
     setTimeout(() => {

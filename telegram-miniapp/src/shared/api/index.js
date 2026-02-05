@@ -10,12 +10,17 @@ const api = axios.create({
     Accept: "application/json; charset=utf-8",
   },
 });
+const normalizeErrorMessage = (message) => {
+  if (!message) return "Произошла ошибка";
+  const hasLatin = /[A-Za-z]/.test(message);
+  return hasLatin ? "Произошла ошибка" : message;
+};
 let refreshPromise = null;
 const refreshToken = async () => {
   if (refreshPromise) return refreshPromise;
   const initData = getInitData();
   if (!initData) {
-    return Promise.reject(new Error("Missing Telegram initData"));
+    return Promise.reject(new Error("Отсутствуют данные Telegram initData"));
   }
   refreshPromise = axios
     .post(
@@ -77,7 +82,7 @@ api.interceptors.response.use(
         authStore.logout();
       }
       return Promise.reject({
-        message: error.response.data?.message || "Произошла ошибка",
+        message: normalizeErrorMessage(error.response.data?.message || "Произошла ошибка"),
         status: error.response.status,
         data: error.response.data,
       });
@@ -88,7 +93,7 @@ api.interceptors.response.use(
       });
     } else {
       return Promise.reject({
-        message: error.message || "Неизвестная ошибка",
+        message: normalizeErrorMessage(error.message || "Неизвестная ошибка"),
         status: -1,
       });
     }

@@ -82,7 +82,7 @@ export const useLoyaltyStore = defineStore("loyalty", {
         this.periodDays = response.data?.period_days || 60;
         this.applyLevels(response.data?.levels || []);
       } catch (error) {
-        console.error("Failed to refresh loyalty data:", error);
+        console.error("Не удалось обновить данные лояльности:", error);
       } finally {
         this.loading = false;
       }

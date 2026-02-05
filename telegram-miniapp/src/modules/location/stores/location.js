@@ -171,7 +171,7 @@ export const useLocationStore = defineStore("location", {
     async detectUserLocation() {
       return new Promise((resolve, reject) => {
         if (!navigator.geolocation) {
-          reject(new Error("Geolocation not supported"));
+          reject(new Error("Геолокация не поддерживается"));
           return;
         }
         navigator.geolocation.getCurrentPosition(
@@ -184,7 +184,7 @@ export const useLocationStore = defineStore("location", {
             resolve(location);
           },
           (error) => {
-            console.error("Geolocation error:", error);
+            console.error("Ошибка геолокации:", error);
             reject(error);
           },
         );

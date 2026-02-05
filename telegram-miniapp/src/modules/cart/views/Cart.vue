@@ -230,7 +230,7 @@ onMounted(async () => {
         locationStore.setDeliveryZone(zone);
       }
     } catch (error) {
-      console.error("Failed to load delivery zone in cart:", error);
+      console.error("Не удалось загрузить зону доставки в корзине:", error);
     }
   }
   await ensureTariffs();
@@ -243,7 +243,7 @@ function getItemTotalPrice(item) {
   const quantity = parseInt(item.quantity) || 1;
   const total = price * quantity;
   if (isNaN(total)) {
-    console.error("Invalid price calculation:", { item, price, quantity, total });
+    console.error("Некорректный расчёт цены:", { item, price, quantity, total });
     return "0";
   }
   return formatPrice(total);
@@ -366,7 +366,7 @@ async function loadBonusBalance() {
     await loadMaxUsable();
     syncBonusUsage();
   } catch (error) {
-    console.error("Failed to load bonus balance:", error);
+    console.error("Не удалось загрузить бонусный баланс:", error);
   }
 }
 function syncBonusUsage() {
@@ -393,7 +393,7 @@ async function loadMaxUsable() {
     const response = await bonusesAPI.calculateMaxSpend(orderTotal, deliveryCost.value);
     maxUsableFromApi.value = response.data.max_usable || 0;
   } catch (error) {
-    console.error("Failed to load max usable bonuses:", error);
+    console.error("Не удалось загрузить максимальное списание бонусов:", error);
     maxUsableFromApi.value = 0;
   }
 }
@@ -424,7 +424,7 @@ async function ensureTariffs() {
       locationStore.setDeliveryZone(zone);
     }
   } catch (error) {
-    console.error("Failed to refresh delivery tariffs:", error);
+    console.error("Не удалось обновить тарифы доставки:", error);
   }
 }
 watch(

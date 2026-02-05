@@ -64,10 +64,10 @@ async function handleLogin() {
           console.log("[Login] Profile updated:", updated.data);
           authStore.setUser(updated.data.user);
         } catch (updateError) {
-          console.error("[Login] Failed to update phone:", updateError);
+          console.error("[Login] Не удалось обновить телефон:", updateError);
         }
       } else {
-        console.log("[Login] No phone number received from requestContact");
+        console.log("[Login] Номер телефона не получен из requestContact");
       }
     }
     hapticFeedback("success");
@@ -75,7 +75,7 @@ async function handleLogin() {
   } catch (err) {
     error.value = err.message || "Ошибка авторизации";
     hapticFeedback("error");
-    console.error("Login error:", err);
+    console.error("Ошибка входа:", err);
   } finally {
     loading.value = false;
   }

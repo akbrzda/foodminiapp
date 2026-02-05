@@ -382,7 +382,7 @@ router.post("/check-delivery", async (req, res, next) => {
     if (!polygon) {
       return res.json({
         available: false,
-        message: "Delivery is not available to this address",
+        message: "Доставка по этому адресу недоступна.",
       });
     }
     const [tariffsRows] = await db.query(

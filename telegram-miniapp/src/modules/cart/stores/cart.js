@@ -78,7 +78,7 @@ export const useCartStore = defineStore("cart", {
     },
     updateQuantity(index, quantity) {
       if (index < 0 || index >= this.items.length) {
-        console.error("Invalid index for updateQuantity:", index);
+        console.error("Некорректный индекс для updateQuantity:", index);
         return;
       }
       if (quantity <= 0) {

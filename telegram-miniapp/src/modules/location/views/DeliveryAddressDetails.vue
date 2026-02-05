@@ -64,7 +64,7 @@ async function save() {
       coords = { lat: geo.data.lat, lng: geo.data.lng };
       locationStore.setDeliveryCoords(coords);
     } catch (error) {
-      console.error("Failed to geocode address:", error);
+      console.error("Не удалось геокодировать адрес:", error);
       deliveryZoneError.value = "Не удалось определить адрес";
       hapticFeedback("error");
       return;
@@ -81,7 +81,7 @@ async function save() {
     const zone = { ...response.data.polygon, tariffs: response.data.tariffs || [] };
     locationStore.setDeliveryZone(zone);
   } catch (error) {
-    console.error("Failed to update delivery zone:", error);
+    console.error("Не удалось обновить зону доставки:", error);
     deliveryZoneError.value = "Не удалось проверить зону доставки";
     hapticFeedback("error");
     return;

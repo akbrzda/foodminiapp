@@ -49,7 +49,7 @@ async function loadOrders() {
     const response = await ordersAPI.getMyOrders();
     orders.value = response.data.orders || [];
   } catch (error) {
-    console.error("Failed to load orders:", error);
+    console.error("Не удалось загрузить заказы:", error);
   } finally {
     loading.value = false;
   }

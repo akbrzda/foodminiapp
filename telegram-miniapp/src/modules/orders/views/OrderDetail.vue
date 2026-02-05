@@ -184,7 +184,7 @@ async function loadOrder() {
     const response = await ordersAPI.getOrderById(route.params.id);
     order.value = response.data.order;
   } catch (error) {
-    console.error("Failed to load order:", error);
+    console.error("Не удалось загрузить заказ:", error);
   } finally {
     loading.value = false;
   }
