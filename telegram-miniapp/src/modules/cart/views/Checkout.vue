@@ -414,6 +414,10 @@ async function refreshCartPricesForOrderType() {
   const fulfillmentType = orderType.value === "pickup" ? "pickup" : "delivery";
   const branchId = locationStore.selectedBranch?.id || null;
   try {
+    if (menuStore.isCacheFresh(locationStore.selectedCity.id, fulfillmentType, branchId)) {
+      cartStore.refreshPricesFromMenu(menuStore.items);
+      return;
+    }
     const response = await menuAPI.getMenu(locationStore.selectedCity.id, { fulfillmentType, branchId });
     const categories = response.data.categories || [];
     const allItems = categories.flatMap((category) => category.items || []);

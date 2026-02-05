@@ -188,7 +188,7 @@
                         <span>{{ formatCurrency(item.subtotal) }}</span>
                       </div>
                       <div v-if="item.modifiers?.length" class="text-xs text-muted-foreground">
-                        {{ item.modifiers.map((modifier) => modifier.modifier_name).join(", ") }}
+                        {{ formatOrderModifiers(item.modifiers) }}
                       </div>
                       <div v-if="index < (order.items?.length || 0) - 1" class="mt-2 h-px bg-border"></div>
                     </div>
@@ -587,6 +587,42 @@ const formatOrderTime = (order) => {
   const endValue = order.deadline_time || order.desired_time;
   const end = endValue ? format(endValue) : null;
   return end ? `${start} до ${end}` : start;
+};
+
+const formatModifierWeight = (value, unit) => {
+  if (value === null || value === undefined || value === "") return "";
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) return "";
+  const units = {
+    g: "г",
+    kg: "кг",
+    ml: "мл",
+    l: "л",
+    pcs: "шт",
+  };
+  const label = units[unit] || unit || "";
+  return label ? `${numeric} ${label}` : `${numeric}`;
+};
+
+const formatOrderModifiers = (modifiers = []) => {
+  if (!Array.isArray(modifiers) || modifiers.length === 0) return "";
+  const grouped = new Map();
+  modifiers.forEach((modifier) => {
+    const name = modifier.modifier_name || "Дополнение";
+    const weightText = formatModifierWeight(modifier.modifier_weight, modifier.modifier_weight_unit);
+    const key = `${name}__${weightText || ""}`;
+    if (!grouped.has(key)) {
+      grouped.set(key, { name, weightText, count: 0 });
+    }
+    grouped.get(key).count += 1;
+  });
+  return Array.from(grouped.values())
+    .map((entry) => {
+      const weightPart = entry.weightText ? ` (${entry.weightText})` : "";
+      const countPart = entry.count > 1 ? ` x${entry.count}` : "";
+      return `${entry.name}${weightPart}${countPart}`;
+    })
+    .join(", ");
 };
 
 const getNextStatus = (order) => {

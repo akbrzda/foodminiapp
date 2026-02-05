@@ -11,6 +11,14 @@ export const useMenuStore = defineStore("menu", {
     loadedAt: null,
   }),
   getters: {
+    isCacheFresh: (state) => (cityId, fulfillmentType, branchId, ttlMs = 300000) => {
+      if (!state.loadedAt) return false;
+      if (state.cityId !== cityId) return false;
+      if ((state.fulfillmentType || null) !== (fulfillmentType || null)) return false;
+      if ((state.branchId || null) !== (branchId || null)) return false;
+      if (state.categories.length === 0 || state.items.length === 0) return false;
+      return Date.now() - state.loadedAt <= ttlMs;
+    },
     getCategoryById: (state) => (id) => {
       return state.categories.find((cat) => cat.id === id);
     },

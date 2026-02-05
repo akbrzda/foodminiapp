@@ -600,6 +600,8 @@ CREATE TABLE `order_item_modifiers` (
   `modifier_group_id` int DEFAULT NULL COMMENT 'ID группы модификаторов',
   `modifier_name` varchar(200) COLLATE utf8mb4_unicode_ci NOT NULL,
   `modifier_price` decimal(10,2) NOT NULL,
+  `modifier_weight` decimal(10,2) DEFAULT NULL,
+  `modifier_weight_unit` enum('g','kg','ml','l','pcs') COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `old_modifier_id` (`old_modifier_id`),

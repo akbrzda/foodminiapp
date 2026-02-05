@@ -374,13 +374,7 @@ async function loadMenu() {
   if (!locationStore.selectedCity) return;
   const fulfillmentType = locationStore.isPickup ? "pickup" : "delivery";
   const branchId = locationStore.selectedBranch?.id || null;
-  if (
-    menuStore.cityId === locationStore.selectedCity.id &&
-    menuStore.fulfillmentType === fulfillmentType &&
-    menuStore.branchId === branchId &&
-    menuStore.categories.length > 0 &&
-    menuStore.items.length > 0
-  ) {
+  if (menuStore.isCacheFresh(locationStore.selectedCity.id, fulfillmentType, branchId)) {
     await nextTick();
     setupIntersectionObserver();
     return;

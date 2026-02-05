@@ -39,10 +39,10 @@ const getTariffsByPolygonId = async (polygonId) => {
 const resolveDeliveryCost = async (polygonId, amount) => {
   const tariffs = await getTariffsByPolygonId(polygonId);
   if (tariffs.length === 0) {
-    return { deliveryCost: null, tariffs: [] };
+    return { deliveryCost: 0, tariffs: [{ amount_from: 0, amount_to: null, delivery_cost: 0 }] };
   }
   const tariff = findTariffForAmount(tariffs, amount);
-  return { deliveryCost: tariff ? tariff.delivery_cost : null, tariffs };
+  return { deliveryCost: tariff ? tariff.delivery_cost : 0, tariffs };
 };
 
 const getTimeZoneOffset = (date, timeZone) => {
@@ -401,7 +401,7 @@ async function calculateOrderCost(items, { cityId, fulfillmentType, bonusToUse =
     if (modifiers && Array.isArray(modifiers) && modifiers.length > 0) {
       for (const modId of modifiers) {
         const [newModifiers] = await db.query(
-          "SELECT m.id, m.name, m.price, m.is_active, m.group_id, mg.type, mg.is_required FROM modifiers m JOIN modifier_groups mg ON m.group_id = mg.id WHERE m.id = ? AND m.is_active = TRUE",
+          "SELECT m.id, m.name, m.price, m.weight, m.weight_unit, m.is_active, m.group_id, mg.type, mg.is_required FROM modifiers m JOIN modifier_groups mg ON m.group_id = mg.id WHERE m.id = ? AND m.is_active = TRUE",
           [modId],
         );
         if (newModifiers.length > 0) {
@@ -430,6 +430,8 @@ async function calculateOrderCost(items, { cityId, fulfillmentType, bonusToUse =
             group_id: modifier.group_id,
             type: modifier.type,
             is_required: modifier.is_required,
+            weight_value: modifier.weight ?? null,
+            weight_unit: modifier.weight_unit ?? null,
           });
         } else {
           const [oldModifiers] = await db.query("SELECT id, name, price, is_active FROM menu_modifiers WHERE id = ? AND item_id = ?", [
@@ -447,6 +449,8 @@ async function calculateOrderCost(items, { cityId, fulfillmentType, bonusToUse =
             name: modifier.name,
             price: modifierPrice,
             old_system: true,
+            weight_value: null,
+            weight_unit: null,
           });
         }
       }
@@ -505,9 +509,6 @@ router.post("/calculate", authenticateToken, async (req, res, next) => {
     if (orderType === "delivery" && delivery_polygon_id) {
       const amountForTariff = Math.floor(total);
       const { deliveryCost: resolvedCost } = await resolveDeliveryCost(delivery_polygon_id, amountForTariff);
-      if (resolvedCost === null) {
-        return res.status(400).json({ error: "Тарифы доставки не настроены" });
-      }
       deliveryCost = resolvedCost;
     }
     if (settings.bonuses_enabled && effectiveBonusToUse > 0) {
@@ -710,10 +711,6 @@ router.post("/", authenticateToken, async (req, res, next) => {
     if (order_type === "delivery" && deliveryPolygon) {
       const amountForTariff = Math.floor(total);
       const { deliveryCost: resolvedCost } = await resolveDeliveryCost(deliveryPolygon.id, amountForTariff);
-      if (resolvedCost === null) {
-        await connection.rollback();
-        return res.status(400).json({ error: "Тарифы доставки не настроены" });
-      }
       deliveryCost = resolvedCost;
     }
     const finalTotal = total + deliveryCost;
@@ -800,16 +797,16 @@ router.post("/", authenticateToken, async (req, res, next) => {
         if (modifier.old_system) {
           await connection.query(
             `INSERT INTO order_item_modifiers 
-             (order_item_id, modifier_id, modifier_name, modifier_price, old_modifier_id)
-             VALUES (?, ?, ?, ?, ?)`,
-            [orderItemId, null, modifier.name, modifier.price, modifier.id],
+             (order_item_id, modifier_id, modifier_name, modifier_price, old_modifier_id, modifier_weight, modifier_weight_unit)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            [orderItemId, null, modifier.name, modifier.price, modifier.id, modifier.weight_value || null, modifier.weight_unit || null],
           );
         } else {
           await connection.query(
             `INSERT INTO order_item_modifiers 
-             (order_item_id, modifier_id, modifier_name, modifier_price, modifier_group_id)
-             VALUES (?, ?, ?, ?, ?)`,
-            [orderItemId, modifier.id, modifier.name, modifier.price, modifier.group_id || null],
+             (order_item_id, modifier_id, modifier_name, modifier_price, modifier_group_id, modifier_weight, modifier_weight_unit)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            [orderItemId, modifier.id, modifier.name, modifier.price, modifier.group_id || null, modifier.weight_value || null, modifier.weight_unit || null],
           );
         }
       }
@@ -1167,7 +1164,7 @@ router.get("/admin/shift", authenticateToken, requireRole("admin", "manager", "c
     const itemsByOrder = new Map();
     if (orderIds.length > 0) {
       const [items] = await db.query(
-        `SELECT oi.*, oim.modifier_id, oim.modifier_name, oim.modifier_price, oim.order_item_id
+        `SELECT oi.*, oim.modifier_id, oim.modifier_name, oim.modifier_price, oim.modifier_weight, oim.modifier_weight_unit, oim.order_item_id
          FROM order_items oi
          LEFT JOIN order_item_modifiers oim ON oim.order_item_id = oi.id
          WHERE oi.order_id IN (?)`,
@@ -1183,6 +1180,8 @@ router.get("/admin/shift", authenticateToken, requireRole("admin", "manager", "c
             modifier_id: row.modifier_id,
             modifier_name: row.modifier_name,
             modifier_price: row.modifier_price,
+            modifier_weight: row.modifier_weight,
+            modifier_weight_unit: row.modifier_weight_unit,
           });
         }
       });

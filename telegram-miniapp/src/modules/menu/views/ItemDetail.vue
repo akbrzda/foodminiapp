@@ -355,18 +355,23 @@ async function loadItem() {
     if (locationStore.selectedCity) {
       const fulfillmentType = locationStore.isPickup ? "pickup" : "delivery";
       const branchId = locationStore.selectedBranch?.id || null;
-      const menuResponse = await menuAPI.getMenu(locationStore.selectedCity.id, { fulfillmentType, branchId });
-      const categories = menuResponse.data.categories || [];
-      const allItems = categories.flatMap((category) => category.items || []);
-      menuStore.setMenuData({
-        cityId: locationStore.selectedCity.id,
-        fulfillmentType,
-        branchId,
-        categories,
-        items: allItems,
-      });
-      item.value = allItems.find((entry) => entry.id === itemId) || null;
-      if (item.value) return;
+      if (menuStore.isCacheFresh(locationStore.selectedCity.id, fulfillmentType, branchId)) {
+        item.value = menuStore.getItemById?.(itemId) || null;
+        if (item.value) return;
+      } else {
+        const menuResponse = await menuAPI.getMenu(locationStore.selectedCity.id, { fulfillmentType, branchId });
+        const categories = menuResponse.data.categories || [];
+        const allItems = categories.flatMap((category) => category.items || []);
+        menuStore.setMenuData({
+          cityId: locationStore.selectedCity.id,
+          fulfillmentType,
+          branchId,
+          categories,
+          items: allItems,
+        });
+        item.value = allItems.find((entry) => entry.id === itemId) || null;
+        if (item.value) return;
+      }
     }
     const fulfillmentType = locationStore.isPickup ? "pickup" : "delivery";
     const cityId = locationStore.selectedCity?.id || null;

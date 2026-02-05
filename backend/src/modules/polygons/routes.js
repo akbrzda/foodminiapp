@@ -400,9 +400,14 @@ router.post("/check-delivery", async (req, res, next) => {
       delivery_cost: row.delivery_cost,
     }));
     if (tariffs.length === 0) {
+      const freeTariffs = [{ amount_from: 0, amount_to: null, delivery_cost: 0 }];
       return res.json({
-        available: false,
-        message: "Тарифы доставки не настроены",
+        available: true,
+        polygon,
+        coords_swapped: coordsSwapped,
+        tariffs: freeTariffs,
+        delivery_cost: 0,
+        next_threshold: null,
       });
     }
     const cartAmountValue = Number.isFinite(Number(cart_amount)) ? Number(cart_amount) : null;
