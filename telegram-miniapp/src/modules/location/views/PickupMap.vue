@@ -22,7 +22,12 @@
       <div class="sheet-status" :class="selectedBranch.isOpen ? 'open' : 'closed'">
         {{ selectedBranch.isOpen ? "Открыто" : "Закрыто" }}
       </div>
-      <div class="sheet-hours">{{ selectedBranch.work_hours || "Время работы уточняйте" }}</div>
+      <div class="sheet-hours">
+        <template v-if="getWorkHoursLines(selectedBranch).length">
+          <div v-for="(line, index) in getWorkHoursLines(selectedBranch)" :key="index">{{ line }}</div>
+        </template>
+        <template v-else>Время работы уточняйте</template>
+      </div>
       <div class="sheet-phone">{{ selectedBranch.phone || "+7 (800) 777-70-55" }}</div>
       <button class="primary-btn" @click="confirmPickup">Заберу отсюда</button>
     </div>
@@ -35,6 +40,7 @@ import { useRouter } from "vue-router";
 import { useLocationStore } from "@/modules/location/stores/location.js";
 import { citiesAPI } from "@/shared/api/endpoints.js";
 import { hapticFeedback } from "@/shared/services/telegram.js";
+import { formatWorkHoursLines, getBranchOpenState, normalizeWorkHours } from "@/shared/utils/workingHours";
 const router = useRouter();
 const locationStore = useLocationStore();
 const mapContainerRef = ref(null);
@@ -69,6 +75,13 @@ async function loadBranches() {
     const data = response.data.branches || [];
     branches.value = data.map((branch) => buildDisplayBranch(branch));
     locationStore.setBranches(branches.value);
+    if (locationStore.selectedBranch) {
+      const matched = branches.value.find((branch) => branch.id === locationStore.selectedBranch.id);
+      if (matched) {
+        selectedBranch.value = matched;
+        locationStore.setBranch(matched);
+      }
+    }
   } catch (error) {
     console.error("Failed to load branches:", error);
   }
@@ -116,12 +129,18 @@ function buildDisplayBranch(branch) {
   if (isAddressLike(displayName) || normalizeAddress(displayName) === displayAddress) {
     displayName = "Панда Пицца";
   }
+  const timeZone = locationStore.selectedCity?.timezone || "Europe/Moscow";
+  const openState = getBranchOpenState(branch.working_hours || branch.work_hours, timeZone);
   return {
     ...branch,
-    isOpen: true,
+    isOpen: openState.isOpen,
     displayName,
     displayAddress: displayAddress || branch.address || "",
+    work_hours: normalizeWorkHours(branch.work_hours || branch.working_hours),
   };
+}
+function getWorkHoursLines(branch) {
+  return formatWorkHoursLines(branch.work_hours || branch.working_hours);
 }
 function normalizeAddress(value) {
   if (!value) return "";

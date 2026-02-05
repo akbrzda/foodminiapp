@@ -11,13 +11,9 @@
             <img :src="normalizeImageUrl(item.image_url)" :alt="item.name" />
           </div>
           <div class="item-info">
-            <h3>{{ item.name }}</h3>
-            <div class="variant" v-if="item.variant_name">
-              <span class="variant-text">{{ item.variant_name }}</span>
-            </div>
-            <div class="weight" v-if="getItemWeight(item)">
-              <span class="weight-text">{{ getItemWeight(item) }}</span>
-            </div>
+            <h3>
+              {{ item.name }} <span class="variant-text" v-if="item.variant_name">{{ item.variant_name }}</span>
+            </h3>
             <div class="modifiers" v-if="getModifierSummary(item).length">
               <div class="modifier">{{ getModifierSummary(item).join(", ") }}</div>
             </div>
@@ -70,7 +66,7 @@
       <div class="delivery-tariff-widget" v-if="isDelivery && deliveryTariffs.length >= 2">
         <div class="tariff-title">Стоимость доставки</div>
         <div v-if="deliveryCost === 0" class="tariff-subtitle">У вас бесплатная доставка</div>
-        <div v-else class="tariff-subtitle">Еще {{ formatPrice(nextThreshold?.delta || 0) }} ₽ к заказу для понижения стоимости доставки</div>
+        <div v-else class="tariff-subtitle">До бесплатной доставки еще {{ formatPrice(nextThreshold?.delta || 0) }} ₽</div>
         <div class="tariff-pills">
           <div
             v-for="(tariff, index) in normalizedTariffs"
@@ -79,7 +75,6 @@
             :class="{ free: tariff.delivery_cost === 0, current: isCurrentTariff(tariff) }"
           >
             <span>{{ formatPrice(tariff.delivery_cost) }} ₽</span>
-            <span v-if="isCurrentTariff(tariff)" class="tariff-current">сейчас</span>
           </div>
         </div>
       </div>
@@ -121,7 +116,9 @@ import { useKeyboardHandler } from "@/shared/composables/useKeyboardHandler";
 import { hapticFeedback } from "@/shared/services/telegram.js";
 import { bonusesAPI, addressesAPI } from "@/shared/api/endpoints.js";
 import { formatPrice, normalizeImageUrl } from "@/shared/utils/format";
+import { formatWeight, formatWeightValue } from "@/shared/utils/weight";
 import { calculateDeliveryCost, getThresholds, normalizeTariffs, findTariffForAmount } from "@/shared/utils/deliveryTariffs";
+import { getBranchOpenState } from "@/shared/utils/workingHours";
 const router = useRouter();
 const cartStore = useCartStore();
 const locationStore = useLocationStore();
@@ -133,6 +130,7 @@ const bonusBalance = ref(0);
 const showBonusInfo = ref(false);
 const showPartialModal = ref(false);
 const partialBonusInput = ref("");
+const pendingBonusState = ref(null);
 
 const maxUsableFromApi = ref(0);
 const handleVisibilityChange = async () => {
@@ -142,6 +140,27 @@ const handleVisibilityChange = async () => {
 };
 
 const bonusesEnabled = computed(() => settingsStore.bonusesEnabled);
+const branchOpenState = computed(() => {
+  const timeZone = locationStore.selectedCity?.timezone || "Europe/Moscow";
+  if (locationStore.deliveryType === "pickup") {
+    if (!locationStore.selectedBranch) {
+      return { isOpen: true, reason: "" };
+    }
+    return getBranchOpenState(locationStore.selectedBranch.working_hours || locationStore.selectedBranch.work_hours, timeZone);
+  }
+  if (locationStore.deliveryType === "delivery") {
+    const branchId = locationStore.deliveryZone?.branch_id;
+    if (!branchId) {
+      return { isOpen: true, reason: "" };
+    }
+    const branch = locationStore.branches.find((item) => item.id === branchId);
+    if (!branch) {
+      return { isOpen: false, reason: "Филиал закрыт" };
+    }
+    return getBranchOpenState(branch.working_hours || branch.work_hours, timeZone);
+  }
+  return { isOpen: true, reason: "" };
+});
 const ordersEnabled = computed(() => settingsStore.ordersEnabled);
 const useBonuses = computed({
   get: () => cartStore.bonusUsage.useBonuses,
@@ -243,6 +262,11 @@ function checkout() {
     alert("Прием заказов временно отключен");
     return;
   }
+  if (!branchOpenState.value.isOpen) {
+    hapticFeedback("error");
+    alert("Филиал закрыт");
+    return;
+  }
   if (isDelivery.value && !settingsStore.deliveryEnabled) {
     hapticFeedback("error");
     alert("Доставка временно отключена");
@@ -259,29 +283,6 @@ function checkout() {
   }
   hapticFeedback("medium");
   router.push("/checkout");
-}
-function formatWeight(value) {
-  if (!value) return "";
-  return String(value);
-}
-function getUnitLabel(unit) {
-  const units = {
-    g: "г",
-    kg: "кг",
-    ml: "мл",
-    l: "л",
-    pcs: "шт",
-  };
-  return units[unit] || "";
-}
-function formatWeightValue(value, unit) {
-  const parsedValue = Number(value);
-  if (!Number.isFinite(parsedValue) || parsedValue <= 0 || !unit) {
-    return "";
-  }
-  const unitLabel = getUnitLabel(unit);
-  if (!unitLabel) return "";
-  return `${formatPrice(parsedValue)} ${unitLabel}`;
 }
 function getModifierSummary(item) {
   if (!item || !Array.isArray(item.modifiers)) return [];
@@ -321,13 +322,21 @@ function toggleBonusInfo() {
 function enableBonusUsage() {
   if (maxBonusToUse.value === 0) return;
   hapticFeedback("light");
-  bonusChangeRequested.value = true;
-  useBonuses.value = true;
-  partialBonusInput.value = String(appliedBonusToUse.value || maxBonusToUse.value);
+  pendingBonusState.value = {
+    useBonuses: useBonuses.value,
+    bonusToUse: bonusToUse.value,
+  };
+  const defaultValue = useBonuses.value ? appliedBonusToUse.value : maxBonusToUse.value;
+  partialBonusInput.value = String(defaultValue || 0);
   showPartialModal.value = true;
 }
 function closePartialModal() {
   showPartialModal.value = false;
+  if (pendingBonusState.value) {
+    useBonuses.value = pendingBonusState.value.useBonuses;
+    bonusToUse.value = pendingBonusState.value.bonusToUse;
+    pendingBonusState.value = null;
+  }
 }
 function normalizePartialValue(value) {
   const parsedValue = Number(value);
@@ -344,6 +353,7 @@ function confirmPartialBonus() {
   useBonuses.value = value > 0;
   bonusToUse.value = value;
   showPartialModal.value = false;
+  pendingBonusState.value = null;
 }
 async function loadBonusBalance() {
   if (!bonusesEnabled.value) {
@@ -504,12 +514,12 @@ watch(
   padding: 8px;
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius-md);
-  margin-bottom: 12px;
-  gap: 12px;
+  margin-bottom: 8px;
+  gap: 6px;
 }
 .item-media {
-  width: 64px;
-  height: 64px;
+  width: 72px;
+  height: 72px;
   flex-shrink: 0;
   border-radius: 12px;
   overflow: hidden;
@@ -532,22 +542,12 @@ watch(
   font-size: var(--font-size-body);
   font-weight: var(--font-weight-regular);
   color: var(--color-text-primary);
-  margin-bottom: 4px;
-}
-.modifiers {
-  margin-top: 4px;
-}
-.variant {
-  margin-top: 4px;
+  line-height: 1;
   margin-bottom: 4px;
 }
 .variant-text {
   font-size: var(--font-size-caption);
   color: var(--color-text-secondary);
-  font-style: italic;
-}
-.weight {
-  margin-top: 4px;
 }
 .weight-text {
   font-size: var(--font-size-caption);
@@ -682,7 +682,7 @@ watch(
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  border: 2px solid var(--color-text-secondary);
+  border: 1px solid var(--color-text-secondary);
   color: var(--color-text-secondary);
   display: inline-flex;
   align-items: center;
@@ -831,22 +831,22 @@ watch(
 }
 .delivery-tariff-widget {
   margin: 8px 0 8px;
-  padding: 16px 12px;
+  padding: 8px 6px;
   border-radius: 18px;
   background: var(--color-background);
   border: 1px solid var(--color-border);
   text-align: center;
 }
 .tariff-title {
-  font-size: 24px;
-  font-weight: 800;
+  font-size: 20px;
+  font-weight: 700;
   color: var(--color-text-primary);
   margin-bottom: 4px;
 }
 .tariff-subtitle {
-  font-size: 14px;
+  font-size: 12px;
   color: var(--color-text-secondary);
-  margin-bottom: 16px;
+  margin-bottom: 8px;
 }
 .tariff-pills {
   display: flex;
@@ -856,8 +856,9 @@ watch(
   flex-wrap: wrap;
 }
 .tariff-pill {
-  min-width: 86px;
-  padding: 6px 12px;
+  position: relative;
+  min-width: 64px;
+  padding: 4px 8px;
   border-radius: 999px;
   border: 1px solid var(--color-border);
   color: var(--color-text-secondary);
@@ -867,14 +868,24 @@ watch(
   align-items: center;
   gap: 6px;
   justify-content: center;
+  font-size: var(--font-size-caption);
+}
+.tariff-pill::after {
+  position: absolute;
+  content: "";
+  height: 1px;
+  width: 12px;
+  top: 50%;
+  right: -13px;
+  background: var(--color-border);
+}
+.tariff-pill.free::after {
+  width: 0;
+  height: 0;
 }
 .tariff-pill.current {
   border-color: var(--color-success);
-  background: var(--color-success);
-  color: #ffffff;
-}
-.tariff-pill.free {
-  color: var(--color-text-secondary);
+  color: var(--color-success);
 }
 .tariff-current {
   font-size: 11px;

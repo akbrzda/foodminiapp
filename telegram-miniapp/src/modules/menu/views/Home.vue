@@ -2,7 +2,7 @@
   <div class="home">
     <AppHeader @toggleMenu="showMenu = true" />
     <div class="location-bar">
-      <div v-if="!ordersEnabled" class="order-disabled">Прием заказов временно отключен</div>
+      <div v-if="!ordersEnabled" class="order-disabled">{{ orderDisabledReason }}</div>
       <template v-else>
         <div class="location-tabs" v-if="deliveryEnabled || pickupEnabled">
           <button v-if="deliveryEnabled" @click="setDeliveryType('delivery')" class="pill-tab" :class="{ active: locationStore.isDelivery }">
@@ -162,6 +162,7 @@ import { hapticFeedback } from "@/shared/services/telegram.js";
 import { wsService } from "@/shared/services/websocket.js";
 import AppHeader from "@/shared/components/AppHeader.vue";
 import { formatPrice, normalizeImageUrl } from "@/shared/utils/format";
+import { formatWeight, formatWeightValue } from "@/shared/utils/weight";
 import { calculateDeliveryCost } from "@/shared/utils/deliveryTariffs";
 const router = useRouter();
 const route = useRoute();
@@ -189,6 +190,10 @@ const canOrder = computed(() => {
   if (locationStore.isDelivery) return deliveryEnabled.value;
   if (locationStore.isPickup) return pickupEnabled.value;
   return false;
+});
+const orderDisabledReason = computed(() => {
+  if (!settingsStore.ordersEnabled) return "Прием заказов временно отключен";
+  return "";
 });
 const actionButtonText = computed(() => {
   if (!ordersEnabled.value) return "Заказы недоступны";
@@ -451,29 +456,6 @@ function getAddButtonLabel(item) {
   if (!canOrder.value) return "Заказы недоступны";
   if (isItemUnavailable(item)) return "Недоступно";
   return getItemPrice(item);
-}
-function formatWeight(value) {
-  if (!value) return "";
-  return String(value);
-}
-function getUnitLabel(unit) {
-  const units = {
-    g: "г",
-    kg: "кг",
-    ml: "мл",
-    l: "л",
-    pcs: "шт",
-  };
-  return units[unit] || "";
-}
-function formatWeightValue(value, unit) {
-  const parsedValue = Number(value);
-  if (!Number.isFinite(parsedValue) || parsedValue <= 0 || !unit) {
-    return "";
-  }
-  const unitLabel = getUnitLabel(unit);
-  if (!unitLabel) return "";
-  return `${formatPrice(parsedValue)} ${unitLabel}`;
 }
 function getDisplayWeight(item) {
   if (!item) return "";

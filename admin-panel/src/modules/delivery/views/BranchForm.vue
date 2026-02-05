@@ -197,6 +197,10 @@ const days = [
   { value: "saturday", label: "Суббота" },
   { value: "sunday", label: "Воскресенье" },
 ];
+const dayOrder = days.reduce((acc, day, index) => {
+  acc[day.value] = index;
+  return acc;
+}, {});
 
 const goBack = () => {
   router.push({ name: "branches" });
@@ -221,10 +225,19 @@ const addWorkingDay = () => {
     open: "09:00",
     close: "21:00",
   });
+  sortWorkingHours();
 };
 
 const removeWorkingDay = (index) => {
   form.value.working_hours.splice(index, 1);
+};
+
+const sortWorkingHours = () => {
+  form.value.working_hours.sort((a, b) => {
+    const orderA = dayOrder[a.day] ?? Number.MAX_SAFE_INTEGER;
+    const orderB = dayOrder[b.day] ?? Number.MAX_SAFE_INTEGER;
+    return orderA - orderB;
+  });
 };
 
 const initBranchMap = () => {
@@ -353,6 +366,7 @@ const loadBranch = async () => {
       assembly_time: Number(branch.assembly_time || 0),
       is_active: normalizeBoolean(branch.is_active, true),
     };
+    sortWorkingHours();
     await nextTick();
     initBranchMap();
   } catch (error) {
@@ -419,6 +433,13 @@ watch(
     router.replace({ query: { ...route.query, cityId: String(value) } });
     await nextTick();
     initBranchMap();
+  },
+);
+
+watch(
+  () => form.value.working_hours.map((schedule) => schedule.day || "").join("|"),
+  () => {
+    sortWorkingHours();
   },
 );
 

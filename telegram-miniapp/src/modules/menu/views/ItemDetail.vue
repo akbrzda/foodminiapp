@@ -168,6 +168,7 @@ import { useKeyboardHandler } from "@/shared/composables/useKeyboardHandler";
 import { menuAPI } from "@/shared/api/endpoints.js";
 import { hapticFeedback } from "@/shared/services/telegram.js";
 import { formatPrice, normalizeImageUrl } from "@/shared/utils/format";
+import { formatModifierWeight, formatWeight, formatWeightValue } from "@/shared/utils/weight";
 const route = useRoute();
 const router = useRouter();
 const cartStore = useCartStore();
@@ -184,7 +185,7 @@ const quantity = ref(1);
 const isAdded = ref(false);
 const ordersEnabled = computed(() => settingsStore.ordersEnabled);
 const canOrder = computed(() => {
-  if (!settingsStore.ordersEnabled) return false;
+  if (!ordersEnabled.value) return false;
   if (locationStore.isDelivery) return settingsStore.deliveryEnabled;
   if (locationStore.isPickup) return settingsStore.pickupEnabled;
   return false;
@@ -578,44 +579,6 @@ function addToCart() {
     image_url: item.value.image_url,
   });
   isAdded.value = true;
-}
-function formatWeight(value) {
-  if (!value) return "";
-  return String(value);
-}
-function getUnitLabel(unit) {
-  const units = {
-    g: "г",
-    kg: "кг",
-    ml: "мл",
-    l: "л",
-    pcs: "шт",
-  };
-  return units[unit] || "";
-}
-function formatWeightValue(value, unit) {
-  const parsedValue = Number(value);
-  if (!Number.isFinite(parsedValue) || parsedValue <= 0 || !unit) {
-    return "";
-  }
-  const unitLabel = getUnitLabel(unit);
-  if (!unitLabel) return "";
-  return `${formatPrice(parsedValue)} ${unitLabel}`;
-}
-function formatModifierWeight(value, unit) {
-  const parsedValue = Number(value);
-  if (!Number.isFinite(parsedValue) || parsedValue <= 0) {
-    return "";
-  }
-  const normalizedUnit = unit || "g";
-  const unitLabel = getUnitLabel(normalizedUnit);
-  if (unitLabel) {
-    return `${formatPrice(parsedValue)} ${unitLabel}`;
-  }
-  if (unit) {
-    return `${formatPrice(parsedValue)} ${unit}`;
-  }
-  return `${formatPrice(parsedValue)} г`;
 }
 </script>
 <style scoped>

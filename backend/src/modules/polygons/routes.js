@@ -61,9 +61,35 @@ router.get("/city/:cityId", async (req, res, next) => {
                AND NOW() NOT BETWEEN dp.blocked_from AND dp.blocked_until))`,
       [cityId],
     );
+    if (!polygons.length) {
+      return res.json({ polygons: [] });
+    }
+    const polygonIds = polygons.map((p) => p.id);
+    const placeholders = polygonIds.map(() => "?").join(",");
+    const [tariffsRows] = await db.query(
+      `SELECT id, polygon_id, amount_from, amount_to, delivery_cost
+       FROM delivery_tariffs
+       WHERE polygon_id IN (${placeholders})
+       ORDER BY polygon_id, amount_from`,
+      polygonIds,
+    );
+    const tariffsByPolygon = new Map();
+    tariffsRows.forEach((row) => {
+      if (!tariffsByPolygon.has(row.polygon_id)) {
+        tariffsByPolygon.set(row.polygon_id, []);
+      }
+      tariffsByPolygon.get(row.polygon_id).push({
+        id: row.id,
+        polygon_id: row.polygon_id,
+        amount_from: row.amount_from,
+        amount_to: row.amount_to === null ? null : Number(row.amount_to),
+        delivery_cost: row.delivery_cost,
+      });
+    });
     const parsedPolygons = polygons.map((p) => ({
       ...p,
       polygon: parseGeoJson(p.polygon),
+      tariffs: tariffsByPolygon.get(p.id) || [],
     }));
     res.json({ polygons: parsedPolygons });
   } catch (error) {
@@ -86,9 +112,35 @@ router.get("/branch/:branchId", async (req, res, next) => {
                AND NOW() NOT BETWEEN blocked_from AND blocked_until))`,
       [branchId],
     );
+    if (!polygons.length) {
+      return res.json({ polygons: [] });
+    }
+    const polygonIds = polygons.map((p) => p.id);
+    const placeholders = polygonIds.map(() => "?").join(",");
+    const [tariffsRows] = await db.query(
+      `SELECT id, polygon_id, amount_from, amount_to, delivery_cost
+       FROM delivery_tariffs
+       WHERE polygon_id IN (${placeholders})
+       ORDER BY polygon_id, amount_from`,
+      polygonIds,
+    );
+    const tariffsByPolygon = new Map();
+    tariffsRows.forEach((row) => {
+      if (!tariffsByPolygon.has(row.polygon_id)) {
+        tariffsByPolygon.set(row.polygon_id, []);
+      }
+      tariffsByPolygon.get(row.polygon_id).push({
+        id: row.id,
+        polygon_id: row.polygon_id,
+        amount_from: row.amount_from,
+        amount_to: row.amount_to === null ? null : Number(row.amount_to),
+        delivery_cost: row.delivery_cost,
+      });
+    });
     const parsedPolygons = polygons.map((p) => ({
       ...p,
       polygon: parseGeoJson(p.polygon),
+      tariffs: tariffsByPolygon.get(p.id) || [],
     }));
     res.json({ polygons: parsedPolygons });
   } catch (error) {

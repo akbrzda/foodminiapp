@@ -1,7 +1,7 @@
 <template>
   <div class="checkout">
     <div class="content">
-      <div v-if="!ordersEnabled" class="order-disabled">Прием заказов временно отключен</div>
+      <div v-if="!ordersEnabled" class="order-disabled">{{ orderDisabledReason }}</div>
       <div v-else-if="!deliveryEnabled && !pickupEnabled" class="order-disabled">Нет доступных способов заказа</div>
       <template v-else>
         <div class="order-type-tabs">
@@ -80,6 +80,9 @@
           >
             <h3>{{ branch.name }}</h3>
             <p class="branch-address">{{ branch.address }}</p>
+            <p class="branch-status" :class="{ closed: !branch.isOpen }">
+              {{ branch.isOpen ? "Открыто" : "Закрыто" }}
+            </p>
             <p class="branch-phone" v-if="branch.phone">
               <Phone :size="14" />
               {{ branch.phone }}
@@ -158,6 +161,7 @@ import { citiesAPI, addressesAPI, ordersAPI, menuAPI, bonusesAPI } from "@/share
 import { hapticFeedback } from "@/shared/services/telegram.js";
 import { formatPrice } from "@/shared/utils/format";
 import { calculateDeliveryCost } from "@/shared/utils/deliveryTariffs";
+import { getBranchOpenState, normalizeWorkHours } from "@/shared/utils/workingHours";
 const router = useRouter();
 const cartStore = useCartStore();
 const locationStore = useLocationStore();
@@ -188,10 +192,35 @@ const handleVisibilityChange = async () => {
     await refreshBonusBalance();
   }
 };
+const branchOpenState = computed(() => {
+  const timeZone = locationStore.selectedCity?.timezone || "Europe/Moscow";
+  if (orderType.value === "pickup") {
+    if (!selectedBranch.value) {
+      return { isOpen: true, reason: "" };
+    }
+    return getBranchOpenState(selectedBranch.value.working_hours || selectedBranch.value.work_hours, timeZone);
+  }
+  if (orderType.value === "delivery") {
+    const branchId = locationStore.deliveryZone?.branch_id;
+    if (!branchId) {
+      return { isOpen: true, reason: "" };
+    }
+    const branch = locationStore.branches.find((item) => item.id === branchId) || locationStore.selectedBranch;
+    if (!branch) {
+      return { isOpen: false, reason: "Филиал закрыт" };
+    }
+    return getBranchOpenState(branch.working_hours || branch.work_hours, timeZone);
+  }
+  return { isOpen: true, reason: "" };
+});
 const ordersEnabled = computed(() => settingsStore.ordersEnabled);
 const deliveryEnabled = computed(() => settingsStore.deliveryEnabled);
 const pickupEnabled = computed(() => settingsStore.pickupEnabled);
 const bonusesEnabled = computed(() => settingsStore.bonusesEnabled);
+const orderDisabledReason = computed(() => {
+  if (!settingsStore.ordersEnabled) return "Прием заказов временно отключен";
+  return "";
+});
 const deliveryDetails = ref({
   entrance: locationStore.deliveryDetails?.entrance || "",
   doorCode: locationStore.deliveryDetails?.doorCode || "",
@@ -465,7 +494,16 @@ async function loadBranches() {
   try {
     loadingBranches.value = true;
     const response = await citiesAPI.getBranches(locationStore.selectedCity.id);
-    branches.value = response.data.branches || [];
+    const timeZone = locationStore.selectedCity?.timezone || "Europe/Moscow";
+    const raw = response.data.branches || [];
+    branches.value = raw.map((branch) => {
+      const openState = getBranchOpenState(branch.working_hours || branch.work_hours, timeZone);
+      return {
+        ...branch,
+        isOpen: openState.isOpen,
+        work_hours: normalizeWorkHours(branch.work_hours || branch.working_hours),
+      };
+    });
   } catch (error) {
     console.error("Failed to load branches:", error);
   } finally {
@@ -511,6 +549,11 @@ async function ensureTariffs() {
 async function submitOrder() {
   if (!canSubmitOrder.value || submitting.value) return;
   if (!ordersEnabled.value) return;
+  if (!branchOpenState.value.isOpen) {
+    hapticFeedback("error");
+    alert("Филиал закрыт");
+    return;
+  }
   paymentError.value = "";
   submitting.value = true;
   hapticFeedback("medium");
@@ -613,6 +656,8 @@ async function submitOrder() {
       "Cart is empty": "Корзина пуста",
       "Insufficient stock": "Недостаточно товара на складе",
       "Minimum order amount is": "Минимальная сумма заказа не достигнута",
+      "Working hours are not set": "График работы не задан",
+      "Branch is closed": "Филиал закрыт",
     };
     if (error.status === 0) {
       errorMessage = "Нет связи с сервером. Проверьте интернет-соединение и убедитесь, что backend запущен.";
@@ -875,6 +920,15 @@ async function submitOrder() {
   font-size: var(--font-size-body);
   color: var(--color-text-secondary);
   margin: 4px 0;
+}
+.branch-status {
+  font-size: var(--font-size-caption);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-success);
+  margin: 4px 0;
+}
+.branch-status.closed {
+  color: var(--color-error);
 }
 .branch-phone {
   font-size: var(--font-size-caption);

@@ -85,12 +85,6 @@ docker-compose up -d        # Запуск MySQL + Redis + phpMyAdmin
 docker-compose down         # Остановка
 ```
 
-Доступы:
-
-- MySQL: `localhost:3306` (user: `akbrzda`, password: `2109a2001`, database: `pandapizza`)
-- Redis: `localhost:6379` (password: `a9k1m9a0l1t1`)
-- phpMyAdmin: `http://localhost:8081`
-
 ## Workflow задач
 
 1. **Создай план**: Добавь `TASKS.md` с детальными шагами (для каждой задачи очищай сначала файл, если там уже все задачи были выполнены)
@@ -123,4 +117,3 @@ docker-compose down         # Остановка
 - Всегд придерживаться технической документации и не импровизировать без согласования
 - Пиши лаконичные и понятные коммиты, отражающие суть изменений
 - If code file more than 500 lines split it into several files logically;
-- When writing code, always use context7 MCP server.

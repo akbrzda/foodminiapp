@@ -38,7 +38,14 @@
                 <div class="branch-info">
                   <div class="branch-name">{{ branch.name }}</div>
                   <div class="branch-address">{{ branch.address }}</div>
-                  <div class="branch-hours">{{ branch.work_hours }}</div>
+                  <div class="branch-status" :class="{ closed: !branch.isOpen }">
+                    {{ branch.isOpen ? "Открыто" : "Закрыто" }}
+                  </div>
+                  <div class="branch-hours">
+                    <template v-if="getWorkHoursLines(branch).length">
+                      <div v-for="(line, index) in getWorkHoursLines(branch)" :key="index">{{ line }}</div>
+                    </template>
+                  </div>
                 </div>
                 <Check v-if="branch.id === locationStore.selectedBranch?.id" :size="24" class="checkmark" />
               </button>
@@ -60,6 +67,7 @@ import { X, Check, MapPin } from "lucide-vue-next";
 import { useLocationStore } from "@/modules/location/stores/location.js";
 import { citiesAPI } from "@/shared/api/endpoints.js";
 import { hapticFeedback } from "@/shared/services/telegram.js";
+import { formatWorkHoursLines, getBranchOpenState, normalizeWorkHours } from "@/shared/utils/workingHours";
 const props = defineProps({
   open: Boolean,
 });
@@ -97,7 +105,16 @@ async function loadBranches() {
   try {
     loading.value = true;
     const response = await citiesAPI.getBranches(locationStore.selectedCity.id);
-    branches.value = response.data.branches || [];
+    const timeZone = locationStore.selectedCity?.timezone || "Europe/Moscow";
+    const raw = response.data.branches || [];
+    branches.value = raw.map((branch) => {
+      const openState = getBranchOpenState(branch.working_hours || branch.work_hours, timeZone);
+      return {
+        ...branch,
+        isOpen: openState.isOpen,
+        work_hours: normalizeWorkHours(branch.work_hours || branch.working_hours),
+      };
+    });
     locationStore.setBranches(branches.value);
   } catch (error) {
     console.error("Failed to load branches:", error);
@@ -122,6 +139,9 @@ function selectDeliveryAddress() {
     closeDialog();
     emit("addressSelected", deliveryAddress.value);
   }
+}
+function getWorkHoursLines(branch) {
+  return formatWorkHoursLines(branch.work_hours || branch.working_hours);
 }
 function closeDialog() {
   isOpen.value = false;
@@ -343,6 +363,14 @@ function closeDialog() {
   font-size: var(--font-size-caption);
   color: var(--color-text-secondary);
   margin-bottom: 4px;
+}
+.branch-status {
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-success);
+}
+.branch-status.closed {
+  color: var(--color-error);
 }
 .branch-hours {
   font-size: var(--font-size-small);

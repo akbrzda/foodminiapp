@@ -40,6 +40,10 @@
                 <User :size="20" />
                 <span>Профиль</span>
               </button>
+              <button class="sidebar-item" @click="navigateTo('/contacts')">
+                <Phone :size="20" />
+                <span>Контакты</span>
+              </button>
             </nav>
           </div>
         </div>
@@ -70,7 +74,7 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from "vue";
 import { useRouter } from "vue-router";
-import { Menu, MapPin, X, Home, Package, Gift, User } from "lucide-vue-next";
+import { Menu, MapPin, X, Home, Package, Gift, User, Phone } from "lucide-vue-next";
 import { useLocationStore } from "@/modules/location/stores/location.js";
 import { useAuthStore } from "@/modules/auth/stores/auth.js";
 import { useSettingsStore } from "@/modules/settings/stores/settings.js";

@@ -69,6 +69,12 @@ const routes = [
     component: () => import("@/modules/location/views/PickupMap.vue"),
     meta: { requiresAuth: false, showBackButton: true },
   },
+  {
+    path: "/contacts",
+    name: "Contacts",
+    component: () => import("@/modules/location/views/Contacts.vue"),
+    meta: { requiresAuth: true, requiresLocation: true, showBackButton: true },
+  },
 ];
 const router = createRouter({
   history: createWebHistory(),

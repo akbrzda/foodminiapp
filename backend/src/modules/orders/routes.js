@@ -80,6 +80,191 @@ const zonedTimeToUtc = (localDateTime, timeZone) => {
   return new Date(utcGuess.getTime() - offsetMinutes * 60000);
 };
 
+const DAY_ALIASES = {
+  monday: "monday",
+  tuesday: "tuesday",
+  wednesday: "wednesday",
+  thursday: "thursday",
+  friday: "friday",
+  saturday: "saturday",
+  sunday: "sunday",
+  mon: "monday",
+  tue: "tuesday",
+  wed: "wednesday",
+  thu: "thursday",
+  fri: "friday",
+  sat: "saturday",
+  sun: "sunday",
+  пн: "monday",
+  вт: "tuesday",
+  ср: "wednesday",
+  чт: "thursday",
+  пт: "friday",
+  сб: "saturday",
+  вс: "sunday",
+  понедельник: "monday",
+  вторник: "tuesday",
+  среда: "wednesday",
+  четверг: "thursday",
+  пятница: "friday",
+  суббота: "saturday",
+  воскресенье: "sunday",
+};
+
+const normalizeDayKey = (value) => {
+  if (!value) return "";
+  const key = String(value).trim().toLowerCase();
+  return DAY_ALIASES[key] || key;
+};
+
+const parseTimeToMinutes = (value) => {
+  if (value === null || value === undefined || value === "") return null;
+  if (Number.isFinite(value)) {
+    const minutes = Math.max(0, Math.floor(Number(value)));
+    if (minutes === 1440) return 1440;
+    return minutes;
+  }
+  const text = String(value).trim();
+  if (!text) return null;
+  if (/^\d{1,2}:\d{2}$/.test(text)) {
+    const [h, m] = text.split(":").map((part) => Number(part));
+    if (!Number.isFinite(h) || !Number.isFinite(m)) return null;
+    if (h === 24 && m === 0) return 1440;
+    return h * 60 + m;
+  }
+  if (/^\d{1,2}$/.test(text)) {
+    const h = Number(text);
+    if (!Number.isFinite(h)) return null;
+    if (h === 24) return 1440;
+    return h * 60;
+  }
+  return null;
+};
+
+const parseRangeString = (value) => {
+  if (!value) return null;
+  const text = String(value).trim();
+  if (!text) return null;
+  const parts = text.split(/[–—-]/).map((part) => part.trim());
+  if (parts.length < 2) return null;
+  const open = parseTimeToMinutes(parts[0]);
+  const close = parseTimeToMinutes(parts[1]);
+  if (open === null || close === null) return null;
+  return { open, close };
+};
+
+const normalizeWorkingHours = (value) => {
+  if (!value) return value;
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  if (!trimmed) return value;
+  if ((trimmed.startsWith("{") && trimmed.endsWith("}")) || (trimmed.startsWith("[") && trimmed.endsWith("]"))) {
+    try {
+      return JSON.parse(trimmed);
+    } catch (error) {
+      return value;
+    }
+  }
+  return value;
+};
+
+const buildScheduleMap = (value) => {
+  const normalized = normalizeWorkingHours(value);
+  const map = new Map();
+  if (!normalized) return map;
+  if (Array.isArray(normalized)) {
+    normalized.forEach((entry) => {
+      const dayKey = normalizeDayKey(entry?.day || entry?.weekday);
+      if (!dayKey) return;
+      const range = entry?.hours ? parseRangeString(entry.hours) : null;
+      const open = range?.open ?? parseTimeToMinutes(entry?.open || entry?.from || entry?.start);
+      const close = range?.close ?? parseTimeToMinutes(entry?.close || entry?.to || entry?.end);
+      if (open === null || close === null) return;
+      map.set(dayKey, { open, close });
+    });
+    return map;
+  }
+  if (typeof normalized === "object") {
+    Object.entries(normalized).forEach(([dayKeyRaw, data]) => {
+      const dayKey = normalizeDayKey(dayKeyRaw);
+      if (!dayKey) return;
+      if (typeof data === "string") {
+        const range = parseRangeString(data);
+        if (!range) return;
+        map.set(dayKey, range);
+        return;
+      }
+      if (typeof data === "object" && data) {
+        const open = parseTimeToMinutes(data.open || data.from || data.start);
+        const close = parseTimeToMinutes(data.close || data.to || data.end);
+        if (open === null || close === null) return;
+        map.set(dayKey, { open, close });
+      }
+    });
+  }
+  return map;
+};
+
+const getCityNowParts = (timeZone) => {
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: timeZone || "Europe/Moscow",
+    weekday: "long",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+  const parts = formatter.formatToParts(new Date());
+  const weekday = parts.find((part) => part.type === "weekday")?.value || "";
+  const hour = Number(parts.find((part) => part.type === "hour")?.value);
+  const minute = Number(parts.find((part) => part.type === "minute")?.value);
+  const minutes = Number.isFinite(hour) && Number.isFinite(minute) ? hour * 60 + minute : null;
+  return { weekday: normalizeDayKey(weekday), minutes };
+};
+
+const getBranchOpenState = (workingHours, timeZone) => {
+  const schedule = buildScheduleMap(workingHours);
+  if (!schedule || schedule.size === 0) {
+    return { isOpen: false, reason: "Working hours are not set" };
+  }
+  const { weekday, minutes } = getCityNowParts(timeZone);
+  if (!weekday || minutes === null) {
+    return { isOpen: false, reason: "Failed to get local time" };
+  }
+  const daySchedule = schedule.get(weekday);
+  if (!daySchedule) {
+    return { isOpen: false, reason: "Branch is closed" };
+  }
+  const { open, close } = daySchedule;
+  if (!Number.isFinite(open) || !Number.isFinite(close) || open === close) {
+    return { isOpen: false, reason: "Branch is closed" };
+  }
+  if (close < open) {
+    const isOpen = minutes >= open || minutes < close;
+    return { isOpen, reason: isOpen ? "" : "Branch is closed" };
+  }
+  const isOpen = minutes >= open && minutes < close;
+  return { isOpen, reason: isOpen ? "" : "Branch is closed" };
+};
+
+const ensureBranchIsOpen = async (connection, branchId, cityId) => {
+  const [branches] = await connection.query(
+    `SELECT b.id, b.working_hours, b.is_active, c.timezone
+     FROM branches b
+     JOIN cities c ON b.city_id = c.id
+     WHERE b.id = ? AND b.city_id = ? AND b.is_active = TRUE`,
+    [branchId, cityId],
+  );
+  if (branches.length === 0) {
+    return { ok: false, error: "Branch not found" };
+  }
+  const branch = branches[0];
+  const state = getBranchOpenState(branch.working_hours, branch.timezone);
+  if (!state.isOpen) {
+    return { ok: false, error: state.reason || "Branch is closed" };
+  }
+  return { ok: true, branch };
+};
+
 const getShiftWindowUtc = (timeZone, now = new Date()) => {
   const formatter = new Intl.DateTimeFormat("en-US", {
     timeZone,
@@ -407,6 +592,13 @@ router.post("/", authenticateToken, async (req, res, next) => {
         error: "branch_id is required for pickup orders",
       });
     }
+    if (order_type === "pickup") {
+      const openCheck = await ensureBranchIsOpen(connection, branch_id, city_id);
+      if (!openCheck.ok) {
+        await connection.rollback();
+        return res.status(400).json({ error: openCheck.error });
+      }
+    }
     if (order_type === "delivery" && (!delivery_street || !delivery_house)) {
       await connection.rollback();
       return res.status(400).json({
@@ -482,6 +674,15 @@ router.post("/", authenticateToken, async (req, res, next) => {
           return res.status(400).json({
             error: "Delivery is not available to this address",
           });
+        }
+        if (!deliveryPolygon.branch_id) {
+          await connection.rollback();
+          return res.status(400).json({ error: "Branch not found" });
+        }
+        const openCheck = await ensureBranchIsOpen(connection, deliveryPolygon.branch_id, city_id);
+        if (!openCheck.ok) {
+          await connection.rollback();
+          return res.status(400).json({ error: openCheck.error });
         }
         deliveryCost = 0;
       } catch (geoError) {

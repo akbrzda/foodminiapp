@@ -1,5 +1,9 @@
 export const normalizeTariffs = (tariffs = []) => {
   if (!Array.isArray(tariffs)) return [];
+  // Если тарифы не настроены, используем дефолт: бесплатная доставка от 0.
+  if (tariffs.length === 0) {
+    return [{ amount_from: 0, amount_to: null, delivery_cost: 0 }];
+  }
   return tariffs
     .map((tariff) => ({
       amount_from: Number.isFinite(Number(tariff.amount_from)) ? Number(tariff.amount_from) : 0,
