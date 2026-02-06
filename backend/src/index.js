@@ -43,11 +43,39 @@ const corsOrigins = rawCorsOrigins
   .split(",")
   .map((origin) => origin.trim())
   .filter(Boolean);
+const normalizeOrigin = (value) => {
+  if (!value || typeof value !== "string") return "";
+  return value.trim().replace(/\/$/, "");
+};
+const getOriginHost = (value) => {
+  if (!value) return "";
+  try {
+    return new URL(value).host;
+  } catch (error) {
+    return "";
+  }
+};
+const isOriginAllowed = (origin) => {
+  if (corsOrigins.length === 0) return true;
+  const normalizedOrigin = normalizeOrigin(origin);
+  const originHost = getOriginHost(normalizedOrigin);
+  return corsOrigins.some((allowed) => {
+    const normalizedAllowed = normalizeOrigin(allowed);
+    if (!normalizedAllowed) return false;
+    if (normalizedAllowed === "*") return true;
+    if (normalizedAllowed === normalizedOrigin) return true;
+    const allowedHost = getOriginHost(normalizedAllowed) || normalizedAllowed;
+    if (originHost && allowedHost && originHost === allowedHost) return true;
+    return false;
+  });
+};
 const corsOptions = {
   origin: (origin, callback) => {
     // В production требуем наличие origin
     if (process.env.NODE_ENV === "production" && !origin) {
-      return callback(new Error("Origin header is required"), false);
+      const error = new Error("Origin header is required");
+      error.status = 403;
+      return callback(error, false);
     }
 
     // В development разрешаем отсутствие origin (для Postman и т.д.)
@@ -55,11 +83,13 @@ const corsOptions = {
       return callback(null, true);
     }
 
-    if (corsOrigins.length === 0 || corsOrigins.includes(origin)) {
+    if (isOriginAllowed(origin)) {
       return callback(null, true);
     }
 
-    return callback(new Error(`Not allowed by CORS: ${origin}`));
+    const error = new Error(`Not allowed by CORS: ${origin}`);
+    error.status = 403;
+    return callback(error, false);
   },
   credentials: true,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
@@ -95,11 +125,15 @@ app.use(
 // HTTPS redirect в production
 if (process.env.NODE_ENV === "production") {
   app.use((req, res, next) => {
-    if (req.header("x-forwarded-proto") !== "https") {
-      res.redirect(`https://${req.header("host")}${req.url}`);
-    } else {
-      next();
+    // Для preflight-запросов редирект ломает CORS, поэтому пропускаем OPTIONS.
+    if (req.method === "OPTIONS") {
+      return next();
     }
+    const isSecure = req.secure || req.header("x-forwarded-proto") === "https";
+    if (!isSecure) {
+      return res.redirect(`https://${req.header("host")}${req.url}`);
+    }
+    return next();
   });
 }
 

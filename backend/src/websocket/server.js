@@ -26,6 +26,33 @@ function checkConnectionRateLimit(ip) {
   return true;
 }
 
+function normalizeOrigin(value) {
+  if (!value || typeof value !== "string") return "";
+  return value.trim().replace(/\/$/, "");
+}
+function getOriginHost(value) {
+  if (!value) return "";
+  try {
+    return new URL(value).host;
+  } catch (error) {
+    return "";
+  }
+}
+function isOriginAllowed(origin, allowedList) {
+  if (!Array.isArray(allowedList) || allowedList.length === 0) return true;
+  const normalizedOrigin = normalizeOrigin(origin);
+  const originHost = getOriginHost(normalizedOrigin);
+  return allowedList.some((allowed) => {
+    const normalizedAllowed = normalizeOrigin(allowed);
+    if (!normalizedAllowed) return false;
+    if (normalizedAllowed === "*") return true;
+    if (normalizedAllowed === normalizedOrigin) return true;
+    const allowedHost = getOriginHost(normalizedAllowed) || normalizedAllowed;
+    if (originHost && allowedHost && originHost === allowedHost) return true;
+    return false;
+  });
+}
+
 class WSServer {
   constructor(server) {
     this.wss = new WebSocketServer({ noServer: true });
@@ -51,9 +78,9 @@ class WSServer {
 
         // Проверяем Origin для защиты от CSRF
         const origin = request.headers.origin;
-        const allowedOrigins = process.env.CORS_ORIGINS?.split(",").map((o) => o.trim()) || [];
+        const allowedOrigins = process.env.CORS_ORIGINS?.split(",").map((o) => o.trim()).filter(Boolean) || [];
 
-        if (process.env.NODE_ENV === "production" && (!origin || !allowedOrigins.includes(origin))) {
+        if (process.env.NODE_ENV === "production" && (!origin || !isOriginAllowed(origin, allowedOrigins))) {
           socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
           socket.destroy();
           return;

@@ -21,7 +21,16 @@ class WebSocketService {
     if (!wsUrl) {
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
       const host = import.meta.env.VITE_API_URL ? new URL(import.meta.env.VITE_API_URL).host : "localhost:3000";
-      wsUrl = `${protocol}//${host}`;
+      wsUrl = `${protocol}//${host}/socket`;
+    }
+    try {
+      const normalized = new URL(wsUrl, window.location.origin);
+      if (normalized.pathname === "/" || normalized.pathname === "") {
+        normalized.pathname = "/socket";
+        wsUrl = normalized.toString();
+      }
+    } catch (error) {
+      // если URL некорректный, оставляем как есть
     }
     try {
       this.ws = new WebSocket(`${wsUrl}?token=${encodeURIComponent(token)}`);

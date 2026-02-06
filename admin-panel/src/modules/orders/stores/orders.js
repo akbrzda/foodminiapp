@@ -104,8 +104,8 @@ export const useOrdersStore = defineStore("orders", {
         devError("Некорректный WS URL:", error);
         return;
       }
-      if (wsUrl.pathname.startsWith("/api")) {
-        wsUrl.pathname = "/";
+      if (wsUrl.pathname.startsWith("/api") || wsUrl.pathname === "/" || wsUrl.pathname === "") {
+        wsUrl.pathname = "/socket";
       }
       const isSecure = window.location.protocol === "https:" || wsUrl.protocol === "https:";
       wsUrl.protocol = isSecure ? "wss:" : "ws:";
