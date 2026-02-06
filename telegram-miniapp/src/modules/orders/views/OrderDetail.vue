@@ -145,6 +145,7 @@ import { ordersAPI } from "@/shared/api/endpoints.js";
 import { formatPrice } from "@/shared/utils/format";
 import { hapticFeedback } from "@/shared/services/telegram.js";
 import { wsService } from "@/shared/services/websocket.js";
+import { devError } from "@/shared/utils/logger.js";
 const route = useRoute();
 const router = useRouter();
 const cartStore = useCartStore();
@@ -184,7 +185,7 @@ async function loadOrder() {
     const response = await ordersAPI.getOrderById(route.params.id);
     order.value = response.data.order;
   } catch (error) {
-    console.error("Не удалось загрузить заказ:", error);
+    devError("Не удалось загрузить заказ:", error);
   } finally {
     loading.value = false;
   }

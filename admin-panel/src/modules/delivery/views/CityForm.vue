@@ -1,3 +1,4 @@
+import { devError } from "@/shared/utils/logger";
 <template>
   <div class="space-y-6">
     <Card>
@@ -215,7 +216,7 @@ const geocodeCity = async () => {
       }
     }
   } catch (error) {
-    console.error("Ошибка геокодирования:", error);
+    devError("Ошибка геокодирования:", error);
     showErrorNotification("Не удалось найти город на карте");
   }
 };
@@ -244,7 +245,7 @@ const loadCity = async () => {
     await nextTick();
     initCityMap();
   } catch (error) {
-    console.error("Ошибка загрузки города:", error);
+    devError("Ошибка загрузки города:", error);
     showErrorNotification("Ошибка загрузки города");
     goBack();
   }
@@ -261,7 +262,7 @@ const submitCity = async () => {
     showSuccessNotification(isEditing.value ? "Город обновлен" : "Город создан");
     goBack();
   } catch (error) {
-    console.error("Ошибка сохранения города:", error);
+    devError("Ошибка сохранения города:", error);
     showErrorNotification(error.response?.data?.error || "Ошибка сохранения города");
   } finally {
     saving.value = false;

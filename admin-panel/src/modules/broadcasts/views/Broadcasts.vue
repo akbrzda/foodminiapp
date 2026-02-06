@@ -1,3 +1,4 @@
+import { devError } from "@/shared/utils/logger";
 <template>
   <div class="space-y-6">
     <Card>
@@ -147,7 +148,7 @@ const loadCampaigns = async () => {
     const response = await api.get("/api/broadcasts");
     campaigns.value = response.data?.data?.items || [];
   } catch (error) {
-    console.error("Ошибка загрузки рассылок:", error);
+    devError("Ошибка загрузки рассылок:", error);
     showErrorNotification("Не удалось загрузить рассылки");
   }
 };

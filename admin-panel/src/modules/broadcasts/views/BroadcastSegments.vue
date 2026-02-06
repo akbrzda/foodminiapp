@@ -1,3 +1,4 @@
+import { devError } from "@/shared/utils/logger";
 <template>
   <div class="space-y-6">
     <Card>
@@ -126,7 +127,7 @@ const loadSegments = async () => {
     const response = await api.get("/api/broadcasts/segments");
     segments.value = response.data?.data?.items || [];
   } catch (error) {
-    console.error("Ошибка загрузки сегментов:", error);
+    devError("Ошибка загрузки сегментов:", error);
     showErrorNotification("Не удалось загрузить сегменты");
   }
 };
@@ -165,7 +166,7 @@ const calculate = async () => {
     const response = await api.post("/api/broadcasts/segments/calculate", { config: segmentConfig.value });
     estimatedSize.value = response.data?.data?.estimated_size || 0;
   } catch (error) {
-    console.error("Ошибка расчета сегмента:", error);
+    devError("Ошибка расчета сегмента:", error);
     showErrorNotification(error.response?.data?.error || "Не удалось рассчитать аудиторию");
   }
 };
@@ -194,7 +195,7 @@ const saveSegment = async () => {
     closeModal();
     await loadSegments();
   } catch (error) {
-    console.error("Ошибка сохранения сегмента:", error);
+    devError("Ошибка сохранения сегмента:", error);
     showErrorNotification(error.response?.data?.error || "Не удалось сохранить сегмент");
   }
 };
@@ -205,7 +206,7 @@ const deleteSegment = async (segment) => {
     await api.delete(`/api/broadcasts/segments/${segment.id}`);
     await loadSegments();
   } catch (error) {
-    console.error("Ошибка удаления сегмента:", error);
+    devError("Ошибка удаления сегмента:", error);
     showErrorNotification("Не удалось удалить сегмент");
   }
 };

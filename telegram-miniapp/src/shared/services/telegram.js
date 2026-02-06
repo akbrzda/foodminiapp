@@ -1,3 +1,5 @@
+import { devLog, devWarn } from "@/shared/utils/logger.js";
+
 let webAppInstance = null;
 function resolveWebApp() {
   if (webAppInstance) {
@@ -14,7 +16,7 @@ export function getWebApp() {
 export function ensureReady() {
   const webApp = resolveWebApp();
   if (!webApp) {
-    console.warn("Telegram WebApp is not available.");
+    devWarn("Telegram WebApp is not available.");
     return null;
   }
   webApp.ready();
@@ -197,7 +199,7 @@ export function requestContact({ timeoutMs = 10000 } = {}) {
         return;
       }
       resolved = true;
-      console.log("[requestContact] Finishing with phone:", phone);
+      devLog("[requestContact] Finishing with phone:", phone);
       if (timer) {
         clearTimeout(timer);
       }
@@ -213,48 +215,48 @@ export function requestContact({ timeoutMs = 10000 } = {}) {
       resolve(phone || null);
     };
     handler = (payload) => {
-      console.log("[requestContact] contactRequested event:", payload);
+      devLog("[requestContact] contactRequested event:", payload);
       const phone = payload?.responseUnsafe?.contact?.phone_number || payload?.contact?.phone_number || null;
-      console.log("[requestContact] Extracted phone:", phone);
+      devLog("[requestContact] Extracted phone:", phone);
       finish(phone);
     };
     debugHandler = (event) => {
-      console.log("[requestContact] DEBUG custom_method_invoked:", JSON.stringify(event, null, 2));
+      devLog("[requestContact] DEBUG custom_method_invoked:", JSON.stringify(event, null, 2));
     };
     customHandler = (payload) => {
-      console.log("[requestContact] custom_method_invoked payload:", payload);
+      devLog("[requestContact] custom_method_invoked payload:", payload);
       const result = payload?.result;
       if (!result) {
-        console.log("[requestContact] В payload нет результата");
+        devLog("[requestContact] В payload нет результата");
         return;
       }
       try {
-        console.log("[requestContact] Raw result:", result);
+        devLog("[requestContact] Raw result:", result);
         const decodedResult = decodeURIComponent(result);
-        console.log("[requestContact] Decoded result:", decodedResult);
+        devLog("[requestContact] Decoded result:", decodedResult);
         const params = new URLSearchParams(decodedResult);
         const contactRaw = params.get("contact");
-        console.log("[requestContact] Contact raw:", contactRaw);
+        devLog("[requestContact] Contact raw:", contactRaw);
         if (!contactRaw) {
-          console.log("[requestContact] В параметрах нет контакта");
+          devLog("[requestContact] В параметрах нет контакта");
           return;
         }
         const contact = JSON.parse(contactRaw);
-        console.log("[requestContact] Parsed contact:", contact);
+        devLog("[requestContact] Parsed contact:", contact);
         finish(contact?.phone_number || null);
       } catch (error) {
         console.error("[requestContact] Не удалось разобрать результат контакта:", error, "result:", result);
       }
     };
     timer = setTimeout(() => {
-      console.log("[requestContact] Timeout reached");
+      devLog("[requestContact] Timeout reached");
       finish(null);
     }, timeoutMs);
-    console.log("[requestContact] Subscribing to events...");
+    devLog("[requestContact] Subscribing to events...");
     webApp.onEvent("contactRequested", handler);
     webApp.onEvent("custom_method_invoked", customHandler);
     try {
-      console.log("[requestContact] Calling webApp.requestContact...");
+      devLog("[requestContact] Calling webApp.requestContact...");
       webApp.requestContact();
     } catch (error) {
       console.error("[requestContact] Ошибка при вызове requestContact:", error);

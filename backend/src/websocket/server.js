@@ -1,26 +1,83 @@
 import { WebSocketServer } from "ws";
 import jwt from "jsonwebtoken";
 import { promisify } from "util";
+import { isBlacklisted } from "../middleware/tokenBlacklist.js";
+
 const jwtVerify = promisify(jwt.verify);
+
+// Rate limiting для WebSocket подключений
+const connectionAttempts = new Map();
+const MAX_ATTEMPTS = 10; // Максимум 10 попыток
+const ATTEMPT_WINDOW = 60000; // За 1 минуту
+
+function checkConnectionRateLimit(ip) {
+  const now = Date.now();
+  const attempts = connectionAttempts.get(ip) || [];
+
+  // Удаляем старые попытки
+  const recentAttempts = attempts.filter((time) => now - time < ATTEMPT_WINDOW);
+
+  if (recentAttempts.length >= MAX_ATTEMPTS) {
+    return false;
+  }
+
+  recentAttempts.push(now);
+  connectionAttempts.set(ip, recentAttempts);
+  return true;
+}
+
 class WSServer {
   constructor(server) {
     this.wss = new WebSocketServer({ noServer: true });
     this.userConnections = new Map();
     this.rooms = new Map();
     this.connectionMeta = new WeakMap();
+    this.maxConnectionsPerUser = 5; // Максимум 5 подключений на пользователя
     this.setupWebSocketServer(server);
   }
+
   setupWebSocketServer(server) {
     server.on("upgrade", async (request, socket, head) => {
       try {
+        // Получаем IP для rate limiting
+        const ip = request.headers["x-forwarded-for"]?.split(",")[0] || request.socket.remoteAddress;
+
+        // Проверяем rate limit
+        if (!checkConnectionRateLimit(ip)) {
+          socket.write("HTTP/1.1 429 Too Many Requests\r\n\r\n");
+          socket.destroy();
+          return;
+        }
+
+        // Проверяем Origin для защиты от CSRF
+        const origin = request.headers.origin;
+        const allowedOrigins = process.env.CORS_ORIGINS?.split(",").map((o) => o.trim()) || [];
+
+        if (process.env.NODE_ENV === "production" && (!origin || !allowedOrigins.includes(origin))) {
+          socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
+          socket.destroy();
+          return;
+        }
+
         const url = new URL(request.url, `http://${request.headers.host}`);
         const token = url.searchParams.get("token");
+
         if (!token) {
           socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
           socket.destroy();
           return;
         }
+
+        // Проверяем blacklist
+        const blacklisted = await isBlacklisted(token);
+        if (blacklisted) {
+          socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
+          socket.destroy();
+          return;
+        }
+
         const decoded = await jwtVerify(token, process.env.JWT_SECRET);
+
         this.wss.handleUpgrade(request, socket, head, (ws) => {
           this.wss.emit("connection", ws, request, decoded);
         });
@@ -30,14 +87,24 @@ class WSServer {
         socket.destroy();
       }
     });
+
     this.wss.on("connection", (ws, request, userData) => {
       this.handleConnection(ws, userData);
     });
   }
+
   handleConnection(ws, userData) {
     const userId = userData.userId ?? userData.id;
     const role = userData.role;
     const city_ids = userData.city_ids ?? userData.cities;
+
+    // Проверяем лимит подключений на пользователя
+    const userConns = this.userConnections.get(userId);
+    if (userConns && userConns.size >= this.maxConnectionsPerUser) {
+      ws.close(1008, "Too many connections");
+      return;
+    }
+
     console.log(`WebSocket connected: userId=${userId}, role=${role}`);
     this.connectionMeta.set(ws, {
       userId,

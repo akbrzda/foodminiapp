@@ -163,6 +163,7 @@ import { formatPrice } from "@/shared/utils/format";
 import { formatPhone, normalizePhone } from "@/shared/utils/phone";
 import { calculateDeliveryCost } from "@/shared/utils/deliveryTariffs";
 import { getBranchOpenState, normalizeWorkHours } from "@/shared/utils/workingHours";
+import { devError } from "@/shared/utils/logger.js";
 const router = useRouter();
 const cartStore = useCartStore();
 const locationStore = useLocationStore();
@@ -337,7 +338,7 @@ onMounted(async () => {
         locationStore.setDeliveryZone(zone);
       }
     } catch (error) {
-      console.error("Не удалось обновить зону доставки:", error);
+      devError("Не удалось обновить зону доставки:", error);
     }
   }
   await ensureTariffs();
@@ -431,7 +432,7 @@ async function refreshCartPricesForOrderType() {
     });
     cartStore.refreshPricesFromMenu(allItems);
   } catch (error) {
-    console.error("Не удалось обновить цены корзины:", error);
+    devError("Не удалось обновить цены корзины:", error);
   }
 }
 watch(
@@ -465,7 +466,7 @@ async function refreshBonusBalance() {
       cartStore.setBonusToUse(appliedBonusToUse.value);
     }
   } catch (error) {
-    console.error("Не удалось обновить бонусный баланс:", error);
+    devError("Не удалось обновить бонусный баланс:", error);
   }
 }
 function selectOrderType(type) {
@@ -510,7 +511,7 @@ async function loadBranches() {
       };
     });
   } catch (error) {
-    console.error("Не удалось загрузить филиалы:", error);
+    devError("Не удалось загрузить филиалы:", error);
   } finally {
     loadingBranches.value = false;
   }
@@ -548,7 +549,7 @@ async function ensureTariffs() {
       applyDeliveryZone(zone);
     }
   } catch (error) {
-    console.error("Не удалось обновить тарифы доставки:", error);
+    devError("Не удалось обновить тарифы доставки:", error);
   }
 }
 async function submitOrder() {
@@ -586,7 +587,7 @@ async function submitOrder() {
           cartStore.setBonusToUse(bonusToUse);
         }
       } catch (error) {
-        console.error("Не удалось обновить бонусный баланс перед оформлением:", error);
+        devError("Не удалось обновить бонусный баланс перед оформлением:", error);
         bonusToUse = 0;
         cartStore.resetBonusUsage();
       }
@@ -651,7 +652,7 @@ async function submitOrder() {
     cartStore.clearCart();
     router.push("/");
   } catch (error) {
-    console.error("Не удалось создать заказ:", error);
+    devError("Не удалось создать заказ:", error);
     hapticFeedback("error");
     let errorMessage = "Ошибка при оформлении заказа";
     const errorTranslations = {

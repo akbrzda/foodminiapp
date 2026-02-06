@@ -1,6 +1,7 @@
 import db from "../../../config/database.js";
 import redis from "../../../config/redis.js";
 import { getSystemSettings } from "../../../utils/settings.js";
+import { logInfo } from "../../../utils/bonusHelpers.js";
 import {
   getUserLoyaltySnapshot,
   updateUserBalance,
@@ -131,7 +132,7 @@ const notifyWsBonusUpdate = async (userId, balance, payload) => {
     const { wsServer } = await import("../../../index.js");
     wsServer.notifyBonusUpdate(userId, balance, payload);
   } catch (error) {
-    console.error("Failed to send WebSocket notification:", error);
+    // WebSocket errors are non-critical
   }
 };
 
@@ -140,7 +141,7 @@ const notifyWsLevelUp = async (userId, levelId, levelName) => {
     const { wsServer } = await import("../../../index.js");
     wsServer.notifyLevelUp(userId, levelId, levelName);
   } catch (error) {
-    console.error("Failed to send WebSocket notification:", error);
+    // WebSocket errors are non-critical
   }
 };
 
@@ -148,7 +149,7 @@ export async function invalidateBonusCache(userId) {
   try {
     await redis.del(getBonusCacheKey(userId));
   } catch (error) {
-    console.error("Не удалось инвалидировать кеш бонусов:", error);
+    // Redis errors are non-critical for cache invalidation
   }
 }
 
@@ -346,13 +347,16 @@ export async function applyManualBonusAdjustment({ userId, delta, description, c
     },
     { connection },
   );
-  await logLoyaltyEvent({
-    eventType: "balance_calculated",
-    userId,
-    oldValue: String(currentBalance),
-    newValue: String(newBalance),
-    metadata: { amount: toInt(delta), transaction_id: txId },
-  });
+  await logLoyaltyEvent(
+    {
+      eventType: "balance_calculated",
+      userId,
+      oldValue: String(currentBalance),
+      newValue: String(newBalance),
+      metadata: { amount: toInt(delta), transaction_id: txId },
+    },
+    { connection },
+  );
   await invalidateBonusCache(userId);
   return { balance: newBalance };
 }
@@ -433,13 +437,16 @@ export async function checkLevelUp(userId, levels = null, connection = null) {
       },
       { connection },
     );
-    await logLoyaltyEvent({
-      eventType: "level_changed",
-      userId,
-      oldValue: String(currentLevelId),
-      newValue: String(newLevelId),
-      metadata: { total_spent: totalSpent },
-    });
+    await logLoyaltyEvent(
+      {
+        eventType: "level_changed",
+        userId,
+        oldValue: String(currentLevelId),
+        newValue: String(newLevelId),
+        metadata: { total_spent: totalSpent },
+      },
+      { connection },
+    );
     await notifyWsLevelUp(userId, newLevelId, activeLevels[newLevelId]?.name);
     return {
       old_level_id: currentLevelId,
@@ -501,13 +508,13 @@ export async function earnBonuses(order, connection = null, levels = DEFAULT_LOY
   }
 
   if (lockedOrder.bonus_earn_locked) {
-    console.log(`Начисление за заказ ${order.id} уже заблокировано, пропуск дублирования`);
+    logInfo(logger, `Начисление за заказ ${order.id} уже заблокировано, пропуск дублирования`, { orderId: order.id });
     return null;
   }
 
   const affected = await lockOrderBonusEarn(order.id, { connection });
   if (affected === 0) {
-    console.log(`Не удалось установить блокировку для заказа ${order.id}, возможно другой процесс уже обработал`);
+    logInfo(logger, `Не удалось установить блокировку для заказа ${order.id}`, { orderId: order.id });
     return null;
   }
 
@@ -548,14 +555,17 @@ export async function earnBonuses(order, connection = null, levels = DEFAULT_LOY
   const levelUp = await checkLevelUp(order.user_id, levels, connection);
   await invalidateBonusCache(order.user_id);
 
-  await logLoyaltyEvent({
-    eventType: "balance_calculated",
-    userId: order.user_id,
-    orderId: order.id,
-    oldValue: String(balanceBefore),
-    newValue: String(newBalance),
-    metadata: { amount: toInt(amount), base_amount: baseAmount, level_id: loyaltyLevelId },
-  });
+  await logLoyaltyEvent(
+    {
+      eventType: "balance_calculated",
+      userId: order.user_id,
+      orderId: order.id,
+      oldValue: String(balanceBefore),
+      newValue: String(newBalance),
+      metadata: { amount: toInt(amount), base_amount: baseAmount, level_id: loyaltyLevelId },
+    },
+    { connection },
+  );
 
   await notifyWsBonusUpdate(order.user_id, newBalance, {
     type: "earn",
@@ -600,26 +610,32 @@ export async function removeEarnedBonuses(order, connection = null, levels = DEF
   );
 
   if (newBalance < 0) {
-    await logLoyaltyEvent({
-      eventType: "negative_balance",
-      userId: order.user_id,
-      orderId: order.id,
-      oldValue: String(currentBalance),
-      newValue: String(newBalance),
-      metadata: { earned: earnedAmount },
-    });
+    await logLoyaltyEvent(
+      {
+        eventType: "negative_balance",
+        userId: order.user_id,
+        orderId: order.id,
+        oldValue: String(currentBalance),
+        newValue: String(newBalance),
+        metadata: { earned: earnedAmount },
+      },
+      { connection },
+    );
   }
 
   await unlockOrderBonusEarn(order.id, { connection });
 
-  await logLoyaltyEvent({
-    eventType: "balance_calculated",
-    userId: order.user_id,
-    orderId: order.id,
-    oldValue: String(currentBalance),
-    newValue: String(newBalance),
-    metadata: { adjustment_id: adjustmentId, amount: toInt(earnedAmount) },
-  });
+  await logLoyaltyEvent(
+    {
+      eventType: "balance_calculated",
+      userId: order.user_id,
+      orderId: order.id,
+      oldValue: String(currentBalance),
+      newValue: String(newBalance),
+      metadata: { adjustment_id: adjustmentId, amount: toInt(earnedAmount) },
+    },
+    { connection },
+  );
 
   await invalidateBonusCache(order.user_id);
   await checkLevelUp(order.user_id, levels, connection);
@@ -630,7 +646,7 @@ export async function removeEarnedBonuses(order, connection = null, levels = DEF
 export async function redeliveryEarnBonuses(order, connection = null) {
   const lockedOrder = await getOrderBonusLock(order.id, { connection });
   if (!lockedOrder || !lockedOrder.bonus_earn_amount) {
-    console.log(`Нет сохранённой суммы начисления для заказа ${order.id}, пропуск`);
+    logInfo(logger, `Нет сохранённой суммы начисления для заказа ${order.id}`, { orderId: order.id });
     return null;
   }
 
@@ -663,14 +679,17 @@ export async function redeliveryEarnBonuses(order, connection = null) {
     { connection },
   );
 
-  await logLoyaltyEvent({
-    eventType: "balance_calculated",
-    userId: order.user_id,
-    orderId: order.id,
-    oldValue: String(balanceBefore),
-    newValue: String(newBalance),
-    metadata: { amount: toInt(savedAmount), transaction_id: txId },
-  });
+  await logLoyaltyEvent(
+    {
+      eventType: "balance_calculated",
+      userId: order.user_id,
+      orderId: order.id,
+      oldValue: String(balanceBefore),
+      newValue: String(newBalance),
+      metadata: { amount: toInt(savedAmount), transaction_id: txId },
+    },
+    { connection },
+  );
 
   await invalidateBonusCache(order.user_id);
   await notifyWsBonusUpdate(order.user_id, newBalance, {
@@ -723,14 +742,17 @@ export async function cancelOrderBonuses(order, connection = null, levels = DEFA
   await updateUserBalance(order.user_id, newBalance, { connection });
 
   if (newBalance < 0) {
-    await logLoyaltyEvent({
-      eventType: "negative_balance",
-      userId: order.user_id,
-      orderId: order.id,
-      oldValue: String(currentBalance),
-      newValue: String(newBalance),
-      metadata: { spent: spentTotal, earned: earnedTotal },
-    });
+    await logLoyaltyEvent(
+      {
+        eventType: "negative_balance",
+        userId: order.user_id,
+        orderId: order.id,
+        oldValue: String(currentBalance),
+        newValue: String(newBalance),
+        metadata: { spent: spentTotal, earned: earnedTotal },
+      },
+      { connection },
+    );
   }
 
   await invalidateBonusCache(order.user_id);
@@ -779,13 +801,16 @@ export async function grantRegistrationBonus(userId, connection = null) {
     },
     { connection },
   );
-  await logLoyaltyEvent({
-    eventType: "balance_calculated",
-    userId,
-    oldValue: String(currentBalance),
-    newValue: String(newBalance),
-    metadata: { amount, transaction_id: txId },
-  });
+  await logLoyaltyEvent(
+    {
+      eventType: "balance_calculated",
+      userId,
+      oldValue: String(currentBalance),
+      newValue: String(newBalance),
+      metadata: { amount, transaction_id: txId },
+    },
+    { connection },
+  );
   await invalidateBonusCache(userId);
   return { id: txId, amount, balance_after: newBalance };
 }
@@ -797,7 +822,9 @@ export async function expireBonusesForUser(userId, connection) {
   }
 
   const earns = await getEarnTransactions(userId, { onlyActive: false, connection, forUpdate: true });
-  const expiredEarns = earns.filter((earn) => earn.expires_at && new Date(earn.expires_at) <= new Date() && (parseFloat(earn.remaining_amount) || 0) > 0);
+  const expiredEarns = earns.filter(
+    (earn) => earn.expires_at && new Date(earn.expires_at) <= new Date() && (parseFloat(earn.remaining_amount) || 0) > 0,
+  );
 
   let expiredTotal = 0;
   for (const earn of expiredEarns) {
@@ -813,13 +840,16 @@ export async function expireBonusesForUser(userId, connection) {
     const newBalance = currentBalance - expiredTotal;
     await updateUserBalance(userId, newBalance, { connection });
     await invalidateBonusCache(userId);
-    await logLoyaltyEvent({
-      eventType: "bonus_expired",
-      userId,
-      oldValue: String(currentBalance),
-      newValue: String(newBalance),
-      metadata: { amount: expiredTotal },
-    });
+    await logLoyaltyEvent(
+      {
+        eventType: "bonus_expired",
+        userId,
+        oldValue: String(currentBalance),
+        newValue: String(newBalance),
+        metadata: { amount: expiredTotal },
+      },
+      { connection },
+    );
     return { expiredTotal, balance: newBalance };
   }
 

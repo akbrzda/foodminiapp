@@ -1,3 +1,4 @@
+import { devError } from "@/shared/utils/logger";
 <template>
   <div class="space-y-6">
     <PageHeader title="Детали заказа" description="Управление заказом и составом">
@@ -426,7 +427,7 @@ onMounted(async () => {
   try {
     await loadOrder();
   } catch (error) {
-    console.error("Ошибка загрузки заказа:", error);
+    devError("Ошибка загрузки заказа:", error);
     showErrorNotification("Ошибка загрузки заказа");
   }
 });
@@ -443,7 +444,7 @@ const loadOrder = async () => {
     order.value = response.data.order;
     updateBreadcrumbs();
   } catch (error) {
-    console.error("Failed to load order:", error);
+    devError("Failed to load order:", error);
     showErrorNotification("Ошибка при загрузке заказа");
   }
 };
@@ -467,7 +468,7 @@ const updateStatus = async () => {
     statusUpdate.value = "";
     showSuccessNotification("Статус заказа обновлен");
   } catch (error) {
-    console.error("Failed to update status:", error);
+    devError("Failed to update status:", error);
     showErrorNotification("Ошибка при обновлении статуса");
   }
 };

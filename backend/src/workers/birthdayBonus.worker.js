@@ -1,4 +1,5 @@
 import { issueBirthdayBonuses } from "../modules/loyalty/services/loyaltyService.js";
+import { logSystem } from "../utils/logger.js";
 
 const CHECK_INTERVAL_MS = 10 * 60 * 1000;
 const RUN_HOUR = 2;
@@ -29,7 +30,7 @@ export function createBirthdayBonusWorker() {
         try {
           await issueBirthdayBonusesJob();
         } catch (error) {
-          console.error("Ошибка начисления бонусов ко дню рождения:", error);
+          logSystem("error", "bonus", "Ошибка начисления бонусов ко дню рождения", { error: error.message });
         }
       }, CHECK_INTERVAL_MS);
     },

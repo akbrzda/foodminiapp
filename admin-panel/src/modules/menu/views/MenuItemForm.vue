@@ -67,7 +67,7 @@
                   </div>
                 </FieldContent>
               </Field>
-              <FieldGroup class="grid gap-4 md:grid-cols-2">
+              <FieldGroup v-if="!hasVariants" class="grid gap-4 md:grid-cols-3">
                 <Field>
                   <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Вес *</FieldLabel>
                   <FieldContent>
@@ -89,6 +89,12 @@
                         <SelectItem value="pcs">шт (штуки)</SelectItem>
                       </SelectContent>
                     </Select>
+                  </FieldContent>
+                </Field>
+                <Field>
+                  <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Базовая цена *</FieldLabel>
+                  <FieldContent>
+                    <Input v-model.number="form.price" type="number" step="0.01" required placeholder="0.00" />
                   </FieldContent>
                 </Field>
               </FieldGroup>
@@ -428,7 +434,12 @@
           <CardContent>
             <div class="grid gap-2 md:grid-cols-2">
               <Label v-for="tag in tags" :key="tag.id" class="flex items-center gap-2 text-sm text-foreground">
-                <input v-model="form.tag_ids" type="checkbox" :value="Number(tag.id)" class="h-4 w-4 rounded border-border text-primary focus:ring-primary" />
+                <input
+                  v-model="form.tag_ids"
+                  type="checkbox"
+                  :value="Number(tag.id)"
+                  class="h-4 w-4 rounded border-border text-primary focus:ring-primary"
+                />
                 <Badge :style="`background-color: ${tag.color_hex}`">{{ tag.name }}</Badge>
               </Label>
             </div>
@@ -442,6 +453,7 @@
 import { computed, onMounted, ref, watch } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { ArrowLeft, Plus, Save, Trash2, UploadCloud } from "lucide-vue-next";
+import { devError } from "@/shared/utils/logger";
 import api from "@/shared/api/client.js";
 import Badge from "@/shared/components/ui/badge/Badge.vue";
 import Button from "@/shared/components/ui/button/Button.vue";
@@ -495,6 +507,7 @@ const form = ref({
   image_url: "",
   weight_value: null,
   weight_unit: "g",
+  price: null,
   calories_per_100g: null,
   proteins_per_100g: null,
   fats_per_100g: null,
@@ -563,6 +576,12 @@ const formatPrice = (value) => {
   return `${numeric.toFixed(0)} ₽`;
 };
 const getBaseItemPrice = () => {
+  // Если у блюда есть базовая цена в форме (для блюд без вариантов)
+  if (form.value.price !== null && form.value.price !== undefined && !hasVariants.value) {
+    return Number(form.value.price) || 0;
+  }
+
+  // Иначе ищем в ценах по городам
   if (!Array.isArray(form.value.prices)) return 0;
   const baseDelivery = form.value.prices.find(
     (price) => normalizeCityId(price.city_id) === null && price.fulfillment_type === "delivery" && price.price !== null && price.price !== undefined,
@@ -576,9 +595,7 @@ const getBaseItemPrice = () => {
 const getOrCreatePriceEntry = (list, cityId, fulfillmentType, basePrice) => {
   if (!Array.isArray(list)) return { city_id: cityId, fulfillment_type: fulfillmentType, price: basePrice || 0 };
   const normalizedCityId = normalizeCityId(cityId);
-  let entry = list.find(
-    (price) => normalizeCityId(price.city_id) === normalizedCityId && price.fulfillment_type === fulfillmentType,
-  );
+  let entry = list.find((price) => normalizeCityId(price.city_id) === normalizedCityId && price.fulfillment_type === fulfillmentType);
   if (!entry) {
     entry = {
       city_id: normalizedCityId,
@@ -622,7 +639,7 @@ const loadCategories = async () => {
     const response = await api.get("/api/menu/admin/all-categories");
     allCategories.value = response.data.categories || [];
   } catch (error) {
-    console.error("Failed to load categories:", error);
+    devError("Failed to load categories:", error);
   }
 };
 const loadModifierGroups = async () => {
@@ -630,7 +647,7 @@ const loadModifierGroups = async () => {
     const response = await api.get("/api/menu/admin/modifier-groups");
     modifierGroups.value = response.data.modifier_groups || response.data.groups || [];
   } catch (error) {
-    console.error("Failed to load modifier groups:", error);
+    devError("Failed to load modifier groups:", error);
   }
 };
 const loadTags = async () => {
@@ -638,7 +655,7 @@ const loadTags = async () => {
     const response = await api.get("/api/menu/admin/tags");
     tags.value = response.data.tags || [];
   } catch (error) {
-    console.error("Failed to load tags:", error);
+    devError("Failed to load tags:", error);
   }
 };
 const loadItem = async () => {
@@ -662,7 +679,7 @@ const loadItem = async () => {
           .get(`/api/menu/admin/variants/${variant.id}/prices`)
           .then((response) => response.data.prices || [])
           .catch((error) => {
-            console.error("Failed to load variant prices:", error);
+            devError("Failed to load variant prices:", error);
             return [];
           }),
       ),
@@ -678,6 +695,7 @@ const loadItem = async () => {
       image_url: item.image_url || "",
       weight_value: item.weight_value,
       weight_unit: item.weight_unit || "g",
+      price: item.price,
       calories_per_100g: item.calories_per_100g,
       proteins_per_100g: item.proteins_per_100g,
       fats_per_100g: item.fats_per_100g,
@@ -699,7 +717,7 @@ const loadItem = async () => {
     selectedCityId.value = form.value.city_ids.length ? form.value.city_ids[0] : null;
     initialDisabledModifierIds.value = [...form.value.disabled_modifier_ids];
   } catch (error) {
-    console.error("Failed to load item:", error);
+    devError("Failed to load item:", error);
     showErrorNotification("Ошибка при загрузке позиции");
     goBack();
   }
@@ -713,6 +731,7 @@ const saveItem = async () => {
       image_url: form.value.image_url,
       weight_value: form.value.weight_value,
       weight_unit: form.value.weight_unit,
+      price: !hasVariants.value ? form.value.price : null,
       calories_per_100g: form.value.calories_per_100g,
       proteins_per_100g: form.value.proteins_per_100g,
       fats_per_100g: form.value.fats_per_100g,
@@ -736,7 +755,7 @@ const saveItem = async () => {
     await api.put(`/api/menu/admin/items/${savedItemId}/categories`, { category_ids: form.value.category_ids });
     return savedItemId;
   } catch (error) {
-    console.error("Failed to save item:", error);
+    devError("Failed to save item:", error);
     showErrorNotification(`Ошибка: ${error.response?.data?.error || error.message}`);
     return null;
   }
@@ -755,12 +774,8 @@ const saveDisabledModifiers = async (savedItemId) => {
   const initialDisabledIds = new Set(initialDisabledModifierIds.value || []);
   const toDisable = allModifierIds.filter((id) => desiredDisabledIds.has(id) && !initialDisabledIds.has(id));
   const toEnable = allModifierIds.filter((id) => !desiredDisabledIds.has(id) && initialDisabledIds.has(id));
-  await Promise.all(
-    toDisable.map((modifierId) => api.post(`/api/menu/admin/items/${savedItemId}/disabled-modifiers`, { modifier_id: modifierId })),
-  );
-  await Promise.all(
-    toEnable.map((modifierId) => api.delete(`/api/menu/admin/items/${savedItemId}/disabled-modifiers/${modifierId}`)),
-  );
+  await Promise.all(toDisable.map((modifierId) => api.post(`/api/menu/admin/items/${savedItemId}/disabled-modifiers`, { modifier_id: modifierId })));
+  await Promise.all(toEnable.map((modifierId) => api.delete(`/api/menu/admin/items/${savedItemId}/disabled-modifiers/${modifierId}`)));
   initialDisabledModifierIds.value = [...form.value.disabled_modifier_ids];
 };
 const saveCities = async (savedItemId) => {
@@ -805,7 +820,7 @@ const saveAll = async () => {
     await Promise.all([saveModifiers(savedItemId), saveCities(savedItemId), savePrices(savedItemId), saveVariantPrices(), saveTags(savedItemId)]);
     showSuccessNotification("Позиция сохранена");
   } catch (error) {
-    console.error("Failed to save all item data:", error);
+    devError("Failed to save all item data:", error);
     showErrorNotification(`Ошибка: ${error.response?.data?.error || error.message}`);
   } finally {
     saving.value = false;
@@ -874,7 +889,7 @@ const handleFile = async (file) => {
     form.value.image_url = uploadedUrl;
     uploadState.value = { loading: false, error: null, preview: uploadedUrl };
   } catch (error) {
-    console.error("Failed to upload:", error);
+    devError("Failed to upload:", error);
     uploadState.value = { loading: false, error: "Ошибка загрузки", preview: null };
   }
 };
@@ -884,7 +899,7 @@ onMounted(async () => {
     await loadItem();
     updateBreadcrumbs();
   } catch (error) {
-    console.error("Ошибка инициализации формы позиции:", error);
+    devError("Ошибка инициализации формы позиции:", error);
     showErrorNotification("Ошибка загрузки данных формы");
   }
 });

@@ -1,3 +1,4 @@
+import { devError } from "@/shared/utils/logger";
 <template>
   <div class="space-y-6">
     <Card>
@@ -101,7 +102,7 @@ const loadItems = async () => {
     const response = await api.get("/api/menu/admin/items");
     items.value = response.data.items || [];
   } catch (error) {
-    console.error("Failed to load items:", error);
+    devError("Failed to load items:", error);
     showErrorNotification(`Ошибка при загрузке позиций: ${error.response?.data?.error || error.message}`);
   }
 };
@@ -117,7 +118,7 @@ const deleteItem = async (item) => {
     await api.delete(`/api/menu/admin/items/${item.id}`);
     await loadItems();
   } catch (error) {
-    console.error("Failed to delete item:", error);
+    devError("Failed to delete item:", error);
     showErrorNotification(`Ошибка: ${error.response?.data?.error || error.message}`);
   }
 };

@@ -1,6 +1,7 @@
 import { defineStore } from "pinia";
 import api from "@/shared/api/client.js";
 import { useAuthStore } from "@/shared/stores/auth.js";
+import { devError } from "@/shared/utils/logger";
 export const useOrdersStore = defineStore("orders", {
   state: () => ({
     newOrdersCount: 0,
@@ -38,7 +39,7 @@ export const useOrdersStore = defineStore("orders", {
         const response = await api.get("/api/orders/admin/count", { params: { status: "pending" } });
         this.setNewOrdersCount(response.data?.total || 0);
       } catch (error) {
-        console.error("Ошибка загрузки количества новых заказов:", error);
+        devError("Ошибка загрузки количества новых заказов:", error);
       }
     },
     applyOrderEvent(payload) {
@@ -100,7 +101,7 @@ export const useOrdersStore = defineStore("orders", {
       try {
         wsUrl = new URL(wsBase, window.location.origin);
       } catch (error) {
-        console.error("Некорректный WS URL:", error);
+        devError("Некорректный WS URL:", error);
         return;
       }
       if (wsUrl.pathname.startsWith("/api")) {
@@ -125,7 +126,7 @@ export const useOrdersStore = defineStore("orders", {
           const payload = JSON.parse(event.data);
           this.applyOrderEvent(payload);
         } catch (error) {
-          console.error("Ошибка обработки WS-сообщения:", error);
+          devError("Ошибка обработки WS-сообщения:", error);
         }
       };
       this.ws.onclose = () => {

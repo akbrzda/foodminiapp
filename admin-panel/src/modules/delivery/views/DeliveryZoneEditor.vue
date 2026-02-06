@@ -1,3 +1,4 @@
+import { devError } from "@/shared/utils/logger";
 <template>
   <div class="relative h-full min-h-[calc(100vh-80px)] bg-background">
     <div id="editor-map" class="absolute inset-0 z-0"></div>
@@ -319,7 +320,7 @@ const loadTariffs = async () => {
     const response = await api.get(`/api/polygons/admin/${polygonId.value}/tariffs`);
     tariffs.value = response.data?.tariffs || [];
   } catch (error) {
-    console.error("Ошибка загрузки тарифов:", error);
+    devError("Ошибка загрузки тарифов:", error);
     showErrorNotification("Не удалось загрузить тарифы");
   } finally {
     tariffsLoading.value = false;
@@ -335,7 +336,7 @@ const saveTariffs = async (payload) => {
     tariffEditorOpen.value = false;
     showSuccessNotification("Тарифы сохранены");
   } catch (error) {
-    console.error("Ошибка сохранения тарифов:", error);
+    devError("Ошибка сохранения тарифов:", error);
     const message = error?.response?.data?.errors?.[0] || "Ошибка сохранения тарифов";
     showErrorNotification(message);
   }
@@ -358,7 +359,7 @@ const selectTariffCopySource = async (value) => {
     const response = await api.get(`/api/polygons/admin/${value}/tariffs`);
     tariffCopyPreview.value = response.data?.tariffs || [];
   } catch (error) {
-    console.error("Ошибка предпросмотра тарифов:", error);
+    devError("Ошибка предпросмотра тарифов:", error);
     showErrorNotification("Не удалось загрузить тарифы для копирования");
   }
 };
@@ -370,7 +371,7 @@ const confirmTariffCopy = async (value) => {
     closeTariffCopy();
     showSuccessNotification("Тарифы скопированы");
   } catch (error) {
-    console.error("Ошибка копирования тарифов:", error);
+    devError("Ошибка копирования тарифов:", error);
     const message = error?.response?.data?.error || "Не удалось скопировать тарифы";
     showErrorNotification(message);
   }
@@ -408,7 +409,7 @@ const savePolygon = async () => {
     }
     goBack();
   } catch (error) {
-    console.error("Ошибка сохранения полигона:", error);
+    devError("Ошибка сохранения полигона:", error);
     showErrorNotification("Ошибка сохранения полигона");
   }
 };
@@ -435,7 +436,7 @@ onMounted(async () => {
     initMap();
     await loadPolygon();
   } catch (error) {
-    console.error("Ошибка загрузки полигона:", error);
+    devError("Ошибка загрузки полигона:", error);
     showErrorNotification("Ошибка загрузки полигона");
   }
 });

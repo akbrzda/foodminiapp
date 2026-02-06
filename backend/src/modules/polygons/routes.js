@@ -11,7 +11,6 @@ const parseGeoJson = (value) => {
     try {
       return JSON.parse(value);
     } catch (error) {
-      console.error("Failed to parse polygon GeoJSON:", error);
       return null;
     }
   }
@@ -165,7 +164,7 @@ router.post("/geocode", async (req, res, next) => {
     try {
       cached = await redis.get(cacheKey);
     } catch (redisError) {
-      console.error("Redis error on geocode cache get:", redisError);
+      // Redis errors are non-critical
     }
     if (cached) {
       return res.json(JSON.parse(cached));
@@ -181,7 +180,7 @@ router.post("/geocode", async (req, res, next) => {
       }
       await redis.set(rateLimitKey, Date.now().toString(), "EX", 1);
     } catch (redisError) {
-      console.error("Redis error on rate limiting:", redisError);
+      // Redis errors are non-critical
     }
     const nominatimUrl = "https://nominatim.openstreetmap.org/search";
     const response = await axios.get(nominatimUrl, {
@@ -216,7 +215,7 @@ router.post("/geocode", async (req, res, next) => {
     try {
       await redis.set(cacheKey, JSON.stringify(geocodeResult), "EX", 86400);
     } catch (redisError) {
-      console.error("Redis error on geocode cache set:", redisError);
+      // Redis errors are non-critical
     }
     res.json(geocodeResult);
   } catch (error) {
@@ -251,7 +250,7 @@ router.post("/reverse", async (req, res, next) => {
     try {
       cached = await redis.get(cacheKey);
     } catch (redisError) {
-      console.error("Redis error on reverse cache get:", redisError);
+      // Redis errors are non-critical
     }
     if (cached) {
       return res.json(JSON.parse(cached));
@@ -267,7 +266,7 @@ router.post("/reverse", async (req, res, next) => {
       }
       await redis.set(rateLimitKey, Date.now().toString(), "EX", 1);
     } catch (redisError) {
-      console.error("Redis error on reverse rate limiting:", redisError);
+      // Redis errors are non-critical
     }
     const nominatimUrl = "https://nominatim.openstreetmap.org/reverse";
     let response = null;
@@ -298,11 +297,10 @@ router.post("/reverse", async (req, res, next) => {
       }
     }
     if (lastError) {
-      console.error("Reverse geocode request failed:", lastError?.code || lastError?.message || lastError);
       try {
         await redis.set(cacheKey, JSON.stringify({}), "EX", 60);
       } catch (redisError) {
-        console.error("Redis error on reverse cache set (empty):", redisError);
+        // Redis errors are non-critical
       }
       return res.json({ label: "", lat, lon, error: "reverse_unavailable" });
     }
@@ -331,7 +329,7 @@ router.post("/reverse", async (req, res, next) => {
     try {
       await redis.set(cacheKey, JSON.stringify(payload), "EX", 86400);
     } catch (redisError) {
-      console.error("Redis error on reverse cache set:", redisError);
+      // Redis errors are non-critical
     }
     res.json(payload);
   } catch (error) {

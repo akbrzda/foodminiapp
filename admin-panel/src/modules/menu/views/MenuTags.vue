@@ -1,3 +1,4 @@
+import { devError } from "@/shared/utils/logger";
 <template>
   <div class="space-y-6">
     <Card>
@@ -155,7 +156,7 @@ async function loadTags() {
     tags.value = response.data.tags || [];
   } catch (error) {
     showErrorNotification("Ошибка загрузки тегов");
-    console.error("Failed to load tags:", error);
+    devError("Failed to load tags:", error);
   }
 }
 function openModal(tag = null) {
@@ -206,7 +207,7 @@ async function submitTag() {
     } else {
       showErrorNotification("Ошибка сохранения тега");
     }
-    console.error("Failed to save tag:", error);
+    devError("Failed to save tag:", error);
   }
 }
 async function deleteTag(tag) {
@@ -219,7 +220,7 @@ async function deleteTag(tag) {
     loadTags();
   } catch (error) {
     showErrorNotification("Ошибка удаления тега");
-    console.error("Failed to delete tag:", error);
+    devError("Failed to delete tag:", error);
   }
 }
 </script>

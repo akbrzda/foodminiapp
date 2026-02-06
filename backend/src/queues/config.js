@@ -49,7 +49,6 @@ export async function addTelegramNotification(data) {
     });
     return job;
   } catch (error) {
-    console.error("❌ Failed to queue Telegram notification:", error);
     throw error;
   }
 }
@@ -60,7 +59,6 @@ export async function addImageProcessing(data) {
     });
     return job;
   } catch (error) {
-    console.error("❌ Failed to queue image processing:", error);
     throw error;
   }
 }
@@ -82,7 +80,6 @@ export async function getQueueStats(queue) {
       total: waiting + active + completed + failed + delayed,
     };
   } catch (error) {
-    console.error("Failed to get queue stats:", error);
     return null;
   }
 }
@@ -100,7 +97,6 @@ export async function getFailedJobs(queue, start = 0, end = 50) {
       finishedOn: job.finishedOn,
     }));
   } catch (error) {
-    console.error("Failed to get failed jobs:", error);
     return [];
   }
 }
@@ -114,7 +110,6 @@ export async function retryFailedJobs(queue) {
     }
     return retried;
   } catch (error) {
-    console.error("Failed to retry jobs:", error);
     throw error;
   }
 }
@@ -123,7 +118,6 @@ export async function cleanQueue(queue, grace = 86400000) {
     const cleaned = await queue.clean(grace, 1000, "completed");
     return cleaned;
   } catch (error) {
-    console.error("Failed to clean queue:", error);
     throw error;
   }
 }

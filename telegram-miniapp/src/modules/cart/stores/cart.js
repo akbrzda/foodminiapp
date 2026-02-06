@@ -1,4 +1,5 @@
 import { defineStore } from "pinia";
+import { devError } from "@/shared/utils/logger.js";
 export const useCartStore = defineStore("cart", {
   state: () => ({
     items: JSON.parse(localStorage.getItem("cart") || "[]"),
@@ -78,7 +79,7 @@ export const useCartStore = defineStore("cart", {
     },
     updateQuantity(index, quantity) {
       if (index < 0 || index >= this.items.length) {
-        console.error("Некорректный индекс для updateQuantity:", index);
+        devError("Некорректный индекс для updateQuantity:", index);
         return;
       }
       if (quantity <= 0) {

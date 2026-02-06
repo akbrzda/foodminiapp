@@ -121,7 +121,8 @@ CREATE TABLE `users` (
   KEY `idx_birth_date` (`date_of_birth`),
   KEY `idx_users_timezone` (`timezone`),
   KEY `idx_current_loyalty_level` (`current_loyalty_level_id`),
-  KEY `idx_loyalty_joined_at` (`loyalty_joined_at`)
+  KEY `idx_loyalty_joined_at` (`loyalty_joined_at`),
+  CONSTRAINT `chk_loyalty_balance` CHECK (`loyalty_balance` >= 0)
 ) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb3;
 
 
@@ -387,10 +388,10 @@ CREATE TABLE `orders` (
   KEY `idx_user_id` (`user_id`),
   KEY `idx_order_number` (`order_number`),
   KEY `idx_status` (`status`),
-  KEY `idx_sync_status` (`sync_status`),
   KEY `idx_created_at` (`created_at`),
   KEY `idx_bonus_earn_locked` (`bonus_earn_locked`),
   KEY `idx_user_status_created` (`user_id`,`status`,`created_at`),
+  CONSTRAINT `chk_bonus_spent` CHECK (`bonus_spent` >= 0 AND `bonus_spent` <= `subtotal`),
   CONSTRAINT `orders_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
   CONSTRAINT `orders_ibfk_2` FOREIGN KEY (`city_id`) REFERENCES `cities` (`id`) ON DELETE CASCADE,
   CONSTRAINT `orders_ibfk_3` FOREIGN KEY (`branch_id`) REFERENCES `branches` (`id`) ON DELETE SET NULL,

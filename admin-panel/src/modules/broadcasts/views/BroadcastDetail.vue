@@ -1,3 +1,4 @@
+import { devError } from "@/shared/utils/logger";
 <template>
   <div class="space-y-6">
     <Card>
@@ -210,7 +211,7 @@ const loadCampaign = async () => {
     stats.value = response.data?.data?.stats || {};
     updateBreadcrumbs();
   } catch (error) {
-    console.error("Ошибка загрузки рассылки:", error);
+    devError("Ошибка загрузки рассылки:", error);
     showErrorNotification("Не удалось загрузить рассылку");
   }
 };
@@ -220,7 +221,7 @@ const loadMessages = async () => {
     const response = await api.get(`/api/broadcasts/${campaignId.value}/messages`);
     messages.value = response.data?.data?.items || [];
   } catch (error) {
-    console.error("Ошибка загрузки сообщений:", error);
+    devError("Ошибка загрузки сообщений:", error);
   }
 };
 
@@ -229,7 +230,7 @@ const loadConversions = async () => {
     const response = await api.get(`/api/broadcasts/${campaignId.value}/conversions`);
     conversions.value = response.data?.data?.items || [];
   } catch (error) {
-    console.error("Ошибка загрузки конверсий:", error);
+    devError("Ошибка загрузки конверсий:", error);
   }
 };
 

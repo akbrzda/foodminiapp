@@ -1,35 +1,53 @@
+import { logger } from "../utils/logger.js";
+
 export const errorHandler = (err, req, res, next) => {
-  console.error("Error:", err);
+  // Логируем ошибку
+  logger.error("API Error", {
+    path: req.path,
+    method: req.method,
+    error: err.message,
+    stack: err.stack,
+  });
+
   if (err.name === "ValidationError") {
     return res.status(400).json({
       error: "Validation error",
-      details: err.message,
+      details: process.env.NODE_ENV === "development" ? err.message : undefined,
     });
   }
+
   if (err.name === "UnauthorizedError" || err.status === 401) {
     return res.status(401).json({
-      error: "Unauthorized",
-      message: "Invalid or missing authentication token",
+      error: "Authentication required",
     });
   }
+
   if (err.status === 403) {
     return res.status(403).json({
-      error: "Forbidden",
-      message: "You do not have permission to access this resource",
+      error: "Access denied",
     });
   }
+
   if (err.status === 404) {
     return res.status(404).json({
-      error: "Not found",
-      message: err.message || "Resource not found",
+      error: "Resource not found",
     });
   }
+
+  // Скрываем технические детали в production
   const statusCode = err.status || 500;
-  const message = process.env.NODE_ENV === "production" ? "Internal server error" : err.message;
+  const isProduction = process.env.NODE_ENV === "production";
+
+  // Проверяем, не содержит ли ошибка информацию о БД
+  const isSqlError = err.code?.startsWith("ER_") || err.message?.toLowerCase().includes("sql") || err.message?.toLowerCase().includes("mysql");
+
+  const message = isProduction ? "Internal server error" : isSqlError ? "Database error occurred" : err.message;
+
   res.status(statusCode).json({
     error: "Server error",
     message,
-    ...(process.env.NODE_ENV === "development" && { stack: err.stack }),
+    // Показываем stack только в development
+    ...(process.env.NODE_ENV === "development" && !isSqlError && { stack: err.stack }),
   });
 };
 export const notFoundHandler = (req, res) => {

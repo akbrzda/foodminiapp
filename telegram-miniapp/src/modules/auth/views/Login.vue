@@ -18,6 +18,7 @@ import { useAuthStore } from "@/modules/auth/stores/auth.js";
 import { useTelegramStore } from "@/shared/stores/telegram.js";
 import { authAPI } from "@/shared/api/endpoints.js";
 import { getInitData, getTelegramUser, hapticFeedback, requestContact } from "@/shared/services/telegram.js";
+import { devError, devLog } from "@/shared/utils/logger.js";
 const router = useRouter();
 const authStore = useAuthStore();
 const telegramStore = useTelegramStore();
@@ -27,9 +28,9 @@ onMounted(() => {
   if (window.Telegram?.WebApp) {
     const originalOnEvent = window.Telegram.WebApp.onEvent.bind(window.Telegram.WebApp);
     window.Telegram.WebApp.onEvent = function (eventType, eventHandler) {
-      console.log("[Login] WebApp.onEvent registered:", eventType);
+      devLog("[Login] WebApp.onEvent registered:", eventType);
       return originalOnEvent(eventType, function (...args) {
-        console.log("[Login] WebApp event fired:", eventType, args);
+        devLog("[Login] WebApp event fired:", eventType, args);
         return eventHandler(...args);
       });
     };
@@ -54,20 +55,20 @@ async function handleLogin() {
     authStore.setToken(response.data.token);
     authStore.setUser(response.data.user);
     if (!response.data.user?.phone) {
-      console.log("[Login] User has no phone, requesting contact...");
+      devLog("[Login] User has no phone, requesting contact...");
       const phoneNumber = await requestContact();
-      console.log("[Login] Received phone number:", phoneNumber);
+      devLog("[Login] Received phone number:", phoneNumber);
       if (phoneNumber) {
         try {
-          console.log("[Login] Updating profile with phone:", phoneNumber);
+          devLog("[Login] Updating profile with phone:", phoneNumber);
           const updated = await authAPI.updateProfile({ phone: phoneNumber });
-          console.log("[Login] Profile updated:", updated.data);
+          devLog("[Login] Profile updated:", updated.data);
           authStore.setUser(updated.data.user);
         } catch (updateError) {
-          console.error("[Login] Не удалось обновить телефон:", updateError);
+          devError("[Login] Не удалось обновить телефон:", updateError);
         }
       } else {
-        console.log("[Login] Номер телефона не получен из requestContact");
+        devLog("[Login] Номер телефона не получен из requestContact");
       }
     }
     hapticFeedback("success");
@@ -75,7 +76,7 @@ async function handleLogin() {
   } catch (err) {
     error.value = err.message || "Ошибка авторизации";
     hapticFeedback("error");
-    console.error("Ошибка входа:", err);
+    devError("Ошибка входа:", err);
   } finally {
     loading.value = false;
   }

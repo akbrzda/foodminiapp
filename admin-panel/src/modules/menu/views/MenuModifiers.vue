@@ -1,3 +1,4 @@
+import { devError } from "@/shared/utils/logger";
 <template>
   <div class="space-y-6">
     <Card>
@@ -378,7 +379,7 @@ const loadGroups = async () => {
     const response = await api.get("/api/menu/admin/modifier-groups");
     groups.value = response.data.modifier_groups || [];
   } catch (error) {
-    console.error("Failed to load groups:", error);
+    devError("Failed to load groups:", error);
     showErrorNotification(`Ошибка при загрузке групп: ${error.response?.data?.error || error.message}`);
   }
 };
@@ -410,7 +411,7 @@ const submitGroup = async () => {
     showModal.value = false;
     await loadGroups();
   } catch (error) {
-    console.error("Failed to save group:", error);
+    devError("Failed to save group:", error);
     showErrorNotification(`Ошибка при сохранении группы: ${error.response?.data?.error || error.message}`);
   }
 };
@@ -421,7 +422,7 @@ const deleteGroup = async (group) => {
     showSuccessNotification("Группа модификаторов удалена");
     await loadGroups();
   } catch (error) {
-    console.error("Failed to delete group:", error);
+    devError("Failed to delete group:", error);
     showErrorNotification(`Ошибка при удалении группы: ${error.response?.data?.error || error.message}`);
   }
 };
@@ -470,7 +471,7 @@ const openCityPricesModal = async (modifier) => {
     activeModifierForPrices.value = modifier;
     showCityPricesModal.value = true;
   } catch (error) {
-    console.error("Failed to load modifier prices:", error);
+    devError("Failed to load modifier prices:", error);
     showErrorNotification("Ошибка при загрузке цен модификатора");
   } finally {
     saving.value = false;
@@ -524,7 +525,7 @@ const handleFile = async (file) => {
     modifierForm.value.image_url = uploadedUrl;
     uploadState.value.preview = uploadedUrl;
   } catch (error) {
-    console.error("Upload failed:", error);
+    devError("Upload failed:", error);
     uploadState.value.error = "Ошибка загрузки";
   } finally {
     uploadState.value.loading = false;
@@ -532,7 +533,7 @@ const handleFile = async (file) => {
 };
 const submitModifier = async () => {
   if (!activeGroup.value) {
-    console.error("activeGroup is not set");
+    devError("activeGroup is not set");
     showErrorNotification("Ошибка: не выбрана группа модификаторов");
     return;
   }
@@ -554,7 +555,7 @@ const submitModifier = async () => {
     showModifierModal.value = false;
     await loadGroups();
   } catch (error) {
-    console.error("Failed to save modifier:", error);
+    devError("Failed to save modifier:", error);
     showErrorNotification(`Ошибка при сохранении модификатора: ${error.response?.data?.error || error.message}`);
   }
 };
@@ -574,7 +575,7 @@ const submitCityPrices = async () => {
     showSuccessNotification("Цены модификатора сохранены");
     closeCityPricesModal();
   } catch (error) {
-    console.error("Failed to save modifier prices:", error);
+    devError("Failed to save modifier prices:", error);
     showErrorNotification("Ошибка при сохранении цен модификатора");
   } finally {
     saving.value = false;
@@ -587,7 +588,7 @@ const deleteModifier = async (modifier) => {
     showSuccessNotification("Модификатор удален");
     await loadGroups();
   } catch (error) {
-    console.error("Failed to delete modifier:", error);
+    devError("Failed to delete modifier:", error);
     showErrorNotification(`Ошибка при удалении модификатора: ${error.response?.data?.error || error.message}`);
   }
 };

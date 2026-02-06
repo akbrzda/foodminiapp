@@ -2,7 +2,9 @@ import express from "express";
 import { authenticateToken } from "../../middleware/auth.js";
 import { upload, processAndSaveImage } from "../../middleware/upload.js";
 import { IMAGE_CATEGORIES, deleteImage, deleteEntityImages } from "../../config/uploads.js";
+
 const router = express.Router();
+
 router.post("/menu-items/:id", authenticateToken, upload.single("image"), async (req, res) => {
   try {
     const { id } = req.params;
@@ -16,10 +18,10 @@ router.post("/menu-items/:id", authenticateToken, upload.single("image"), async 
       data: result,
     });
   } catch (error) {
-    console.error("Upload error:", error);
     res.status(500).json({ error: "Failed to upload image" });
   }
 });
+
 router.post("/menu-categories/:id", authenticateToken, upload.single("image"), async (req, res) => {
   try {
     const { id } = req.params;
@@ -33,10 +35,10 @@ router.post("/menu-categories/:id", authenticateToken, upload.single("image"), a
       data: result,
     });
   } catch (error) {
-    console.error("Upload error:", error);
     res.status(500).json({ error: "Failed to upload image" });
   }
 });
+
 /* Accepts 'temp' as ID for temporary uploads
  */
 router.post("/modifiers/:id", authenticateToken, upload.single("image"), async (req, res) => {
@@ -52,10 +54,10 @@ router.post("/modifiers/:id", authenticateToken, upload.single("image"), async (
       data: result,
     });
   } catch (error) {
-    console.error("Upload error:", error);
     res.status(500).json({ error: "Failed to upload image" });
   }
 });
+
 router.post("/modifier-groups/:id", authenticateToken, upload.single("image"), async (req, res) => {
   try {
     const { id } = req.params;
@@ -68,10 +70,10 @@ router.post("/modifier-groups/:id", authenticateToken, upload.single("image"), a
       data: result,
     });
   } catch (error) {
-    console.error("Upload error:", error);
     res.status(500).json({ error: "Failed to upload image" });
   }
 });
+
 router.post("/tags/:id", authenticateToken, upload.single("image"), async (req, res) => {
   try {
     const { id } = req.params;
@@ -84,10 +86,10 @@ router.post("/tags/:id", authenticateToken, upload.single("image"), async (req, 
       data: result,
     });
   } catch (error) {
-    console.error("Upload error:", error);
     res.status(500).json({ error: "Failed to upload image" });
   }
 });
+
 router.post("/broadcasts/:id", authenticateToken, upload.single("image"), async (req, res) => {
   try {
     const { id } = req.params;
@@ -101,10 +103,10 @@ router.post("/broadcasts/:id", authenticateToken, upload.single("image"), async 
       data: result,
     });
   } catch (error) {
-    console.error("Upload error:", error);
     res.status(500).json({ error: "Не удалось загрузить изображение" });
   }
 });
+
 router.delete("/:category/:id/:filename", authenticateToken, async (req, res) => {
   try {
     const { category, id, filename } = req.params;
@@ -118,10 +120,10 @@ router.delete("/:category/:id/:filename", authenticateToken, async (req, res) =>
       res.status(404).json({ error: "Image not found" });
     }
   } catch (error) {
-    console.error("Delete error:", error);
     res.status(500).json({ error: "Failed to delete image" });
   }
 });
+
 router.delete("/:category/:id", authenticateToken, async (req, res) => {
   try {
     const { category, id } = req.params;
@@ -135,8 +137,8 @@ router.delete("/:category/:id", authenticateToken, async (req, res) => {
       res.status(404).json({ error: "Images not found" });
     }
   } catch (error) {
-    console.error("Delete error:", error);
     res.status(500).json({ error: "Failed to delete images" });
   }
 });
+
 export default router;

@@ -1,5 +1,6 @@
 import { defineStore } from "pinia";
 import { ref, computed } from "vue";
+import { devLog, devWarn } from "@/shared/utils/logger.js";
 export const useTelegramStore = defineStore("telegram", () => {
   const tg = ref(null);
   const user = ref(null);
@@ -20,7 +21,7 @@ export const useTelegramStore = defineStore("telegram", () => {
     tg.value = webApp;
     let currentInitData = webApp.initData || "";
     let currentInitDataUnsafe = webApp.initDataUnsafe || {};
-    console.log("📱 Инициализация Telegram WebApp:", {
+    devLog("📱 Инициализация Telegram WebApp:", {
       platform: webApp.platform,
       version: webApp.version,
       hasInitData: !!currentInitData,
@@ -30,7 +31,7 @@ export const useTelegramStore = defineStore("telegram", () => {
       const savedInitData = sessionStorage.getItem("tg_init_data");
       const savedInitDataUnsafe = sessionStorage.getItem("tg_init_data_unsafe");
       if (savedInitData) {
-        console.log("🔄 Восстанавливаем initData из sessionStorage");
+        devLog("🔄 Восстанавливаем initData из sessionStorage");
         currentInitData = savedInitData;
         webApp.initData = savedInitData;
         if (savedInitDataUnsafe) {
@@ -43,13 +44,13 @@ export const useTelegramStore = defineStore("telegram", () => {
         }
       } else {
         if (webApp.platform !== "unknown") {
-          console.warn("⚠️ initData пустой и не найден в sessionStorage. Платформа:", webApp.platform);
+          devWarn("⚠️ initData пустой и не найден в sessionStorage. Платформа:", webApp.platform);
         } else {
-          console.log("ℹ️ Запуск вне Telegram (платформа: unknown)");
+          devLog("ℹ️ Запуск вне Telegram (платформа: unknown)");
         }
       }
     } else {
-      console.log("💾 Сохраняем initData в sessionStorage");
+      devLog("💾 Сохраняем initData в sessionStorage");
       sessionStorage.setItem("tg_init_data", currentInitData);
       if (webApp.initDataUnsafe) {
         sessionStorage.setItem("tg_init_data_unsafe", JSON.stringify(webApp.initDataUnsafe));
@@ -101,7 +102,7 @@ export const useTelegramStore = defineStore("telegram", () => {
         stableHeight: webApp.viewportStableHeight,
         isExpanded: webApp.isExpanded,
       };
-      console.log("📱 Viewport changed:", viewportInfo);
+      devLog("📱 Viewport changed:", viewportInfo);
       if (typeof window !== "undefined") {
         window.dispatchEvent(
           new CustomEvent("telegram-viewport-changed", {
@@ -110,7 +111,7 @@ export const useTelegramStore = defineStore("telegram", () => {
         );
       }
     });
-    console.log("✅ Telegram WebApp инициализирован", {
+    devLog("✅ Telegram WebApp инициализирован", {
       platform: webApp.platform,
       version: webApp.version,
       initDataLength: currentInitData.length,

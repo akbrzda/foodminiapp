@@ -35,7 +35,7 @@ async function notifyStatusChange(orderId, userId, oldStatus, newStatus, orderTy
     const { wsServer } = await import("../index.js");
     wsServer.notifyOrderStatusUpdate(orderId, userId, newStatus, oldStatus, branchId || null);
   } catch (wsError) {
-    console.error("Failed to send WebSocket notification:", wsError);
+    // WebSocket errors are non-critical, skip logging
   }
   try {
     const { sendTelegramNotification, formatOrderStatusMessage } = await import("../utils/telegram.js");
@@ -45,7 +45,7 @@ async function notifyStatusChange(orderId, userId, oldStatus, newStatus, orderTy
       await sendTelegramNotification(users[0].telegram_id, message);
     }
   } catch (telegramError) {
-    console.error("Failed to send Telegram notification:", telegramError);
+    // Telegram errors are non-critical, skip logging
   }
 }
 
@@ -70,7 +70,7 @@ async function updateOrderStatus(order, localDate) {
         ]);
         await earnBonuses(order, null, loyaltyLevels);
       } catch (bonusError) {
-        console.error("Failed to earn bonuses:", bonusError);
+        logger.bonus.error(`Failed to earn bonuses for order ${order.id}`, { error: bonusError.message });
       }
     }
   } else if (newStatus === "cancelled") {
@@ -79,7 +79,7 @@ async function updateOrderStatus(order, localDate) {
       const loyaltyLevels = await getLoyaltyLevelsFromDb();
       await rollbackBonuses(order, loyaltyLevels);
     } catch (bonusError) {
-      console.error("Failed to rollback bonuses for cancelled order:", bonusError);
+      logger.bonus.error(`Failed to rollback bonuses for order ${order.id}`, { error: bonusError.message });
     }
   }
   await logger.order.statusChanged(order.id, order.status, newStatus, "system");
@@ -119,7 +119,7 @@ async function runAutoStatusCheck() {
       await processOffset(offsetMinutes, nowUtc);
     }
   } catch (error) {
-    console.error("Failed to run auto status check:", error);
+    logger.system.dbError(`Failed to run auto status check: ${error.message}`);
   }
 }
 

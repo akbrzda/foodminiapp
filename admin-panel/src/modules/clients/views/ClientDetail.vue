@@ -233,6 +233,7 @@ import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ArrowLeft, Save } from "lucide-vue-next";
 import api from "@/shared/api/client.js";
+import { devError } from "@/shared/utils/logger";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
 import { useOrdersStore } from "@/modules/orders/stores/orders.js";
 import { formatCurrency, formatDateTime, formatNumber, formatPhoneInput, isValidPhone, normalizePhone } from "@/shared/utils/format.js";
@@ -243,6 +244,7 @@ import CardDescription from "@/shared/components/ui/card/CardDescription.vue";
 import CardHeader from "@/shared/components/ui/card/CardHeader.vue";
 import CardTitle from "@/shared/components/ui/card/CardTitle.vue";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/shared/components/ui/dialog/index.js";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/components/ui/select/index.js";
 import Input from "@/shared/components/ui/input/Input.vue";
 import Table from "@/shared/components/ui/table/Table.vue";
 import TableBody from "@/shared/components/ui/table/TableBody.vue";
@@ -411,15 +413,15 @@ const goBack = () => {
 onMounted(async () => {
   const [clientResult, ordersResult, loyaltyResult] = await Promise.allSettled([loadClient(), loadOrders(), loadLoyalty()]);
   if (clientResult.status === "rejected") {
-    console.error("Ошибка загрузки клиента:", clientResult.reason);
+    devError("Ошибка загрузки клиента:", clientResult.reason);
     showErrorNotification("Ошибка загрузки клиента");
   }
   if (ordersResult.status === "rejected") {
-    console.error("Ошибка загрузки заказов:", ordersResult.reason);
+    devError("Ошибка загрузки заказов:", ordersResult.reason);
     showErrorNotification("Ошибка загрузки заказов");
   }
   if (loyaltyResult.status === "rejected") {
-    console.error("Ошибка загрузки бонусов:", loyaltyResult.reason);
+    devError("Ошибка загрузки бонусов:", loyaltyResult.reason);
     showErrorNotification("Ошибка загрузки бонусов");
   }
 });

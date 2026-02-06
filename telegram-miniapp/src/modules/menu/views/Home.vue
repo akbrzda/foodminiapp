@@ -164,6 +164,7 @@ import AppHeader from "@/shared/components/AppHeader.vue";
 import { formatPrice, normalizeImageUrl } from "@/shared/utils/format";
 import { formatWeight, formatWeightValue } from "@/shared/utils/weight";
 import { calculateDeliveryCost } from "@/shared/utils/deliveryTariffs";
+import { devError } from "@/shared/utils/logger.js";
 const router = useRouter();
 const route = useRoute();
 const authStore = useAuthStore();
@@ -276,7 +277,7 @@ async function loadActiveOrder() {
     const active = orders.filter((order) => order.status !== "completed" && order.status !== "cancelled");
     activeOrders.value = active;
   } catch (error) {
-    console.error("Не удалось загрузить активный заказ:", error);
+    devError("Не удалось загрузить активный заказ:", error);
   }
 }
 function setupOrderStatusListener() {
@@ -400,7 +401,7 @@ async function loadMenu() {
     await nextTick();
     setupIntersectionObserver();
   } catch (error) {
-    console.error("Не удалось загрузить меню:", error);
+    devError("Не удалось загрузить меню:", error);
     menuStore.setError("Не удалось загрузить меню");
   } finally {
     menuStore.setLoading(false);

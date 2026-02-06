@@ -1,3 +1,4 @@
+import { devError } from "@/shared/utils/logger";
 <template>
   <div class="space-y-6">
     <Card>
@@ -419,7 +420,7 @@ const loadStopList = async () => {
     const response = await api.get("/api/menu/admin/stop-list");
     stopList.value = response.data.items || [];
   } catch (error) {
-    console.error("Failed to load stop list:", error);
+    devError("Failed to load stop list:", error);
     showErrorNotification("Ошибка при загрузке стоп-листа");
   }
 };
@@ -428,7 +429,7 @@ const loadReasons = async () => {
     const response = await api.get("/api/menu/admin/stop-list-reasons");
     reasons.value = (response.data.reasons || []).filter((reason) => reason.is_active);
   } catch (error) {
-    console.error("Failed to load reasons:", error);
+    devError("Failed to load reasons:", error);
     reasons.value = [];
   }
 };
@@ -438,7 +439,7 @@ const loadModifiers = async () => {
     const response = await api.get("/api/menu/admin/modifiers");
     modifiers.value = response.data.modifiers || [];
   } catch (error) {
-    console.error("Failed to load modifiers:", error);
+    devError("Failed to load modifiers:", error);
     modifiers.value = [];
   } finally {
     loadingModifiers.value = false;
@@ -458,7 +459,7 @@ const loadCategoriesAndItems = async () => {
       items: itemsResponses[index]?.data?.items || [],
     }));
   } catch (error) {
-    console.error("Failed to load categories:", error);
+    devError("Failed to load categories:", error);
     categories.value = [];
   } finally {
     loadingCategories.value = false;
@@ -621,7 +622,7 @@ const submitStopList = async () => {
     showModal.value = false;
     await loadStopList();
   } catch (error) {
-    console.error("Failed to add to stop list:", error);
+    devError("Failed to add to stop list:", error);
     showErrorNotification(`Ошибка: ${error.response?.data?.error || error.message}`);
   } finally {
     saving.value = false;
@@ -634,7 +635,7 @@ const removeFromStopList = async (item) => {
     showSuccessNotification("Позиция удалена из стоп-листа");
     await loadStopList();
   } catch (error) {
-    console.error("Failed to remove from stop list:", error);
+    devError("Failed to remove from stop list:", error);
     showErrorNotification(`Ошибка: ${error.response?.data?.error || error.message}`);
   }
 };
@@ -647,7 +648,7 @@ onMounted(async () => {
       now.value = new Date();
     }, 60000);
   } catch (error) {
-    console.error("Ошибка загрузки стоп-листа:", error);
+    devError("Ошибка загрузки стоп-листа:", error);
     showErrorNotification("Ошибка загрузки стоп-листа");
   }
 });

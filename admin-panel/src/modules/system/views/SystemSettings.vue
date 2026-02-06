@@ -1,3 +1,4 @@
+import { devError } from "@/shared/utils/logger";
 <template>
   <div class="space-y-6">
     <Card>
@@ -277,7 +278,7 @@ const loadModuleSettings = async () => {
     moduleItems.value = response.data.items || [];
     hydrateForm(moduleItems.value, moduleForm);
   } catch (error) {
-    console.error("Failed to load settings:", error);
+    devError("Failed to load settings:", error);
     showErrorNotification("Ошибка при загрузке настроек");
   } finally {
     moduleLoading.value = false;
@@ -300,7 +301,7 @@ const saveModuleSettings = async () => {
     hydrateForm(moduleItems.value, moduleForm);
     showSuccessNotification("Настройки сохранены");
   } catch (error) {
-    console.error("Failed to save settings:", error);
+    devError("Failed to save settings:", error);
     const message = error.response?.data?.errors?.settings || "Ошибка при сохранении настроек";
     showErrorNotification(message);
   } finally {
@@ -313,7 +314,7 @@ const loadReasons = async () => {
     const response = await api.get("/api/menu/admin/stop-list-reasons");
     reasons.value = response.data.reasons || [];
   } catch (error) {
-    console.error("Failed to load reasons:", error);
+    devError("Failed to load reasons:", error);
     showErrorNotification("Ошибка при загрузке причин");
   }
 };
@@ -349,7 +350,7 @@ const submitReason = async () => {
     showModal.value = false;
     await loadReasons();
   } catch (error) {
-    console.error("Failed to save reason:", error);
+    devError("Failed to save reason:", error);
     showErrorNotification(`Ошибка при сохранении причины: ${error.response?.data?.error || error.message}`);
   } finally {
     savingReason.value = false;
@@ -362,7 +363,7 @@ const deleteReason = async (reason) => {
     await api.delete(`/api/menu/admin/stop-list-reasons/${reason.id}`);
     await loadReasons();
   } catch (error) {
-    console.error("Failed to delete reason:", error);
+    devError("Failed to delete reason:", error);
     showErrorNotification(`Ошибка при удалении причины: ${error.response?.data?.error || error.message}`);
   }
 };
@@ -372,7 +373,7 @@ onMounted(async () => {
     await loadModuleSettings();
     await loadReasons();
   } catch (error) {
-    console.error("Ошибка загрузки настроек системы:", error);
+    devError("Ошибка загрузки настроек системы:", error);
     showErrorNotification("Ошибка загрузки настроек системы");
   }
 });

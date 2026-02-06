@@ -1,4 +1,5 @@
 import { defineStore } from "pinia";
+import { devError } from "@/shared/utils/logger.js";
 export const useLocationStore = defineStore("location", {
   state: () => ({
     selectedCity: JSON.parse(localStorage.getItem("selectedCity") || "null"),
@@ -184,7 +185,7 @@ export const useLocationStore = defineStore("location", {
             resolve(location);
           },
           (error) => {
-            console.error("Ошибка геолокации:", error);
+            devError("Ошибка геолокации:", error);
             reject(error);
           },
         );

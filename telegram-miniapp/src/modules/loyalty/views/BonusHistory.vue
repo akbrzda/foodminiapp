@@ -139,6 +139,7 @@ import { bonusesAPI } from "@/shared/api/endpoints.js";
 import { formatPrice } from "@/shared/utils/format";
 import { useLoyaltyStore } from "@/modules/loyalty/stores/loyalty.js";
 import { useSettingsStore } from "@/modules/settings/stores/settings.js";
+import { devError } from "@/shared/utils/logger.js";
 
 const bonusBalance = ref(0);
 const transactions = ref([]);
@@ -201,7 +202,7 @@ async function loadData() {
     transactions.value = historyResponse.data.transactions || [];
     historyHasMore.value = Boolean(historyResponse.data.has_more);
   } catch (error) {
-    console.error("Не удалось загрузить данные бонусов:", error);
+    devError("Не удалось загрузить данные бонусов:", error);
   } finally {
     loading.value = false;
   }
@@ -218,7 +219,7 @@ async function loadMoreHistory() {
     historyPage.value = nextPage;
     historyHasMore.value = Boolean(response.data.has_more);
   } catch (error) {
-    console.error("Не удалось загрузить историю бонусов:", error);
+    devError("Не удалось загрузить историю бонусов:", error);
   } finally {
     loadingMore.value = false;
   }

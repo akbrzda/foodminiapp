@@ -1,3 +1,4 @@
+import { devError } from "@/shared/utils/logger";
 <template>
   <div class="space-y-6">
     <Card>
@@ -132,7 +133,7 @@ onMounted(async () => {
     await referenceStore.loadCities();
     await loadClients();
   } catch (error) {
-    console.error("Ошибка загрузки клиентов:", error);
+    devError("Ошибка загрузки клиентов:", error);
     showErrorNotification("Ошибка загрузки клиентов");
   }
 });

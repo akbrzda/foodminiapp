@@ -1,3 +1,4 @@
+import { devError } from "@/shared/utils/logger";
 <template>
   <div class="space-y-6">
     <Card>
@@ -144,7 +145,7 @@ const loadBranches = async () => {
       branches.value = response.data.branches || [];
     }
   } catch (error) {
-    console.error("Ошибка загрузки филиалов:", error);
+    devError("Ошибка загрузки филиалов:", error);
     if (requestId === branchesRequestId) {
       branches.value = [];
     }
@@ -174,7 +175,7 @@ const deleteBranch = async (branch) => {
     showSuccessNotification("Филиал удален");
     await loadBranches();
   } catch (error) {
-    console.error("Ошибка удаления филиала:", error);
+    devError("Ошибка удаления филиала:", error);
     showErrorNotification(error.response?.data?.error || "Ошибка удаления филиала");
   }
 };

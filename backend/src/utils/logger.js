@@ -2,19 +2,68 @@ import db from "../config/database.js";
 import winston from "winston";
 import path from "path";
 import { fileURLToPath } from "url";
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Функция для маскировки чувствительных данных
+function maskSensitiveData(data) {
+  if (!data) return data;
+
+  const masked = { ...data };
+
+  // Маскируем токены
+  if (masked.token) {
+    masked.token = `${masked.token.substring(0, 10)}...`;
+  }
+
+  // Маскируем пароли
+  if (masked.password || masked.password_hash) {
+    masked.password = "***";
+    masked.password_hash = "***";
+  }
+
+  // Маскируем номера телефонов (показываем только последние 4 цифры)
+  if (masked.phone) {
+    const phone = String(masked.phone);
+    masked.phone = phone.length > 4 ? `***${phone.slice(-4)}` : "***";
+  }
+
+  // Частично маскируем email
+  if (masked.email) {
+    const email = String(masked.email);
+    const [name, domain] = email.split("@");
+    if (name && domain) {
+      masked.email = `${name.substring(0, 2)}***@${domain}`;
+    }
+  }
+
+  return masked;
+}
+
+// Форматтер с маскировкой
+const maskingFormat = winston.format((info) => {
+  if (info.context) {
+    info.context = maskSensitiveData(info.context);
+  }
+  if (info.user) {
+    info.user = maskSensitiveData(info.user);
+  }
+  return info;
+})();
+
 const systemLogger = winston.createLogger({
   level: "info",
   format: winston.format.combine(
     winston.format.timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
     winston.format.errors({ stack: true }),
+    maskingFormat,
     winston.format.json(),
   ),
   transports: [
     new winston.transports.File({
       filename: path.join(__dirname, "../../logs/combined.log"),
-      maxsize: 5242880,
+      maxsize: 5242880, // 5MB
       maxFiles: 5,
     }),
     new winston.transports.File({
@@ -53,6 +102,13 @@ export function logSystem(level, category, message, context = null) {
   });
 }
 export const logger = {
+  // Прямые методы логирования
+  error: (message, context) => systemLogger.error(message, context),
+  warn: (message, context) => systemLogger.warn(message, context),
+  info: (message, context) => systemLogger.info(message, context),
+  debug: (message, context) => systemLogger.debug(message, context),
+
+  // Специфичные логгеры по категориям
   order: {
     created: (orderId, userId, total) => logSystem("info", "order", `Order ${orderId} created`, { orderId, userId, total }),
     statusChanged: (orderId, oldStatus, newStatus, changedBy) =>

@@ -1,3 +1,4 @@
+import { devError } from "@/shared/utils/logger";
 <template>
   <div class="space-y-6">
     <Card>
@@ -186,6 +187,7 @@
       <DialogContent class="w-full max-w-3xl">
         <DialogHeader>
           <DialogTitle>Детали действия #{{ detailsModal.log?.id || "" }}</DialogTitle>
+          <DialogDescription>Подробная информация о выполненном административном действии</DialogDescription>
         </DialogHeader>
         <div v-if="detailsModal.log" class="space-y-4">
           <div>
@@ -228,7 +230,7 @@ import Badge from "@/shared/components/ui/badge/Badge.vue";
 import Button from "@/shared/components/ui/button/Button.vue";
 import Card from "@/shared/components/ui/card/Card.vue";
 import CardContent from "@/shared/components/ui/card/CardContent.vue";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/shared/components/ui/dialog/index.js";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/shared/components/ui/dialog/index.js";
 import PageHeader from "@/shared/components/PageHeader.vue";
 import { Calendar } from "@/shared/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/shared/components/ui/popover";
@@ -328,7 +330,7 @@ const loadLogs = async () => {
     logs.value = response.data.logs || [];
     pagination.total = response.data.total || 0;
   } catch (error) {
-    console.error("Ошибка загрузки логов:", error);
+    devError("Ошибка загрузки логов:", error);
     const message = error.response?.data?.error || error.message || "Неизвестная ошибка";
     showErrorNotification(`Ошибка загрузки логов: ${message}`);
   } finally {
@@ -346,7 +348,7 @@ const loadAdmins = async () => {
     const response = await api.get("/api/admin/users/admins");
     admins.value = response.data.admins || [];
   } catch (error) {
-    console.error("Ошибка загрузки администраторов:", error);
+    devError("Ошибка загрузки администраторов:", error);
     const message = error.response?.data?.error || error.message || "Неизвестная ошибка";
     showErrorNotification(`Ошибка загрузки администраторов: ${message}`);
   }
@@ -427,7 +429,7 @@ onMounted(async () => {
   try {
     await Promise.all([loadAdmins(), loadLogs()]);
   } catch (error) {
-    console.error("Ошибка загрузки логов:", error);
+    devError("Ошибка загрузки логов:", error);
     showErrorNotification("Ошибка загрузки логов");
   }
 });

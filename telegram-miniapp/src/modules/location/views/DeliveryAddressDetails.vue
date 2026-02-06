@@ -23,6 +23,7 @@ import { useRouter } from "vue-router";
 import { useLocationStore } from "@/modules/location/stores/location.js";
 import { addressesAPI, geocodeAPI } from "@/shared/api/endpoints.js";
 import { hapticFeedback } from "@/shared/services/telegram.js";
+import { devError } from "@/shared/utils/logger.js";
 const router = useRouter();
 const locationStore = useLocationStore();
 const address = ref(locationStore.deliveryAddress || "");
@@ -64,7 +65,7 @@ async function save() {
       coords = { lat: geo.data.lat, lng: geo.data.lng };
       locationStore.setDeliveryCoords(coords);
     } catch (error) {
-      console.error("Не удалось геокодировать адрес:", error);
+      devError("Не удалось геокодировать адрес:", error);
       deliveryZoneError.value = "Не удалось определить адрес";
       hapticFeedback("error");
       return;
@@ -81,7 +82,7 @@ async function save() {
     const zone = { ...response.data.polygon, tariffs: response.data.tariffs || [] };
     locationStore.setDeliveryZone(zone);
   } catch (error) {
-    console.error("Не удалось обновить зону доставки:", error);
+    devError("Не удалось обновить зону доставки:", error);
     deliveryZoneError.value = "Не удалось проверить зону доставки";
     hapticFeedback("error");
     return;

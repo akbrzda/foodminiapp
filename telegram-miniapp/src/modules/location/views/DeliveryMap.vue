@@ -77,6 +77,7 @@ import { useRouter } from "vue-router";
 import { useLocationStore } from "@/modules/location/stores/location.js";
 import { addressesAPI } from "@/shared/api/endpoints.js";
 import { hapticFeedback } from "@/shared/services/telegram.js";
+import { devDebug, devError } from "@/shared/utils/logger.js";
 const router = useRouter();
 const locationStore = useLocationStore();
 const mapContainerRef = ref(null);
@@ -144,7 +145,7 @@ async function ensureTariffs() {
     const zone = { ...response.data.polygon, tariffs: response.data.tariffs || [] };
     locationStore.setDeliveryZone(zone);
   } catch (error) {
-    console.error("Не удалось обновить тарифы доставки:", error);
+    devError("Не удалось обновить тарифы доставки:", error);
   }
 }
 onMounted(async () => {
@@ -322,7 +323,7 @@ async function confirmAddress() {
       const zone = { ...response.data.polygon, tariffs: response.data.tariffs || [] };
       locationStore.setDeliveryZone(zone);
     } catch (error) {
-      console.error("Не удалось обновить зону доставки:", error);
+      devError("Не удалось обновить зону доставки:", error);
       deliveryZoneError.value = "Не удалось проверить зону доставки";
       hapticFeedback("error");
       return;
@@ -391,7 +392,7 @@ async function loadDeliveryPolygons(L) {
       }
     });
   } catch (error) {
-    console.error("Не удалось загрузить полигоны доставки:", error);
+    devError("Не удалось загрузить полигоны доставки:", error);
   }
 }
 function setMapCenter(lat, lon) {
@@ -452,7 +453,7 @@ async function locateUser() {
     if (error?.code === 1) {
       setStoredGeoPermission("denied");
     }
-    console.error("Не удалось определить местоположение пользователя:", error);
+    devError("Не удалось определить местоположение пользователя:", error);
   }
 }
 async function fetchAddressSuggestions(query) {
@@ -476,12 +477,12 @@ async function fetchAddressSuggestions(query) {
       .filter((item) => item && Number.isFinite(item.lat) && Number.isFinite(item.lon));
     addressSuggestions.value = suggestions;
     searchCache.set(normalized, suggestions);
-    console.debug(`Address suggestions: ${elapsed}ms`, { query: normalized, count: suggestions.length });
+    devDebug(`Address suggestions: ${elapsed}ms`, { query: normalized, count: suggestions.length });
   } catch (error) {
     if (searchId === lastSearchId) {
       addressSuggestions.value = [];
     }
-    console.error("Не удалось найти адрес:", error);
+    devError("Не удалось найти адрес:", error);
   }
 }
 async function geocodeAddress(query) {
@@ -494,7 +495,7 @@ async function geocodeAddress(query) {
     if (!data.length) return null;
     return formatAddressSuggestion(data[0]);
   } catch (error) {
-    console.error("Не удалось геокодировать адрес:", error);
+    devError("Не удалось геокодировать адрес:", error);
     return null;
   }
 }
@@ -525,12 +526,12 @@ async function reverseGeocode(lat, lon) {
         : formatAddressSuggestion(data);
     reverseCache.set(key, suggestion);
     const elapsed = Math.round(performance.now() - start);
-    console.debug(`Reverse geocode: ${elapsed}ms`, { key, hasSuggestion: !!suggestion });
+    devDebug(`Reverse geocode: ${elapsed}ms`, { key, hasSuggestion: !!suggestion });
     lastReverseRequestAt = Date.now();
     return suggestion;
   } catch (error) {
     if (error?.name !== "AbortError") {
-      console.error("Не удалось выполнить обратное геокодирование:", error);
+      devError("Не удалось выполнить обратное геокодирование:", error);
     }
     return null;
   }

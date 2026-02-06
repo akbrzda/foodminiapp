@@ -1,5 +1,6 @@
 import { defineStore } from "pinia";
 import { settingsAPI } from "@/shared/api/endpoints.js";
+import { devError } from "@/shared/utils/logger.js";
 
 const DEFAULT_SETTINGS = {
   bonuses_enabled: true,
@@ -57,7 +58,7 @@ export const useSettingsStore = defineStore("settings", {
         const systemResponse = await settingsAPI.getSettings();
         this.applySettings(systemResponse.data?.settings || {});
       } catch (error) {
-        console.error("Не удалось загрузить настройки:", error);
+        devError("Не удалось загрузить настройки:", error);
         this.applySettings({});
       }
     },

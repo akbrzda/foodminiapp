@@ -42,7 +42,6 @@ export async function startWorkers() {
       imageWorker,
     };
   } catch (error) {
-    console.error("❌ Failed to start workers:", error);
     logger.system.dbError(`Failed to start workers: ${error.message}`);
     throw error;
   }
@@ -74,7 +73,7 @@ export async function stopWorkers() {
     await Promise.all(promises);
     logger.system.shutdown("Background workers stopped");
   } catch (error) {
-    console.error("❌ Error stopping workers:", error);
+    logger.system.dbError(`Error stopping workers: ${error.message}`);
     throw error;
   }
 }
@@ -88,7 +87,7 @@ process.on("SIGINT", async () => {
 });
 if (import.meta.url === `file://${process.argv[1]}`) {
   startWorkers().catch((error) => {
-    console.error("Fatal error:", error);
+    logger.system.dbError(`Fatal error: ${error.message}`);
     process.exit(1);
   });
 }

@@ -1,3 +1,4 @@
+import { devError } from "@/shared/utils/logger";
 <template>
   <div class="space-y-6">
     <Card>
@@ -324,7 +325,7 @@ const geocodeAddress = async () => {
       }
     }
   } catch (error) {
-    console.error("Ошибка геокодирования:", error);
+    devError("Ошибка геокодирования:", error);
     showErrorNotification("Не удалось найти адрес на карте");
   }
 };
@@ -372,7 +373,7 @@ const loadBranch = async () => {
     await nextTick();
     initBranchMap();
   } catch (error) {
-    console.error("Ошибка загрузки филиала:", error);
+    devError("Ошибка загрузки филиала:", error);
     showErrorNotification("Ошибка загрузки филиала");
     goBack();
   }
@@ -416,7 +417,7 @@ const submitBranch = async () => {
     showSuccessNotification(isEditing.value ? "Филиал обновлен" : "Филиал создан");
     goBack();
   } catch (error) {
-    console.error("Ошибка сохранения филиала:", error);
+    devError("Ошибка сохранения филиала:", error);
     showErrorNotification(error.response?.data?.error || "Ошибка сохранения филиала");
   } finally {
     saving.value = false;

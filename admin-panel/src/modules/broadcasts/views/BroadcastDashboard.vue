@@ -1,3 +1,4 @@
+import { devError } from "@/shared/utils/logger";
 <template>
   <div class="space-y-6">
     <Card>
@@ -85,7 +86,7 @@ const loadStats = async () => {
     const response = await api.get("/api/broadcasts/dashboard", { params: { period: period.value } });
     stats.value = response.data?.data || {};
   } catch (error) {
-    console.error("Ошибка загрузки дашборда:", error);
+    devError("Ошибка загрузки дашборда:", error);
     showErrorNotification("Не удалось загрузить дашборд");
   }
 };

@@ -1,3 +1,5 @@
+import { devLog, devWarn } from "@/shared/utils/logger.js";
+
 class WebSocketService {
   constructor() {
     this.ws = null;
@@ -24,7 +26,7 @@ class WebSocketService {
     try {
       this.ws = new WebSocket(`${wsUrl}?token=${encodeURIComponent(token)}`);
       this.ws.onopen = () => {
-        console.log("WebSocket подключен");
+        devLog("WebSocket подключен");
         this.isConnecting = false;
         this.reconnectAttempts = 0;
         this.emit("connected");
@@ -32,7 +34,7 @@ class WebSocketService {
       this.ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          console.log("Сообщение WebSocket:", data);
+          devLog("Сообщение WebSocket:", data);
           if (data.type) {
             this.emit(data.type, data.data);
           }
@@ -46,7 +48,7 @@ class WebSocketService {
         this.emit("error", error);
       };
       this.ws.onclose = () => {
-        console.log("WebSocket отключен");
+        devLog("WebSocket отключен");
         this.isConnecting = false;
         this.emit("disconnected");
         this.scheduleReconnect(token);
@@ -64,7 +66,7 @@ class WebSocketService {
       return;
     }
     this.reconnectAttempts++;
-    console.log(`Переподключение через ${this.reconnectDelay}мс (попытка ${this.reconnectAttempts})`);
+    devLog(`Переподключение через ${this.reconnectDelay}мс (попытка ${this.reconnectAttempts})`);
     setTimeout(() => {
       this.connect(token);
     }, this.reconnectDelay);
@@ -80,7 +82,7 @@ class WebSocketService {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type, payload }));
     } else {
-      console.warn("WebSocket не подключен");
+      devWarn("WebSocket не подключен");
     }
   }
   on(event, callback) {

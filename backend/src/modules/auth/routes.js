@@ -7,7 +7,23 @@ import { parseTelegramUser, validateTelegramData } from "../../utils/telegram.js
 import { normalizePhone } from "../../utils/phone.js";
 import { getSystemSettings } from "../../utils/settings.js";
 import { grantRegistrationBonus } from "../loyalty/services/loyaltyService.js";
+import { addToBlacklist } from "../../middleware/tokenBlacklist.js";
+import { logger } from "../../utils/logger.js";
+import { authenticateToken } from "../../middleware/auth.js";
+import { authLimiter } from "../../middleware/rateLimiter.js";
+
 const router = express.Router();
+
+// Helper функция для установки secure cookie
+function setAuthCookie(res, token, maxAge = 7 * 24 * 60 * 60 * 1000) {
+  res.cookie("access_token", token, {
+    httpOnly: true, // Защита от XSS
+    secure: process.env.NODE_ENV === "production", // HTTPS only в production
+    sameSite: "strict", // Защита от CSRF
+    maxAge: maxAge, // 7 дней по умолчанию
+    path: "/",
+  });
+}
 function verifyTelegramAuth(data, botToken) {
   const { hash, ...userData } = data;
   const dataCheckString = Object.keys(userData)
@@ -18,7 +34,9 @@ function verifyTelegramAuth(data, botToken) {
   const hmac = crypto.createHmac("sha256", secretKey).update(dataCheckString).digest("hex");
   return hmac === hash;
 }
-router.post("/telegram", async (req, res, next) => {
+
+// Применяем rate limiting на все auth endpoints
+router.post("/telegram", authLimiter, async (req, res, next) => {
   try {
     const { initData } = req.body;
     let telegramPayload = req.body;
@@ -123,7 +141,7 @@ router.post("/telegram", async (req, res, next) => {
           await grantRegistrationBonus(userId, null);
         }
       } catch (bonusError) {
-        console.error("Failed to grant registration bonus:", bonusError);
+        // Registration bonus errors are non-critical
       }
     }
     const token = jwt.sign(
@@ -135,6 +153,13 @@ router.post("/telegram", async (req, res, next) => {
       process.env.JWT_SECRET,
       { expiresIn: "30d" },
     );
+
+    // Устанавливаем cookie с токеном
+    setAuthCookie(res, token, 30 * 24 * 60 * 60 * 1000); // 30 дней
+
+    // Логируем успешный вход
+    await logger.auth.login(userId, "client", req.ip);
+
     res.json({ token, user });
   } catch (error) {
     next(error);
@@ -173,33 +198,45 @@ router.post("/eruda", async (req, res, next) => {
     next(error);
   }
 });
-router.post("/admin/login", async (req, res, next) => {
+router.post("/admin/login", authLimiter, async (req, res, next) => {
   try {
     const { email, password } = req.body;
     if (!email || !password) {
+      await logger.auth.loginFailed(email || "unknown", "Missing credentials", req.ip);
       return res.status(400).json({ error: "Email and password are required" });
     }
+
     const [users] = await db.query(
       `SELECT id, email, password_hash, first_name, last_name, role, is_active, branch_id, telegram_id, eruda_enabled
        FROM admin_users WHERE email = ?`,
       [email],
     );
+
     if (users.length === 0) {
-      return res.status(401).json({ error: "Invalid email or password" });
+      await logger.auth.loginFailed(email, "User not found", req.ip);
+      return res.status(401).json({ error: "Invalid credentials" });
     }
+
     const user = users[0];
+
     if (!user.is_active) {
+      await logger.auth.loginFailed(email, "Account disabled", req.ip);
       return res.status(403).json({ error: "Account is disabled" });
     }
+
     const isValidPassword = await bcrypt.compare(password, user.password_hash);
+
     if (!isValidPassword) {
-      return res.status(401).json({ error: "Invalid email or password" });
+      await logger.auth.loginFailed(email, "Invalid password", req.ip);
+      return res.status(401).json({ error: "Invalid credentials" });
     }
+
     let cities = [];
     if (user.role === "manager") {
       const [userCities] = await db.query(`SELECT city_id FROM admin_user_cities WHERE admin_user_id = ?`, [user.id]);
       cities = userCities.map((c) => c.city_id);
     }
+
     let branches = [];
     if (user.role === "manager") {
       const [userBranches] = await db.query(
@@ -211,6 +248,7 @@ router.post("/admin/login", async (req, res, next) => {
       );
       branches = userBranches || [];
     }
+
     const token = jwt.sign(
       {
         id: user.id,
@@ -224,7 +262,15 @@ router.post("/admin/login", async (req, res, next) => {
       process.env.JWT_SECRET,
       { expiresIn: "7d" },
     );
+
+    // Устанавливаем cookie с токеном
+    setAuthCookie(res, token, 7 * 24 * 60 * 60 * 1000); // 7 дней
+
+    // Логируем успешный вход
+    await logger.auth.login(user.id, user.role, req.ip);
+
     delete user.password_hash;
+
     res.json({
       token,
       user: {
@@ -239,4 +285,32 @@ router.post("/admin/login", async (req, res, next) => {
     next(error);
   }
 });
+
+// Endpoint для выхода из системы
+router.post("/logout", authenticateToken, async (req, res, next) => {
+  try {
+    // Получаем токен
+    const token = req.cookies?.access_token || (req.headers["authorization"] && req.headers["authorization"].split(" ")[1]);
+
+    if (token) {
+      // Добавляем токен в blacklist
+      const decoded = jwt.decode(token);
+      const expiresIn = decoded.exp - Math.floor(Date.now() / 1000);
+      await addToBlacklist(token, expiresIn > 0 ? expiresIn : 1);
+    }
+
+    // Удаляем cookie
+    res.clearCookie("access_token", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      path: "/",
+    });
+
+    res.json({ message: "Logout successful" });
+  } catch (error) {
+    next(error);
+  }
+});
+
 export default router;

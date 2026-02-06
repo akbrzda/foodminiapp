@@ -1,3 +1,4 @@
+import { devError } from "@/shared/utils/logger";
 <template>
   <div class="space-y-6">
     <Card>
@@ -206,7 +207,7 @@ const loadCategories = async () => {
     const response = await api.get("/api/menu/admin/all-categories");
     categories.value = response.data.categories || [];
   } catch (error) {
-    console.error("Failed to load categories:", error);
+    devError("Failed to load categories:", error);
     showErrorNotification("Ошибка при загрузке категорий");
   }
 };
@@ -239,7 +240,7 @@ const openModal = async (category = null) => {
         .filter(Number.isFinite);
       form.value.city_ids = activeCityIds;
     } catch (error) {
-      console.error("Failed to load category cities:", error);
+      devError("Failed to load category cities:", error);
       showErrorNotification("Ошибка при загрузке доступности по городам");
     }
   }
@@ -284,7 +285,7 @@ const handleFile = async (file) => {
     form.value.image_url = uploadedUrl;
     uploadState.value = { loading: false, error: null, preview: uploadedUrl };
   } catch (error) {
-    console.error("Failed to upload category image:", error);
+    devError("Failed to upload category image:", error);
     uploadState.value = { loading: false, error: "Ошибка загрузки", preview: null };
   }
 };
@@ -301,7 +302,7 @@ const submitCategory = async () => {
     showModal.value = false;
     await loadCategories();
   } catch (error) {
-    console.error("Failed to save category:", error);
+    devError("Failed to save category:", error);
     showErrorNotification(`Ошибка при сохранении категории: ${error.response?.data?.error || error.message}`);
   } finally {
     saving.value = false;
@@ -314,7 +315,7 @@ const deleteCategory = async (category) => {
     showSuccessNotification("Категория удалена");
     await loadCategories();
   } catch (error) {
-    console.error("Failed to delete category:", error);
+    devError("Failed to delete category:", error);
     showErrorNotification(`Ошибка при удалении категории: ${error.response?.data?.error || error.message}`);
   }
 };
@@ -323,7 +324,7 @@ onMounted(async () => {
     await referenceStore.loadCities();
     await loadCategories();
   } catch (error) {
-    console.error("Ошибка загрузки категорий:", error);
+    devError("Ошибка загрузки категорий:", error);
     showErrorNotification("Ошибка загрузки категорий");
   }
 });

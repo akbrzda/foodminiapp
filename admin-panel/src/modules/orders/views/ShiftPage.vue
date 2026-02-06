@@ -1,299 +1,52 @@
 <template>
   <div class="min-h-screen min-w-[1280px] bg-background text-foreground">
-    <header class="sticky top-0 z-30 border-b border-border bg-background/90 backdrop-blur">
-      <div class="flex h-[72px] items-center justify-between gap-6 px-6">
-        <div class="flex items-center gap-4">
-          <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary text-sm font-semibold">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="24"
-              height="24"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              class="lucide lucide-panda-icon lucide-panda"
-            >
-              <path d="M11.25 17.25h1.5L12 18z" />
-              <path d="m15 12 2 2" />
-              <path d="M18 6.5a.5.5 0 0 0-.5-.5" />
-              <path
-                d="M20.69 9.67a4.5 4.5 0 1 0-7.04-5.5 8.35 8.35 0 0 0-3.3 0 4.5 4.5 0 1 0-7.04 5.5C2.49 11.2 2 12.88 2 14.5 2 19.47 6.48 22 12 22s10-2.53 10-7.5c0-1.62-.48-3.3-1.3-4.83"
-              />
-              <path d="M6 6.5a.495.495 0 0 1 .5-.5" />
-              <path d="m9 12-2 2" />
-            </svg>
-          </div>
-          <div class="min-w-0">
-            <div class="text-base font-semibold text-foreground">Текущая смена</div>
-            <div class="text-xs text-muted-foreground">Оперативное управление заказами</div>
-          </div>
-        </div>
-        <div class="flex items-center gap-3">
-          <div class="hidden items-center gap-2 sm:flex">
-            <Select v-model="themeValue">
-              <SelectTrigger class="h-9 w-[160px] text-xs">
-                <div class="flex items-center gap-2">
-                  <component :is="activeThemeIcon" :size="14" />
-                  <SelectValue />
-                </div>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="system">
-                  <div class="flex items-center gap-2">
-                    <Monitor :size="14" />
-                    Системный
-                  </div>
-                </SelectItem>
-                <SelectItem value="light">
-                  <div class="flex items-center gap-2">
-                    <Sun :size="14" />
-                    Светлый
-                  </div>
-                </SelectItem>
-                <SelectItem value="dark">
-                  <div class="flex items-center gap-2">
-                    <Moon :size="14" />
-                    Темный
-                  </div>
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div class="min-w-[260px]">
-            <Select v-model="selectedBranchId">
-              <SelectTrigger class="w-full">
-                <SelectValue placeholder="Выберите филиал" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem v-for="branch in branchOptions" :key="branch.id" :value="String(branch.id)">
-                  {{ branch.label }}
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <Button variant="outline" @click="openAdminPanel">
-            <ExternalLink :size="16" />
-            Админ‑панель
-          </Button>
-        </div>
-      </div>
-    </header>
+    <!-- Шапка страницы -->
+    <ShiftHeader
+      v-model:theme="themeValue"
+      v-model:selected-branch-id="selectedBranchId"
+      :branch-options="branchOptions"
+      @open-admin-panel="openAdminPanel"
+    />
 
     <div class="flex h-[calc(100vh-72px)]">
-      <section class="flex w-[40%] min-w-[480px] flex-col border-r border-border bg-muted/40 p-4">
-        <div class="flex flex-wrap items-center justify-between gap-3">
-          <div class="flex items-center gap-2 border-b border-transparent">
-            <button
-              v-for="tab in tabs"
-              :key="tab.value"
-              type="button"
-              class="relative px-3 py-2 text-sm font-semibold transition-colors"
-              :class="tabButtonClass(tab.value)"
-              @click="activeTab = tab.value"
-            >
-              <span>{{ tab.label }}</span>
-              <span
-                v-if="tab.badge !== null"
-                class="ml-2 inline-flex min-w-[22px] items-center justify-center rounded-full px-2 py-0.5 text-[11px] font-semibold"
-                :class="tabBadgeClass(tab.value)"
-              >
-                {{ tab.badge }}
-              </span>
-            </button>
-          </div>
+      <!-- Список заказов -->
+      <OrdersList
+        ref="ordersListRef"
+        v-model:active-tab="activeTab"
+        v-model:order-type-filter="orderTypeFilter"
+        v-model:search-query="searchQuery"
+        :debounced-search="debouncedSearch"
+        :visible-orders="visibleOrders"
+        :expanded-order-id="expandedOrderId"
+        :recent-order-ids="recentOrderIds"
+        :tabs="tabs"
+        @clear-search="clearSearch"
+        @toggle-order="toggleOrder"
+        @change-status="changeStatus"
+        @open-cancel-dialog="openCancelDialog"
+        @set-order-ref="setOrderRef"
+      />
 
-          <DropdownMenu>
-            <DropdownMenuTrigger as-child>
-              <Button variant="outline" class="gap-2">
-                {{ orderTypeFilterLabel }}
-                <ChevronDown :size="14" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuRadioGroup v-model="orderTypeFilter">
-                <DropdownMenuRadioItem value="all">Все</DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="delivery">Доставка</DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="pickup">Самовывоз</DropdownMenuRadioItem>
-              </DropdownMenuRadioGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-
-        <div v-if="activeTab === 'search'" class="mt-3">
-          <Field>
-            <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Поиск</FieldLabel>
-            <FieldContent>
-              <div class="relative mt-1">
-                <Search class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" :size="16" />
-                <Input
-                  ref="searchInputRef"
-                  v-model="searchQuery"
-                  class="pl-9 pr-9"
-                  placeholder="Поиск по номеру, телефону или адресу"
-                  @keydown.esc.prevent="clearSearch"
-                />
-                <button
-                  v-if="searchQuery"
-                  type="button"
-                  class="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-muted-foreground hover:bg-accent/60"
-                  @click="clearSearch"
-                >
-                  <X :size="14" />
-                </button>
-              </div>
-            </FieldContent>
-          </Field>
-        </div>
-
-        <div class="mt-4 flex-1 overflow-y-auto pr-1">
-          <div
-            v-if="visibleOrders.length === 0"
-            class="flex h-full flex-col items-center justify-center gap-3 text-center text-sm text-muted-foreground"
-          >
-            <component :is="emptyStateIcon" :size="28" />
-            <div class="max-w-[240px]">
-              <div class="font-semibold text-muted-foreground">{{ emptyStateTitle }}</div>
-              <div v-if="emptyStateSubtitle" class="text-xs text-muted-foreground/70">{{ emptyStateSubtitle }}</div>
-            </div>
-          </div>
-
-          <div v-else class="space-y-3 pb-6">
-            <article
-              v-for="order in visibleOrders"
-              :key="order.id"
-              :ref="(el) => setOrderRef(order.id, el)"
-              class="rounded-xl border bg-card p-4 transition-all"
-              :class="orderCardClass(order)"
-              @click="toggleOrder(order)"
-            >
-              <div class="flex items-start justify-between gap-4">
-                <div class="space-y-1">
-                  <div class="flex items-center gap-2 text-sm font-semibold text-foreground">
-                    <span>#{{ order.order_number }}</span>
-                    <span class="flex items-center gap-1 text-xs font-medium text-muted-foreground">
-                      <Clock :size="14" />
-                      {{ formatOrderTime(order) }}
-                    </span>
-                  </div>
-                  <div class="flex items-center gap-2 text-sm text-muted-foreground">
-                    <MapPin v-if="order.order_type === 'delivery'" :size="14" />
-                    <Store v-else :size="14" />
-                    <span>{{ getOrderLocation(order) }}</span>
-                  </div>
-                  <div class="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Phone :size="14" />
-                    <a
-                      v-if="normalizePhone(order.user_phone)"
-                      class="text-foreground hover:underline"
-                      :href="`tel:${normalizePhone(order.user_phone)}`"
-                    >
-                      {{ formatPhone(order.user_phone) }}
-                    </a>
-                    <span v-else>—</span>
-                  </div>
-                  <div v-if="order.delivery_comment || order.comment" class="flex items-center gap-2 text-sm text-muted-foreground">
-                    <MessageSquare :size="14" />
-                    <span>{{ order.delivery_comment || order.comment }}</span>
-                  </div>
-                  <div class="flex items-center gap-2 text-sm text-muted-foreground">
-                    <CreditCard :size="14" />
-                    <span>{{ getPaymentSummary(order) }}</span>
-                  </div>
-                </div>
-                <Badge class="text-xs font-semibold" :class="getStatusBadge(order).class" :style="getStatusBadge(order).style">
-                  {{ getStatusBadge(order).label }}
-                </Badge>
-              </div>
-
-              <Transition name="fade-slide">
-                <div v-if="expandedOrderId === order.id" class="mt-4 space-y-4">
-                  <div class="rounded-lg border border-border bg-muted/50 p-3">
-                    <div v-for="(item, index) in order.items || []" :key="item.id" class="py-2">
-                      <div class="flex items-center justify-between text-sm font-semibold text-foreground">
-                        <span>{{ item.item_name }}</span>
-                        <span>{{ formatCurrency(item.subtotal) }}</span>
-                      </div>
-                      <div v-if="item.modifiers?.length" class="text-xs text-muted-foreground">
-                        {{ formatOrderModifiers(item.modifiers) }}
-                      </div>
-                      <div v-if="index < (order.items?.length || 0) - 1" class="mt-2 h-px bg-border"></div>
-                    </div>
-                  </div>
-
-                  <div v-if="Number(order.delivery_cost) > 0" class="text-sm text-muted-foreground">
-                    Доставка: {{ formatCurrency(order.delivery_cost) }}
-                  </div>
-
-                  <div class="text-sm font-semibold text-foreground">Итого: {{ formatCurrency(order.total) }}</div>
-
-                  <div class="space-y-2">
-                    <Button v-if="getNextStatus(order)" class="w-full" @click.stop="changeStatus(order)">
-                      {{ getNextStatus(order).label }}
-                    </Button>
-                    <Button v-if="canCancel(order)" variant="destructive" class="w-full" @click.stop="openCancelDialog(order)">
-                      Отменить заказ
-                    </Button>
-                  </div>
-                </div>
-              </Transition>
-            </article>
-          </div>
-        </div>
-      </section>
-
-      <section class="relative flex-1 bg-background">
-        <div ref="mapContainer" class="absolute inset-0 z-0"></div>
-        <div class="absolute right-4 top-4 z-20 flex flex-col gap-2 pointer-events-auto">
-          <Button size="icon" variant="outline" @click="togglePolygons">
-            <Eye v-if="polygonsVisible" :size="16" />
-            <EyeOff v-else :size="16" />
-          </Button>
-          <Button size="icon" variant="outline" @click="centerOnBranch">
-            <LocateFixed :size="16" />
-          </Button>
-        </div>
-      </section>
+      <!-- Карта -->
+      <OrderMap ref="orderMapRef" :polygons-visible="polygonsVisible" @toggle-polygons="togglePolygons" @center-on-branch="centerOnBranch" />
     </div>
 
-    <Dialog :open="branchDialogOpen">
-      <DialogContent class="shift-branch-dialog">
-        <DialogHeader>
-          <DialogTitle>Выберите филиал</DialogTitle>
-          <DialogDescription>Для работы со сменой нужно указать активный филиал.</DialogDescription>
-        </DialogHeader>
-        <div class="mt-4">
-          <Select v-model="selectedBranchId">
-            <SelectTrigger class="w-full">
-              <SelectValue placeholder="Выберите филиал" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem v-for="branch in branchOptions" :key="branch.id" :value="String(branch.id)">
-                {{ branch.label }}
-              </SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <DialogFooter class="mt-6">
-          <Button :disabled="!selectedBranchId" @click="closeBranchDialog">Продолжить</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <!-- Диалог выбора филиала -->
+    <BranchSelectionDialog
+      :open="branchDialogOpen"
+      v-model:selected-branch-id="selectedBranchId"
+      :branch-options="branchOptions"
+      @confirm="closeBranchDialog"
+    />
 
-    <Dialog v-model:open="cancelDialog.open">
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Отменить заказ #{{ cancelDialog.order?.order_number }}</DialogTitle>
-          <DialogDescription>Заказ будет перемещён в завершённые и получит статус отмены.</DialogDescription>
-        </DialogHeader>
-        <DialogFooter class="mt-6 gap-2">
-          <Button variant="outline" @click="cancelDialog.open = false">Отмена</Button>
-          <Button variant="destructive" :disabled="cancelDialog.loading" @click="confirmCancel"> Подтвердить </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <!-- Модалка отмены заказа -->
+    <OrderStatusModal
+      v-model:open="cancelDialog.open"
+      :order="cancelDialog.order"
+      :loading="cancelDialog.loading"
+      @confirm="confirmCancel"
+      @close="cancelDialog.open = false"
+    />
   </div>
 </template>
 
@@ -301,61 +54,35 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import {
-  ChevronDown,
-  Clock,
-  CreditCard,
-  ExternalLink,
-  Eye,
-  EyeOff,
-  LocateFixed,
-  MapPin,
-  Monitor,
-  MessageSquare,
-  Moon,
-  PackageOpen,
-  Phone,
-  Search,
-  Store,
-  Sun,
-  X,
-} from "lucide-vue-next";
+import { devError } from "@/shared/utils/logger";
 import api from "@/shared/api/client.js";
 import { useReferenceStore } from "@/shared/stores/reference.js";
 import { useOrdersStore } from "@/modules/orders/stores/orders.js";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
 import { useTheme } from "@/shared/composables/useTheme.js";
 import { createMarkerIcon, getMapColor, getTileLayer } from "@/shared/utils/leaflet.js";
-import { formatCurrency, formatPhone, normalizePhone } from "@/shared/utils/format.js";
-import Badge from "@/shared/components/ui/badge/Badge.vue";
-import Button from "@/shared/components/ui/button/Button.vue";
-import Input from "@/shared/components/ui/input/Input.vue";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/components/ui/select";
-import { Field, FieldContent, FieldLabel } from "@/shared/components/ui/field";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuTrigger,
-} from "@/shared/components/ui/dropdown-menu/index.js";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/shared/components/ui/dialog/index.js";
+import ShiftHeader from "@/modules/orders/components/ShiftHeader.vue";
+import OrdersList from "@/modules/orders/components/OrdersList.vue";
+import OrderMap from "@/modules/orders/components/OrderMap.vue";
+import BranchSelectionDialog from "@/modules/orders/components/BranchSelectionDialog.vue";
+import OrderStatusModal from "@/modules/orders/components/OrderStatusModal.vue";
 
 const referenceStore = useReferenceStore();
 const ordersStore = useOrdersStore();
 const { showErrorNotification, showNewOrderNotification, showSuccessNotification } = useNotifications();
 const { theme, setTheme, resolvedTheme } = useTheme();
 
+// Состояние темы
 const themeValue = computed({
   get: () => theme.value,
   set: (value) => setTheme(value),
 });
-const activeThemeIcon = computed(() => {
-  if (theme.value === "dark") return Moon;
-  if (theme.value === "light") return Sun;
-  return Monitor;
-});
 
+// Refs компонентов
+const ordersListRef = ref(null);
+const orderMapRef = ref(null);
+
+// Состояние заказов
 const orders = ref([]);
 const recentOrderIds = ref(new Set());
 const activeTab = ref("active");
@@ -365,13 +92,14 @@ const debouncedSearch = ref("");
 const expandedOrderId = ref(null);
 const selectedBranchId = ref("");
 const shiftMeta = ref(null);
-const searchInputRef = ref(null);
 const branchDialogOpen = ref(false);
 const storedBranchId = ref("");
 const cancelDialog = ref({ open: false, order: null, loading: false });
 let searchTimer = null;
+let shiftTimer = null;
 
-const mapContainer = ref(null);
+// Состояние карты
+const orderRefs = new Map();
 let mapInstance = null;
 let polygonsLayer = null;
 let branchMarker = null;
@@ -379,26 +107,20 @@ let staticBranchMarker = null;
 let deliveryMarker = null;
 let routeLine = null;
 let tileLayer = null;
-let shiftTimer = null;
-const orderRefs = new Map();
-
 const polygonsVisible = ref(localStorage.getItem("shift_polygons_visible") !== "false");
 
+// Вычисляемые свойства для карты
 const mapAccentColor = computed(() => getMapColor(resolvedTheme.value, "accent"));
 const mapAccentFill = computed(() => getMapColor(resolvedTheme.value, "accentFill"));
 
+// Табы для списка заказов
 const tabs = computed(() => [
   { value: "active", label: "Активные", badge: activeOrders.value.length },
   { value: "completed", label: "Завершенные", badge: deliveringCount.value },
   { value: "search", label: "Поиск", badge: null },
 ]);
 
-const orderTypeFilterLabel = computed(() => {
-  if (orderTypeFilter.value === "delivery") return "Доставка";
-  if (orderTypeFilter.value === "pickup") return "Самовывоз";
-  return "Все";
-});
-
+// Опции филиалов
 const branchOptions = computed(() => {
   return referenceStore.branches.map((branch) => {
     const city = referenceStore.cities.find((item) => item.id === branch.city_id);
@@ -414,6 +136,39 @@ const branchesReady = computed(() => {
   return referenceStore.cities.every((city) => Array.isArray(referenceStore.branchesByCity?.[city.id]));
 });
 
+// Фильтрация заказов
+const filteredOrders = computed(() => {
+  let list = [...orders.value];
+  if (orderTypeFilter.value !== "all") {
+    list = list.filter((order) => order.order_type === orderTypeFilter.value);
+  }
+  return list;
+});
+
+const activeOrders = computed(() => filteredOrders.value.filter((order) => ["pending", "confirmed", "preparing", "ready"].includes(order.status)));
+
+const completedOrders = computed(() => filteredOrders.value.filter((order) => ["delivering", "completed", "cancelled"].includes(order.status)));
+
+const deliveringCount = computed(() => completedOrders.value.filter((order) => order.status === "delivering").length);
+
+const searchOrders = computed(() => {
+  const query = debouncedSearch.value.trim().toLowerCase();
+  if (!query) return filteredOrders.value;
+  return filteredOrders.value.filter((order) => {
+    const numberMatch = order.order_number?.toString().startsWith(query);
+    const phoneMatch = order.user_phone?.toString().includes(query);
+    const addressMatch = order.delivery_street?.toLowerCase().includes(query) || order.delivery_house?.toLowerCase().includes(query);
+    return numberMatch || phoneMatch || addressMatch;
+  });
+});
+
+const visibleOrders = computed(() => {
+  if (activeTab.value === "active") return activeOrders.value;
+  if (activeTab.value === "completed") return completedOrders.value;
+  return searchOrders.value;
+});
+
+// Функции управления филиалами
 const readStoredBranch = () => {
   storedBranchId.value = localStorage.getItem("shift_selected_branch_id") || "";
 };
@@ -436,64 +191,17 @@ const restoreBranchSelection = () => {
   }
 };
 
-const filteredOrders = computed(() => {
-  let list = [...orders.value];
-  if (orderTypeFilter.value !== "all") {
-    list = list.filter((order) => order.order_type === orderTypeFilter.value);
+const closeBranchDialog = () => {
+  if (selectedBranchId.value) {
+    branchDialogOpen.value = false;
   }
-  return list;
-});
-
-const activeOrders = computed(() => filteredOrders.value.filter((order) => ["pending", "confirmed", "preparing", "ready"].includes(order.status)));
-
-const completedOrders = computed(() => filteredOrders.value.filter((order) => ["delivering", "completed", "cancelled"].includes(order.status)));
-
-const deliveringCount = computed(() => completedOrders.value.filter((order) => order.status === "delivering").length);
-
-const searchOrders = computed(() => {
-  const query = debouncedSearch.value.trim().toLowerCase();
-  if (!query) return filteredOrders.value;
-  return filteredOrders.value.filter((order) => {
-    const numberMatch = order.order_number?.toString().startsWith(query);
-    const phoneMatch = order.user_phone?.toString().includes(query);
-    const addressMatch = getOrderLocation(order).toLowerCase().includes(query);
-    return numberMatch || phoneMatch || addressMatch;
-  });
-});
-
-const visibleOrders = computed(() => {
-  if (activeTab.value === "active") return activeOrders.value;
-  if (activeTab.value === "completed") return completedOrders.value;
-  return searchOrders.value;
-});
-
-const emptyStateIcon = computed(() => {
-  if (activeTab.value === "search" && !debouncedSearch.value) return Search;
-  return PackageOpen;
-});
-
-const emptyStateTitle = computed(() => {
-  if (activeTab.value === "search" && debouncedSearch.value) {
-    return "Ничего не найдено";
-  }
-  return "Нет заказов";
-});
-
-const emptyStateSubtitle = computed(() => {
-  if (activeTab.value === "search" && debouncedSearch.value) {
-    return "Попробуйте изменить запрос";
-  }
-  return "";
-});
-
-const tabButtonClass = (value) => {
-  return value === activeTab.value ? "border-b-2 border-primary text-foreground" : "text-muted-foreground hover:text-foreground";
 };
 
-const tabBadgeClass = (value) => {
-  return value === activeTab.value ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground";
+const openAdminPanel = () => {
+  window.open("/dashboard", "_blank");
 };
 
+// Функции поиска
 const clearSearch = () => {
   searchQuery.value = "";
   debouncedSearch.value = "";
@@ -502,7 +210,7 @@ const clearSearch = () => {
 
 const focusSearchInput = () => {
   nextTick(() => {
-    const el = searchInputRef.value?.$el || searchInputRef.value;
+    const el = ordersListRef.value?.searchInputRef?.$el || ordersListRef.value?.searchInputRef;
     el?.focus?.();
   });
 };
@@ -515,64 +223,7 @@ const setOrderRef = (orderId, element) => {
   orderRefs.set(orderId, element);
 };
 
-const openAdminPanel = () => {
-  window.open("/dashboard", "_blank");
-};
-
-const closeBranchDialog = () => {
-  if (selectedBranchId.value) {
-    branchDialogOpen.value = false;
-  }
-};
-
-const getOrderLocation = (order) => {
-  if (order.order_type === "pickup") {
-    return order.branch_name || "Самовывоз";
-  }
-  const parts = [
-    order.delivery_street,
-    order.delivery_house,
-    order.delivery_entrance ? `подъезд ${order.delivery_entrance}` : null,
-    order.delivery_floor ? `этаж ${order.delivery_floor}` : null,
-    order.delivery_apartment ? `кв. ${order.delivery_apartment}` : null,
-    order.delivery_intercom ? `домофон ${order.delivery_intercom}` : null,
-  ].filter(Boolean);
-  return parts.join(", ") || "Адрес доставки";
-};
-
-const getPaymentSummary = (order) => {
-  const method = order.payment_method === "cash" ? "наличными" : "картой";
-  const itemsCount = order.items?.length || 0;
-  const changeFrom = order.payment_method === "cash" && order.change_from ? `, сдача с ${formatCurrency(order.change_from)}` : "";
-  return `К оплате: ${formatCurrency(order.total)} ${method} (${itemsCount}шт)${changeFrom}`;
-};
-
-const getStatusBadge = (order) => {
-  const labels = {
-    pending: "Новый",
-    confirmed: "Принят",
-    preparing: "Готовится",
-    ready: order.order_type === "pickup" ? "Готов к выдаче" : "Готов",
-    delivering: "В пути",
-    completed: order.order_type === "pickup" ? "Выдан" : "Доставлен",
-    cancelled: "Отменен",
-  };
-  const colors = {
-    pending: { backgroundColor: "#3B82F6", color: "#FFFFFF" },
-    confirmed: { backgroundColor: "#10B981", color: "#FFFFFF" },
-    preparing: { backgroundColor: "#F59E0B", color: "#FFFFFF" },
-    ready: { backgroundColor: "#8B5CF6", color: "#FFFFFF" },
-    delivering: { backgroundColor: "#FFD200", color: "#000000" },
-    completed: { backgroundColor: "#6B7280", color: "#FFFFFF" },
-    cancelled: { backgroundColor: "#EF4444", color: "#FFFFFF" },
-  };
-  return {
-    label: labels[order.status] || order.status,
-    class: "",
-    style: colors[order.status] || { backgroundColor: "#E0E0E0", color: "#666666" },
-  };
-};
-
+// Функции управления заказами
 const parseOrderDate = (value) => {
   if (!value) return null;
   if (value instanceof Date) return value;
@@ -589,90 +240,6 @@ const parseOrderDate = (value) => {
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
-
-const orderCardClass = (order) => {
-  const isExpanded = expandedOrderId.value === order.id;
-  const desiredDate = parseOrderDate(order.desired_time);
-  const isOverdue = Boolean(desiredDate) && desiredDate < new Date() && !["completed", "cancelled"].includes(order.status);
-  const isRecent = recentOrderIds.value.has(order.id);
-  if (isExpanded) {
-    return ["border-primary shadow-lg"];
-  }
-  if (isOverdue) {
-    return ["border-2 border-destructive shadow-sm"];
-  }
-  if (isRecent) {
-    return ["border-border shadow-sm", "bg-primary/10"];
-  }
-  return ["border-border shadow-sm"];
-};
-
-const formatOrderTime = (order) => {
-  const format = (value) => {
-    const parsed = parseOrderDate(value);
-    return parsed ? new Intl.DateTimeFormat("ru-RU", { hour: "2-digit", minute: "2-digit" }).format(parsed) : "—";
-  };
-  const start = format(order.created_at);
-  const endValue = order.deadline_time || order.desired_time;
-  const end = endValue ? format(endValue) : null;
-  return end ? `${start} до ${end}` : start;
-};
-
-const formatModifierWeight = (value, unit) => {
-  if (value === null || value === undefined || value === "") return "";
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric) || numeric <= 0) return "";
-  const units = {
-    g: "г",
-    kg: "кг",
-    ml: "мл",
-    l: "л",
-    pcs: "шт",
-  };
-  const label = units[unit] || unit || "";
-  return label ? `${numeric} ${label}` : `${numeric}`;
-};
-
-const formatOrderModifiers = (modifiers = []) => {
-  if (!Array.isArray(modifiers) || modifiers.length === 0) return "";
-  const grouped = new Map();
-  modifiers.forEach((modifier) => {
-    const name = modifier.modifier_name || "Дополнение";
-    const weightText = formatModifierWeight(modifier.modifier_weight, modifier.modifier_weight_unit);
-    const key = `${name}__${weightText || ""}`;
-    if (!grouped.has(key)) {
-      grouped.set(key, { name, weightText, count: 0 });
-    }
-    grouped.get(key).count += 1;
-  });
-  return Array.from(grouped.values())
-    .map((entry) => {
-      const weightPart = entry.weightText ? ` (${entry.weightText})` : "";
-      const countPart = entry.count > 1 ? ` x${entry.count}` : "";
-      return `${entry.name}${weightPart}${countPart}`;
-    })
-    .join(", ");
-};
-
-const getNextStatus = (order) => {
-  const flowDelivery = {
-    pending: { status: "confirmed", label: "Принять заказ" },
-    confirmed: { status: "preparing", label: "Отправить в готовку" },
-    preparing: { status: "ready", label: "Готов к выдаче" },
-    ready: { status: "delivering", label: "Передать курьеру" },
-    delivering: { status: "completed", label: "Заказ доставлен" },
-  };
-  const flowPickup = {
-    pending: { status: "confirmed", label: "Принять заказ" },
-    confirmed: { status: "preparing", label: "Отправить в готовку" },
-    preparing: { status: "ready", label: "Готов к выдаче" },
-    ready: { status: "completed", label: "Выдать заказ" },
-  };
-  const flow = order.order_type === "pickup" ? flowPickup : flowDelivery;
-  return flow[order.status] || null;
-};
-
-const canCancel = (order) => order.status !== "cancelled";
 
 const toggleOrder = (order) => {
   if (expandedOrderId.value === order.id) {
@@ -693,12 +260,27 @@ const ensureOrderDetails = async (order) => {
     const details = response.data.order;
     orders.value = orders.value.map((item) => (item.id === order.id ? { ...item, ...details } : item));
   } catch (error) {
-    console.error("Ошибка загрузки деталей заказа:", error);
+    devError("Ошибка загрузки деталей заказа:", error);
   }
 };
 
 const changeStatus = async (order) => {
-  const next = getNextStatus(order);
+  const flowDelivery = {
+    pending: { status: "confirmed", label: "Принять заказ" },
+    confirmed: { status: "preparing", label: "Отправить в готовку" },
+    preparing: { status: "ready", label: "Готов к выдаче" },
+    ready: { status: "delivering", label: "Передать курьеру" },
+    delivering: { status: "completed", label: "Заказ доставлен" },
+  };
+  const flowPickup = {
+    pending: { status: "confirmed", label: "Принять заказ" },
+    confirmed: { status: "preparing", label: "Отправить в готовку" },
+    preparing: { status: "ready", label: "Готов к выдаче" },
+    ready: { status: "completed", label: "Выдать заказ" },
+  };
+  const flow = order.order_type === "pickup" ? flowPickup : flowDelivery;
+  const next = flow[order.status] || null;
+
   if (!next) return;
   try {
     const response = await api.put(`/api/orders/admin/${order.id}/status`, { status: next.status });
@@ -717,7 +299,7 @@ const changeStatus = async (order) => {
       showSuccessNotification(`Статус заказа #${order.order_number} уже изменен`);
       return;
     }
-    console.error("Ошибка смены статуса:", error);
+    devError("Ошибка смены статуса:", error);
     showErrorNotification("Не удалось обновить статус заказа");
   }
 };
@@ -735,7 +317,7 @@ const confirmCancel = async () => {
     showSuccessNotification(`Заказ #${cancelDialog.value.order.order_number} отменен`);
     cancelDialog.value.open = false;
   } catch (error) {
-    console.error("Ошибка отмены заказа:", error);
+    devError("Ошибка отмены заказа:", error);
     showErrorNotification("Не удалось отменить заказ");
   } finally {
     cancelDialog.value.loading = false;
@@ -760,7 +342,7 @@ const loadOrders = async () => {
     shiftMeta.value = response.data.shift || null;
     scheduleShiftReload();
   } catch (error) {
-    console.error("Ошибка загрузки заказов смены:", error);
+    devError("Ошибка загрузки заказов смены:", error);
     showErrorNotification("Не удалось загрузить заказы смены");
   }
 };
@@ -775,6 +357,7 @@ const scheduleShiftReload = () => {
   shiftTimer = setTimeout(() => loadOrders(), delay);
 };
 
+// Функции управления картой
 const togglePolygons = () => {
   polygonsVisible.value = !polygonsVisible.value;
   localStorage.setItem("shift_polygons_visible", polygonsVisible.value ? "true" : "false");
@@ -795,13 +378,14 @@ const updatePolygonsVisibility = () => {
 };
 
 const initMap = () => {
-  if (!mapContainer.value) return;
+  const mapContainer = orderMapRef.value?.mapContainerRef;
+  if (!mapContainer) return;
   if (mapInstance) {
     mapInstance.remove();
   }
   const branch = branchOptions.value.find((item) => item.id === Number(selectedBranchId.value));
   const center = branch?.latitude && branch?.longitude ? [branch.latitude, branch.longitude] : [55.751244, 37.618423];
-  mapInstance = L.map(mapContainer.value, { zoomControl: true, attributionControl: false }).setView(center, 12);
+  mapInstance = L.map(mapContainer, { zoomControl: true, attributionControl: false }).setView(center, 12);
   tileLayer = getTileLayer(resolvedTheme.value, { maxZoom: 18 }).addTo(mapInstance);
   renderBranchMarker();
 };
@@ -895,10 +479,11 @@ const loadPolygons = async () => {
     });
     updatePolygonsVisibility();
   } catch (error) {
-    console.error("Ошибка загрузки полигонов:", error);
+    devError("Ошибка загрузки полигонов:", error);
   }
 };
 
+// Функции отображения заказов на карте
 const clearOrderMap = () => {
   if (branchMarker) {
     branchMarker.remove();
@@ -987,6 +572,7 @@ const showOrderOnMap = (order) => {
   deliveryMarker.on("click", scrollToOrder);
 };
 
+// Обработка событий WebSocket
 const playNewOrderSound = () => {
   if (document.visibilityState !== "visible") return;
   const audio = new Audio("/sounds/new-order.mp3");
@@ -1038,6 +624,7 @@ const handleOrderEvent = (payload) => {
   }
 };
 
+// Watchers
 watch(searchQuery, () => {
   if (searchTimer) {
     clearTimeout(searchTimer);
@@ -1105,6 +692,7 @@ watch(
   },
 );
 
+// Lifecycle хуки
 onMounted(async () => {
   readStoredBranch();
   await referenceStore.fetchCitiesAndBranches();
@@ -1118,6 +706,7 @@ watch(
     restoreBranchSelection();
   },
 );
+
 watch(
   () => branchesReady.value,
   () => {
@@ -1139,18 +728,3 @@ onBeforeUnmount(() => {
   tileLayer = null;
 });
 </script>
-
-<style scoped>
-.fade-slide-enter-active,
-.fade-slide-leave-active {
-  transition: all 0.2s ease-out;
-}
-.fade-slide-enter-from,
-.fade-slide-leave-to {
-  opacity: 0;
-  transform: translateY(-4px);
-}
-:deep(.shift-branch-dialog > button) {
-  display: none;
-}
-</style>

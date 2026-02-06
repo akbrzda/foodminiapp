@@ -1,14 +1,15 @@
 version: '3.8'
+
 services:
   mysql:
     image: mysql:8.0
     container_name: miniapp-panda-mysql
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: root_password
-      MYSQL_DATABASE: miniapp_panda
-      MYSQL_USER: miniapp_user
-      MYSQL_PASSWORD: miniapp_password_change_me
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-miniapp_panda}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
     ports:
       - "3306:3306"
     volumes:
@@ -18,10 +19,11 @@ services:
     networks:
       - miniapp-network
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot_password"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
       interval: 10s
       timeout: 5s
       retries: 5
+
   # Redis для кеширования и очередей (BullMQ)
   redis:
     image: redis:7-alpine
@@ -31,11 +33,11 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
-    command: redis-server --appendonly yes --requirepass a9k1m9a0l1t1
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
     networks:
       - miniapp-network
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "a9k1m9a0l1t1", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5

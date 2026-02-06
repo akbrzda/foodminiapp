@@ -72,6 +72,7 @@ import { formatPhone, normalizePhone } from "@/shared/utils/phone.js";
 import { hapticFeedback } from "@/shared/services/telegram.js";
 import { normalizeTariffs } from "@/shared/utils/deliveryTariffs";
 import { formatWorkHoursLines, normalizeWorkHours } from "@/shared/utils/workingHours";
+import { devError } from "@/shared/utils/logger.js";
 const router = useRouter();
 const locationStore = useLocationStore();
 const branches = ref([]);
@@ -125,7 +126,7 @@ async function loadBranches() {
     const data = response.data.branches || [];
     branches.value = data.map((branch) => buildDisplayBranch(branch));
   } catch (error) {
-    console.error("Не удалось загрузить филиалы:", error);
+    devError("Не удалось загрузить филиалы:", error);
     errorMessage.value = "Не удалось загрузить филиалы";
   } finally {
     loading.value = false;
@@ -139,7 +140,7 @@ async function loadPolygons() {
     const data = await response.json();
     polygons.value = Array.isArray(data.polygons) ? data.polygons : [];
   } catch (error) {
-    console.error("Не удалось загрузить полигоны доставки:", error);
+    devError("Не удалось загрузить полигоны доставки:", error);
   }
 }
 function setMapRef(branchId, element) {

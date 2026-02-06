@@ -119,6 +119,7 @@ import { formatPrice, normalizeImageUrl } from "@/shared/utils/format";
 import { formatWeight, formatWeightValue } from "@/shared/utils/weight";
 import { calculateDeliveryCost, getThresholds, normalizeTariffs, findTariffForAmount } from "@/shared/utils/deliveryTariffs";
 import { getBranchOpenState } from "@/shared/utils/workingHours";
+import { devError } from "@/shared/utils/logger.js";
 const router = useRouter();
 const cartStore = useCartStore();
 const locationStore = useLocationStore();
@@ -230,7 +231,7 @@ onMounted(async () => {
         locationStore.setDeliveryZone(zone);
       }
     } catch (error) {
-      console.error("Не удалось загрузить зону доставки в корзине:", error);
+      devError("Не удалось загрузить зону доставки в корзине:", error);
     }
   }
   await ensureTariffs();
@@ -243,7 +244,7 @@ function getItemTotalPrice(item) {
   const quantity = parseInt(item.quantity) || 1;
   const total = price * quantity;
   if (isNaN(total)) {
-    console.error("Некорректный расчёт цены:", { item, price, quantity, total });
+    devError("Некорректный расчёт цены:", { item, price, quantity, total });
     return "0";
   }
   return formatPrice(total);
@@ -366,7 +367,7 @@ async function loadBonusBalance() {
     await loadMaxUsable();
     syncBonusUsage();
   } catch (error) {
-    console.error("Не удалось загрузить бонусный баланс:", error);
+    devError("Не удалось загрузить бонусный баланс:", error);
   }
 }
 function syncBonusUsage() {
@@ -393,7 +394,7 @@ async function loadMaxUsable() {
     const response = await bonusesAPI.calculateMaxSpend(orderTotal, deliveryCost.value);
     maxUsableFromApi.value = response.data.max_usable || 0;
   } catch (error) {
-    console.error("Не удалось загрузить максимальное списание бонусов:", error);
+    devError("Не удалось загрузить максимальное списание бонусов:", error);
     maxUsableFromApi.value = 0;
   }
 }
@@ -424,7 +425,7 @@ async function ensureTariffs() {
       locationStore.setDeliveryZone(zone);
     }
   } catch (error) {
-    console.error("Не удалось обновить тарифы доставки:", error);
+    devError("Не удалось обновить тарифы доставки:", error);
   }
 }
 watch(

@@ -1,5 +1,6 @@
 import { ref } from "vue";
 import { toast } from "vue-sonner";
+import { devWarn } from "@/shared/utils/logger";
 export function useNotifications() {
   const isSupported = typeof window !== "undefined" && "Notification" in window;
   const permission = ref(isSupported ? Notification.permission : "denied");
@@ -25,12 +26,12 @@ export function useNotifications() {
       oscillator.start();
       oscillator.stop(context.currentTime + 0.2);
     } catch (error) {
-      console.warn("Не удалось воспроизвести звук:", error);
+      devWarn("Не удалось воспроизвести звук:", error);
     }
   };
   const requestPermission = async () => {
     if (!isSupported) {
-      console.warn("Браузер не поддерживает уведомления");
+      devWarn("Браузер не поддерживает уведомления");
       return false;
     }
     if (permission.value === "granted") {
@@ -47,7 +48,7 @@ export function useNotifications() {
   };
   const showNotification = async (title, options = {}) => {
     if (!isSupported) {
-      console.warn("Браузер не поддерживает уведомления");
+      devWarn("Браузер не поддерживает уведомления");
       toast.message(title, { description: options.body || "" });
       return;
     }

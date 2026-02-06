@@ -51,6 +51,7 @@ import { ChevronDown, X, Check } from "lucide-vue-next";
 import { useLocationStore } from "@/modules/location/stores/location.js";
 import { citiesAPI } from "@/shared/api/endpoints.js";
 import { hapticFeedback } from "@/shared/services/telegram.js";
+import { devLog } from "@/shared/utils/logger.js";
 const props = defineProps({
   open: Boolean,
 });
@@ -118,7 +119,7 @@ async function getUserLocation() {
         calculateDistances();
       },
       (error) => {
-        console.log("Geolocation error:", error);
+        devLog("Geolocation error:", error);
       },
     );
   }

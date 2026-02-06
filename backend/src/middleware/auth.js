@@ -1,4 +1,7 @@
 import jwt from "jsonwebtoken";
+import { isBlacklisted } from "./tokenBlacklist.js";
+import { logger } from "../utils/logger.js";
+
 const normalizeCityIds = (value) => {
   if (Array.isArray(value)) {
     return value.map((item) => Number(item)).filter((item) => Number.isInteger(item));
@@ -24,15 +27,29 @@ const normalizeCityIds = (value) => {
   }
   return [];
 };
-export const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers["authorization"];
-  const token = authHeader && authHeader.split(" ")[1];
-  if (!token) {
-    return res.status(401).json({
-      error: "Access token required",
-    });
-  }
+
+export const authenticateToken = async (req, res, next) => {
   try {
+    // Пытаемся получить токен из cookie (приоритет) или header
+    const token = req.cookies?.access_token || (req.headers["authorization"] && req.headers["authorization"].split(" ")[1]);
+
+    if (!token) {
+      await logger.auth.unauthorized(req.path, req.ip);
+      return res.status(401).json({
+        error: "Authentication required",
+      });
+    }
+
+    // Проверяем blacklist
+    const blacklisted = await isBlacklisted(token);
+    if (blacklisted) {
+      await logger.auth.unauthorized(req.path, req.ip);
+      return res.status(401).json({
+        error: "Token has been revoked",
+      });
+    }
+
+    // Верифицируем токен
     const user = jwt.verify(token, process.env.JWT_SECRET);
     req.user = {
       ...user,
@@ -40,6 +57,11 @@ export const authenticateToken = (req, res, next) => {
     };
     next();
   } catch (error) {
+    if (error.name === "TokenExpiredError") {
+      await logger.auth.tokenExpired(req.user?.id || "unknown");
+    } else {
+      await logger.auth.unauthorized(req.path, req.ip);
+    }
     return res.status(403).json({
       error: "Invalid or expired token",
     });

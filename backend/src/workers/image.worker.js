@@ -17,7 +17,7 @@ async function ensureDirectories() {
     await fs.mkdir(OPTIMIZED_DIR, { recursive: true });
     await fs.mkdir(THUMBNAILS_DIR, { recursive: true });
   } catch (error) {
-    console.error("Failed to create upload directories:", error);
+    // Directory creation errors will be caught during processing
   }
 }
 async function getFileSize(filePath) {

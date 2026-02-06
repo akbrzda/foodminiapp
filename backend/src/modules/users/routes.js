@@ -4,18 +4,42 @@ import { authenticateToken } from "../../middleware/auth.js";
 import { normalizePhone } from "../../utils/phone.js";
 import { getSystemSettings } from "../../utils/settings.js";
 import { grantRegistrationBonus } from "../loyalty/services/loyaltyService.js";
+import {
+  encryptEmail,
+  encryptPhone,
+  encryptAddress,
+  decryptEmail,
+  decryptPhone,
+  decryptAddress,
+  decryptUserData,
+  decryptAddressData,
+} from "../../utils/encryption.js";
+import { validateEmail, validatePhone, validateName, validateBirthdate, validateAddress } from "../../utils/validation.js";
 const router = express.Router();
 router.post("/register", async (req, res, next) => {
   try {
     const { phone, telegram_id, first_name, last_name } = req.body;
+
     if (!phone) {
       return res.status(400).json({ error: "Phone number is required" });
     }
-    const [existingUsers] = await db.query("SELECT * FROM users WHERE phone = ?", [phone]);
+
+    // Валидация телефона
+    const phoneValidation = validatePhone(phone);
+    if (!phoneValidation.valid) {
+      return res.status(400).json({ error: phoneValidation.error });
+    }
+
+    // Шифрование телефона для поиска
+    const encryptedPhone = encryptPhone(phoneValidation.phone);
+
+    const [existingUsers] = await db.query("SELECT * FROM users WHERE phone = ?", [encryptedPhone]);
+
     if (existingUsers.length > 0) {
       const user = existingUsers[0];
       const updates = [];
       const values = [];
+
       if (telegram_id && user.telegram_id !== telegram_id) {
         updates.push("telegram_id = ?");
         values.push(telegram_id);
@@ -28,10 +52,12 @@ router.post("/register", async (req, res, next) => {
         updates.push("last_name = ?");
         values.push(last_name);
       }
+
       if (updates.length > 0) {
         values.push(user.id);
         await db.query(`UPDATE users SET ${updates.join(", ")} WHERE id = ?`, values);
       }
+
       const [updatedUsers] = await db.query(
         `SELECT u.id, u.telegram_id, u.phone, u.first_name, u.last_name, u.email, u.date_of_birth,
                 u.loyalty_balance, u.current_loyalty_level_id, u.loyalty_joined_at, u.created_at, u.updated_at
@@ -39,15 +65,21 @@ router.post("/register", async (req, res, next) => {
          WHERE u.id = ?`,
         [user.id],
       );
-      return res.json({ user: updatedUsers[0] });
+
+      // Дешифрование перед отправкой клиенту
+      const decryptedUser = decryptUserData(updatedUsers[0]);
+      return res.json({ user: decryptedUser });
     }
+
     const [result] = await db.query("INSERT INTO users (phone, telegram_id, first_name, last_name) VALUES (?, ?, ?, ?)", [
-      phone,
+      encryptedPhone,
       telegram_id || null,
       first_name || null,
       last_name || null,
     ]);
+
     await db.query("UPDATE users SET current_loyalty_level_id = 1, loyalty_joined_at = NOW() WHERE id = ?", [result.insertId]);
+
     const [newUser] = await db.query(
       `SELECT u.id, u.telegram_id, u.phone, u.first_name, u.last_name, u.email, u.date_of_birth,
               u.loyalty_balance, u.current_loyalty_level_id, u.loyalty_joined_at, u.created_at, u.updated_at
@@ -55,15 +87,18 @@ router.post("/register", async (req, res, next) => {
        WHERE u.id = ?`,
       [result.insertId],
     );
+
     try {
       const systemSettings = await getSystemSettings();
       if (systemSettings.bonuses_enabled) {
         await grantRegistrationBonus(result.insertId, null);
       }
     } catch (bonusError) {
-      console.error("Failed to grant registration bonus:", bonusError);
+      logger.error("Failed to grant registration bonus", { error: bonusError });
     }
-    res.status(201).json({ user: newUser[0] });
+
+    const decryptedUser = decryptUserData(newUser[0]);
+    res.status(201).json({ user: decryptedUser });
   } catch (error) {
     next(error);
   }
@@ -81,7 +116,10 @@ router.get("/profile", authenticateToken, async (req, res, next) => {
     if (users.length === 0) {
       return res.status(404).json({ error: "User not found" });
     }
-    res.json({ user: users[0] });
+
+    // Дешифрование перед отправкой клиенту
+    const decryptedUser = decryptUserData(users[0]);
+    res.json({ user: decryptedUser });
   } catch (error) {
     next(error);
   }
@@ -163,42 +201,74 @@ router.put("/profile", authenticateToken, async (req, res, next) => {
     const { first_name, last_name, email, date_of_birth, phone } = req.body;
     const updates = [];
     const values = [];
+
     if (first_name !== undefined) {
+      const nameValidation = validateName(first_name);
+      if (!nameValidation.valid) {
+        return res.status(400).json({ error: nameValidation.error });
+      }
       updates.push("first_name = ?");
-      values.push(first_name);
+      values.push(nameValidation.name);
     }
+
     if (last_name !== undefined) {
+      const nameValidation = validateName(last_name);
+      if (!nameValidation.valid) {
+        return res.status(400).json({ error: nameValidation.error });
+      }
       updates.push("last_name = ?");
-      values.push(last_name);
+      values.push(nameValidation.name);
     }
+
     if (email !== undefined) {
-      updates.push("email = ?");
-      values.push(email);
+      if (email) {
+        const emailValidation = validateEmail(email);
+        if (!emailValidation.valid) {
+          return res.status(400).json({ error: emailValidation.error });
+        }
+        const encryptedEmail = encryptEmail(emailValidation.email);
+        updates.push("email = ?");
+        values.push(encryptedEmail);
+      } else {
+        updates.push("email = ?");
+        values.push(null);
+      }
     }
+
     if (date_of_birth !== undefined) {
+      const birthdateValidation = validateBirthdate(date_of_birth);
+      if (!birthdateValidation.valid) {
+        return res.status(400).json({ error: birthdateValidation.error });
+      }
       updates.push("date_of_birth = ?");
-      values.push(date_of_birth);
+      values.push(birthdateValidation.birthdate);
     }
+
     if (phone !== undefined) {
-      const normalizedPhone = normalizePhone(phone);
-      if (!normalizedPhone) {
-        return res.status(400).json({ error: "Phone number is required" });
+      const phoneValidation = validatePhone(phone);
+      if (!phoneValidation.valid) {
+        return res.status(400).json({ error: phoneValidation.error });
       }
-      if (normalizedPhone.length > 20) {
-        return res.status(400).json({ error: "Phone number is too long" });
-      }
-      const [existingUsers] = await db.query("SELECT id FROM users WHERE phone = ? AND id != ?", [normalizedPhone, userId]);
+
+      const encryptedPhone = encryptPhone(phoneValidation.phone);
+
+      const [existingUsers] = await db.query("SELECT id FROM users WHERE phone = ? AND id != ?", [encryptedPhone, userId]);
+
       if (existingUsers.length > 0) {
         return res.status(409).json({ error: "Phone number already in use" });
       }
+
       updates.push("phone = ?");
-      values.push(normalizedPhone);
+      values.push(encryptedPhone);
     }
+
     if (updates.length === 0) {
       return res.status(400).json({ error: "No fields to update" });
     }
+
     values.push(userId);
     await db.query(`UPDATE users SET ${updates.join(", ")} WHERE id = ?`, values);
+
     const [updatedUsers] = await db.query(
       `SELECT u.id, u.telegram_id, u.phone, u.first_name, u.last_name, u.email, u.date_of_birth,
               u.loyalty_balance, u.current_loyalty_level_id, u.loyalty_joined_at, u.created_at, u.updated_at
@@ -206,7 +276,9 @@ router.put("/profile", authenticateToken, async (req, res, next) => {
        WHERE u.id = ?`,
       [userId],
     );
-    res.json({ user: updatedUsers[0] });
+
+    const decryptedUser = decryptUserData(updatedUsers[0]);
+    res.json({ user: decryptedUser });
   } catch (error) {
     next(error);
   }
@@ -222,7 +294,11 @@ router.get("/addresses", authenticateToken, async (req, res, next) => {
        ORDER BY da.is_default DESC, da.created_at DESC`,
       [userId],
     );
-    res.json({ addresses });
+
+    // Дешифрование адресов перед отправкой
+    const decryptedAddresses = addresses.map((addr) => decryptAddressData(addr));
+
+    res.json({ addresses: decryptedAddresses });
   } catch (error) {
     next(error);
   }
@@ -231,18 +307,38 @@ router.post("/addresses", authenticateToken, async (req, res, next) => {
   try {
     const userId = req.user.id;
     const { city_id, street, house, entrance, apartment, intercom, comment, latitude, longitude, is_default } = req.body;
+
     if (!city_id || !street || !house) {
       return res.status(400).json({
         error: "City, street, and house are required",
       });
     }
+
+    // Валидация адреса
+    const streetValidation = validateAddress(street);
+    if (!streetValidation.valid) {
+      return res.status(400).json({ error: `Street: ${streetValidation.error}` });
+    }
+
+    const houseValidation = validateAddress(house);
+    if (!houseValidation.valid) {
+      return res.status(400).json({ error: `House: ${houseValidation.error}` });
+    }
+
     const [cities] = await db.query("SELECT id FROM cities WHERE id = ? AND is_active = TRUE", [city_id]);
     if (cities.length === 0) {
       return res.status(404).json({ error: "City not found or inactive" });
     }
+
     if (is_default) {
       await db.query("UPDATE delivery_addresses SET is_default = FALSE WHERE user_id = ?", [userId]);
     }
+
+    // Шифрование адресных данных
+    const encryptedStreet = encryptAddress(streetValidation.address);
+    const encryptedHouse = encryptAddress(houseValidation.address);
+    const encryptedComment = comment ? encryptAddress(comment) : null;
+
     const [result] = await db.query(
       `INSERT INTO delivery_addresses 
        (user_id, city_id, street, house, entrance, apartment, intercom, comment, latitude, longitude, is_default)
@@ -250,17 +346,18 @@ router.post("/addresses", authenticateToken, async (req, res, next) => {
       [
         userId,
         city_id,
-        street,
-        house,
+        encryptedStreet,
+        encryptedHouse,
         entrance || null,
         apartment || null,
         intercom || null,
-        comment || null,
+        encryptedComment,
         latitude || null,
         longitude || null,
         is_default || false,
       ],
     );
+
     const [newAddress] = await db.query(
       `SELECT da.*, c.name as city_name 
        FROM delivery_addresses da
@@ -268,7 +365,9 @@ router.post("/addresses", authenticateToken, async (req, res, next) => {
        WHERE da.id = ?`,
       [result.insertId],
     );
-    res.status(201).json({ address: newAddress[0] });
+
+    const decryptedAddress = decryptAddressData(newAddress[0]);
+    res.status(201).json({ address: decryptedAddress });
   } catch (error) {
     next(error);
   }

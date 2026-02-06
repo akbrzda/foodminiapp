@@ -50,14 +50,14 @@ async function processExpiredBonuses() {
           }
         } catch (error) {
           await connection.rollback();
-          console.error("Ошибка при списании истёкших бонусов:", error);
+          logSystem("error", "bonus", "Ошибка при списании истёкших бонусов", { error: error.message, userId });
         } finally {
           connection.release();
         }
       }
     }
   } catch (error) {
-    console.error("Ошибка при обработке истекших бонусов:", error);
+    logSystem("error", "bonus", "Ошибка при обработке истекших бонусов", { error: error.message });
   }
 }
 

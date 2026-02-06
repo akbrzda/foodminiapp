@@ -1,3 +1,4 @@
+import { devError } from "@/shared/utils/logger";
 <template>
   <div class="space-y-6">
     <Card>
@@ -332,7 +333,7 @@ const loadUsers = async () => {
     const response = await api.get("/api/admin/users", { params });
     users.value = response.data.users || [];
   } catch (error) {
-    console.error("Ошибка загрузки пользователей:", error);
+    devError("Ошибка загрузки пользователей:", error);
   }
 };
 const openModal = (user = null) => {
@@ -399,7 +400,7 @@ const submitUser = async () => {
     showModal.value = false;
     await loadUsers();
   } catch (error) {
-    console.error("Ошибка сохранения пользователя:", error);
+    devError("Ошибка сохранения пользователя:", error);
     showErrorNotification(error.response?.data?.error || "Ошибка сохранения пользователя");
   }
 };
@@ -410,7 +411,7 @@ const deleteUser = async (user) => {
     await api.delete(`/api/admin/users/${user.id}`);
     await loadUsers();
   } catch (error) {
-    console.error("Ошибка удаления пользователя:", error);
+    devError("Ошибка удаления пользователя:", error);
     showErrorNotification(error.response?.data?.error || "Ошибка удаления пользователя");
   }
 };
@@ -419,7 +420,7 @@ onMounted(async () => {
     await referenceStore.loadCities();
     await loadUsers();
   } catch (error) {
-    console.error("Ошибка загрузки пользователей:", error);
+    devError("Ошибка загрузки пользователей:", error);
     showErrorNotification("Ошибка загрузки пользователей");
   }
 });

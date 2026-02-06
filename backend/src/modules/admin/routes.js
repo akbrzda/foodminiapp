@@ -21,7 +21,7 @@ router.get("/users/admins", requireRole("admin", "ceo"), async (req, res, next) 
     );
     res.json({ admins });
   } catch (error) {
-    console.error("Ошибка получения списка администраторов:", error);
+    logger.error("Ошибка получения списка администраторов", { error });
     next(error);
   }
 });
@@ -638,7 +638,6 @@ router.get("/logs", requireRole("admin", "ceo"), async (req, res, next) => {
       limit: parseInt(limit),
     });
   } catch (error) {
-    console.error("Ошибка получения логов:", error);
     next(error);
   }
 });

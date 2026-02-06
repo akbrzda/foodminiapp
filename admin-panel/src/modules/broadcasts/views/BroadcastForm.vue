@@ -1,3 +1,4 @@
+import { devError } from "@/shared/utils/logger";
 <template>
   <div class="space-y-6">
     <Card>
@@ -484,7 +485,7 @@ const loadSegments = async () => {
     const response = await api.get("/api/broadcasts/segments");
     segments.value = response.data?.data?.items || [];
   } catch (error) {
-    console.error("Ошибка загрузки сегментов:", error);
+    devError("Ошибка загрузки сегментов:", error);
   }
 };
 
@@ -516,7 +517,7 @@ const loadCampaign = async () => {
     syncScheduleFields(form.value.scheduled_at);
     updateBreadcrumbs();
   } catch (error) {
-    console.error("Ошибка загрузки рассылки:", error);
+    devError("Ошибка загрузки рассылки:", error);
     showErrorNotification("Не удалось загрузить рассылку");
   }
 };
@@ -530,7 +531,7 @@ const calculateAudience = async () => {
     const response = await api.post("/api/broadcasts/segments/calculate", { config: segmentConfig.value });
     estimatedSize.value = response.data?.data?.estimated_size || 0;
   } catch (error) {
-    console.error("Ошибка расчета сегмента:", error);
+    devError("Ошибка расчета сегмента:", error);
     showErrorNotification(error.response?.data?.error || "Не удалось рассчитать аудиторию");
   }
 };
@@ -577,7 +578,7 @@ const saveCampaign = async () => {
     }
     showSuccessNotification("Рассылка сохранена");
   } catch (error) {
-    console.error("Ошибка сохранения рассылки:", error);
+    devError("Ошибка сохранения рассылки:", error);
     showErrorNotification(error.response?.data?.error || "Не удалось сохранить рассылку");
   } finally {
     saving.value = false;
@@ -594,7 +595,7 @@ const sendCampaign = async () => {
     await api.post(`/api/broadcasts/${campaignId.value}/send`);
     showSuccessNotification("Рассылка запущена");
   } catch (error) {
-    console.error("Ошибка запуска рассылки:", error);
+    devError("Ошибка запуска рассылки:", error);
     showErrorNotification(error.response?.data?.error || "Не удалось запустить рассылку");
   } finally {
     sending.value = false;
@@ -614,7 +615,7 @@ const previewCampaign = async () => {
     const response = await api.post(`/api/broadcasts/${campaignId.value}/preview`, { user_id: Number(test.value.user_id) });
     previewText.value = response.data?.data?.text || "";
   } catch (error) {
-    console.error("Ошибка предпросмотра:", error);
+    devError("Ошибка предпросмотра:", error);
     showErrorNotification(error.response?.data?.error || "Не удалось получить предпросмотр");
   }
 };
@@ -635,7 +636,7 @@ const sendTest = async () => {
     });
     showSuccessNotification("Тест отправлен");
   } catch (error) {
-    console.error("Ошибка тестовой отправки:", error);
+    devError("Ошибка тестовой отправки:", error);
     showErrorNotification(error.response?.data?.error || "Не удалось отправить тест");
   }
 };
@@ -735,7 +736,7 @@ const handleFile = async (file) => {
     form.value.content_image_url = uploadedUrl;
     uploadState.value = { loading: false, error: null, preview: uploadedUrl };
   } catch (error) {
-    console.error("Ошибка загрузки изображения:", error);
+    devError("Ошибка загрузки изображения:", error);
     uploadState.value = { loading: false, error: "Не удалось загрузить изображение", preview: null };
   }
 };

@@ -40,6 +40,7 @@ import { useAuthStore } from "@/modules/auth/stores/auth.js";
 import { authAPI } from "@/shared/api/endpoints.js";
 import { hapticFeedback } from "@/shared/services/telegram.js";
 import { formatPhone, normalizePhone } from "@/shared/utils/phone";
+import { devError } from "@/shared/utils/logger.js";
 const router = useRouter();
 const authStore = useAuthStore();
 const saving = ref(false);
@@ -85,7 +86,7 @@ async function saveProfile() {
       saveMessage.value = "";
     }, 3000);
   } catch (error) {
-    console.error("Не удалось обновить профиль:", error);
+    devError("Не удалось обновить профиль:", error);
     hapticFeedback("error");
     saveError.value = error.response?.data?.error || "Не удалось сохранить профиль";
     setTimeout(() => {

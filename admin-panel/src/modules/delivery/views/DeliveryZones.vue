@@ -1,3 +1,4 @@
+import { devError } from "@/shared/utils/logger";
 <template>
   <div class="relative h-full min-h-[calc(100vh-80px)] bg-background">
     <div id="map" class="absolute inset-0 z-0"></div>
@@ -406,7 +407,7 @@ const loadBranches = async () => {
       branches.value = response.data.branches || [];
     }
   } catch (error) {
-    console.error("Ошибка загрузки филиалов:", error);
+    devError("Ошибка загрузки филиалов:", error);
     if (requestId === branchesRequestId) {
       branches.value = [];
     }
@@ -425,7 +426,7 @@ const loadPolygons = async () => {
       branch_name: polygon.branch_name || branchName,
     }));
   } catch (error) {
-    console.error("Ошибка загрузки полигонов:", error);
+    devError("Ошибка загрузки полигонов:", error);
   }
 };
 const loadAllPolygons = async () => {
@@ -433,7 +434,7 @@ const loadAllPolygons = async () => {
     const response = await api.get("/api/polygons/admin/all");
     allPolygons.value = response.data.polygons || [];
   } catch (error) {
-    console.error("Ошибка загрузки всех полигонов:", error);
+    devError("Ошибка загрузки всех полигонов:", error);
     allPolygons.value = [];
   }
 };
@@ -637,7 +638,7 @@ const deletePolygon = async (polygon) => {
     await api.delete(`/api/polygons/admin/${polygon.id}`);
     await loadPolygons();
   } catch (error) {
-    console.error("Ошибка удаления полигона:", error);
+    devError("Ошибка удаления полигона:", error);
     showErrorNotification("Не удалось удалить полигон");
   }
 };
@@ -717,7 +718,7 @@ const submitBlock = async () => {
     await loadAllPolygons();
     closeBlockModal();
   } catch (error) {
-    console.error("Ошибка блокировки полигона:", error);
+    devError("Ошибка блокировки полигона:", error);
     showErrorNotification("Не удалось заблокировать полигон");
   }
 };
@@ -728,7 +729,7 @@ const unblockPolygon = async (polygon) => {
     await loadPolygons();
     await loadAllPolygons();
   } catch (error) {
-    console.error("Ошибка разблокировки полигона:", error);
+    devError("Ошибка разблокировки полигона:", error);
     showErrorNotification("Не удалось разблокировать полигон");
   }
 };
@@ -772,7 +773,7 @@ const bulkUnblock = async () => {
     await loadPolygons();
     await loadAllPolygons();
   } catch (error) {
-    console.error("Ошибка массовой разблокировки:", error);
+    devError("Ошибка массовой разблокировки:", error);
     showErrorNotification("Не удалось разблокировать полигоны");
   }
 };
@@ -788,7 +789,7 @@ const loadTariffsForPolygon = async (polygonId) => {
     const response = await api.get(`/api/polygons/admin/${polygonId}/tariffs`);
     selectedTariffs.value = response.data?.tariffs || [];
   } catch (error) {
-    console.error("Ошибка загрузки тарифов:", error);
+    devError("Ошибка загрузки тарифов:", error);
     showErrorNotification("Не удалось загрузить тарифы");
   } finally {
     tariffsLoading.value = false;
@@ -832,7 +833,7 @@ const saveTariffs = async (payload) => {
     await loadPolygons();
     await loadAllPolygons();
   } catch (error) {
-    console.error("Ошибка сохранения тарифов:", error);
+    devError("Ошибка сохранения тарифов:", error);
     const message = error?.response?.data?.errors?.[0] || "Ошибка сохранения тарифов";
     showErrorNotification(message);
   }
@@ -856,7 +857,7 @@ const selectTariffCopySource = async (value) => {
     const response = await api.get(`/api/polygons/admin/${value}/tariffs`);
     tariffCopyPreview.value = response.data?.tariffs || [];
   } catch (error) {
-    console.error("Ошибка предпросмотра тарифов:", error);
+    devError("Ошибка предпросмотра тарифов:", error);
     showErrorNotification("Не удалось загрузить тарифы для копирования");
   }
 };
@@ -871,7 +872,7 @@ const confirmTariffCopy = async (value) => {
     await loadPolygons();
     await loadAllPolygons();
   } catch (error) {
-    console.error("Ошибка копирования тарифов:", error);
+    devError("Ошибка копирования тарифов:", error);
     const message = error?.response?.data?.error || "Не удалось скопировать тарифы";
     showErrorNotification(message);
   }
@@ -893,7 +894,7 @@ const savePolygonFromSidebar = async (data) => {
     stopPolygonEditing();
     closeSidebar();
   } catch (error) {
-    console.error("Ошибка сохранения полигона:", error);
+    devError("Ошибка сохранения полигона:", error);
     showErrorNotification("Не удалось сохранить изменения");
   }
 };
@@ -920,7 +921,7 @@ const transferPolygon = async (data) => {
     await loadAllPolygons();
     closeSidebar();
   } catch (error) {
-    console.error("Ошибка переноса полигона:", error);
+    devError("Ошибка переноса полигона:", error);
     showErrorNotification(error.response?.data?.error || "Не удалось перенести полигон");
   }
 };
@@ -987,7 +988,7 @@ const submitPolygon = async () => {
     showSuccessNotification(editing.value ? "Полигон обновлен" : "Полигон создан");
     closeModal();
   } catch (error) {
-    console.error("Ошибка сохранения полигона:", error);
+    devError("Ошибка сохранения полигона:", error);
     showErrorNotification("Ошибка сохранения полигона");
   }
 };

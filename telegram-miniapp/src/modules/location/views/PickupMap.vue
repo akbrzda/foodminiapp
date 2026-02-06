@@ -44,6 +44,7 @@ import { formatPhone, normalizePhone } from "@/shared/utils/phone.js";
 import { citiesAPI } from "@/shared/api/endpoints.js";
 import { hapticFeedback } from "@/shared/services/telegram.js";
 import { formatWorkHoursLines, getBranchOpenState, normalizeWorkHours } from "@/shared/utils/workingHours";
+import { devError } from "@/shared/utils/logger.js";
 const router = useRouter();
 const locationStore = useLocationStore();
 const mapContainerRef = ref(null);
@@ -86,7 +87,7 @@ async function loadBranches() {
       }
     }
   } catch (error) {
-    console.error("Не удалось загрузить филиалы:", error);
+    devError("Не удалось загрузить филиалы:", error);
   }
 }
 async function initMap() {

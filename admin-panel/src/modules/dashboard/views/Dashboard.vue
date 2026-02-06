@@ -1,3 +1,4 @@
+import { devError } from "@/shared/utils/logger";
 <template>
   <div class="space-y-6">
     <Card>
@@ -582,7 +583,7 @@ const loadDashboard = async () => {
     const response = await api.get("/api/analytics/dashboard", { params });
     stats.value = response.data;
   } catch (error) {
-    console.error("Ошибка загрузки дашборда:", error);
+    devError("Ошибка загрузки дашборда:", error);
   }
 };
 const scheduleLoad = () => {
@@ -606,7 +607,7 @@ const onCityChange = async () => {
         }
       }
     } catch (error) {
-      console.error("Ошибка загрузки филиалов:", error);
+      devError("Ошибка загрузки филиалов:", error);
       if (requestId === branchesRequestId.value) {
         branches.value = [];
       }
@@ -667,7 +668,7 @@ onMounted(async () => {
     }
     await loadDashboard();
   } catch (error) {
-    console.error("Ошибка загрузки аналитики:", error);
+    devError("Ошибка загрузки аналитики:", error);
     showErrorNotification("Ошибка загрузки аналитики");
   }
 });

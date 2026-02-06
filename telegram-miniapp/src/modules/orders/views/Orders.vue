@@ -37,6 +37,7 @@ import { ordersAPI } from "@/shared/api/endpoints.js";
 import { hapticFeedback } from "@/shared/services/telegram.js";
 import { formatPrice } from "@/shared/utils/format";
 import { formatRelativeTime, isToday, isYesterday, formatTime, formatDateOnly } from "@/shared/utils/date";
+import { devError } from "@/shared/utils/logger.js";
 const router = useRouter();
 const orders = ref([]);
 const loading = ref(false);
@@ -49,7 +50,7 @@ async function loadOrders() {
     const response = await ordersAPI.getMyOrders();
     orders.value = response.data.orders || [];
   } catch (error) {
-    console.error("Не удалось загрузить заказы:", error);
+    devError("Не удалось загрузить заказы:", error);
   } finally {
     loading.value = false;
   }

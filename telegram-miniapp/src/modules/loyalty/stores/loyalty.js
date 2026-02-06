@@ -1,5 +1,6 @@
 import { defineStore } from "pinia";
 import { bonusesAPI } from "@/shared/api/endpoints.js";
+import { devError } from "@/shared/utils/logger.js";
 import {
   LOYALTY_LEVELS,
   MAX_BONUS_REDEEM_PERCENT,
@@ -82,7 +83,7 @@ export const useLoyaltyStore = defineStore("loyalty", {
         this.periodDays = response.data?.period_days || 60;
         this.applyLevels(response.data?.levels || []);
       } catch (error) {
-        console.error("Не удалось обновить данные лояльности:", error);
+        devError("Не удалось обновить данные лояльности:", error);
       } finally {
         this.loading = false;
       }

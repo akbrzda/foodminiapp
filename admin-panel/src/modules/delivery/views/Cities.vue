@@ -1,3 +1,4 @@
+import { devError } from "@/shared/utils/logger";
 <template>
   <div class="space-y-6">
     <Card>
@@ -94,7 +95,7 @@ const loadCities = async () => {
     const response = await api.get("/api/cities/admin/all");
     cities.value = response.data.cities || [];
   } catch (error) {
-    console.error("Failed to load cities:", error);
+    devError("Failed to load cities:", error);
     showErrorNotification("Ошибка при загрузке городов");
   }
 };
@@ -114,7 +115,7 @@ const deleteCity = async (city) => {
     showSuccessNotification("Город удален");
     await loadCities();
   } catch (error) {
-    console.error("Ошибка удаления города:", error);
+    devError("Ошибка удаления города:", error);
     showErrorNotification(error.response?.data?.error || "Ошибка удаления города");
   }
 };

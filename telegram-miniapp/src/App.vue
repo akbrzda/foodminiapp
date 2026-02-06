@@ -12,6 +12,7 @@ import { useLocationStore } from "@/modules/location/stores/location.js";
 import { useSettingsStore } from "@/modules/settings/stores/settings.js";
 import { citiesAPI, userStateAPI } from "@/shared/api/endpoints.js";
 import { wsService } from "@/shared/services/websocket.js";
+import { devLog } from "@/shared/utils/logger.js";
 const authStore = useAuthStore();
 const cartStore = useCartStore();
 const loyaltyStore = useLoyaltyStore();
@@ -117,10 +118,10 @@ function setupWebSocket() {
   if (!authStore.isAuthenticated) return;
   wsService.connect(authStore.token);
   wsService.on("order-status-updated", (data) => {
-    console.log("Order status updated:", data);
+    devLog("Order status updated:", data);
   });
   wsService.on("bonus-updated", (data) => {
-    console.log("Bonus updated:", data);
+    devLog("Bonus updated:", data);
   });
   watch(
     () => authStore.isAuthenticated,

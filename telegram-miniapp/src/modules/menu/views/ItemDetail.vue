@@ -169,6 +169,7 @@ import { menuAPI } from "@/shared/api/endpoints.js";
 import { hapticFeedback } from "@/shared/services/telegram.js";
 import { formatPrice, normalizeImageUrl } from "@/shared/utils/format";
 import { formatModifierWeight, formatWeight, formatWeightValue } from "@/shared/utils/weight";
+import { devError } from "@/shared/utils/logger.js";
 const route = useRoute();
 const router = useRouter();
 const cartStore = useCartStore();
@@ -378,7 +379,7 @@ async function loadItem() {
     const response = await menuAPI.getItemDetails(route.params.id, { city_id: cityId, fulfillment_type: fulfillmentType });
     item.value = response.data.item;
   } catch (err) {
-    console.error("Не удалось загрузить блюдо:", err);
+    devError("Не удалось загрузить блюдо:", err);
     error.value = "Не удалось загрузить позицию";
   } finally {
     loading.value = false;
