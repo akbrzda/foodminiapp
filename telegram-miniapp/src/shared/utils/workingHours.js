@@ -124,8 +124,12 @@ const buildScheduleMap = (value) => {
       if (!dayKey) return;
       const range = entry?.hours ? parseRangeString(entry.hours) : null;
       const open = range?.open ?? parseTimeToMinutes(entry?.open || entry?.from || entry?.start);
-      const close = range?.close ?? parseTimeToMinutes(entry?.close || entry?.to || entry?.end);
+      let close = range?.close ?? parseTimeToMinutes(entry?.close || entry?.to || entry?.end);
       if (open === null || close === null) return;
+      // Если закрытие в 00:00, трактуем как конец суток для корректной проверки "10:00-00:00".
+      if (close === 0 && open > 0) {
+        close = 1440;
+      }
       map.set(dayKey, { open, close });
     });
     return map;
@@ -142,8 +146,12 @@ const buildScheduleMap = (value) => {
       }
       if (typeof data === "object" && data) {
         const open = parseTimeToMinutes(data.open || data.from || data.start);
-        const close = parseTimeToMinutes(data.close || data.to || data.end);
+        let close = parseTimeToMinutes(data.close || data.to || data.end);
         if (open === null || close === null) return;
+        // Если закрытие в 00:00, трактуем как конец суток для корректной проверки "10:00-00:00".
+        if (close === 0 && open > 0) {
+          close = 1440;
+        }
         map.set(dayKey, { open, close });
       }
     });

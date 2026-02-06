@@ -114,7 +114,7 @@ import { useMenuStore } from "@/modules/menu/stores/menu.js";
 import { useSettingsStore } from "@/modules/settings/stores/settings.js";
 import { useKeyboardHandler } from "@/shared/composables/useKeyboardHandler";
 import { hapticFeedback } from "@/shared/services/telegram.js";
-import { bonusesAPI, addressesAPI } from "@/shared/api/endpoints.js";
+import { bonusesAPI, addressesAPI, citiesAPI } from "@/shared/api/endpoints.js";
 import { formatPrice, normalizeImageUrl } from "@/shared/utils/format";
 import { formatWeight, formatWeightValue } from "@/shared/utils/weight";
 import { calculateDeliveryCost, getThresholds, normalizeTariffs, findTariffForAmount } from "@/shared/utils/deliveryTariffs";
@@ -154,7 +154,9 @@ const branchOpenState = computed(() => {
     if (!branchId) {
       return { isOpen: true, reason: "" };
     }
-    const branch = locationStore.branches.find((item) => item.id === branchId);
+    const branchFromList = locationStore.branches.find((item) => item.id === branchId);
+    const branchFallback = locationStore.selectedBranch?.id === branchId ? locationStore.selectedBranch : null;
+    const branch = branchFromList || branchFallback;
     if (!branch) {
       return { isOpen: false, reason: "Филиал закрыт" };
     }
@@ -235,6 +237,7 @@ onMounted(async () => {
     }
   }
   await ensureTariffs();
+  await ensureDeliveryBranch();
 });
 onUnmounted(() => {
   document.removeEventListener("visibilitychange", handleVisibilityChange);
@@ -428,6 +431,26 @@ async function ensureTariffs() {
     devError("Не удалось обновить тарифы доставки:", error);
   }
 }
+async function ensureDeliveryBranch() {
+  if (!isDelivery.value) return;
+  const cityId = locationStore.selectedCity?.id;
+  const branchId = locationStore.deliveryZone?.branch_id;
+  if (!cityId || !branchId) return;
+  const existing = locationStore.branches.find((item) => item.id === branchId);
+  if (existing) return;
+  try {
+    // Подгружаем актуальный филиал для зоны доставки, чтобы корректно проверить график работы.
+    const response = await citiesAPI.getBranches(cityId);
+    const branches = response.data?.branches || [];
+    locationStore.setBranches(branches);
+    const matched = branches.find((branch) => branch.id === branchId);
+    if (matched && locationStore.selectedBranch?.id === branchId) {
+      locationStore.setBranch(matched);
+    }
+  } catch (error) {
+    devError("Не удалось загрузить филиалы для проверки графика доставки:", error);
+  }
+}
 watch(
   () => useBonuses.value,
   (newValue) => {
@@ -486,6 +509,13 @@ watch(
     await ensureTariffs();
   },
   { deep: true },
+);
+watch(
+  () => [isDelivery.value, locationStore.deliveryZone?.branch_id, locationStore.selectedCity?.id],
+  async () => {
+    await ensureDeliveryBranch();
+  },
+  { immediate: true },
 );
 </script>
 <style scoped>
