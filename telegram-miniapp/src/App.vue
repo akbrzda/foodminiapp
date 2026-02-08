@@ -5,6 +5,7 @@
 </template>
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { useRouter } from "vue-router";
 import { useAuthStore } from "@/modules/auth/stores/auth.js";
 import { useCartStore } from "@/modules/cart/stores/cart.js";
 import { useLoyaltyStore } from "@/modules/loyalty/stores/loyalty.js";
@@ -13,6 +14,7 @@ import { useSettingsStore } from "@/modules/settings/stores/settings.js";
 import { citiesAPI, userStateAPI } from "@/shared/api/endpoints.js";
 import { wsService } from "@/shared/services/websocket.js";
 import { devLog } from "@/shared/utils/logger.js";
+const router = useRouter();
 const authStore = useAuthStore();
 const cartStore = useCartStore();
 const loyaltyStore = useLoyaltyStore();
@@ -96,8 +98,17 @@ function scheduleSync() {
   }, 600);
 }
 onMounted(async () => {
+  if (authStore.isAuthenticated) {
+    const isSessionValid = await authStore.verifySession();
+    if (!isSessionValid) {
+      await router.replace("/login");
+      return;
+    }
+  } else {
+    authStore.sessionChecked = true;
+  }
   await settingsStore.loadSettings();
-  if (settingsStore.bonusesEnabled) {
+  if (settingsStore.bonusesEnabled && authStore.isAuthenticated) {
     await loyaltyStore.refreshFromProfile();
   }
   applyDeliveryTypeSettings();
@@ -213,9 +224,14 @@ watch(
 );
 watch(
   () => authStore.isAuthenticated,
-  (isAuth) => {
+  async (isAuth) => {
     if (isAuth) {
-      loadRemoteState();
+      const isSessionValid = await authStore.verifySession();
+      if (isSessionValid) {
+        loadRemoteState();
+      } else {
+        await router.replace("/login");
+      }
     } else {
       isHydrated.value = false;
     }

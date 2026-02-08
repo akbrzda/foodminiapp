@@ -9,7 +9,27 @@ class WebSocketService {
     this.listeners = new Map();
     this.isConnecting = false;
   }
-  connect(token) {
+  async requestTicket(token) {
+    const apiBase = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
+    const response = await fetch(`${apiBase}/api/auth/ws-ticket`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json; charset=utf-8",
+        Accept: "application/json; charset=utf-8",
+        Authorization: `Bearer ${token}`,
+      },
+      credentials: "include",
+    });
+    if (!response.ok) {
+      throw new Error("Не удалось получить WS ticket");
+    }
+    const payload = await response.json();
+    if (!payload?.ticket) {
+      throw new Error("WS ticket отсутствует в ответе");
+    }
+    return payload.ticket;
+  }
+  async connect(token) {
     if (this.ws?.readyState === WebSocket.OPEN || this.isConnecting) {
       return;
     }
@@ -33,7 +53,8 @@ class WebSocketService {
       // если URL некорректный, оставляем как есть
     }
     try {
-      this.ws = new WebSocket(`${wsUrl}?token=${encodeURIComponent(token)}`);
+      const ticket = await this.requestTicket(token);
+      this.ws = new WebSocket(`${wsUrl}?ticket=${encodeURIComponent(ticket)}`);
       this.ws.onopen = () => {
         devLog("WebSocket подключен");
         this.isConnecting = false;

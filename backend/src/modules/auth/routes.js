@@ -3,26 +3,73 @@ import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
 import db from "../../config/database.js";
+import redis from "../../config/redis.js";
+import {
+  JWT_ISSUER,
+  JWT_AUDIENCE_CLIENT,
+  JWT_AUDIENCE_ADMIN,
+  JWT_AUDIENCE_REFRESH_CLIENT,
+  JWT_AUDIENCE_REFRESH_ADMIN,
+  JWT_ACCESS_AUDIENCES,
+  JWT_REFRESH_AUDIENCES,
+  extractBearerToken,
+  getAuthCookieOptions,
+  getClearAuthCookieOptions,
+} from "../../config/auth.js";
 import { parseTelegramUser, validateTelegramData } from "../../utils/telegram.js";
 import { normalizePhone } from "../../utils/phone.js";
+import { decryptPhone } from "../../utils/encryption.js";
 import { getSystemSettings } from "../../utils/settings.js";
 import { grantRegistrationBonus } from "../loyalty/services/loyaltyService.js";
-import { addToBlacklist } from "../../middleware/tokenBlacklist.js";
-import { logger } from "../../utils/logger.js";
+import { addToBlacklist, isBlacklisted } from "../../middleware/tokenBlacklist.js";
 import { authenticateToken } from "../../middleware/auth.js";
-import { authLimiter } from "../../middleware/rateLimiter.js";
+import { logger } from "../../utils/logger.js";
+import { authLimiter, createLimiter, strictAuthLimiter } from "../../middleware/rateLimiter.js";
 
 const router = express.Router();
+const CLIENT_ACCESS_TOKEN_TTL = "12h";
+const CLIENT_ACCESS_TOKEN_COOKIE_MAX_AGE = 12 * 60 * 60 * 1000;
+const ADMIN_ACCESS_TOKEN_TTL = "8h";
+const ADMIN_ACCESS_TOKEN_COOKIE_MAX_AGE = 8 * 60 * 60 * 1000;
+const CLIENT_REFRESH_TOKEN_TTL = "30d";
+const CLIENT_REFRESH_TOKEN_COOKIE_MAX_AGE = 30 * 24 * 60 * 60 * 1000;
+const ADMIN_REFRESH_TOKEN_TTL = "14d";
+const ADMIN_REFRESH_TOKEN_COOKIE_MAX_AGE = 14 * 24 * 60 * 60 * 1000;
+const WS_TICKET_PREFIX = "ws_ticket";
+const WS_TICKET_TTL_SECONDS = 45;
+
+const getRequiredBotToken = () => {
+  const botToken = process.env.TELEGRAM_BOT_TOKEN;
+  return typeof botToken === "string" && botToken.trim().length > 0 ? botToken.trim() : null;
+};
 
 // Helper функция для установки secure cookie
 function setAuthCookie(res, token, maxAge = 7 * 24 * 60 * 60 * 1000) {
-  res.cookie("access_token", token, {
-    httpOnly: true, // Защита от XSS
-    secure: process.env.NODE_ENV === "production", // HTTPS only в production
-    sameSite: "strict", // Защита от CSRF
-    maxAge: maxAge, // 7 дней по умолчанию
-    path: "/",
+  res.cookie("access_token", token, getAuthCookieOptions(maxAge));
+}
+function setRefreshCookie(res, token, maxAge = 30 * 24 * 60 * 60 * 1000) {
+  res.cookie("refresh_token", token, getAuthCookieOptions(maxAge));
+}
+function signAccessToken(payload, audience, expiresIn) {
+  return jwt.sign(payload, process.env.JWT_SECRET, {
+    expiresIn,
+    issuer: JWT_ISSUER,
+    audience,
+    algorithm: "HS256",
   });
+}
+function signRefreshToken(payload, audience, expiresIn) {
+  return jwt.sign({ ...payload, token_type: "refresh" }, process.env.JWT_SECRET, {
+    expiresIn,
+    issuer: JWT_ISSUER,
+    audience,
+    algorithm: "HS256",
+  });
+}
+function getTokenTtlSeconds(decodedToken) {
+  const now = Math.floor(Date.now() / 1000);
+  const seconds = Number(decodedToken?.exp) - now;
+  return Number.isFinite(seconds) && seconds > 0 ? seconds : 1;
 }
 function verifyTelegramAuth(data, botToken) {
   const { hash, ...userData } = data;
@@ -36,7 +83,7 @@ function verifyTelegramAuth(data, botToken) {
 }
 
 // Применяем rate limiting на все auth endpoints
-router.post("/telegram", authLimiter, async (req, res, next) => {
+router.post("/telegram", authLimiter, strictAuthLimiter, async (req, res, next) => {
   try {
     const { initData } = req.body;
     let telegramPayload = req.body;
@@ -59,12 +106,13 @@ router.post("/telegram", authLimiter, async (req, res, next) => {
     if (!id || !hash) {
       return res.status(400).json({ error: "Telegram data is required" });
     }
-    const botToken = process.env.TELEGRAM_BOT_TOKEN;
-    if (botToken) {
-      const isValid = initData ? validateTelegramData(initData, botToken) : verifyTelegramAuth(telegramPayload, botToken);
-      if (!isValid) {
-        return res.status(403).json({ error: "Invalid Telegram data" });
-      }
+    const botToken = getRequiredBotToken();
+    if (!botToken) {
+      return res.status(500).json({ error: "Server misconfiguration: TELEGRAM_BOT_TOKEN is required" });
+    }
+    const isValid = initData ? validateTelegramData(initData, botToken) : verifyTelegramAuth(telegramPayload, botToken);
+    if (!isValid) {
+      return res.status(403).json({ error: "Invalid Telegram data" });
     }
     const authAge = Date.now() / 1000 - Number(auth_date);
     if (!Number.isFinite(authAge)) {
@@ -109,10 +157,15 @@ router.post("/telegram", authLimiter, async (req, res, next) => {
         user = updatedUsers[0];
       }
       if (user.phone) {
-        const normalizedPhone = normalizePhone(user.phone);
-        if (normalizedPhone && normalizedPhone !== user.phone) {
-          await db.query("UPDATE users SET phone = ? WHERE id = ?", [normalizedPhone, userId]);
-          user.phone = normalizedPhone;
+        try {
+          const decryptedPhone = decryptPhone(user.phone);
+          const normalizedPhone = normalizePhone(decryptedPhone);
+          if (normalizedPhone && normalizedPhone !== user.phone) {
+            await db.query("UPDATE users SET phone = ? WHERE id = ?", [normalizedPhone, userId]);
+            user.phone = normalizedPhone;
+          }
+        } catch (phoneError) {
+          // Если телефон в неизвестном формате, не трогаем его при входе.
         }
       }
     } else {
@@ -144,18 +197,17 @@ router.post("/telegram", authLimiter, async (req, res, next) => {
         // Registration bonus errors are non-critical
       }
     }
-    const token = jwt.sign(
-      {
-        id: userId,
-        telegram_id: id,
-        type: "client",
-      },
-      process.env.JWT_SECRET,
-      { expiresIn: "30d" },
-    );
+    const authPayload = {
+      id: userId,
+      telegram_id: id,
+      type: "client",
+    };
+    const token = signAccessToken(authPayload, JWT_AUDIENCE_CLIENT, CLIENT_ACCESS_TOKEN_TTL);
+    const refreshToken = signRefreshToken(authPayload, JWT_AUDIENCE_REFRESH_CLIENT, CLIENT_REFRESH_TOKEN_TTL);
 
     // Устанавливаем cookie с токеном
-    setAuthCookie(res, token, 30 * 24 * 60 * 60 * 1000); // 30 дней
+    setAuthCookie(res, token, CLIENT_ACCESS_TOKEN_COOKIE_MAX_AGE);
+    setRefreshCookie(res, refreshToken, CLIENT_REFRESH_TOKEN_COOKIE_MAX_AGE);
 
     // Логируем успешный вход
     await logger.auth.login(userId, "client", req.ip);
@@ -175,12 +227,13 @@ router.post("/eruda", async (req, res, next) => {
     if (!parsedUser?.telegram_id) {
       return res.json({ enabled: false });
     }
-    const botToken = process.env.TELEGRAM_BOT_TOKEN;
-    if (botToken) {
-      const isValid = validateTelegramData(initData, botToken);
-      if (!isValid) {
-        return res.json({ enabled: false });
-      }
+    const botToken = getRequiredBotToken();
+    if (!botToken) {
+      return res.status(500).json({ error: "Server misconfiguration: TELEGRAM_BOT_TOKEN is required" });
+    }
+    const isValid = validateTelegramData(initData, botToken);
+    if (!isValid) {
+      return res.json({ enabled: false });
     }
     const [admins] = await db.query(
       `SELECT id, eruda_enabled, is_active
@@ -198,7 +251,7 @@ router.post("/eruda", async (req, res, next) => {
     next(error);
   }
 });
-router.post("/admin/login", authLimiter, async (req, res, next) => {
+router.post("/admin/login", authLimiter, strictAuthLimiter, async (req, res, next) => {
   try {
     const { email, password } = req.body;
     if (!email || !password) {
@@ -249,22 +302,21 @@ router.post("/admin/login", authLimiter, async (req, res, next) => {
       branches = userBranches || [];
     }
 
-    const token = jwt.sign(
-      {
-        id: user.id,
-        email: user.email,
-        role: user.role,
-        cities: cities,
-        type: "admin",
-        branch_ids: branches.map((branch) => branch.id),
-        branch_city_ids: branches.map((branch) => branch.city_id),
-      },
-      process.env.JWT_SECRET,
-      { expiresIn: "7d" },
-    );
+    const authPayload = {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      cities: cities,
+      type: "admin",
+      branch_ids: branches.map((branch) => branch.id),
+      branch_city_ids: branches.map((branch) => branch.city_id),
+    };
+    const token = signAccessToken(authPayload, JWT_AUDIENCE_ADMIN, ADMIN_ACCESS_TOKEN_TTL);
+    const refreshToken = signRefreshToken(authPayload, JWT_AUDIENCE_REFRESH_ADMIN, ADMIN_REFRESH_TOKEN_TTL);
 
     // Устанавливаем cookie с токеном
-    setAuthCookie(res, token, 7 * 24 * 60 * 60 * 1000); // 7 дней
+    setAuthCookie(res, token, ADMIN_ACCESS_TOKEN_COOKIE_MAX_AGE);
+    setRefreshCookie(res, refreshToken, ADMIN_REFRESH_TOKEN_COOKIE_MAX_AGE);
 
     // Логируем успешный вход
     await logger.auth.login(user.id, user.role, req.ip);
@@ -286,26 +338,173 @@ router.post("/admin/login", authLimiter, async (req, res, next) => {
   }
 });
 
+router.post("/ws-ticket", authenticateToken, createLimiter, async (req, res, next) => {
+  try {
+    if (req.user?.type === "client") {
+      const [users] = await db.query("SELECT id FROM users WHERE id = ? LIMIT 1", [req.user.id]);
+      if (users.length === 0) {
+        return res.status(401).json({ error: "User account not found" });
+      }
+    }
+    if (req.user?.type === "admin") {
+      const [admins] = await db.query("SELECT id, is_active FROM admin_users WHERE id = ? LIMIT 1", [req.user.id]);
+      if (admins.length === 0 || !admins[0].is_active) {
+        return res.status(401).json({ error: "Admin account not found or inactive" });
+      }
+    }
+    const ticket = crypto.randomBytes(32).toString("hex");
+    const redisKey = `${WS_TICKET_PREFIX}:${ticket}`;
+    const payload = JSON.stringify({
+      id: req.user.id,
+      role: req.user.role || null,
+      cities: req.user.cities || [],
+      city_ids: req.user.city_ids || [],
+      type: req.user.type || "client",
+      issued_at: Date.now(),
+    });
+    await redis.set(redisKey, payload, "EX", WS_TICKET_TTL_SECONDS);
+    res.json({
+      ticket,
+      expires_in: WS_TICKET_TTL_SECONDS,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/refresh", authLimiter, async (req, res) => {
+  try {
+    const refreshToken = req.cookies?.refresh_token;
+    if (!refreshToken) {
+      return res.status(401).json({ error: "Refresh token required" });
+    }
+    if (await isBlacklisted(refreshToken)) {
+      return res.status(401).json({ error: "Refresh token has been revoked" });
+    }
+    const decoded = jwt.verify(refreshToken, process.env.JWT_SECRET, {
+      algorithms: ["HS256"],
+      issuer: JWT_ISSUER,
+      audience: JWT_REFRESH_AUDIENCES,
+    });
+
+    let nextAccessToken;
+    let nextRefreshToken;
+    let accessMaxAge;
+    let refreshMaxAge;
+
+    if (decoded?.type === "client") {
+      const [users] = await db.query(
+        `SELECT id, telegram_id
+         FROM users
+         WHERE id = ?
+         LIMIT 1`,
+        [decoded.id],
+      );
+      if (users.length === 0) {
+        return res.status(401).json({ error: "User account not found" });
+      }
+      const user = users[0];
+      const payload = {
+        id: user.id,
+        telegram_id: user.telegram_id || decoded.telegram_id,
+        type: "client",
+      };
+      nextAccessToken = signAccessToken(payload, JWT_AUDIENCE_CLIENT, CLIENT_ACCESS_TOKEN_TTL);
+      nextRefreshToken = signRefreshToken(payload, JWT_AUDIENCE_REFRESH_CLIENT, CLIENT_REFRESH_TOKEN_TTL);
+      accessMaxAge = CLIENT_ACCESS_TOKEN_COOKIE_MAX_AGE;
+      refreshMaxAge = CLIENT_REFRESH_TOKEN_COOKIE_MAX_AGE;
+    } else if (decoded?.type === "admin") {
+      const [admins] = await db.query(
+        `SELECT id, email, role, is_active
+         FROM admin_users
+         WHERE id = ?
+         LIMIT 1`,
+        [decoded.id],
+      );
+      if (admins.length === 0 || !admins[0].is_active) {
+        return res.status(401).json({ error: "Admin account not found or inactive" });
+      }
+      const admin = admins[0];
+      let cities = [];
+      if (admin.role === "manager") {
+        const [userCities] = await db.query(`SELECT city_id FROM admin_user_cities WHERE admin_user_id = ?`, [admin.id]);
+        cities = userCities.map((c) => c.city_id);
+      }
+      let branches = [];
+      if (admin.role === "manager") {
+        const [userBranches] = await db.query(
+          `SELECT b.id, b.city_id
+           FROM admin_user_branches aub
+           JOIN branches b ON aub.branch_id = b.id
+           WHERE aub.admin_user_id = ?`,
+          [admin.id],
+        );
+        branches = userBranches || [];
+      }
+      const payload = {
+        id: admin.id,
+        email: admin.email,
+        role: admin.role,
+        cities,
+        type: "admin",
+        branch_ids: branches.map((branch) => branch.id),
+        branch_city_ids: branches.map((branch) => branch.city_id),
+      };
+      nextAccessToken = signAccessToken(payload, JWT_AUDIENCE_ADMIN, ADMIN_ACCESS_TOKEN_TTL);
+      nextRefreshToken = signRefreshToken(payload, JWT_AUDIENCE_REFRESH_ADMIN, ADMIN_REFRESH_TOKEN_TTL);
+      accessMaxAge = ADMIN_ACCESS_TOKEN_COOKIE_MAX_AGE;
+      refreshMaxAge = ADMIN_REFRESH_TOKEN_COOKIE_MAX_AGE;
+    } else {
+      return res.status(403).json({ error: "Invalid refresh token payload" });
+    }
+
+    await addToBlacklist(refreshToken, getTokenTtlSeconds(decoded));
+    setAuthCookie(res, nextAccessToken, accessMaxAge);
+    setRefreshCookie(res, nextRefreshToken, refreshMaxAge);
+    res.json({ token: nextAccessToken });
+  } catch (error) {
+    return res.status(401).json({ error: "Invalid or expired refresh token" });
+  }
+});
+
 // Endpoint для выхода из системы
-router.post("/logout", authenticateToken, async (req, res, next) => {
+router.post("/logout", async (req, res, next) => {
   try {
     // Получаем токен
-    const token = req.cookies?.access_token || (req.headers["authorization"] && req.headers["authorization"].split(" ")[1]);
+    const token = req.cookies?.access_token || extractBearerToken(req.headers["authorization"]);
+    const refreshToken = req.cookies?.refresh_token;
 
     if (token) {
-      // Добавляем токен в blacklist
-      const decoded = jwt.decode(token);
-      const expiresIn = decoded.exp - Math.floor(Date.now() / 1000);
-      await addToBlacklist(token, expiresIn > 0 ? expiresIn : 1);
+      try {
+        // Добавляем токен в blacklist только если он корректный
+        const decoded = jwt.verify(token, process.env.JWT_SECRET, {
+          algorithms: ["HS256"],
+          issuer: JWT_ISSUER,
+          audience: JWT_ACCESS_AUDIENCES,
+        });
+        const expiresIn = decoded.exp - Math.floor(Date.now() / 1000);
+        await addToBlacklist(token, expiresIn > 0 ? expiresIn : 1);
+      } catch (tokenError) {
+        // Для logout не критично: даже при невалидном токене нужно очистить cookie.
+      }
+    }
+    if (refreshToken) {
+      try {
+        const decodedRefresh = jwt.verify(refreshToken, process.env.JWT_SECRET, {
+          algorithms: ["HS256"],
+          issuer: JWT_ISSUER,
+          audience: JWT_REFRESH_AUDIENCES,
+        });
+        await addToBlacklist(refreshToken, getTokenTtlSeconds(decodedRefresh));
+      } catch (refreshTokenError) {
+        // Для logout не критично: даже при невалидном refresh токене нужно очистить cookie.
+      }
     }
 
     // Удаляем cookie
-    res.clearCookie("access_token", {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
-      path: "/",
-    });
+    const clearOptions = getClearAuthCookieOptions();
+    res.clearCookie("access_token", clearOptions);
+    res.clearCookie("refresh_token", clearOptions);
 
     res.json({ message: "Logout successful" });
   } catch (error) {

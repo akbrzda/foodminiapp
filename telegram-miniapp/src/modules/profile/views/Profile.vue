@@ -29,6 +29,9 @@
       </button>
       <p v-if="saveMessage" class="save-message">{{ saveMessage }}</p>
       <p v-if="saveError" class="save-error">{{ saveError }}</p>
+      <button class="delete-btn" @click="deleteAccount" :disabled="deleting">
+        {{ deleting ? "Удаление..." : "Удалить аккаунт" }}
+      </button>
       <button class="logout-btn" @click="logout">Выйти</button>
     </div>
   </div>
@@ -38,12 +41,13 @@ import { ref, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { useAuthStore } from "@/modules/auth/stores/auth.js";
 import { authAPI } from "@/shared/api/endpoints.js";
-import { hapticFeedback } from "@/shared/services/telegram.js";
+import { hapticFeedback, showConfirm } from "@/shared/services/telegram.js";
 import { formatPhone, normalizePhone } from "@/shared/utils/phone";
 import { devError } from "@/shared/utils/logger.js";
 const router = useRouter();
 const authStore = useAuthStore();
 const saving = ref(false);
+const deleting = ref(false);
 const saveMessage = ref("");
 const saveError = ref("");
 const profileForm = ref({
@@ -96,9 +100,30 @@ async function saveProfile() {
     saving.value = false;
   }
 }
-function logout() {
+async function deleteAccount() {
+  if (deleting.value) return;
+  const confirmed = await showConfirm("Удалить аккаунт без возможности восстановления?");
+  if (!confirmed) return;
+  deleting.value = true;
+  saveError.value = "";
+  saveMessage.value = "";
+  hapticFeedback("warning");
+  try {
+    await authAPI.deleteAccount();
+    await authStore.logout({ notifyServer: false });
+    hapticFeedback("success");
+    router.push("/login");
+  } catch (error) {
+    devError("Не удалось удалить аккаунт:", error);
+    hapticFeedback("error");
+    saveError.value = error.response?.data?.error || "Не удалось удалить аккаунт";
+  } finally {
+    deleting.value = false;
+  }
+}
+async function logout() {
   hapticFeedback("medium");
-  authStore.logout();
+  await authStore.logout({ notifyServer: true });
   router.push("/login");
 }
 function normalizeDateForInput(value) {
@@ -183,6 +208,22 @@ function normalizeDateForInput(value) {
   font-size: var(--font-size-body);
   font-weight: var(--font-weight-semibold);
   cursor: pointer;
+}
+.delete-btn {
+  width: 100%;
+  margin-top: 12px;
+  padding: 16px;
+  border: none;
+  border-radius: var(--border-radius-lg);
+  background: var(--color-error);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+}
+.delete-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
 }
 .save-message {
   margin: 8px 4px 0;

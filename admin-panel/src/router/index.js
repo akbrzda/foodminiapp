@@ -303,7 +303,7 @@ router.beforeEach((to) => {
   const authStore = useAuthStore();
   const tokenValid = authStore.validateToken();
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
-    return { name: "login" };
+    return { name: "login", query: { redirect: to.fullPath } };
   }
   if (to.meta.public && tokenValid && authStore.isAuthenticated && to.name === "login") {
     return { name: "orders" };

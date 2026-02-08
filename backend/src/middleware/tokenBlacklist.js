@@ -1,5 +1,12 @@
 import redis from "../config/redis.js";
 import jwt from "jsonwebtoken";
+import crypto from "crypto";
+import { extractBearerToken } from "../config/auth.js";
+
+const buildBlacklistKey = (token) => {
+  const hash = crypto.createHash("sha256").update(String(token)).digest("hex");
+  return `blacklist:${hash}`;
+};
 
 /**
  * Добавляет токен в blacklist
@@ -8,7 +15,7 @@ import jwt from "jsonwebtoken";
  */
 export async function addToBlacklist(token, expiresIn = 60 * 60 * 24 * 30) {
   try {
-    const key = `blacklist:${token}`;
+    const key = buildBlacklistKey(token);
     await redis.set(key, "1", "EX", expiresIn);
   } catch (error) {
     console.error("Failed to add token to blacklist:", error);
@@ -23,7 +30,7 @@ export async function addToBlacklist(token, expiresIn = 60 * 60 * 24 * 30) {
  */
 export async function isBlacklisted(token) {
   try {
-    const key = `blacklist:${token}`;
+    const key = buildBlacklistKey(token);
     const result = await redis.get(key);
     return result !== null;
   } catch (error) {
@@ -39,7 +46,9 @@ export async function isBlacklisted(token) {
 export const checkBlacklist = async (req, res, next) => {
   try {
     // Получаем токен из cookie или header
-    const token = req.cookies?.access_token || (req.headers.authorization && req.headers.authorization.split(" ")[1]);
+    const authorizationHeader = req.headers.authorization;
+    const bearerToken = extractBearerToken(authorizationHeader);
+    const token = req.cookies?.access_token || bearerToken;
 
     if (!token) {
       return next();

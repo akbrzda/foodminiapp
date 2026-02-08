@@ -326,9 +326,6 @@ function getStatusClass(status) {
   if (["cancelled"].includes(status)) return "status-cancelled";
   return "";
 }
-function openCitySelector() {
-  window.dispatchEvent(new CustomEvent("open-city-popup"));
-}
 function openDeliverySelector() {
   if (!ordersEnabled.value) return;
   if (!locationStore.selectedCity) {

@@ -1,9 +1,7 @@
 import { WebSocketServer } from "ws";
-import jwt from "jsonwebtoken";
-import { promisify } from "util";
-import { isBlacklisted } from "../middleware/tokenBlacklist.js";
+import redis from "../config/redis.js";
 
-const jwtVerify = promisify(jwt.verify);
+const WS_TICKET_PREFIX = "ws_ticket";
 
 // Rate limiting для WebSocket подключений
 const connectionAttempts = new Map();
@@ -87,23 +85,31 @@ class WSServer {
         }
 
         const url = new URL(request.url, `http://${request.headers.host}`);
-        const token = url.searchParams.get("token");
+        const ticket = url.searchParams.get("ticket");
 
-        if (!token) {
+        if (!ticket) {
           socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
           socket.destroy();
           return;
         }
 
-        // Проверяем blacklist
-        const blacklisted = await isBlacklisted(token);
-        if (blacklisted) {
+        const redisKey = `${WS_TICKET_PREFIX}:${ticket}`;
+        const ticketPayload = await redis.get(redisKey);
+        if (!ticketPayload) {
           socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
           socket.destroy();
           return;
         }
+        await redis.del(redisKey);
 
-        const decoded = await jwtVerify(token, process.env.JWT_SECRET);
+        let decoded;
+        try {
+          decoded = JSON.parse(ticketPayload);
+        } catch (parseError) {
+          socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
+          socket.destroy();
+          return;
+        }
 
         this.wss.handleUpgrade(request, socket, head, (ws) => {
           this.wss.emit("connection", ws, request, decoded);

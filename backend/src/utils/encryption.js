@@ -12,6 +12,28 @@ if (!process.env.ENCRYPTION_KEY) {
 
 const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY;
 
+function isEncryptedPayload(value) {
+  if (!value || typeof value !== "string") {
+    return false;
+  }
+  const parts = value.split(":");
+  if (parts.length !== 4) {
+    return false;
+  }
+  const [salt, iv, authTag, encrypted] = parts;
+  const isHex = (str) => /^[a-f0-9]+$/i.test(str);
+  return (
+    salt.length === SALT_LENGTH * 2 &&
+    iv.length === IV_LENGTH * 2 &&
+    authTag.length === AUTH_TAG_LENGTH * 2 &&
+    encrypted.length > 0 &&
+    isHex(salt) &&
+    isHex(iv) &&
+    isHex(authTag) &&
+    isHex(encrypted)
+  );
+}
+
 // Генерация ключа из мастер-ключа с использованием соли
 function deriveKey(salt) {
   return crypto.pbkdf2Sync(ENCRYPTION_KEY, salt, 100000, 32, "sha256");
@@ -53,6 +75,9 @@ export function decrypt(encryptedData) {
   }
 
   try {
+    if (!isEncryptedPayload(encryptedData)) {
+      return encryptedData;
+    }
     const parts = encryptedData.split(":");
     if (parts.length !== 4) {
       throw new Error("Invalid encrypted data format");
@@ -161,6 +186,30 @@ export function decryptAddressData(address) {
   if (!address) return null;
 
   const decrypted = { ...address };
+
+  if (address.street) {
+    try {
+      decrypted.street = decryptAddress(address.street);
+    } catch (error) {
+      decrypted.street = null;
+    }
+  }
+
+  if (address.house) {
+    try {
+      decrypted.house = decryptAddress(address.house);
+    } catch (error) {
+      decrypted.house = null;
+    }
+  }
+
+  if (address.comment) {
+    try {
+      decrypted.comment = decryptAddress(address.comment);
+    } catch (error) {
+      decrypted.comment = null;
+    }
+  }
 
   if (address.street_address) {
     try {

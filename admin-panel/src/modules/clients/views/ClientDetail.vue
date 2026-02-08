@@ -2,6 +2,10 @@
   <div class="space-y-6">
     <PageHeader :title="clientNameForTitle" description="Данные профиля и лояльность">
       <template #actions>
+        <Button variant="destructive" size="sm" :disabled="deletingClient" @click="deleteClient">
+          <Trash2 :size="16" />
+          {{ deletingClient ? "Удаление..." : "Удалить клиента" }}
+        </Button>
         <Button variant="outline" size="sm" @click="goBack">
           <ArrowLeft :size="16" />
           Назад к клиентам
@@ -231,7 +235,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { ArrowLeft, Save } from "lucide-vue-next";
+import { ArrowLeft, Save, Trash2 } from "lucide-vue-next";
 import api from "@/shared/api/client.js";
 import { devError } from "@/shared/utils/logger";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
@@ -260,7 +264,7 @@ import Skeleton from "@/shared/components/ui/skeleton/Skeleton.vue";
 import Spinner from "@/shared/components/ui/spinner/Spinner.vue";
 const route = useRoute();
 const router = useRouter();
-const { showErrorNotification } = useNotifications();
+const { showErrorNotification, showSuccessNotification } = useNotifications();
 const ordersStore = useOrdersStore();
 const clientId = route.params.id;
 const client = ref(null);
@@ -273,6 +277,7 @@ const bonusesLoading = ref(false);
 const saving = ref(false);
 const showAdjustModal = ref(false);
 const adjustSaving = ref(false);
+const deletingClient = ref(false);
 const phoneError = ref("");
 const adjustForm = reactive({
   type: "earn",
@@ -409,6 +414,22 @@ const openOrder = (orderId) => {
 };
 const goBack = () => {
   router.push("/clients");
+};
+const deleteClient = async () => {
+  if (deletingClient.value) return;
+  const confirmed = window.confirm("Удалить клиента и все связанные данные? Действие необратимо.");
+  if (!confirmed) return;
+  deletingClient.value = true;
+  try {
+    await api.delete(`/api/admin/clients/${clientId}`);
+    showSuccessNotification("Клиент удален");
+    router.push("/clients");
+  } catch (error) {
+    devError("Ошибка удаления клиента:", error);
+    showErrorNotification(error.response?.data?.error || "Не удалось удалить клиента");
+  } finally {
+    deletingClient.value = false;
+  }
 };
 onMounted(async () => {
   const [clientResult, ordersResult, loyaltyResult] = await Promise.allSettled([loadClient(), loadOrders(), loadLoyalty()]);

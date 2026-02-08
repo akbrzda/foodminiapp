@@ -70,7 +70,7 @@ import OrderStatusModal from "@/modules/orders/components/OrderStatusModal.vue";
 const referenceStore = useReferenceStore();
 const ordersStore = useOrdersStore();
 const { showErrorNotification, showNewOrderNotification, showSuccessNotification } = useNotifications();
-const { theme, setTheme, resolvedTheme } = useTheme();
+const { theme, setTheme } = useTheme();
 
 // Состояние темы
 const themeValue = computed({
@@ -110,8 +110,8 @@ let tileLayer = null;
 const polygonsVisible = ref(localStorage.getItem("shift_polygons_visible") !== "false");
 
 // Вычисляемые свойства для карты
-const mapAccentColor = computed(() => getMapColor(resolvedTheme.value, "accent"));
-const mapAccentFill = computed(() => getMapColor(resolvedTheme.value, "accentFill"));
+const mapAccentColor = computed(() => getMapColor("accent"));
+const mapAccentFill = computed(() => getMapColor("accentFill"));
 
 // Табы для списка заказов
 const tabs = computed(() => [
@@ -386,7 +386,7 @@ const initMap = () => {
   const branch = branchOptions.value.find((item) => item.id === Number(selectedBranchId.value));
   const center = branch?.latitude && branch?.longitude ? [branch.latitude, branch.longitude] : [55.751244, 37.618423];
   mapInstance = L.map(mapContainer, { zoomControl: true, attributionControl: false }).setView(center, 12);
-  tileLayer = getTileLayer(resolvedTheme.value, { maxZoom: 18 }).addTo(mapInstance);
+  tileLayer = getTileLayer({ maxZoom: 18 }).addTo(mapInstance);
   renderBranchMarker();
 };
 
@@ -668,27 +668,6 @@ watch(
   () => ordersStore.lastEvent,
   (payload) => {
     handleOrderEvent(payload);
-  },
-);
-
-watch(
-  () => resolvedTheme.value,
-  () => {
-    if (!mapInstance) return;
-    if (tileLayer) {
-      tileLayer.remove();
-    }
-    tileLayer = getTileLayer(resolvedTheme.value, { maxZoom: 18 }).addTo(mapInstance);
-    if (polygonsLayer) {
-      polygonsLayer.setStyle({
-        color: mapAccentColor.value,
-        fillColor: mapAccentFill.value,
-        fillOpacity: 1,
-      });
-    }
-    if (routeLine) {
-      routeLine.setStyle({ color: mapAccentColor.value });
-    }
   },
 );
 

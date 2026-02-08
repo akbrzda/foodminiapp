@@ -18,23 +18,35 @@ const normalizeErrorMessage = (message) => {
 let refreshPromise = null;
 const refreshToken = async () => {
   if (refreshPromise) return refreshPromise;
-  const initData = getInitData();
-  if (!initData) {
-    return Promise.reject(new Error("Отсутствуют данные Telegram initData"));
-  }
   refreshPromise = axios
-    .post(
-      `${apiBase}/api/auth/telegram`,
-      { initData },
-      {
-        headers: {
-          "Content-Type": "application/json; charset=utf-8",
-          Accept: "application/json; charset=utf-8",
-        },
-        timeout: 10000,
+    .post(`${apiBase}/api/auth/refresh`, null, {
+      headers: {
+        "Content-Type": "application/json; charset=utf-8",
+        Accept: "application/json; charset=utf-8",
       },
-    )
+      withCredentials: true,
+      timeout: 10000,
+    })
     .then((response) => response.data)
+    .catch(async () => {
+      const initData = getInitData();
+      if (!initData) {
+        throw new Error("Отсутствуют данные Telegram initData");
+      }
+      const fallbackResponse = await axios.post(
+        `${apiBase}/api/auth/telegram`,
+        { initData },
+        {
+          headers: {
+            "Content-Type": "application/json; charset=utf-8",
+            Accept: "application/json; charset=utf-8",
+          },
+          withCredentials: true,
+          timeout: 10000,
+        },
+      );
+      return fallbackResponse.data;
+    })
     .finally(() => {
       refreshPromise = null;
     });

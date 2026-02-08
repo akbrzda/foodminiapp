@@ -108,7 +108,7 @@ router.beforeEach((to, from, next) => {
     if (to.name === "Home" && to.query?.openCity === "1") {
       return next();
     }
-    if (!locationStore.selectedCity && to.name !== "DeliveryMap" && to.name !== "PickupMap" && to.name !== "DeliveryAddressDetails") {
+    if (!locationStore.selectedCity && to.name !== "DeliveryMap" && to.name !== "PickupMap") {
       if (from.name === "Home" && from.query?.openCity === "1") {
         return next();
       }

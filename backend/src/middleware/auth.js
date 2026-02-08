@@ -1,6 +1,7 @@
 import jwt from "jsonwebtoken";
 import { isBlacklisted } from "./tokenBlacklist.js";
 import { logger } from "../utils/logger.js";
+import { JWT_ISSUER, JWT_ACCESS_AUDIENCES, extractBearerToken } from "../config/auth.js";
 
 const normalizeCityIds = (value) => {
   if (Array.isArray(value)) {
@@ -27,11 +28,10 @@ const normalizeCityIds = (value) => {
   }
   return [];
 };
-
 export const authenticateToken = async (req, res, next) => {
   try {
     // Пытаемся получить токен из cookie (приоритет) или header
-    const token = req.cookies?.access_token || (req.headers["authorization"] && req.headers["authorization"].split(" ")[1]);
+    const token = req.cookies?.access_token || extractBearerToken(req.headers["authorization"]);
 
     if (!token) {
       await logger.auth.unauthorized(req.path, req.ip);
@@ -50,7 +50,11 @@ export const authenticateToken = async (req, res, next) => {
     }
 
     // Верифицируем токен
-    const user = jwt.verify(token, process.env.JWT_SECRET);
+    const user = jwt.verify(token, process.env.JWT_SECRET, {
+      algorithms: ["HS256"],
+      issuer: JWT_ISSUER,
+      audience: JWT_ACCESS_AUDIENCES,
+    });
     req.user = {
       ...user,
       cities: normalizeCityIds(user?.cities),

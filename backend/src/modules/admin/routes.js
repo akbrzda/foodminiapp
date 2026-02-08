@@ -232,6 +232,23 @@ router.put("/clients/:id", requireRole("admin", "manager", "ceo"), async (req, r
     next(error);
   }
 });
+router.delete("/clients/:id", requireRole("admin", "manager", "ceo"), async (req, res, next) => {
+  try {
+    const userId = req.params.id;
+    const hasAccess = await ensureManagerClientAccess(req, userId);
+    if (!hasAccess) {
+      return res.status(403).json({ error: "You do not have access to this user" });
+    }
+    const [users] = await db.query("SELECT id FROM users WHERE id = ?", [userId]);
+    if (users.length === 0) {
+      return res.status(404).json({ error: "User not found" });
+    }
+    await db.query("DELETE FROM users WHERE id = ?", [userId]);
+    res.json({ message: "Client deleted successfully" });
+  } catch (error) {
+    next(error);
+  }
+});
 router.get("/clients/:id/orders", requireRole("admin", "manager", "ceo"), async (req, res, next) => {
   try {
     const userId = req.params.id;

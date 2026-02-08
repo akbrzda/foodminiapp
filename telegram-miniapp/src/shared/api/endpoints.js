@@ -9,6 +9,9 @@ export const authAPI = {
   updateProfile(data) {
     return api.put("/users/profile", data);
   },
+  deleteAccount() {
+    return api.delete("/users/me");
+  },
 };
 export const userStateAPI = {
   getState() {
@@ -92,6 +95,12 @@ export const addressesAPI = {
       payload.cart_amount = cartAmount;
     }
     return api.post("/polygons/check-delivery", payload);
+  },
+  searchAddress(payload, config = {}) {
+    return api.post("/polygons/geocode", payload, config);
+  },
+  reverseGeocode(lat, lng, config = {}) {
+    return api.post("/polygons/reverse", { latitude: lat, longitude: lng }, config);
   },
 };
 export const geocodeAPI = {

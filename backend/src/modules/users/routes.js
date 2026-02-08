@@ -1,16 +1,15 @@
 import express from "express";
 import db from "../../config/database.js";
+import { extractBearerToken, getClearAuthCookieOptions } from "../../config/auth.js";
 import { authenticateToken } from "../../middleware/auth.js";
 import { normalizePhone } from "../../utils/phone.js";
 import { getSystemSettings } from "../../utils/settings.js";
 import { grantRegistrationBonus } from "../loyalty/services/loyaltyService.js";
+import { addToBlacklist } from "../../middleware/tokenBlacklist.js";
+import { logger } from "../../utils/logger.js";
 import {
   encryptEmail,
-  encryptPhone,
   encryptAddress,
-  decryptEmail,
-  decryptPhone,
-  decryptAddress,
   decryptUserData,
   decryptAddressData,
 } from "../../utils/encryption.js";
@@ -30,19 +29,19 @@ router.post("/register", async (req, res, next) => {
       return res.status(400).json({ error: phoneValidation.error });
     }
 
-    // Шифрование телефона для поиска
-    const encryptedPhone = encryptPhone(phoneValidation.phone);
+    const normalizedPhone = normalizePhone(phoneValidation.phone);
+    if (!normalizedPhone) {
+      return res.status(400).json({ error: "Invalid phone format" });
+    }
 
-    const [existingUsers] = await db.query("SELECT * FROM users WHERE phone = ?", [encryptedPhone]);
+    const [existingUsers] = await db.query("SELECT * FROM users WHERE phone = ?", [normalizedPhone]);
 
     if (existingUsers.length > 0) {
       const user = existingUsers[0];
       const updates = [];
       const values = [];
-
-      if (telegram_id && user.telegram_id !== telegram_id) {
-        updates.push("telegram_id = ?");
-        values.push(telegram_id);
+      if (telegram_id && user.telegram_id && String(user.telegram_id) !== String(telegram_id)) {
+        return res.status(409).json({ error: "Telegram account rebind is not allowed on this endpoint" });
       }
       if (first_name && user.first_name !== first_name) {
         updates.push("first_name = ?");
@@ -72,8 +71,8 @@ router.post("/register", async (req, res, next) => {
     }
 
     const [result] = await db.query("INSERT INTO users (phone, telegram_id, first_name, last_name) VALUES (?, ?, ?, ?)", [
-      encryptedPhone,
-      telegram_id || null,
+      normalizedPhone,
+      null,
       first_name || null,
       last_name || null,
     ]);
@@ -250,16 +249,19 @@ router.put("/profile", authenticateToken, async (req, res, next) => {
         return res.status(400).json({ error: phoneValidation.error });
       }
 
-      const encryptedPhone = encryptPhone(phoneValidation.phone);
+      const normalizedPhone = normalizePhone(phoneValidation.phone);
+      if (!normalizedPhone) {
+        return res.status(400).json({ error: "Invalid phone format" });
+      }
 
-      const [existingUsers] = await db.query("SELECT id FROM users WHERE phone = ? AND id != ?", [encryptedPhone, userId]);
+      const [existingUsers] = await db.query("SELECT id FROM users WHERE phone = ? AND id != ?", [normalizedPhone, userId]);
 
       if (existingUsers.length > 0) {
         return res.status(409).json({ error: "Phone number already in use" });
       }
 
       updates.push("phone = ?");
-      values.push(encryptedPhone);
+      values.push(normalizedPhone);
     }
 
     if (updates.length === 0) {
@@ -279,6 +281,29 @@ router.put("/profile", authenticateToken, async (req, res, next) => {
 
     const decryptedUser = decryptUserData(updatedUsers[0]);
     res.json({ user: decryptedUser });
+  } catch (error) {
+    next(error);
+  }
+});
+router.delete("/me", authenticateToken, async (req, res, next) => {
+  try {
+    if (req.user?.type && req.user.type !== "client") {
+      return res.status(403).json({ error: "Only client account can be deleted here" });
+    }
+    const userId = req.user.id;
+    const [users] = await db.query("SELECT id FROM users WHERE id = ?", [userId]);
+    if (users.length === 0) {
+      return res.status(404).json({ error: "User not found" });
+    }
+    const token = req.cookies?.access_token || extractBearerToken(req.headers["authorization"]);
+    if (token) {
+      await addToBlacklist(token);
+    }
+    await db.query("DELETE FROM users WHERE id = ?", [userId]);
+    const clearOptions = getClearAuthCookieOptions();
+    res.clearCookie("access_token", clearOptions);
+    res.clearCookie("refresh_token", clearOptions);
+    res.json({ message: "Account deleted successfully" });
   } catch (error) {
     next(error);
   }
@@ -323,6 +348,12 @@ router.post("/addresses", authenticateToken, async (req, res, next) => {
     const houseValidation = validateAddress(house);
     if (!houseValidation.valid) {
       return res.status(400).json({ error: `House: ${houseValidation.error}` });
+    }
+    if (comment) {
+      const commentValidation = validateAddress(comment);
+      if (!commentValidation.valid) {
+        return res.status(400).json({ error: `Comment: ${commentValidation.error}` });
+      }
     }
 
     const [cities] = await db.query("SELECT id FROM cities WHERE id = ? AND is_active = TRUE", [city_id]);
@@ -392,28 +423,50 @@ router.put("/addresses/:id", authenticateToken, async (req, res, next) => {
       values.push(city_id);
     }
     if (street !== undefined) {
-      updates.push("street = ?");
-      values.push(street);
+      if (street) {
+        const streetValidation = validateAddress(street);
+        if (!streetValidation.valid) {
+          return res.status(400).json({ error: `Street: ${streetValidation.error}` });
+        }
+        updates.push("street = ?");
+        values.push(encryptAddress(streetValidation.address));
+      } else {
+        return res.status(400).json({ error: "Street cannot be empty" });
+      }
     }
     if (house !== undefined) {
-      updates.push("house = ?");
-      values.push(house);
+      if (house) {
+        const houseValidation = validateAddress(house);
+        if (!houseValidation.valid) {
+          return res.status(400).json({ error: `House: ${houseValidation.error}` });
+        }
+        updates.push("house = ?");
+        values.push(encryptAddress(houseValidation.address));
+      } else {
+        return res.status(400).json({ error: "House cannot be empty" });
+      }
     }
     if (entrance !== undefined) {
       updates.push("entrance = ?");
-      values.push(entrance);
+      values.push(entrance || null);
     }
     if (apartment !== undefined) {
       updates.push("apartment = ?");
-      values.push(apartment);
+      values.push(apartment || null);
     }
     if (intercom !== undefined) {
       updates.push("intercom = ?");
-      values.push(intercom);
+      values.push(intercom || null);
     }
     if (comment !== undefined) {
+      if (comment) {
+        const commentValidation = validateAddress(comment);
+        if (!commentValidation.valid) {
+          return res.status(400).json({ error: `Comment: ${commentValidation.error}` });
+        }
+      }
       updates.push("comment = ?");
-      values.push(comment);
+      values.push(comment ? encryptAddress(comment) : null);
     }
     if (latitude !== undefined) {
       updates.push("latitude = ?");
@@ -442,7 +495,8 @@ router.put("/addresses/:id", authenticateToken, async (req, res, next) => {
        WHERE da.id = ?`,
       [addressId],
     );
-    res.json({ address: updatedAddress[0] });
+    const decryptedAddress = decryptAddressData(updatedAddress[0]);
+    res.json({ address: decryptedAddress });
   } catch (error) {
     next(error);
   }

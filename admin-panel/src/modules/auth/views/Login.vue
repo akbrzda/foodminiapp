@@ -47,15 +47,28 @@ import Input from "@/shared/components/ui/input/Input.vue";
 
 const authStore = useAuthStore();
 const router = useRouter();
+const POST_LOGIN_REDIRECT_KEY = "admin_post_login_redirect";
 const form = reactive({
   email: "",
   password: "",
 });
 
+const normalizeRedirectPath = (value) => {
+  if (!value || typeof value !== "string") return "";
+  const path = value.trim();
+  if (!path.startsWith("/")) return "";
+  if (path === "/login" || path.startsWith("/login?")) return "";
+  return path;
+};
+
 const handleLogin = async () => {
   const ok = await authStore.login(form);
   if (ok) {
-    router.push({ name: "dashboard" });
+    const queryRedirect = normalizeRedirectPath(router.currentRoute.value.query?.redirect);
+    const storedRedirect = normalizeRedirectPath(sessionStorage.getItem(POST_LOGIN_REDIRECT_KEY) || "");
+    const redirectTarget = queryRedirect || storedRedirect || "/dashboard";
+    sessionStorage.removeItem(POST_LOGIN_REDIRECT_KEY);
+    router.push(redirectTarget);
   }
 };
 </script>

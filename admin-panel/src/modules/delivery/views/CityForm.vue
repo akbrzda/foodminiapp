@@ -103,13 +103,11 @@ import Input from "@/shared/components/ui/input/Input.vue";
 import PageHeader from "@/shared/components/PageHeader.vue";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/components/ui/select";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
-import { useTheme } from "@/shared/composables/useTheme.js";
 import { createMarkerIcon, getTileLayer } from "@/shared/utils/leaflet.js";
 
 const route = useRoute();
 const router = useRouter();
 const { showErrorNotification, showSuccessNotification } = useNotifications();
-const { resolvedTheme } = useTheme();
 
 const cityId = computed(() => (route.params.id ? Number(route.params.id) : null));
 const isEditing = computed(() => Number.isFinite(cityId.value));
@@ -158,7 +156,7 @@ const initCityMap = () => {
     attributionControl: false,
     zoomControl: true,
   }).setView(center, form.value.latitude ? 11 : 5);
-  cityTileLayer = getTileLayer(resolvedTheme.value, { maxZoom: 20 }).addTo(cityMap);
+  cityTileLayer = getTileLayer({ maxZoom: 20 }).addTo(cityMap);
   if (form.value.latitude && form.value.longitude) {
     cityMarker = L.marker([form.value.latitude, form.value.longitude], {
       draggable: true,
@@ -268,17 +266,6 @@ const submitCity = async () => {
     saving.value = false;
   }
 };
-
-watch(
-  () => resolvedTheme.value,
-  () => {
-    if (!cityMap) return;
-    if (cityTileLayer) {
-      cityTileLayer.remove();
-    }
-    cityTileLayer = getTileLayer(resolvedTheme.value, { maxZoom: 20 }).addTo(cityMap);
-  },
-);
 
 onMounted(() => {
   loadCity();

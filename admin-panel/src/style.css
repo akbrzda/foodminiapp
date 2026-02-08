@@ -86,64 +86,32 @@ body {
 a[href^="tel:"] {
   text-decoration: none;
 }
-#app .leaflet-container {
-  background: hsl(var(--background));
-  font-family: "Montserrat", sans-serif;
-}
-.leaflet-marker {
-  --marker-color: hsl(var(--primary));
-  --marker-ring: hsl(var(--background));
-  position: relative;
-  display: block;
-  width: 18px;
-  height: 18px;
-  border-radius: 999px;
-  background: var(--marker-color);
-  border: 2px solid var(--marker-ring);
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.18);
-}
-.leaflet-marker--circle {
-  border-radius: 999px;
-}
-.leaflet-marker--pin::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  bottom: -6px;
-  width: 8px;
-  height: 8px;
-  background: var(--marker-color);
-  transform: translateX(-50%) rotate(45deg);
-  border-radius: 2px;
-  box-shadow: 2px 2px 6px rgba(0, 0, 0, 0.18);
-}
-.leaflet-marker__core {
-  position: absolute;
-  inset: 4px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.35);
-}
-.leaflet-marker--primary {
-  --marker-color: hsl(var(--primary));
-}
-.leaflet-marker--blue {
-  --marker-color: #3b82f6;
-}
-.leaflet-marker--emerald {
-  --marker-color: #10b981;
-}
-.leaflet-marker--rose {
-  --marker-color: #f43f5e;
-}
-.leaflet-marker--gray {
-  --marker-color: #64748b;
-}
 #app {
   min-height: 100vh;
 }
 .panel-title {
   font-family: "Montserrat", sans-serif;
   letter-spacing: -0.01em;
+}
+
+/* Устраняем визуальные швы между тайлами Leaflet (эффект "сетки") по всей админ-панели. */
+.leaflet-container {
+  background: hsl(var(--muted));
+}
+.leaflet-tile {
+  outline: 1px solid transparent;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+.leaflet-tile-container {
+  will-change: transform;
+}
+.leaflet-container img,
+.leaflet-container .leaflet-tile,
+.leaflet-container .leaflet-marker-icon,
+.leaflet-container .leaflet-marker-shadow {
+  max-width: none !important;
+  max-height: none !important;
 }
 
 @layer base {
@@ -153,9 +121,4 @@ a[href^="tel:"] {
   body {
     @apply bg-background text-foreground;
   }
-}
-.leaflet-popup-content-wrapper,
-.leaflet-popup-tip {
-  background: hsl(var(--background)) !important;
-  color: hsl(var(--foreground)) !important;
 }

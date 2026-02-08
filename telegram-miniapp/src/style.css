@@ -235,3 +235,23 @@ body {
 a[href^="tel:"] {
   text-decoration: none;
 }
+
+/* Устраняем визуальные швы между тайлами Leaflet (эффект "сетки"). */
+.leaflet-container {
+  background: var(--color-background-secondary);
+}
+.leaflet-tile {
+  outline: 1px solid transparent;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+.leaflet-tile-container {
+  will-change: transform;
+}
+.leaflet-container img,
+.leaflet-container .leaflet-tile,
+.leaflet-container .leaflet-marker-icon,
+.leaflet-container .leaflet-marker-shadow {
+  max-width: none !important;
+  max-height: none !important;
+}

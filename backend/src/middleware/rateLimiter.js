@@ -49,6 +49,9 @@ export const redisRateLimiter = (options = {}) => {
     windowMs = 60000, // 1 минута по умолчанию
     max = 60, // 60 запросов по умолчанию
     message = "Rate limit exceeded",
+    failOpen = false,
+    fallbackStatus = 503,
+    fallbackMessage = "Сервис временно недоступен",
   } = options;
 
   return async (req, res, next) => {
@@ -72,8 +75,10 @@ export const redisRateLimiter = (options = {}) => {
       next();
     } catch (error) {
       console.error("Rate limiter error:", error);
-      // В случае ошибки Redis пропускаем запрос
-      next();
+      if (failOpen) {
+        return next();
+      }
+      return res.status(fallbackStatus).json({ error: fallbackMessage });
     }
   };
 };
@@ -84,4 +89,7 @@ export const strictAuthLimiter = redisRateLimiter({
   windowMs: 15 * 60 * 1000, // 15 минут
   max: 5, // Только 5 попыток
   message: "Слишком много неудачных попыток входа. Аккаунт временно заблокирован",
+  failOpen: false,
+  fallbackStatus: 503,
+  fallbackMessage: "Авторизация временно недоступна, попробуйте позже",
 });

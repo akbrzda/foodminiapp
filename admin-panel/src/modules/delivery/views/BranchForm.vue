@@ -157,7 +157,6 @@ import PageHeader from "@/shared/components/PageHeader.vue";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/components/ui/select";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
 import { useReferenceStore } from "@/shared/stores/reference.js";
-import { useTheme } from "@/shared/composables/useTheme.js";
 import { createMarkerIcon, getTileLayer } from "@/shared/utils/leaflet.js";
 import { formatPhoneInput, isValidPhone, normalizeBoolean, normalizePhone } from "@/shared/utils/format.js";
 
@@ -165,7 +164,6 @@ const route = useRoute();
 const router = useRouter();
 const referenceStore = useReferenceStore();
 const { showErrorNotification, showSuccessNotification, showWarningNotification } = useNotifications();
-const { resolvedTheme } = useTheme();
 
 const branchId = computed(() => (route.params.id ? Number(route.params.id) : null));
 const isEditing = computed(() => Number.isFinite(branchId.value));
@@ -262,7 +260,7 @@ const initBranchMap = () => {
     attributionControl: false,
     zoomControl: true,
   }).setView(center, 13);
-  branchTileLayer.value = getTileLayer(resolvedTheme.value, { maxZoom: 20 }).addTo(branchMap.value);
+  branchTileLayer.value = getTileLayer({ maxZoom: 20 }).addTo(branchMap.value);
   if (form.value.latitude && form.value.longitude) {
     const branchIcon = createMarkerIcon("pin", "primary", 18);
     branchMarker.value = L.marker([form.value.latitude, form.value.longitude], {
@@ -429,17 +427,6 @@ const handlePhoneInput = (event) => {
     phoneError.value = "";
   }
 };
-
-watch(
-  () => resolvedTheme.value,
-  () => {
-    if (!branchMap.value) return;
-    if (branchTileLayer.value) {
-      branchTileLayer.value.remove();
-    }
-    branchTileLayer.value = getTileLayer(resolvedTheme.value, { maxZoom: 20 }).addTo(branchMap.value);
-  },
-);
 
 watch(
   () => cityId.value,

@@ -119,7 +119,6 @@ import { useRoute, useRouter } from "vue-router";
 import api from "@/shared/api/client.js";
 import { useReferenceStore } from "@/shared/stores/reference.js";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
-import { useTheme } from "@/shared/composables/useTheme.js";
 import { getMapColor, getTileLayer } from "@/shared/utils/leaflet.js";
 import Button from "@/shared/components/ui/button/Button.vue";
 import CardContent from "@/shared/components/ui/card/CardContent.vue";
@@ -169,7 +168,6 @@ const route = useRoute();
 const router = useRouter();
 const referenceStore = useReferenceStore();
 const { showErrorNotification, showSuccessNotification } = useNotifications();
-const { resolvedTheme } = useTheme();
 const branchId = computed(() => parseInt(route.params.branchId, 10));
 const polygonId = computed(() => route.params.polygonId);
 const cityId = computed(() => parseInt(route.query.cityId, 10));
@@ -224,7 +222,7 @@ const initMap = () => {
   const selectedBranch = branches.find((b) => b.id === branchId.value);
   const center = selectedBranch?.latitude && selectedBranch?.longitude ? [selectedBranch.latitude, selectedBranch.longitude] : [55.751244, 37.618423];
   map = L.map(container, { zoomControl: false, attributionControl: false }).setView(center, 13);
-  tileLayer = getTileLayer(resolvedTheme.value, { maxZoom: 20 }).addTo(map);
+  tileLayer = getTileLayer({ maxZoom: 20 }).addTo(map);
   drawnItems = new L.FeatureGroup();
   map.addLayer(drawnItems);
   backgroundLayer = new L.FeatureGroup();
@@ -236,8 +234,8 @@ const initMap = () => {
         allowIntersection: false,
         showArea: false,
         shapeOptions: {
-          color: getMapColor(resolvedTheme.value, "accent"),
-          fillColor: getMapColor(resolvedTheme.value, "accentFill"),
+          color: getMapColor("accent"),
+          fillColor: getMapColor("accentFill"),
           fillOpacity: 1,
           weight: 3,
           opacity: 0.9,
@@ -265,8 +263,8 @@ const renderPolygon = (polygon) => {
   const rawCoords = polygon.polygon.coordinates[0];
   const coords = rawCoords.map((coord) => [coord[0], coord[1]]);
   currentLayer = L.polygon(coords, {
-    color: getMapColor(resolvedTheme.value, "accent"),
-    fillColor: getMapColor(resolvedTheme.value, "accentFill"),
+    color: getMapColor("accent"),
+    fillColor: getMapColor("accentFill"),
     fillOpacity: 1,
     weight: 3,
     opacity: 0.9,
@@ -277,7 +275,7 @@ const renderPolygon = (polygon) => {
 const renderBackgroundPolygons = (excludeId = null) => {
   if (!map || !backgroundLayer) return;
   backgroundLayer.clearLayers();
-  const muted = resolvedTheme.value === "dark" ? "#94a3b8" : "#cbd5e1";
+  const muted = "#cbd5e1";
   const style = {
     color: muted,
     fillColor: muted,
@@ -413,20 +411,6 @@ const savePolygon = async () => {
     showErrorNotification("Ошибка сохранения полигона");
   }
 };
-watch(
-  () => resolvedTheme.value,
-  () => {
-    if (!map) return;
-    if (tileLayer) {
-      tileLayer.remove();
-    }
-    tileLayer = getTileLayer(resolvedTheme.value, { maxZoom: 20 }).addTo(map);
-    if (originalPolygon) {
-      renderPolygon(originalPolygon);
-    }
-    renderBackgroundPolygons(originalPolygon?.id || null);
-  },
-);
 onMounted(async () => {
   try {
     await referenceStore.loadCities();

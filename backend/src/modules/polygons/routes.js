@@ -153,13 +153,30 @@ router.get("/branch/:branchId", async (req, res, next) => {
 });
 router.post("/geocode", async (req, res, next) => {
   try {
-    const { address } = req.body;
-    if (!address || typeof address !== "string" || address.trim().length === 0) {
+    const rawQuery = typeof req.body?.query === "string" ? req.body.query : req.body?.address;
+    if (!rawQuery || typeof rawQuery !== "string" || rawQuery.trim().length === 0) {
       return res.status(400).json({
-        error: "address is required and must be a non-empty string",
+        error: "query or address is required and must be a non-empty string",
       });
     }
-    const cacheKey = `geocode:${Buffer.from(address.trim().toLowerCase()).toString("base64")}`;
+    const query = rawQuery.trim();
+    const requestedLimit = Number(req.body?.limit);
+    const limit = Number.isFinite(requestedLimit) ? Math.min(Math.max(Math.trunc(requestedLimit), 1), 10) : 5;
+    const city = typeof req.body?.city === "string" ? req.body.city.trim() : "";
+    const latitude = Number(req.body?.latitude);
+    const longitude = Number(req.body?.longitude);
+    const radius = Number(req.body?.radius);
+    const hasCenter = Number.isFinite(latitude) && Number.isFinite(longitude);
+    const hasRadius = Number.isFinite(radius) && radius > 0 && radius <= 2;
+    const cachePayload = {
+      query: query.toLowerCase(),
+      limit,
+      city: city.toLowerCase(),
+      latitude: hasCenter ? Number(latitude.toFixed(4)) : null,
+      longitude: hasCenter ? Number(longitude.toFixed(4)) : null,
+      radius: hasRadius ? Number(radius.toFixed(2)) : null,
+    };
+    const cacheKey = `geocode:${Buffer.from(JSON.stringify(cachePayload)).toString("base64")}`;
     let cached = null;
     try {
       cached = await redis.get(cacheKey);
@@ -169,13 +186,15 @@ router.post("/geocode", async (req, res, next) => {
     if (cached) {
       return res.json(JSON.parse(cached));
     }
-    const rateLimitKey = "geocode:ratelimit";
+    const isAutocomplete = limit > 1;
+    const minIntervalMs = isAutocomplete ? 250 : 1000;
+    const rateLimitKey = isAutocomplete ? "geocode:ratelimit:autocomplete" : "geocode:ratelimit";
     try {
       const lastRequest = await redis.get(rateLimitKey);
       if (lastRequest) {
         const timeSinceLastRequest = Date.now() - parseInt(lastRequest);
-        if (timeSinceLastRequest < 1000) {
-          await new Promise((resolve) => setTimeout(resolve, 1000 - timeSinceLastRequest));
+        if (timeSinceLastRequest < minIntervalMs) {
+          await new Promise((resolve) => setTimeout(resolve, minIntervalMs - timeSinceLastRequest));
         }
       }
       await redis.set(rateLimitKey, Date.now().toString(), "EX", 1);
@@ -183,41 +202,88 @@ router.post("/geocode", async (req, res, next) => {
       // Redis errors are non-critical
     }
     const nominatimUrl = "https://nominatim.openstreetmap.org/search";
+    const fullQuery = city ? `${query}, ${city}` : query;
+    const params = {
+      q: fullQuery,
+      format: "json",
+      limit,
+      addressdetails: 1,
+    };
+    if (hasCenter && hasRadius && query.length >= 3) {
+      const viewbox = `${longitude - radius},${latitude - radius},${longitude + radius},${latitude + radius}`;
+      params.viewbox = viewbox;
+      params.bounded = 1;
+    }
     const response = await axios.get(nominatimUrl, {
-      params: {
-        q: address.trim(),
-        format: "json",
-        limit: 1,
-        addressdetails: 1,
-      },
+      params,
       headers: {
         "User-Agent": "MiniappPanda/1.0 (Food Delivery Service)",
       },
       timeout: 5000,
     });
     if (!response.data || response.data.length === 0) {
+      if (limit > 1) {
+        return res.json({ items: [] });
+      }
       return res.status(404).json({
         error: "Address not found",
       });
     }
-    const result = response.data[0];
-    const geocodeResult = {
-      lat: parseFloat(result.lat),
-      lng: parseFloat(result.lon),
-      formatted_address: result.display_name,
-      address: {
-        street: result.address?.road || "",
-        house: result.address?.house_number || "",
-        city: result.address?.city || result.address?.town || result.address?.village || "",
-        country: result.address?.country || "",
-      },
-    };
+    const items = response.data
+      .map((item) => {
+        const address = item?.address || {};
+        const street =
+          address.road ||
+          address.pedestrian ||
+          address.footway ||
+          address.residential ||
+          address.living_street ||
+          address.street ||
+          address.neighbourhood;
+        const house = address.house_number || address.building || "";
+        const label = street ? (house ? `${street}, ${house}` : street) : item.display_name || "";
+        const lat = Number.parseFloat(item.lat);
+        const lon = Number.parseFloat(item.lon);
+        if (!Number.isFinite(lat) || !Number.isFinite(lon) || !label) {
+          return null;
+        }
+        return {
+          lat,
+          lon,
+          lng: lon,
+          label,
+          formatted_address: item.display_name || label,
+          address: {
+            street: street || "",
+            house,
+            city: address.city || address.town || address.village || "",
+            country: address.country || "",
+          },
+        };
+      })
+      .filter(Boolean);
+    const geocodeResult = { items };
     try {
       await redis.set(cacheKey, JSON.stringify(geocodeResult), "EX", 86400);
     } catch (redisError) {
       // Redis errors are non-critical
     }
-    res.json(geocodeResult);
+    if (limit === 1) {
+      const first = items[0];
+      if (!first) {
+        return res.status(404).json({
+          error: "Address not found",
+        });
+      }
+      return res.json({
+        lat: first.lat,
+        lng: first.lng,
+        formatted_address: first.formatted_address,
+        address: first.address,
+        label: first.label,
+      });
+    }
+    return res.json(geocodeResult);
   } catch (error) {
     if (error.response) {
       return res.status(502).json({
@@ -245,7 +311,7 @@ router.post("/reverse", async (req, res, next) => {
     }
     const roundedLat = lat.toFixed(5);
     const roundedLon = lon.toFixed(5);
-    const cacheKey = `reverse:${roundedLat},${roundedLon}`;
+    const cacheKey = `reverse:v2:${roundedLat},${roundedLon}`;
     let cached = null;
     try {
       cached = await redis.get(cacheKey);
@@ -275,10 +341,12 @@ router.post("/reverse", async (req, res, next) => {
       try {
         response = await axios.get(nominatimUrl, {
           params: {
-            format: "json",
+            format: "jsonv2",
             addressdetails: 1,
+            zoom: 18,
             lat: roundedLat,
             lon: roundedLon,
+            "accept-language": "ru",
           },
           headers: {
             "User-Agent": "MiniappPanda/1.0 (Food Delivery Service)",
@@ -311,6 +379,8 @@ router.post("/reverse", async (req, res, next) => {
     }
     const result = response.data;
     const address = result.address || {};
+    const baseLat = Number.parseFloat(result.lat);
+    const baseLon = Number.parseFloat(result.lon);
     const street =
       address.road ||
       address.pedestrian ||
@@ -319,13 +389,154 @@ router.post("/reverse", async (req, res, next) => {
       address.living_street ||
       address.street ||
       address.neighbourhood;
-    const house = address.house_number || address.building;
-    const label = street ? (house ? `${street}, ${house}` : street) : result.display_name || "";
-    const payload = {
-      lat: parseFloat(result.lat),
-      lon: parseFloat(result.lon),
-      label,
-    };
+    let house = address.house_number || address.building;
+    let finalLat = Number.isFinite(baseLat) ? baseLat : lat;
+    let finalLon = Number.isFinite(baseLon) ? baseLon : lon;
+    let label = street ? (house ? `${street}, ${house}` : street) : result.display_name || "";
+
+    // Если reverse попал только в улицу, выбираем ближайший адрес с номером дома рядом с точкой.
+    if (street && !house) {
+      const extractAddress = (value) => {
+        const addr = value?.address || {};
+        const extractedStreet =
+          addr.road ||
+          addr.pedestrian ||
+          addr.footway ||
+          addr.residential ||
+          addr.living_street ||
+          addr.street ||
+          addr.neighbourhood;
+        const extractedHouse = addr.house_number || addr.building;
+        const extractedLat = Number.parseFloat(value?.lat);
+        const extractedLon = Number.parseFloat(value?.lon);
+        if (!extractedStreet || !extractedHouse || !Number.isFinite(extractedLat) || !Number.isFinite(extractedLon)) {
+          return null;
+        }
+        return { street: extractedStreet, house: extractedHouse, lat: extractedLat, lon: extractedLon };
+      };
+      try {
+        const city =
+          address.city ||
+          address.town ||
+          address.village ||
+          address.county ||
+          address.state ||
+          "";
+        const query = city ? `${street}, ${city}` : street;
+        const delta = 0.0035;
+        const nearbySearch = await axios.get("https://nominatim.openstreetmap.org/search", {
+          params: {
+            q: query,
+            format: "jsonv2",
+            addressdetails: 1,
+            limit: 20,
+            viewbox: `${lon - delta},${lat - delta},${lon + delta},${lat + delta}`,
+            bounded: 1,
+            "accept-language": "ru",
+          },
+          headers: {
+            "User-Agent": "MiniappPanda/1.0 (Food Delivery Service)",
+          },
+          timeout: 7000,
+        });
+
+        let candidates = nearbySearch.data || [];
+        if (!candidates.length && city) {
+          // Structured search для дома по улице/городу обычно точнее, чем общий q.
+          const structured = await axios.get("https://nominatim.openstreetmap.org/search", {
+            params: {
+              street,
+              city,
+              format: "jsonv2",
+              addressdetails: 1,
+              limit: 20,
+              viewbox: `${lon - delta},${lat - delta},${lon + delta},${lat + delta}`,
+              bounded: 1,
+              "accept-language": "ru",
+            },
+            headers: {
+              "User-Agent": "MiniappPanda/1.0 (Food Delivery Service)",
+            },
+            timeout: 7000,
+          });
+          candidates = structured.data || [];
+        }
+
+        const nearest = candidates
+          .map((item) => {
+            const itemAddress = item?.address || {};
+            const itemStreet =
+              itemAddress.road ||
+              itemAddress.pedestrian ||
+              itemAddress.footway ||
+              itemAddress.residential ||
+              itemAddress.living_street ||
+              itemAddress.street ||
+              itemAddress.neighbourhood;
+            const itemHouse = itemAddress.house_number || itemAddress.building;
+            const itemLat = Number.parseFloat(item.lat);
+            const itemLon = Number.parseFloat(item.lon);
+            if (!itemStreet || !itemHouse || !Number.isFinite(itemLat) || !Number.isFinite(itemLon)) {
+              return null;
+            }
+            const dLat = itemLat - lat;
+            const dLon = itemLon - lon;
+            return { itemStreet, itemHouse, itemLat, itemLon, distance: dLat * dLat + dLon * dLon };
+          })
+          .filter(Boolean)
+          .sort((a, b) => a.distance - b.distance)[0];
+
+        if (nearest) {
+          house = nearest.itemHouse;
+          finalLat = nearest.itemLat;
+          finalLon = nearest.itemLon;
+          label = `${nearest.itemStreet}, ${nearest.itemHouse}`;
+        }
+      } catch (fallbackError) {
+        // Ошибка fallback-поиска не критична, остаёмся на результате reverse.
+      }
+
+      // Если после поиска по улице/городу дом так и не найден, пробуем несколько ближайших точек вокруг маркера.
+      if (!house) {
+        const offsets = [
+          [0.0002, 0],
+          [-0.0002, 0],
+          [0, 0.0002],
+          [0, -0.0002],
+          [0.0002, 0.0002],
+          [-0.0002, -0.0002],
+        ];
+        for (const [dLat, dLon] of offsets) {
+          try {
+            const nearbyReverse = await axios.get(nominatimUrl, {
+              params: {
+                format: "jsonv2",
+                addressdetails: 1,
+                zoom: 18,
+                lat: Number(lat + dLat).toFixed(5),
+                lon: Number(lon + dLon).toFixed(5),
+                "accept-language": "ru",
+              },
+              headers: {
+                "User-Agent": "MiniappPanda/1.0 (Food Delivery Service)",
+              },
+              timeout: 5000,
+            });
+            const extracted = extractAddress(nearbyReverse.data);
+            if (!extracted) continue;
+            house = extracted.house;
+            finalLat = extracted.lat;
+            finalLon = extracted.lon;
+            label = `${extracted.street}, ${extracted.house}`;
+            break;
+          } catch (pointError) {
+            // Игнорируем ошибку точечного fallback и продолжаем.
+          }
+        }
+      }
+    }
+
+    const payload = { lat: finalLat, lon: finalLon, label };
     try {
       await redis.set(cacheKey, JSON.stringify(payload), "EX", 86400);
     } catch (redisError) {

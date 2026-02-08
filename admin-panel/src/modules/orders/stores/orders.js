@@ -90,11 +90,12 @@ export const useOrdersStore = defineStore("orders", {
         }
       });
     },
-    connectWebSocket() {
+    async connectWebSocket() {
       if (this.ws || this.connecting) return;
       const authStore = useAuthStore();
       const token = authStore.token;
       if (!token) return;
+      this.connecting = true;
       const apiBase = api.defaults.baseURL || "http://localhost:3000";
       const wsBase = import.meta.env.VITE_WS_URL || apiBase;
       let wsUrl;
@@ -102,6 +103,7 @@ export const useOrdersStore = defineStore("orders", {
         wsUrl = new URL(wsBase, window.location.origin);
       } catch (error) {
         devError("Некорректный WS URL:", error);
+        this.connecting = false;
         return;
       }
       if (wsUrl.pathname.startsWith("/api") || wsUrl.pathname === "/" || wsUrl.pathname === "") {
@@ -109,8 +111,22 @@ export const useOrdersStore = defineStore("orders", {
       }
       const isSecure = window.location.protocol === "https:" || wsUrl.protocol === "https:";
       wsUrl.protocol = isSecure ? "wss:" : "ws:";
-      wsUrl.searchParams.set("token", token);
-      this.connecting = true;
+      let ticket = "";
+      try {
+        const ticketResponse = await api.post("/api/auth/ws-ticket");
+        ticket = ticketResponse.data?.ticket || "";
+      } catch (error) {
+        devError("Не удалось получить WS ticket:", error);
+        this.connecting = false;
+        this.scheduleReconnect();
+        return;
+      }
+      if (!ticket) {
+        this.connecting = false;
+        this.scheduleReconnect();
+        return;
+      }
+      wsUrl.searchParams.set("ticket", ticket);
       this.ws = new WebSocket(wsUrl.toString());
       this.ws.onopen = () => {
         this.connecting = false;

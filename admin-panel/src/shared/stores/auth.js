@@ -1,11 +1,28 @@
 import { defineStore } from "pinia";
 import api from "@/shared/api/client.js";
+
 const STORAGE_TOKEN = "admin_token";
 const STORAGE_USER = "admin_user";
+const LEGACY_STORAGE_TOKEN = "admin_token";
+const LEGACY_STORAGE_USER = "admin_user";
+const AUTH_SYNC_KEY = "admin_auth_sync_event";
+const POST_LOGIN_REDIRECT_KEY = "admin_post_login_redirect";
+let crossTabSyncAttached = false;
+
+const readSessionToken = () => sessionStorage.getItem(STORAGE_TOKEN) || localStorage.getItem(LEGACY_STORAGE_TOKEN) || "";
+const readSessionUser = () => {
+  const raw = sessionStorage.getItem(STORAGE_USER) || localStorage.getItem(LEGACY_STORAGE_USER) || "null";
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+};
+
 export const useAuthStore = defineStore("auth", {
   state: () => ({
-    token: localStorage.getItem(STORAGE_TOKEN) || "",
-    user: JSON.parse(localStorage.getItem(STORAGE_USER) || "null"),
+    token: readSessionToken(),
+    user: readSessionUser(),
     loading: false,
     error: "",
   }),
@@ -14,6 +31,60 @@ export const useAuthStore = defineStore("auth", {
     role: (state) => state.user?.role || "",
   },
   actions: {
+    syncAuthEvent(payload) {
+      try {
+        localStorage.setItem(AUTH_SYNC_KEY, JSON.stringify({ ...payload, ts: Date.now() }));
+        localStorage.removeItem(AUTH_SYNC_KEY);
+      } catch {
+        // Игнорируем ошибки синхронизации между вкладками.
+      }
+    },
+    rememberPostLoginRedirect() {
+      if (typeof window === "undefined") return;
+      const currentPath = `${window.location.pathname || ""}${window.location.search || ""}${window.location.hash || ""}`;
+      if (!currentPath || currentPath === "/login" || currentPath.startsWith("/login?")) return;
+      try {
+        sessionStorage.setItem(POST_LOGIN_REDIRECT_KEY, currentPath);
+      } catch {
+        // Игнорируем ошибки сохранения redirect.
+      }
+    },
+    applySession(token, user) {
+      this.token = token || "";
+      this.user = user || null;
+      if (token && user) {
+        sessionStorage.setItem(STORAGE_TOKEN, token);
+        sessionStorage.setItem(STORAGE_USER, JSON.stringify(user));
+      } else {
+        sessionStorage.removeItem(STORAGE_TOKEN);
+        sessionStorage.removeItem(STORAGE_USER);
+      }
+      localStorage.removeItem(LEGACY_STORAGE_TOKEN);
+      localStorage.removeItem(LEGACY_STORAGE_USER);
+    },
+    initCrossTabSync() {
+      if (crossTabSyncAttached || typeof window === "undefined") return;
+      const handler = (event) => {
+        if (event.key !== AUTH_SYNC_KEY || !event.newValue) return;
+        try {
+          const payload = JSON.parse(event.newValue);
+          if (payload?.type === "login" && payload.token && payload.user) {
+            this.applySession(payload.token, payload.user);
+            if (window.location.pathname === "/login") {
+              window.location.assign("/");
+            }
+            return;
+          }
+          if (payload?.type === "logout") {
+            this.logout({ redirect: true, notifyServer: false, sync: false });
+          }
+        } catch {
+          // Игнорируем поврежденные события синхронизации.
+        }
+      };
+      window.addEventListener("storage", handler);
+      crossTabSyncAttached = true;
+    },
     isTokenExpired(token) {
       if (!token) return true;
       const parts = token.split(".");
@@ -38,10 +109,12 @@ export const useAuthStore = defineStore("auth", {
       this.error = "";
       try {
         const response = await api.post("/api/auth/admin/login", payload);
-        this.token = response.data.token;
-        this.user = response.data.user;
-        localStorage.setItem(STORAGE_TOKEN, this.token);
-        localStorage.setItem(STORAGE_USER, JSON.stringify(this.user));
+        this.applySession(response.data.token, response.data.user);
+        this.syncAuthEvent({
+          type: "login",
+          token: response.data.token,
+          user: response.data.user,
+        });
         return true;
       } catch (error) {
         this.error = error.response?.data?.error || "Login failed";
@@ -50,11 +123,28 @@ export const useAuthStore = defineStore("auth", {
         this.loading = false;
       }
     },
-    logout({ redirect = true } = {}) {
-      this.token = "";
-      this.user = null;
-      localStorage.removeItem(STORAGE_TOKEN);
-      localStorage.removeItem(STORAGE_USER);
+    logout({ redirect = true, notifyServer = true, sync = true } = {}) {
+      this.rememberPostLoginRedirect();
+      const currentToken = this.token;
+      const apiBase = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
+      if (currentToken && notifyServer) {
+        fetch(`${apiBase}/api/auth/logout`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json; charset=utf-8",
+            Accept: "application/json; charset=utf-8",
+            Authorization: `Bearer ${currentToken}`,
+          },
+          credentials: "include",
+          keepalive: true,
+        }).catch(() => {
+          // Ошибка server-logout не блокирует локальную очистку.
+        });
+      }
+      this.applySession("", null);
+      if (sync) {
+        this.syncAuthEvent({ type: "logout" });
+      }
       if (redirect && window.location.pathname !== "/login") {
         window.location.assign("/login");
       }

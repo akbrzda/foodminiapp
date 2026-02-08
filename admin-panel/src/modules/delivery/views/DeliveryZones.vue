@@ -249,7 +249,6 @@ import { Calendar as CalendarView } from "@/shared/components/ui/calendar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/components/ui/select";
 import PageHeader from "@/shared/components/PageHeader.vue";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
-import { useTheme } from "@/shared/composables/useTheme.js";
 import { createMarkerIcon, getMapColor, getTileLayer } from "@/shared/utils/leaflet.js";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -291,7 +290,6 @@ const authStore = useAuthStore();
 const route = useRoute();
 const router = useRouter();
 const { showErrorNotification, showSuccessNotification, showWarningNotification } = useNotifications();
-const { resolvedTheme } = useTheme();
 const isManager = computed(() => authStore.role === "manager");
 const cityId = ref("");
 const branchId = ref("");
@@ -483,7 +481,7 @@ const initMap = () => {
     zoomControl: false,
     attributionControl: false,
   }).setView(center, 13);
-  tileLayer = getTileLayer(resolvedTheme.value, { maxZoom: 20 }).addTo(map);
+  tileLayer = getTileLayer({ maxZoom: 20 }).addTo(map);
   if (selectedBranch) {
     const branchIcon = createMarkerIcon("pin", "primary", 18);
     L.marker(center, { icon: branchIcon })
@@ -504,8 +502,8 @@ const initMap = () => {
           allowIntersection: false,
           showArea: false,
           shapeOptions: {
-            color: getMapColor(resolvedTheme.value, "accent"),
-            fillColor: getMapColor(resolvedTheme.value, "accentFill"),
+            color: getMapColor("accent"),
+            fillColor: getMapColor("accentFill"),
             fillOpacity: 1,
             weight: 3,
             opacity: 0.9,
@@ -539,8 +537,8 @@ const initMap = () => {
     editHandler = new L.EditToolbar.Edit(map, {
       featureGroup: drawnItems,
       selectedPathOptions: {
-        color: getMapColor(resolvedTheme.value, "warning"),
-        fillColor: getMapColor(resolvedTheme.value, "warning"),
+        color: getMapColor("warning"),
+        fillColor: getMapColor("warning"),
         fillOpacity: 0.2,
       },
     });
@@ -557,10 +555,10 @@ const renderPolygonsOnMap = () => {
     : cityId.value
       ? allPolygons.value.filter((polygon) => polygon.city_id === parseInt(cityId.value))
       : allPolygons.value;
-  const accent = getMapColor(resolvedTheme.value, "accent");
-  const accentFill = getMapColor(resolvedTheme.value, "accentFill");
-  const danger = getMapColor(resolvedTheme.value, "danger");
-  const muted = resolvedTheme.value === "dark" ? "#94a3b8" : "#9ca3af";
+  const accent = getMapColor("accent");
+  const accentFill = getMapColor("accentFill");
+  const danger = getMapColor("danger");
+  const muted = "#9ca3af";
   visiblePolygons.forEach((polygon) => {
     if (!polygon.polygon) return;
     let color, fillOpacity;
@@ -1009,19 +1007,6 @@ watch(
     }
   },
   { deep: true },
-);
-watch(
-  () => resolvedTheme.value,
-  () => {
-    if (!map) return;
-    if (tileLayer) {
-      tileLayer.remove();
-    }
-    tileLayer = getTileLayer(resolvedTheme.value, { maxZoom: 20 }).addTo(map);
-    if (drawnItems) {
-      renderPolygonsOnMap();
-    }
-  },
 );
 onMounted(() => {
   referenceStore.loadCities();

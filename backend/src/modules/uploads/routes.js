@@ -1,11 +1,25 @@
 import express from "express";
-import { authenticateToken } from "../../middleware/auth.js";
+import { authenticateToken, requireRole } from "../../middleware/auth.js";
 import { upload, processAndSaveImage } from "../../middleware/upload.js";
+import { createLimiter, redisRateLimiter } from "../../middleware/rateLimiter.js";
 import { IMAGE_CATEGORIES, deleteImage, deleteEntityImages } from "../../config/uploads.js";
 
 const router = express.Router();
+router.use(authenticateToken, requireRole("admin", "manager", "ceo"));
+router.use(createLimiter);
+router.use(
+  redisRateLimiter({
+    prefix: "uploads_mutation",
+    windowMs: 15 * 60 * 1000,
+    max: 120,
+    message: "Превышен лимит операций с файлами. Попробуйте позже",
+    failOpen: false,
+    fallbackStatus: 503,
+    fallbackMessage: "Сервис загрузки временно недоступен",
+  }),
+);
 
-router.post("/menu-items/:id", authenticateToken, upload.single("image"), async (req, res) => {
+router.post("/menu-items/:id", upload.single("image"), async (req, res) => {
   try {
     const { id } = req.params;
     if (!req.file) {
@@ -22,7 +36,7 @@ router.post("/menu-items/:id", authenticateToken, upload.single("image"), async 
   }
 });
 
-router.post("/menu-categories/:id", authenticateToken, upload.single("image"), async (req, res) => {
+router.post("/menu-categories/:id", upload.single("image"), async (req, res) => {
   try {
     const { id } = req.params;
     if (!req.file) {
@@ -41,7 +55,7 @@ router.post("/menu-categories/:id", authenticateToken, upload.single("image"), a
 
 /* Accepts 'temp' as ID for temporary uploads
  */
-router.post("/modifiers/:id", authenticateToken, upload.single("image"), async (req, res) => {
+router.post("/modifiers/:id", upload.single("image"), async (req, res) => {
   try {
     const { id } = req.params;
     if (!req.file) {
@@ -58,7 +72,7 @@ router.post("/modifiers/:id", authenticateToken, upload.single("image"), async (
   }
 });
 
-router.post("/modifier-groups/:id", authenticateToken, upload.single("image"), async (req, res) => {
+router.post("/modifier-groups/:id", upload.single("image"), async (req, res) => {
   try {
     const { id } = req.params;
     if (!req.file) {
@@ -74,7 +88,7 @@ router.post("/modifier-groups/:id", authenticateToken, upload.single("image"), a
   }
 });
 
-router.post("/tags/:id", authenticateToken, upload.single("image"), async (req, res) => {
+router.post("/tags/:id", upload.single("image"), async (req, res) => {
   try {
     const { id } = req.params;
     if (!req.file) {
@@ -90,7 +104,7 @@ router.post("/tags/:id", authenticateToken, upload.single("image"), async (req, 
   }
 });
 
-router.post("/broadcasts/:id", authenticateToken, upload.single("image"), async (req, res) => {
+router.post("/broadcasts/:id", upload.single("image"), async (req, res) => {
   try {
     const { id } = req.params;
     if (!req.file) {
@@ -107,7 +121,7 @@ router.post("/broadcasts/:id", authenticateToken, upload.single("image"), async 
   }
 });
 
-router.delete("/:category/:id/:filename", authenticateToken, async (req, res) => {
+router.delete("/:category/:id/:filename", async (req, res) => {
   try {
     const { category, id, filename } = req.params;
     if (!Object.values(IMAGE_CATEGORIES).includes(category)) {
@@ -124,7 +138,7 @@ router.delete("/:category/:id/:filename", authenticateToken, async (req, res) =>
   }
 });
 
-router.delete("/:category/:id", authenticateToken, async (req, res) => {
+router.delete("/:category/:id", async (req, res) => {
   try {
     const { category, id } = req.params;
     if (!Object.values(IMAGE_CATEGORIES).includes(category)) {
