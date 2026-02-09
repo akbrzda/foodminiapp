@@ -102,6 +102,9 @@ export const addressesAPI = {
   reverseGeocode(lat, lng, config = {}) {
     return api.post("/polygons/reverse", { latitude: lat, longitude: lng }, config);
   },
+  getCityPolygons(cityId) {
+    return api.get(`/polygons/city/${cityId}`);
+  },
 };
 export const geocodeAPI = {
   geocode(address) {

@@ -1,11 +1,13 @@
 <template>
   <div class="login">
     <div class="login-content">
-      <div class="logo">🍔</div>
-      <h1>Добро пожаловать</h1>
-      <p>Войдите с помощью Telegram для продолжения</p>
+      <div class="logo"><img src="../../../assets/panda.png" alt="Panda Pizza" /></div>
+    </div>
+
+    <div class="login-footer">
+      <p>Нажмите кнопку ниже, чтобы войти</p>
       <button class="login-btn" @click="handleLogin" :disabled="loading">
-        {{ loading ? "Вход..." : "🚀 Войти через Telegram" }}
+        {{ loading ? "Вход..." : "Поделиться номером" }}
       </button>
       <div v-if="error" class="error">{{ error }}</div>
     </div>
@@ -84,23 +86,81 @@ async function handleLogin() {
 </script>
 <style scoped>
 .login {
-  min-height: 100vh;
+  position: relative;
   display: flex;
-  align-items: center;
-  justify-content: center;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 100vh;
+  min-height: 100dvh;
   background: var(--color-background);
-  padding: 16px 12px;
+  overflow: hidden;
+  padding: 16px 12px calc(12px + env(safe-area-inset-bottom));
 }
 .login-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   text-align: center;
   color: var(--color-text-primary);
   max-width: 400px;
   width: 100%;
 }
-.logo {
-  font-size: 80px;
-  margin-bottom: 24px;
+.login-footer {
+  width: 100%;
+  max-width: 400px;
 }
+/* Контейнер логотипа */
+.logo {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.logo img {
+  width: min(300px, 80vw);
+  height: auto;
+  animation:
+    welcome-entrance 0.8s ease-out,
+    welcome-bounce 1.2s ease-in-out 0.8s 2,
+    gentle-float 4s ease-in-out 3.2s infinite;
+}
+
+/* 1. Плавное появление с небольшим увеличением */
+@keyframes welcome-entrance {
+  0% {
+    opacity: 0;
+    transform: translateY(20px) scale(0.9);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* 2. Приветственное "подпрыгивание" (2 раза) */
+@keyframes welcome-bounce {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-10px) scale(1.03);
+  }
+}
+
+/* 3. Спокойное "плавание" после приветствия */
+@keyframes gentle-float {
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
 h1 {
   font-size: var(--font-size-h1);
   font-weight: var(--font-weight-bold);
@@ -108,17 +168,18 @@ h1 {
   margin-bottom: 12px;
 }
 p {
-  font-size: var(--font-size-body);
+  font-size: var(--font-size-caption);
   color: var(--color-text-primary);
   opacity: 0.8;
-  margin-bottom: 48px;
+  margin-bottom: 20px;
+  text-align: center;
 }
 .login-btn {
   width: 100%;
   padding: 16px;
   border: none;
   border-radius: var(--border-radius-md);
-  background: var(--color-background);
+  background: var(--color-primary);
   color: var(--color-text-primary);
   font-size: var(--font-size-h3);
   font-weight: var(--font-weight-semibold);
@@ -128,8 +189,7 @@ p {
     background-color var(--transition-duration) var(--transition-easing);
 }
 .login-btn:hover:not(:disabled) {
-  transform: scale(1.02);
-  background: var(--color-background-secondary);
+  transform: scale(0.98);
 }
 .login-btn:disabled {
   opacity: 0.7;

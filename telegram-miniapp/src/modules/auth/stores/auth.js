@@ -1,4 +1,5 @@
 import { defineStore } from "pinia";
+import { getInitData } from "@/shared/services/telegram.js";
 
 const SESSION_TOKEN_KEY = "token";
 const SESSION_USER_KEY = "user";
@@ -53,6 +54,50 @@ const clearAccessibleCookies = () => {
     document.cookie = `${cookieName}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Strict`;
   }
 };
+const getApiBase = () => (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
+const fetchUserProfile = async (token) => {
+  if (!token) return null;
+  const response = await fetch(`${getApiBase()}/api/users/profile`, {
+    method: "GET",
+    headers: {
+      Accept: "application/json; charset=utf-8",
+      Authorization: `Bearer ${token}`,
+    },
+    credentials: "include",
+  });
+  if (!response.ok) return null;
+  const payload = await response.json();
+  return payload?.user || null;
+};
+const tryRefreshSessionToken = async () => {
+  const refreshResponse = await fetch(`${getApiBase()}/api/auth/refresh`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      Accept: "application/json; charset=utf-8",
+    },
+    credentials: "include",
+  });
+  if (refreshResponse.ok) {
+    const refreshPayload = await refreshResponse.json();
+    if (refreshPayload?.token) return refreshPayload.token;
+  }
+
+  const initData = getInitData();
+  if (!initData) return null;
+  const loginResponse = await fetch(`${getApiBase()}/api/auth/telegram`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      Accept: "application/json; charset=utf-8",
+    },
+    credentials: "include",
+    body: JSON.stringify({ initData }),
+  });
+  if (!loginResponse.ok) return null;
+  const loginPayload = await loginResponse.json();
+  return loginPayload?.token || null;
+};
 migrateLegacyAuthState();
 
 export const useAuthStore = defineStore("auth", {
@@ -72,19 +117,22 @@ export const useAuthStore = defineStore("auth", {
       this.isAuthenticated = !!token;
       if (token) {
         sessionStorage.setItem(SESSION_TOKEN_KEY, token);
+        localStorage.setItem(LEGACY_TOKEN_KEY, token);
       } else {
         sessionStorage.removeItem(SESSION_TOKEN_KEY);
+        localStorage.removeItem(LEGACY_TOKEN_KEY);
       }
-      localStorage.removeItem(LEGACY_TOKEN_KEY);
     },
     setUser(user) {
       this.user = user;
       if (user) {
-        sessionStorage.setItem(SESSION_USER_KEY, JSON.stringify(user));
+        const serialized = JSON.stringify(user);
+        sessionStorage.setItem(SESSION_USER_KEY, serialized);
+        localStorage.setItem(LEGACY_USER_KEY, serialized);
       } else {
         sessionStorage.removeItem(SESSION_USER_KEY);
+        localStorage.removeItem(LEGACY_USER_KEY);
       }
-      localStorage.removeItem(LEGACY_USER_KEY);
     },
     clearPersistedSessionData() {
       sessionStorage.removeItem(SESSION_TOKEN_KEY);
@@ -104,28 +152,26 @@ export const useAuthStore = defineStore("auth", {
         this.sessionChecked = true;
         return false;
       }
-      const apiBase = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
       try {
-        const response = await fetch(`${apiBase}/api/users/profile`, {
-          method: "GET",
-          headers: {
-            Accept: "application/json; charset=utf-8",
-            Authorization: `Bearer ${this.token}`,
-          },
-          credentials: "include",
-        });
-        if (!response.ok) {
+        let token = this.token;
+        let user = await fetchUserProfile(token);
+        if (!user) {
+          const nextToken = await tryRefreshSessionToken();
+          if (!nextToken) {
+            await this.logout({ notifyServer: true });
+            this.sessionChecked = true;
+            return false;
+          }
+          token = nextToken;
+          this.setToken(token);
+          user = await fetchUserProfile(token);
+        }
+        if (!user) {
           await this.logout({ notifyServer: true });
           this.sessionChecked = true;
           return false;
         }
-        const payload = await response.json();
-        if (!payload?.user) {
-          await this.logout({ notifyServer: true });
-          this.sessionChecked = true;
-          return false;
-        }
-        this.setUser(payload.user);
+        this.setUser(user);
         this.sessionChecked = true;
         return true;
       } catch (error) {

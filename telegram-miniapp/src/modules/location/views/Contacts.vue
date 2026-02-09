@@ -87,7 +87,7 @@ const cityName = computed(() => locationStore.selectedCity?.name || "");
 const polygonsByBranch = computed(() => {
   const map = new Map();
   polygons.value.forEach((polygon) => {
-    const key = polygon.branch_id || polygon.branch_name || "unknown";
+    const key = String(polygon.branch_id || polygon.branch_name || "unknown");
     if (!map.has(key)) {
       map.set(key, []);
     }
@@ -178,8 +178,13 @@ async function initBranchMap(branchId) {
   const branchPolygons = getBranchPolygons(branch);
   const bounds = L.latLngBounds();
   branchPolygons.forEach((polygon, index) => {
-    if (!polygon?.polygon?.coordinates) return;
-    const coords = polygon.polygon.coordinates[0].map((coord) => [coord[0], coord[1]]);
+    const ring = getPolygonRing(polygon?.polygon);
+    if (!ring) return;
+    // Для этого проекта координаты из БД уже приходят в порядке [lat, lng].
+    const coords = ring
+      .map((coord) => [Number(coord?.[0]), Number(coord?.[1])])
+      .filter((pair) => Number.isFinite(pair[0]) && Number.isFinite(pair[1]));
+    if (coords.length < 3) return;
     const shape = L.polygon(coords, {
       color: "#10b981",
       fillColor: "#10b981",
@@ -230,9 +235,19 @@ function getBranchCenter(branchId) {
 }
 function getBranchPolygons(branch) {
   if (!branch) return [];
-  const byId = polygonsByBranch.value.get(branch.id) || [];
+  const byId = polygonsByBranch.value.get(String(branch.id)) || [];
   if (byId.length) return byId;
-  return polygonsByBranch.value.get(branch.name) || polygonsByBranch.value.get(branch.displayName) || [];
+  return polygonsByBranch.value.get(String(branch.name)) || polygonsByBranch.value.get(String(branch.displayName)) || [];
+}
+function getPolygonRing(geometry) {
+  if (!geometry?.coordinates) return null;
+  if (geometry.type === "Polygon") {
+    return Array.isArray(geometry.coordinates[0]) ? geometry.coordinates[0] : null;
+  }
+  if (geometry.type === "MultiPolygon") {
+    return Array.isArray(geometry.coordinates[0]?.[0]) ? geometry.coordinates[0][0] : null;
+  }
+  return null;
 }
 function getPhones(branch) {
   if (!branch) return [];

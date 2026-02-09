@@ -99,6 +99,7 @@ const locationStore = useLocationStore();
 
 const mapContainerRef = ref(null);
 const addressInputRef = ref(null);
+const cityPolygons = ref([]);
 
 const deliveryAddress = ref(locationStore.deliveryAddress || "");
 const addressSuggestions = ref([]);
@@ -125,6 +126,7 @@ let searchTimeout = null;
 let reverseTimeout = null;
 let leafletLoading = null;
 let mapInstance = null;
+let polygonsLayer = null;
 let suggestionsController = null;
 let reverseController = null;
 let lastSearchId = 0;
@@ -189,8 +191,12 @@ async function ensureTariffs() {
 
 onMounted(async () => {
   locationStore.setDeliveryType("delivery");
+  await loadCityPolygons();
   await initMap();
-  await requestInitialLocation();
+  const hasSavedCoords = Boolean(selectedLocation.value);
+  if (!hasSavedCoords) {
+    await requestInitialLocation();
+  }
 
   if (deliveryAddress.value && !selectedLocation.value) {
     const resolved = await geocodeAddress(deliveryAddress.value.trim());
@@ -216,6 +222,7 @@ onUnmounted(() => {
     mapInstance.remove();
     mapInstance = null;
   }
+  polygonsLayer = null;
 });
 
 function onAddressInput() {
@@ -411,6 +418,8 @@ async function initMap() {
   }).setView([initial.lat, initial.lon ?? initial.lng], 15);
 
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(mapInstance);
+  polygonsLayer = L.layerGroup().addTo(mapInstance);
+  renderCityPolygons();
   mapInstance.on("movestart", () => {
     if (!isAddressFocused.value) {
       showSuggestions.value = false;
@@ -436,6 +445,65 @@ async function initMap() {
     selectedLocation.value = { lat: initial.lat, lon: initial.lon ?? initial.lng, lng: initial.lon ?? initial.lng };
     scheduleReverseFromCenter(initial.lat, initial.lon ?? initial.lng, true);
   }
+}
+
+async function loadCityPolygons() {
+  if (!locationStore.selectedCity?.id) {
+    cityPolygons.value = [];
+    return;
+  }
+  try {
+    const response = await addressesAPI.getCityPolygons(locationStore.selectedCity.id);
+    cityPolygons.value = Array.isArray(response?.data?.polygons) ? response.data.polygons : [];
+    renderCityPolygons();
+  } catch (error) {
+    cityPolygons.value = [];
+    devError("Не удалось загрузить полигоны города:", error);
+  }
+}
+
+function renderCityPolygons() {
+  if (!mapInstance || !polygonsLayer || !window.L) return;
+  const L = window.L;
+  polygonsLayer.clearLayers();
+  const selectedZoneId = Number(locationStore.deliveryZone?.id);
+
+  cityPolygons.value.forEach((polygon) => {
+    const rings = getGeometryRings(polygon?.polygon);
+    if (!rings.length) return;
+
+    const isSelected = Number(polygon?.id) === selectedZoneId;
+    rings.forEach((ring) => {
+      const points = ring
+        .map((coord) => [Number(coord?.[0]), Number(coord?.[1])])
+        .filter((pair) => Number.isFinite(pair[0]) && Number.isFinite(pair[1]));
+      if (points.length < 3) return;
+
+      const shape = L.polygon(points, {
+        color: isSelected ? "#f59e0b" : "#10b981",
+        fillColor: isSelected ? "#f59e0b" : "#10b981",
+        fillOpacity: isSelected ? 0.28 : 0.12,
+        weight: isSelected ? 3 : 2,
+      });
+      shape.addTo(polygonsLayer);
+
+      if (polygon?.name) {
+        shape.bindTooltip(polygon.name, { direction: "center", sticky: true });
+      }
+    });
+  });
+}
+
+function getGeometryRings(geometry) {
+  if (!geometry?.coordinates) return [];
+  if (geometry.type === "Polygon") {
+    const outerRing = geometry.coordinates[0];
+    return Array.isArray(outerRing) ? [outerRing] : [];
+  }
+  if (geometry.type === "MultiPolygon") {
+    return geometry.coordinates.map((polygon) => polygon?.[0]).filter((ring) => Array.isArray(ring));
+  }
+  return [];
 }
 
 function setMapCenter(lat, lon, options = {}) {
@@ -698,6 +766,20 @@ watch(deliveryAddress, (value) => {
     lastAddress.value = value;
   }
 });
+
+watch(
+  () => locationStore.deliveryZone?.id,
+  () => {
+    renderCityPolygons();
+  },
+);
+
+watch(
+  () => locationStore.selectedCity?.id,
+  async () => {
+    await loadCityPolygons();
+  },
+);
 </script>
 
 <style scoped>
