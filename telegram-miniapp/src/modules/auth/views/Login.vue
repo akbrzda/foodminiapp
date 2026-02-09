@@ -1,7 +1,7 @@
 <template>
   <div class="login">
     <div class="login-content">
-      <div class="logo"><img src="../../../assets/panda.png" alt="Panda Pizza" /></div>
+      <div class="logo"><img src="../../../panda.png" alt="Panda Pizza" /></div>
     </div>
 
     <div class="login-footer">
