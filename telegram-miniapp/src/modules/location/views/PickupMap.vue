@@ -1,5 +1,6 @@
 <template>
   <div class="pickup-map">
+    <PageHeader title="Самовывоз" />
     <div ref="mapContainerRef" class="map"></div>
     <div class="search-bar">
       <input v-model="searchQuery" class="search-input" placeholder="Найти пиццерию" />
@@ -14,7 +15,7 @@
       </button>
     </div>
     <div v-if="selectedBranch" class="branch-sheet">
-      <button class="sheet-close" @click="selectedBranch = null">
+      <button class="sheet-close" aria-label="Закрыть карточку филиала" @click="selectedBranch = null">
         <X :size="16" />
       </button>
       <div class="sheet-title">{{ selectedBranch.displayName || selectedBranch.name }}</div>
@@ -39,6 +40,7 @@
 import { ref, computed, onMounted } from "vue";
 import { X, MapPin } from "lucide-vue-next";
 import { useRouter } from "vue-router";
+import PageHeader from "@/shared/components/PageHeader.vue";
 import { useLocationStore } from "@/modules/location/stores/location.js";
 import { formatPhone, normalizePhone } from "@/shared/utils/phone.js";
 import { citiesAPI } from "@/shared/api/endpoints.js";
@@ -193,9 +195,13 @@ async function loadLeaflet() {
     const css = document.createElement("link");
     css.rel = "stylesheet";
     css.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+    css.integrity = "sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H";
+    css.crossOrigin = "anonymous";
     document.head.appendChild(css);
     const script = document.createElement("script");
     script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+    script.integrity = "sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH";
+    script.crossOrigin = "anonymous";
     script.async = true;
     script.onload = () => resolve(window.L);
     script.onerror = () => resolve(null);

@@ -24,11 +24,11 @@ import { grantRegistrationBonus } from "../loyalty/services/loyaltyService.js";
 import { addToBlacklist, isBlacklisted } from "../../middleware/tokenBlacklist.js";
 import { authenticateToken } from "../../middleware/auth.js";
 import { logger } from "../../utils/logger.js";
-import { authLimiter, createLimiter, strictAuthLimiter } from "../../middleware/rateLimiter.js";
+import { authLimiter, createLimiter, strictAuthLimiter, telegramAuthLimiter } from "../../middleware/rateLimiter.js";
 
 const router = express.Router();
-const CLIENT_ACCESS_TOKEN_TTL = "12h";
-const CLIENT_ACCESS_TOKEN_COOKIE_MAX_AGE = 12 * 60 * 60 * 1000;
+const CLIENT_ACCESS_TOKEN_TTL = "2h";
+const CLIENT_ACCESS_TOKEN_COOKIE_MAX_AGE = 2 * 60 * 60 * 1000;
 const ADMIN_ACCESS_TOKEN_TTL = "8h";
 const ADMIN_ACCESS_TOKEN_COOKIE_MAX_AGE = 8 * 60 * 60 * 1000;
 const CLIENT_REFRESH_TOKEN_TTL = "30d";
@@ -71,38 +71,22 @@ function getTokenTtlSeconds(decodedToken) {
   const seconds = Number(decodedToken?.exp) - now;
   return Number.isFinite(seconds) && seconds > 0 ? seconds : 1;
 }
-function verifyTelegramAuth(data, botToken) {
-  const { hash, ...userData } = data;
-  const dataCheckString = Object.keys(userData)
-    .sort()
-    .map((key) => `${key}=${userData[key]}`)
-    .join("\n");
-  const secretKey = crypto.createHash("sha256").update(botToken).digest();
-  const hmac = crypto.createHmac("sha256", secretKey).update(dataCheckString).digest("hex");
-  return hmac === hash;
-}
 
 // Применяем rate limiting на все auth endpoints
-router.post("/telegram", authLimiter, strictAuthLimiter, async (req, res, next) => {
+router.post("/telegram", telegramAuthLimiter, async (req, res, next) => {
   try {
-    const { initData } = req.body;
-    let telegramPayload = req.body;
-    if (initData) {
-      const params = new URLSearchParams(initData);
-      const parsedUser = parseTelegramUser(initData);
-      if (!parsedUser) {
-        return res.status(400).json({ error: "Telegram data is required" });
-      }
-      telegramPayload = {
-        id: parsedUser.telegram_id,
-        first_name: parsedUser.first_name,
-        last_name: parsedUser.last_name,
-        username: parsedUser.username,
-        auth_date: Number(params.get("auth_date")),
-        hash: params.get("hash"),
-      };
+    const { initData } = req.body || {};
+    if (!initData || typeof initData !== "string") {
+      return res.status(400).json({ error: "Telegram initData is required" });
     }
-    const { id, first_name, last_name, username, photo_url, auth_date, hash } = telegramPayload;
+    const params = new URLSearchParams(initData);
+    const parsedUser = parseTelegramUser(initData);
+    if (!parsedUser) {
+      return res.status(400).json({ error: "Telegram data is required" });
+    }
+    const { telegram_id: id, first_name, last_name, username } = parsedUser;
+    const auth_date = Number(params.get("auth_date"));
+    const hash = params.get("hash");
     if (!id || !hash) {
       return res.status(400).json({ error: "Telegram data is required" });
     }
@@ -110,7 +94,7 @@ router.post("/telegram", authLimiter, strictAuthLimiter, async (req, res, next) 
     if (!botToken) {
       return res.status(500).json({ error: "Server misconfiguration: TELEGRAM_BOT_TOKEN is required" });
     }
-    const isValid = initData ? validateTelegramData(initData, botToken) : verifyTelegramAuth(telegramPayload, botToken);
+    const isValid = validateTelegramData(initData, botToken);
     if (!isValid) {
       return res.status(403).json({ error: "Invalid Telegram data" });
     }

@@ -1,86 +1,94 @@
 <template>
   <div class="cart">
-    <div v-if="cartStore.items.length === 0" class="empty">
-      <p>Корзина пуста</p>
-      <button class="btn-primary" @click="$router.push('/')">Перейти в меню</button>
-    </div>
-    <div v-else class="cart-content">
-      <div class="items">
-        <div v-for="(item, index) in cartStore.items" :key="index" class="cart-item">
-          <div class="item-media" v-if="item.image_url">
-            <img :src="normalizeImageUrl(item.image_url)" :alt="item.name" />
-          </div>
-          <div class="item-info">
-            <h3>
-              {{ item.name }} <span class="variant-text" v-if="item.variant_name">{{ item.variant_name }}</span>
-            </h3>
-            <div class="modifiers" v-if="getModifierSummary(item).length">
-              <div class="modifier">{{ getModifierSummary(item).join(", ") }}</div>
+    <PageHeader title="Корзина" />
+    <div class="page-container page-container--with-fixed-footer">
+      <div v-if="cartStore.items.length === 0" class="empty">
+        <p>Корзина пуста</p>
+        <button class="btn-primary action-btn" @click="$router.push('/')">Перейти в меню</button>
+      </div>
+      <div v-else class="cart-content">
+        <div class="items">
+          <div v-for="(item, index) in cartStore.items" :key="index" class="cart-item">
+            <div class="item-media" v-if="item.image_url">
+              <img :src="normalizeImageUrl(item.image_url)" :alt="item.name" />
             </div>
-            <div class="price">{{ getItemTotalPrice(item) }} ₽</div>
-          </div>
-          <div class="quantity-controls">
-            <button @click="decreaseQuantity(index)">-</button>
-            <span>{{ item.quantity }}</span>
-            <button @click="increaseQuantity(index)">+</button>
-          </div>
-        </div>
-      </div>
-      <div class="bonus-section" v-if="bonusesEnabled && bonusBalance > 0">
-        <div class="bonus-header">
-          <label class="bonus-switch">
-            <input type="checkbox" v-model="useBonuses" @change="onBonusToggle" />
-            <span class="bonus-switch-track"></span>
-          </label>
-          <div class="bonus-title">
-            Списать {{ formatPrice(displayBonusToUse) }} бонусов
-            <button class="bonus-info-icon" type="button" @click="toggleBonusInfo" aria-label="Информация о списании">!</button>
+            <div class="item-info">
+              <h3>
+                {{ item.name }} <span class="variant-text" v-if="item.variant_name">{{ item.variant_name }}</span>
+              </h3>
+              <div class="modifiers" v-if="getModifierSummary(item).length">
+                <div class="modifier">{{ getModifierSummary(item).join(", ") }}</div>
+              </div>
+              <div class="price">{{ getItemTotalPrice(item) }} ₽</div>
+            </div>
+            <div class="quantity-controls">
+              <button aria-label="Уменьшить количество" @click="decreaseQuantity(index)">-</button>
+              <span>{{ item.quantity }}</span>
+              <button aria-label="Увеличить количество" @click="increaseQuantity(index)">+</button>
+            </div>
           </div>
         </div>
-        <div v-if="showBonusInfo" class="bonus-tooltip">
-          У вас {{ formatPrice(bonusBalance) }} бонусов, можно списать до {{ maxRedeemPercentLabel }}% от суммы заказа.
-        </div>
+        <div class="bonus-section" v-if="bonusesEnabled && bonusBalance > 0">
+          <div class="bonus-header">
+            <label class="bonus-switch">
+              <input type="checkbox" v-model="useBonuses" @change="onBonusToggle" />
+              <span class="bonus-switch-track"></span>
+            </label>
+            <div class="bonus-title">
+              Списать {{ formatPrice(displayBonusToUse) }} бонусов
+              <button class="bonus-info-icon" type="button" @click="toggleBonusInfo" aria-label="Информация о списании">!</button>
+            </div>
+          </div>
+          <div v-if="showBonusInfo" class="bonus-tooltip">
+            У вас {{ formatPrice(bonusBalance) }} бонусов, можно списать до {{ maxRedeemPercentLabel }}% от суммы заказа.
+          </div>
 
-        <div class="bonus-hint" v-if="maxBonusToUse === 0">Добавьте товары, чтобы использовать бонусы</div>
-        <button class="bonus-action" type="button" @click="enableBonusUsage" :disabled="maxBonusToUse === 0">Списать частично</button>
-      </div>
-      <div class="summary">
-        <div class="summary-row">
-          <span>Товары ({{ cartStore.itemsCount }})</span>
-          <span>{{ formatPrice(cartStore.totalPrice) }} ₽</span>
+          <div class="bonus-hint" v-if="maxBonusToUse === 0">Добавьте товары, чтобы использовать бонусы</div>
+          <button class="bonus-action" type="button" @click="enableBonusUsage" :disabled="maxBonusToUse === 0">Списать частично</button>
         </div>
-        <div class="summary-row" v-if="isDelivery">
-          <span>Доставка</span>
-          <span>{{ formatPrice(deliveryCost) }} ₽</span>
+        <div class="summary">
+          <div class="summary-row">
+            <span>Товары ({{ cartStore.itemsCount }})</span>
+            <span>{{ formatPrice(cartStore.totalPrice) }} ₽</span>
+          </div>
+          <div class="summary-row" v-if="isDelivery">
+            <span>Доставка</span>
+            <span>{{ formatPrice(deliveryCost) }} ₽</span>
+          </div>
+          <div class="summary-row bonus-discount" v-if="appliedBonusToUse > 0">
+            <span>Бонусы</span>
+            <span class="discount">-{{ formatPrice(appliedBonusToUse) }} ₽</span>
+          </div>
+          <div class="summary-row total">
+            <span>Итого</span>
+            <span>{{ formatPrice(finalCartTotal) }} ₽</span>
+          </div>
+          <div class="summary-warning" v-if="isDelivery && !isMinOrderReached">Минимальная сумма заказа: {{ formatPrice(minOrderAmount) }} ₽</div>
         </div>
-        <div class="summary-row bonus-discount" v-if="appliedBonusToUse > 0">
-          <span>Бонусы</span>
-          <span class="discount">-{{ formatPrice(appliedBonusToUse) }} ₽</span>
-        </div>
-        <div class="summary-row total">
-          <span>Итого</span>
-          <span>{{ formatPrice(finalCartTotal) }} ₽</span>
-        </div>
-        <div class="summary-warning" v-if="isDelivery && !isMinOrderReached">Минимальная сумма заказа: {{ formatPrice(minOrderAmount) }} ₽</div>
-      </div>
-      <div class="delivery-tariff-widget" v-if="isDelivery && deliveryTariffs.length >= 2">
-        <div class="tariff-title">Стоимость доставки</div>
-        <div v-if="deliveryCost === 0" class="tariff-subtitle">У вас бесплатная доставка</div>
-        <div v-else class="tariff-subtitle">Добавьте еще на {{ formatPrice(nextThreshold?.delta || 0) }} ₽, чтобы снизить стоимость доставки</div>
-        <div class="tariff-pills">
-          <div
-            v-for="(tariff, index) in normalizedTariffs"
-            :key="index"
-            class="tariff-pill"
-            :class="{ free: tariff.delivery_cost === 0, current: isCurrentTariff(tariff) }"
-          >
-            <span>{{ formatPrice(tariff.delivery_cost) }} ₽</span>
+        <div class="delivery-tariff-widget" v-if="isDelivery && deliveryTariffs.length >= 2">
+          <div class="tariff-title">Стоимость доставки</div>
+          <div v-if="deliveryCost === 0" class="tariff-subtitle">У вас бесплатная доставка</div>
+          <div v-else class="tariff-subtitle">Добавьте еще на {{ formatPrice(nextThreshold?.delta || 0) }} ₽, чтобы снизить стоимость доставки</div>
+          <div class="tariff-pills">
+            <div
+              v-for="(tariff, index) in normalizedTariffs"
+              :key="index"
+              class="tariff-pill"
+              :class="{ free: tariff.delivery_cost === 0, current: isCurrentTariff(tariff) }"
+            >
+              <span>{{ formatPrice(tariff.delivery_cost) }} ₽</span>
+            </div>
           </div>
         </div>
+        <button
+          class="checkout-btn action-btn btn-primary"
+          :class="{ 'hidden-on-keyboard': isKeyboardOpen }"
+          @click="checkout"
+          :disabled="isDelivery && !isMinOrderReached"
+        >
+          Перейти к оформлению
+        </button>
       </div>
-      <button class="checkout-btn" :class="{ 'hidden-on-keyboard': isKeyboardOpen }" @click="checkout" :disabled="isDelivery && !isMinOrderReached">
-        Перейти к оформлению
-      </button>
     </div>
     <div v-if="showPartialModal" class="bonus-modal-overlay" @click.self="closePartialModal">
       <div class="bonus-modal">
@@ -107,13 +115,14 @@
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { X } from "lucide-vue-next";
 import { useRouter } from "vue-router";
+import PageHeader from "@/shared/components/PageHeader.vue";
 import { useCartStore } from "@/modules/cart/stores/cart.js";
 import { useLoyaltyStore } from "@/modules/loyalty/stores/loyalty.js";
 import { useLocationStore } from "@/modules/location/stores/location.js";
 import { useMenuStore } from "@/modules/menu/stores/menu.js";
 import { useSettingsStore } from "@/modules/settings/stores/settings.js";
 import { useKeyboardHandler } from "@/shared/composables/useKeyboardHandler";
-import { hapticFeedback } from "@/shared/services/telegram.js";
+import { hapticFeedback, showAlert } from "@/shared/services/telegram.js";
 import { bonusesAPI, addressesAPI, citiesAPI } from "@/shared/api/endpoints.js";
 import { formatPrice, normalizeImageUrl } from "@/shared/utils/format";
 import { formatWeight, formatWeightValue } from "@/shared/utils/weight";
@@ -263,22 +272,22 @@ function decreaseQuantity(index) {
 function checkout() {
   if (!ordersEnabled.value) {
     hapticFeedback("error");
-    alert("Прием заказов временно отключен");
+    showAlert("Прием заказов временно отключен");
     return;
   }
   if (!branchOpenState.value.isOpen) {
     hapticFeedback("error");
-    alert("Филиал закрыт");
+    showAlert("Филиал закрыт");
     return;
   }
   if (isDelivery.value && !settingsStore.deliveryEnabled) {
     hapticFeedback("error");
-    alert("Доставка временно отключена");
+    showAlert("Доставка временно отключена");
     return;
   }
   if (!isDelivery.value && !settingsStore.pickupEnabled) {
     hapticFeedback("error");
-    alert("Самовывоз временно отключен");
+    showAlert("Самовывоз временно отключен");
     return;
   }
   if (isDelivery.value && !isMinOrderReached.value) {
@@ -484,7 +493,7 @@ watch(
     const beforeCost = calculateDeliveryCost(deliveryTariffs.value, Math.max(0, cartStore.totalPrice - prevValue));
     const afterCost = calculateDeliveryCost(deliveryTariffs.value, Math.max(0, cartStore.totalPrice - nextValue));
     if (afterCost > beforeCost) {
-      alert(`Внимание! После списания бонусов стоимость доставки изменится с ${beforeCost} ₽ на ${afterCost} ₽`);
+      showAlert(`Внимание! После списания бонусов стоимость доставки изменится с ${beforeCost} ₽ на ${afterCost} ₽`);
     }
     bonusChangeRequested.value = false;
   },
@@ -525,15 +534,12 @@ watch(
 }
 .empty {
   text-align: center;
-  padding: 64px 16px;
+  padding: 64px 0;
 }
 .empty p {
   font-size: var(--font-size-h3);
   color: var(--color-text-secondary);
   margin-bottom: 24px;
-}
-.cart-content {
-  padding: 16px 12px 100px;
 }
 .items {
   margin-bottom: 8px;
@@ -921,23 +927,5 @@ watch(
 .tariff-current {
   font-size: 11px;
   font-weight: 600;
-}
-.checkout-btn {
-  width: 100%;
-  padding: 18px;
-  border: none;
-  border-radius: var(--border-radius-md);
-  background: var(--color-primary);
-  color: var(--color-text-primary);
-  font-size: var(--font-size-h3);
-  font-weight: var(--font-weight-semibold);
-  cursor: pointer;
-  transition: background-color var(--transition-duration) var(--transition-easing);
-}
-.checkout-btn:hover {
-  background: var(--color-primary-hover);
-}
-.checkout-btn:active {
-  transform: scale(0.98);
 }
 </style>

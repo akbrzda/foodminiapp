@@ -24,22 +24,52 @@ export function ensureReady() {
   return webApp;
 }
 export function getInitData() {
-  if (typeof window !== "undefined" && window.__telegramInitDataOverride) {
-    return window.__telegramInitDataOverride;
-  }
   const webApp = resolveWebApp();
   return webApp?.initData || "";
 }
 export function getStartParam() {
-  if (typeof window !== "undefined" && window.__telegramStartParam) {
-    return window.__telegramStartParam;
-  }
   const webApp = resolveWebApp();
   return webApp?.initDataUnsafe?.start_param || "";
 }
 export function getTelegramUser() {
   const webApp = resolveWebApp();
   return webApp?.initDataUnsafe?.user || null;
+}
+export function getCloudStorageItem(key) {
+  const webApp = resolveWebApp();
+  if (!webApp?.CloudStorage?.getItem) {
+    return Promise.resolve(null);
+  }
+  return new Promise((resolve) => {
+    webApp.CloudStorage.getItem(key, (error, value) => {
+      if (error) {
+        return resolve(null);
+      }
+      resolve(value || null);
+    });
+  });
+}
+export function setCloudStorageItem(key, value) {
+  const webApp = resolveWebApp();
+  if (!webApp?.CloudStorage?.setItem) {
+    return Promise.resolve(false);
+  }
+  return new Promise((resolve) => {
+    webApp.CloudStorage.setItem(key, value, (error) => {
+      resolve(!error);
+    });
+  });
+}
+export function removeCloudStorageItem(key) {
+  const webApp = resolveWebApp();
+  if (!webApp?.CloudStorage?.removeItem) {
+    return Promise.resolve(false);
+  }
+  return new Promise((resolve) => {
+    webApp.CloudStorage.removeItem(key, (error) => {
+      resolve(!error);
+    });
+  });
 }
 export function getColorScheme() {
   return "light";

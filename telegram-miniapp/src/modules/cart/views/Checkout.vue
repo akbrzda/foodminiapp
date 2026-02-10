@@ -1,6 +1,7 @@
 <template>
   <div class="checkout">
-    <div class="content">
+    <PageHeader title="Оформление" />
+    <div class="content page-container page-container--with-fixed-footer">
       <div v-if="!ordersEnabled" class="order-disabled">{{ orderDisabledReason }}</div>
       <div v-else-if="!deliveryEnabled && !pickupEnabled" class="order-disabled">Нет доступных способов заказа</div>
       <template v-else>
@@ -20,9 +21,8 @@
           </div>
         </div>
       </template>
-    </div>
-    <div class="content" v-if="ordersEnabled && orderType === 'delivery'">
-      <div class="delivery-form">
+
+      <div v-if="ordersEnabled && orderType === 'delivery'" class="delivery-form">
         <h2 class="section-title">Адрес доставки</h2>
         <div class="form-group">
           <label class="label">Улица, дом</label>
@@ -30,7 +30,7 @@
             <span class="address-text" :class="{ 'address-placeholder': !deliveryAddress }">
               {{ deliveryAddress || "Укажите адрес" }}
             </span>
-            <button class="edit-address-btn" type="button" @click="openDeliveryMap">
+            <button class="edit-address-btn" type="button" aria-label="Изменить адрес доставки" @click="openDeliveryMap">
               <Pencil :size="16" />
             </button>
           </div>
@@ -63,12 +63,11 @@
         </div>
         <div v-if="addressValidated && !inDeliveryZone" class="error-message">
           <p>Адрес не входит в зону доставки</p>
-          <button class="btn-secondary" @click="openDeliveryMap">Выбрать другой адрес</button>
+          <button class="btn-secondary action-btn" @click="openDeliveryMap">Выбрать другой адрес</button>
         </div>
       </div>
-    </div>
-    <div class="content" v-if="ordersEnabled && orderType === 'pickup'">
-      <div class="pickup-form">
+
+      <div v-if="ordersEnabled && orderType === 'pickup'" class="pickup-form">
         <h2 class="section-title">Выберите филиал</h2>
         <div v-if="loadingBranches" class="loading">Загрузка филиалов...</div>
         <div v-else class="branches-list">
@@ -90,58 +89,59 @@
           </button>
         </div>
       </div>
-    </div>
-    <div class="content" v-if="ordersEnabled && orderType && (orderType === 'pickup' ? selectedBranch : inDeliveryZone)">
-      <div class="order-options">
-        <h2 class="section-title">Дополнительно</h2>
-        <div class="form-group">
-          <label class="label">Способ оплаты</label>
-          <div class="payment-options">
-            <button :class="['payment-option', { active: paymentMethod === 'cash' }]" @click="paymentMethod = 'cash'">
-              <Banknote :size="16" />
-              Наличные
-            </button>
-            <button :class="['payment-option', { active: paymentMethod === 'card' }]" @click="paymentMethod = 'card'">
-              <CreditCard :size="16" />
-              Карта
-            </button>
+
+      <div v-if="ordersEnabled && orderType && (orderType === 'pickup' ? selectedBranch : inDeliveryZone)">
+        <div class="order-options">
+          <h2 class="section-title">Дополнительно</h2>
+          <div class="form-group">
+            <label class="label">Способ оплаты</label>
+            <div class="payment-options">
+              <button :class="['payment-option', { active: paymentMethod === 'cash' }]" @click="paymentMethod = 'cash'">
+                <Banknote :size="16" />
+                Наличные
+              </button>
+              <button :class="['payment-option', { active: paymentMethod === 'card' }]" @click="paymentMethod = 'card'">
+                <CreditCard :size="16" />
+                Карта
+              </button>
+            </div>
+          </div>
+          <div class="form-group" v-if="paymentMethod === 'cash'">
+            <label class="label">Сдача с</label>
+            <input v-model.number="changeFrom" type="number" class="input" placeholder="Сумма" min="0" step="100" />
+            <div v-if="paymentError" class="mt-2 text-xs text-red-500">{{ paymentError }}</div>
+          </div>
+          <div class="form-group">
+            <label class="label">Комментарий к заказу</label>
+            <textarea v-model="orderComment" class="textarea" placeholder="Дополнительные пожелания"></textarea>
           </div>
         </div>
-        <div class="form-group" v-if="paymentMethod === 'cash'">
-          <label class="label">Сдача с</label>
-          <input v-model.number="changeFrom" type="number" class="input" placeholder="Сумма" min="0" step="100" />
-          <div v-if="paymentError" class="mt-2 text-xs text-red-500">{{ paymentError }}</div>
-        </div>
-        <div class="form-group">
-          <label class="label">Комментарий к заказу</label>
-          <textarea v-model="orderComment" class="textarea" placeholder="Дополнительные пожелания"></textarea>
-        </div>
-      </div>
-      <div class="order-summary">
-        <div class="summary-row">
-          <span>Сумма</span>
-          <span>{{ formatPrice(summarySubtotal) }} ₽</span>
-        </div>
-        <div class="summary-row" v-if="orderType === 'delivery' && deliveryCost > 0">
-          <span>Доставка</span>
-          <span>{{ formatPrice(deliveryCost) }} ₽</span>
-        </div>
-        <div class="summary-row bonus-earn" v-if="bonusesEnabled && bonusesToEarn > 0">
-          <span>Будет начислено</span>
-          <span class="earn">{{ formatPrice(bonusesToEarn) }} бонусов</span>
-        </div>
-        <div class="summary-row bonus-discount" v-if="bonusesEnabled && appliedBonusToUse > 0">
-          <span>Будет списано</span>
-          <span class="discount">{{ formatPrice(appliedBonusToUse) }} бонусов</span>
-        </div>
-        <div class="summary-row total">
-          <span>Итого к оплате</span>
-          <span>{{ formatPrice(finalTotalPrice) }} ₽</span>
+        <div class="order-summary">
+          <div class="summary-row">
+            <span>Сумма</span>
+            <span>{{ formatPrice(summarySubtotal) }} ₽</span>
+          </div>
+          <div class="summary-row" v-if="orderType === 'delivery' && deliveryCost > 0">
+            <span>Доставка</span>
+            <span>{{ formatPrice(deliveryCost) }} ₽</span>
+          </div>
+          <div class="summary-row bonus-earn" v-if="bonusesEnabled && bonusesToEarn > 0">
+            <span>Будет начислено</span>
+            <span class="earn">{{ formatPrice(bonusesToEarn) }} бонусов</span>
+          </div>
+          <div class="summary-row bonus-discount" v-if="bonusesEnabled && appliedBonusToUse > 0">
+            <span>Будет списано</span>
+            <span class="discount">{{ formatPrice(appliedBonusToUse) }} бонусов</span>
+          </div>
+          <div class="summary-row total">
+            <span>Итого к оплате</span>
+            <span>{{ formatPrice(finalTotalPrice) }} ₽</span>
+          </div>
         </div>
       </div>
     </div>
     <div class="footer" :class="{ 'hidden-on-keyboard': isKeyboardOpen }" v-if="ordersEnabled && orderType">
-      <button class="submit-btn" @click="submitOrder" :disabled="submitting || !canSubmitOrder">
+      <button class="submit-btn action-btn btn-primary" @click="submitOrder" :disabled="submitting || !canSubmitOrder">
         {{ submitting ? "Оформление..." : `Оформить заказ • ${formatPrice(finalTotalPrice)} ₽` }}
       </button>
     </div>
@@ -151,6 +151,7 @@
 import { ref, computed, onMounted, onUnmounted, watch } from "vue";
 import { useRouter } from "vue-router";
 import { Banknote, CreditCard, Phone, Store, Truck, Clock, Pencil } from "lucide-vue-next";
+import PageHeader from "@/shared/components/PageHeader.vue";
 import { useCartStore } from "@/modules/cart/stores/cart.js";
 import { useLoyaltyStore } from "@/modules/loyalty/stores/loyalty.js";
 import { useLocationStore } from "@/modules/location/stores/location.js";
@@ -158,7 +159,7 @@ import { useMenuStore } from "@/modules/menu/stores/menu.js";
 import { useSettingsStore } from "@/modules/settings/stores/settings.js";
 import { useKeyboardHandler } from "@/shared/composables/useKeyboardHandler";
 import { citiesAPI, addressesAPI, ordersAPI, menuAPI, bonusesAPI } from "@/shared/api/endpoints.js";
-import { hapticFeedback } from "@/shared/services/telegram.js";
+import { hapticFeedback, showAlert } from "@/shared/services/telegram.js";
 import { formatPrice } from "@/shared/utils/format";
 import { formatPhone, normalizePhone } from "@/shared/utils/phone";
 import { calculateDeliveryCost } from "@/shared/utils/deliveryTariffs";
@@ -557,7 +558,7 @@ async function submitOrder() {
   if (!ordersEnabled.value) return;
   if (!branchOpenState.value.isOpen) {
     hapticFeedback("error");
-    alert("Филиал закрыт");
+    showAlert("Филиал закрыт");
     return;
   }
   paymentError.value = "";
@@ -566,7 +567,7 @@ async function submitOrder() {
   try {
     locationStore.setDeliveryDetails({ ...deliveryDetails.value });
     if (!locationStore.selectedCity?.id) {
-      alert("Выберите город перед оформлением заказа");
+      showAlert("Выберите город перед оформлением заказа");
       return;
     }
     if (paymentMethod.value === "cash" && changeFrom.value && changeFrom.value < finalTotalPrice.value) {
@@ -679,7 +680,7 @@ async function submitOrder() {
       const hasLatin = /[A-Za-z]/.test(error.message);
       errorMessage = hasLatin ? "Произошла ошибка" : error.message;
     }
-    alert(errorMessage);
+    showAlert(errorMessage);
   } finally {
     submitting.value = false;
   }
@@ -689,8 +690,6 @@ async function submitOrder() {
 .checkout {
   min-height: 100vh;
   background: var(--color-background);
-  padding: 12px;
-  padding-bottom: 108px;
 }
 .order-disabled {
   padding: 16px;
@@ -890,15 +889,6 @@ async function submitOrder() {
   margin-bottom: 12px;
   font-weight: var(--font-weight-semibold);
 }
-.btn-secondary {
-  padding: 8px 16px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-md);
-  background: var(--color-background);
-  color: var(--color-text-primary);
-  font-size: var(--font-size-body);
-  cursor: pointer;
-}
 .branches-list {
   display: flex;
   flex-direction: column;
@@ -1016,25 +1006,6 @@ async function submitOrder() {
   right: 0;
   padding: 12px;
   z-index: 100;
-}
-.submit-btn {
-  width: 100%;
-  padding: 18px;
-  border: none;
-  border-radius: var(--border-radius-md);
-  background: var(--color-primary);
-  color: var(--color-text-primary);
-  font-size: var(--font-size-h3);
-  font-weight: var(--font-weight-semibold);
-  cursor: pointer;
-  transition: background-color 0.2s;
-}
-.submit-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-.submit-btn:not(:disabled):hover {
-  background: var(--color-primary-hover);
 }
 .loading {
   text-align: center;

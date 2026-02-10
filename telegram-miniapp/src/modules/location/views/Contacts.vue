@@ -1,7 +1,7 @@
 <template>
   <div class="contacts">
-    <div class="contacts-content">
-      <h1 class="page-title">Контакты</h1>
+    <PageHeader title="Контакты" />
+    <div class="contacts-content page-container page-container--spacious-bottom">
       <p class="page-subtitle" v-if="cityName">Город: {{ cityName }}</p>
 
       <div v-if="loading" class="state-message">Загрузка филиалов...</div>
@@ -66,6 +66,7 @@
 import { ref, computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { ChevronDown, Clock, MapPin, Phone } from "lucide-vue-next";
+import PageHeader from "@/shared/components/PageHeader.vue";
 import { useLocationStore } from "@/modules/location/stores/location.js";
 import { citiesAPI } from "@/shared/api/endpoints.js";
 import { formatPhone, normalizePhone } from "@/shared/utils/phone.js";
@@ -309,9 +310,13 @@ async function loadLeaflet() {
     const css = document.createElement("link");
     css.rel = "stylesheet";
     css.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+    css.integrity = "sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H";
+    css.crossOrigin = "anonymous";
     document.head.appendChild(css);
     const script = document.createElement("script");
     script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+    script.integrity = "sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH";
+    script.crossOrigin = "anonymous";
     script.async = true;
     script.onload = () => resolve(window.L);
     script.onerror = () => resolve(null);
@@ -324,15 +329,6 @@ async function loadLeaflet() {
 .contacts {
   min-height: 100vh;
   background: var(--color-background);
-}
-.contacts-content {
-  padding: 16px 12px 32px;
-}
-.page-title {
-  font-size: var(--font-size-h1);
-  font-weight: var(--font-weight-bold);
-  color: var(--color-text-primary);
-  margin: 0 0 6px 0;
 }
 .page-subtitle {
   font-size: var(--font-size-body);

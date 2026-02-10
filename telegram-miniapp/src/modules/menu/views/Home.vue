@@ -117,9 +117,13 @@
                     {{ getAddButtonLabel(item) }}
                   </button>
                   <div v-else class="quantity-controls">
-                    <button class="qty-btn" :disabled="!canOrder" @click.stop="decreaseItemQuantity(item)">−</button>
+                    <button class="qty-btn" aria-label="Уменьшить количество" :disabled="!canOrder" @click.stop="decreaseItemQuantity(item)">
+                      −
+                    </button>
                     <span class="qty-value">{{ getCartItem(item).quantity }}</span>
-                    <button class="qty-btn" :disabled="!canOrder" @click.stop="increaseItemQuantity(item)">+</button>
+                    <button class="qty-btn" aria-label="Увеличить количество" :disabled="!canOrder" @click.stop="increaseItemQuantity(item)">
+                      +
+                    </button>
                   </div>
                 </div>
               </div>
@@ -611,7 +615,7 @@ function goToCart() {
 <style scoped>
 .home {
   min-height: 100vh;
-  padding-bottom: 96px;
+  padding-bottom: env(safe-area-inset-bottom);
   background: var(--color-background);
 }
 .order-disabled {
@@ -936,18 +940,19 @@ function goToCart() {
 .item-card {
   display: flex;
   gap: 8px;
-  padding: 12px;
+  padding: 8px;
   background: var(--color-background);
   border-radius: var(--border-radius-lg);
   cursor: pointer;
-  transition: box-shadow var(--transition-duration) var(--transition-easing);
+  transition: transform var(--transition-duration) var(--transition-easing);
 }
 .item-card.disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
 .item-card:hover {
-  box-shadow: 0px 4px 12px rgba(0, 0, 0, 0.12);
+  transform: scale(0.98);
+  box-shadow: var(--shadow-sm);
 }
 .item-image {
   border-radius: 16px;

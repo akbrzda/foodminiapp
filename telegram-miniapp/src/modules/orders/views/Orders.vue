@@ -1,29 +1,32 @@
 <template>
   <div class="orders">
-    <div v-if="loading" class="loading">Загрузка...</div>
-    <div v-else-if="orders.length === 0" class="empty">
-      <p>У вас пока нет заказов</p>
-      <button class="btn-primary" @click="$router.push('/menu')">Перейти в меню</button>
-    </div>
-    <div v-else class="orders-list">
-      <div v-for="order in orders" :key="order.id" class="order-card" @click="openOrder(order.id)">
-        <div class="order-header">
-          <div class="order-number">#{{ order.order_number }}</div>
-          <div :class="['order-status', `status-${order.status}`]">
-            {{ getStatusText(order.status) }}
+    <PageHeader title="Мои заказы" />
+    <div class="page-container">
+      <div v-if="loading" class="loading">Загрузка...</div>
+      <div v-else-if="orders.length === 0" class="empty">
+        <p>У вас пока нет заказов</p>
+        <button class="btn-primary action-btn" @click="$router.push('/menu')">Перейти в меню</button>
+      </div>
+      <div v-else class="orders-list">
+        <div v-for="order in orders" :key="order.id" class="order-card" @click="openOrder(order.id)">
+          <div class="order-header">
+            <div class="order-number">#{{ order.order_number }}</div>
+            <div :class="['order-status', `status-${order.status}`]">
+              {{ getStatusText(order.status) }}
+            </div>
           </div>
-        </div>
-        <div class="order-date">
-          {{ formatDate(order.created_at) }}
-        </div>
-        <div class="order-details">
-          <div>{{ order.items_count }} позиций</div>
-          <div class="order-total">{{ formatPrice(order.total_amount) }} ₽</div>
-        </div>
-        <div class="order-type">
-          <Truck v-if="order.order_type === 'delivery'" :size="16" />
-          <Store v-else :size="16" />
-          {{ order.order_type === "delivery" ? "Доставка" : "Самовывоз" }}
+          <div class="order-date">
+            {{ formatDate(order.created_at) }}
+          </div>
+          <div class="order-details">
+            <div>{{ order.items_count }} позиций</div>
+            <div class="order-total">{{ formatPrice(order.total_amount) }} ₽</div>
+          </div>
+          <div class="order-type">
+            <Truck v-if="order.order_type === 'delivery'" :size="16" />
+            <Store v-else :size="16" />
+            {{ order.order_type === "delivery" ? "Доставка" : "Самовывоз" }}
+          </div>
         </div>
       </div>
     </div>
@@ -33,6 +36,7 @@
 import { ref, onMounted } from "vue";
 import { Truck, Store } from "lucide-vue-next";
 import { useRouter } from "vue-router";
+import PageHeader from "@/shared/components/PageHeader.vue";
 import { ordersAPI } from "@/shared/api/endpoints.js";
 import { hapticFeedback } from "@/shared/services/telegram.js";
 import { formatPrice } from "@/shared/utils/format";
@@ -95,27 +99,24 @@ function formatDate(dateString) {
 }
 .empty {
   text-align: center;
-  padding: 64px 16px;
+  padding: 64px 0;
 }
 .empty p {
   font-size: var(--font-size-h3);
   color: var(--color-text-secondary);
   margin-bottom: 24px;
 }
-.orders-list {
-  padding: 16px 12px;
-}
 .order-card {
   padding: 16px;
   background: var(--color-background);
   border-radius: var(--border-radius-md);
-  margin-bottom: 12px;
+  margin-bottom: 8px;
   cursor: pointer;
-  box-shadow: var(--shadow-sm);
-  transition: box-shadow var(--transition-duration) var(--transition-easing);
+  border: 1px solid var(--color-border);
+  transition: border-color var(--transition-duration) var(--transition-easing);
 }
 .order-card:hover {
-  box-shadow: 0px 4px 12px rgba(0, 0, 0, 0.12);
+  border-color: var(--color-border-hover);
 }
 .order-header {
   display: flex;

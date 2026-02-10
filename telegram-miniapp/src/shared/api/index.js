@@ -1,9 +1,9 @@
 import axios from "axios";
 import { useAuthStore } from "@/modules/auth/stores/auth.js";
-import { getInitData } from "@/shared/services/telegram.js";
 const apiBase = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
 const api = axios.create({
   baseURL: `${apiBase}/api`,
+  withCredentials: true,
   timeout: 10000,
   headers: {
     "Content-Type": "application/json; charset=utf-8",
@@ -28,25 +28,6 @@ const refreshToken = async () => {
       timeout: 10000,
     })
     .then((response) => response.data)
-    .catch(async () => {
-      const initData = getInitData();
-      if (!initData) {
-        throw new Error("Отсутствуют данные Telegram initData");
-      }
-      const fallbackResponse = await axios.post(
-        `${apiBase}/api/auth/telegram`,
-        { initData },
-        {
-          headers: {
-            "Content-Type": "application/json; charset=utf-8",
-            Accept: "application/json; charset=utf-8",
-          },
-          withCredentials: true,
-          timeout: 10000,
-        },
-      );
-      return fallbackResponse.data;
-    })
     .finally(() => {
       refreshPromise = null;
     });
@@ -76,8 +57,9 @@ api.interceptors.response.use(
     if (error.response) {
       const status = error.response.status;
       const originalRequest = error.config;
+      const isRefreshRequest = originalRequest?.url?.includes("/auth/refresh");
       const isAuthRequest = originalRequest?.url?.includes("/auth/telegram");
-      if ((status === 401 || status === 403) && !isAuthRequest && !originalRequest?._retry) {
+      if ((status === 401 || status === 403) && !isAuthRequest && !isRefreshRequest && !originalRequest?._retry) {
         originalRequest._retry = true;
         try {
           const data = await refreshToken();
@@ -88,10 +70,10 @@ api.interceptors.response.use(
             return api(originalRequest);
           }
         } catch (refreshError) {
-          authStore.logout();
+          await authStore.logout({ notifyServer: false, clearAppState: false });
         }
       } else if (status === 401) {
-        authStore.logout();
+        await authStore.logout({ notifyServer: false, clearAppState: false });
       }
       return Promise.reject({
         message: normalizeErrorMessage(error.response.data?.message || "Произошла ошибка"),

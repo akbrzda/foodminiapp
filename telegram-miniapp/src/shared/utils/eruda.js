@@ -19,6 +19,8 @@ const loadErudaScript = () => {
     const script = document.createElement("script");
     script.id = ERUDA_SCRIPT_ID;
     script.src = ERUDA_SRC;
+    script.integrity = "sha384-YZlapj5YJr2ptJKZzipH/jjh0/TAU1AIbfi0zB6ZyaK0+3IbX8avjsdyE8LJxS9N";
+    script.crossOrigin = "anonymous";
     script.async = true;
     script.onload = () => resolve(window.eruda);
     script.onerror = reject;

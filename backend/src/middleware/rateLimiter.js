@@ -20,6 +20,16 @@ export const authLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Более мягкий лимит для Telegram Mini App, чтобы не ухудшать UX при переоткрытии webview.
+export const telegramAuthLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 минут
+  max: 30, // 30 попыток входа
+  message: { error: "Слишком много попыток входа через Telegram. Попробуйте через 15 минут" },
+  skipSuccessfulRequests: true,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // Лимит для создания ресурсов
 export const createLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 минута

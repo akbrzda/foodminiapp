@@ -82,7 +82,7 @@ const router = createRouter({
 });
 let backButtonCleanup = null;
 let isRedirecting = false;
-router.beforeEach((to, from, next) => {
+router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore();
   const locationStore = useLocationStore();
   if (backButtonCleanup) {
@@ -92,6 +92,9 @@ router.beforeEach((to, from, next) => {
   if (isRedirecting) {
     isRedirecting = false;
     return next();
+  }
+  if (to.meta.requiresAuth && !authStore.isAuthenticated) {
+    await authStore.verifySession();
   }
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
     return next("/login");

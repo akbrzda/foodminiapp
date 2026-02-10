@@ -1,6 +1,7 @@
 <template>
   <div class="profile">
-    <div class="profile-content">
+    <PageHeader title="Профиль" />
+    <div class="profile-content page-container page-container--spacious-bottom">
       <div class="form-card phone-card">
         <label class="field-label">Телефон</label>
         <a v-if="authStore.user?.phone" class="field-value" :href="`tel:${normalizePhone(authStore.user?.phone)}`">
@@ -24,15 +25,15 @@
         <label class="field-label" for="birthdate">День рождения</label>
         <input id="birthdate" v-model="profileForm.date_of_birth" class="field-input" type="date" />
       </div>
-      <button class="save-btn" @click="saveProfile" :disabled="saving">
+      <button class="save-btn action-btn btn-primary" @click="saveProfile" :disabled="saving">
         {{ saving ? "Сохранение..." : "Сохранить" }}
       </button>
       <p v-if="saveMessage" class="save-message">{{ saveMessage }}</p>
       <p v-if="saveError" class="save-error">{{ saveError }}</p>
-      <button class="delete-btn" @click="deleteAccount" :disabled="deleting">
+      <button class="delete-btn action-btn btn-danger" @click="deleteAccount" :disabled="deleting">
         {{ deleting ? "Удаление..." : "Удалить аккаунт" }}
       </button>
-      <button class="logout-btn" @click="logout">Выйти</button>
+      <button class="logout-btn action-btn btn-secondary" @click="logout">Выйти</button>
     </div>
   </div>
 </template>
@@ -40,6 +41,7 @@
 import { ref, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { useAuthStore } from "@/modules/auth/stores/auth.js";
+import PageHeader from "@/shared/components/PageHeader.vue";
 import { authAPI } from "@/shared/api/endpoints.js";
 import { hapticFeedback, showConfirm } from "@/shared/services/telegram.js";
 import { formatPhone, normalizePhone } from "@/shared/utils/phone";
@@ -144,9 +146,6 @@ function normalizeDateForInput(value) {
   min-height: 100vh;
   background: var(--color-background);
 }
-.profile-content {
-  padding: 16px 12px 32px;
-}
 .form-card {
   background: var(--color-background);
   border: 1px solid var(--color-border);
@@ -181,49 +180,11 @@ function normalizeDateForInput(value) {
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-primary);
 }
-.save-btn {
-  width: 100%;
-  padding: 18px;
-  border: none;
-  border-radius: var(--border-radius-lg);
-  background: var(--color-primary);
-  color: var(--color-text-primary);
-  font-size: var(--font-size-h3);
-  font-weight: var(--font-weight-semibold);
-  cursor: pointer;
-  transition: background-color var(--transition-duration) var(--transition-easing);
-}
-.save-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
 .logout-btn {
-  width: 100%;
   margin-top: 12px;
-  padding: 16px;
-  border: none;
-  border-radius: var(--border-radius-lg);
-  background: var(--color-background-secondary);
-  color: var(--color-text-primary);
-  font-size: var(--font-size-body);
-  font-weight: var(--font-weight-semibold);
-  cursor: pointer;
 }
 .delete-btn {
-  width: 100%;
   margin-top: 12px;
-  padding: 16px;
-  border: none;
-  border-radius: var(--border-radius-lg);
-  background: var(--color-error);
-  color: var(--color-text-primary);
-  font-size: var(--font-size-body);
-  font-weight: var(--font-weight-semibold);
-  cursor: pointer;
-}
-.delete-btn:disabled {
-  opacity: 0.7;
-  cursor: not-allowed;
 }
 .save-message {
   margin: 8px 4px 0;

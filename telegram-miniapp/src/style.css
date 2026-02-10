@@ -76,6 +76,19 @@ body {
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
 }
+/* Единый контейнер страниц Mini App */
+.page-container {
+  padding: 16px 12px;
+}
+.page-container--with-fixed-footer {
+  padding-bottom: 100px;
+}
+.page-container--spacious-bottom {
+  padding-bottom: 32px;
+}
+.page-container--safe-bottom {
+  padding-bottom: calc(12px + env(safe-area-inset-bottom));
+}
 /* Стили для состояния открытой клавиатуры */
 .keyboard-open {
   transition: padding-bottom 0.3s ease;
@@ -129,13 +142,34 @@ body {
   line-height: var(--line-height);
 }
 /* Утилиты для кнопок */
+.action-btn {
+  width: 100%;
+  min-height: 56px;
+  padding: 0 16px;
+  border: none;
+  border-radius: var(--border-radius-md);
+  font-size: var(--font-size-h3);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition:
+    background-color var(--transition-duration) var(--transition-easing),
+    transform 0.15s ease;
+}
+.action-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+.action-btn:active:not(:disabled) {
+  transform: scale(0.98);
+}
 .btn-primary {
   background: var(--color-primary);
   color: var(--color-text-primary);
-  font-size: var(--font-size-h3);
-  font-weight: var(--font-weight-semibold);
-  border-radius: var(--border-radius-md);
-  padding: 16px;
   border: none;
   cursor: pointer;
   transition: background-color var(--transition-duration) var(--transition-easing);
@@ -146,18 +180,26 @@ body {
 .btn-primary:disabled {
   background: var(--color-primary-disabled);
   color: var(--color-text-muted);
-  cursor: not-allowed;
 }
 .btn-secondary {
   background: var(--color-background-secondary);
   color: var(--color-text-primary);
-  font-size: var(--font-size-h3);
-  font-weight: var(--font-weight-semibold);
-  border-radius: var(--border-radius-md);
-  padding: 16px;
+  border: 1px solid var(--color-border);
+  cursor: pointer;
+  transition: background-color var(--transition-duration) var(--transition-easing);
+}
+.btn-secondary:hover:not(:disabled) {
+  background: #ebebeb;
+}
+.btn-danger {
+  background: var(--color-error);
+  color: #ffffff;
   border: none;
   cursor: pointer;
   transition: background-color var(--transition-duration) var(--transition-easing);
+}
+.btn-danger:hover:not(:disabled) {
+  background: #e10000;
 }
 .btn-ghost {
   background: transparent;

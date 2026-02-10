@@ -1,13 +1,13 @@
 <template>
   <header class="app-header">
-    <button class="menu-button" @click="toggleSidebar">
+    <button class="menu-button" aria-label="Открыть меню" @click="toggleSidebar">
       <Menu :size="20" />
     </button>
     <button class="city-button" @click="openCityPopup">
       <MapPin :size="16" />
       <span class="city-name">{{ currentCityName }}</span>
     </button>
-    <button v-if="authStore.isAuthenticated && bonusesEnabled" class="bonus-button" @click="openBonusHistory">
+    <button v-if="authStore.isAuthenticated && bonusesEnabled" class="bonus-button" aria-label="Открыть бонусы" @click="openBonusHistory">
       <Gift :size="16" />
       <span class="bonus-value">{{ bonusBalance }}</span>
     </button>
@@ -18,9 +18,9 @@
         <div class="sidebar" @click.stop>
           <div class="sidebar-header">
             <div class="sidebar-title">Меню</div>
-            <button class="close-btn" @click="closeSidebar">
+            <!-- <button class="close-btn" aria-label="Закрыть меню" @click="closeSidebar">
               <X :size="18" />
-            </button>
+            </button> -->
           </div>
           <div class="sidebar-content">
             <nav class="sidebar-nav">
@@ -56,7 +56,7 @@
         <div class="city-popup" @click.stop>
           <div class="popup-header">
             <div class="popup-title">Выберите город</div>
-            <button class="close-btn" @click="closeCityPopup">
+            <button class="close-btn" aria-label="Закрыть выбор города" @click="closeCityPopup">
               <X :size="18" />
             </button>
           </div>
@@ -90,6 +90,7 @@ const showCityPopup = ref(false);
 const cityQuery = ref("");
 const cities = ref([]);
 const bonusBalance = ref(0);
+let removeAfterEachHook = null;
 const currentCityName = computed(() => locationStore.selectedCity?.name || "Город");
 const bonusesEnabled = computed(() => settingsStore.bonusesEnabled);
 const filteredCities = computed(() => {
@@ -160,12 +161,16 @@ function handleOpenCityPopup() {
 onMounted(() => {
   window.addEventListener("open-city-popup", handleOpenCityPopup);
   loadBonusBalance();
-  router.afterEach(() => {
+  removeAfterEachHook = router.afterEach(() => {
     loadBonusBalance();
   });
 });
 onBeforeUnmount(() => {
   window.removeEventListener("open-city-popup", handleOpenCityPopup);
+  if (removeAfterEachHook) {
+    removeAfterEachHook();
+    removeAfterEachHook = null;
+  }
 });
 </script>
 <style scoped>
@@ -174,10 +179,11 @@ onBeforeUnmount(() => {
   z-index: 100;
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
-  padding: 12px;
+  justify-content: space-between;
+  padding: 0 12px;
   background: var(--color-background);
+  margin-top: calc(env(safe-area-inset-top) + 48px);
 }
 .menu-button {
   width: 40px;
@@ -267,6 +273,7 @@ onBeforeUnmount(() => {
   box-shadow: 2px 0 8px rgba(0, 0, 0, 0.1);
   display: flex;
   flex-direction: column;
+  padding-top: calc(env(safe-area-inset-top) + 48px);
 }
 .sidebar-header {
   display: flex;
@@ -293,8 +300,8 @@ onBeforeUnmount(() => {
 .sidebar-item {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
+  gap: 6px;
+  padding: 8px 12px;
   border: none;
   border-radius: var(--border-radius-md);
   background: transparent;

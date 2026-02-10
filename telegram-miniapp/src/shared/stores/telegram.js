@@ -28,40 +28,16 @@ export const useTelegramStore = defineStore("telegram", () => {
       hasInitDataUnsafe: !!currentInitDataUnsafe && Object.keys(currentInitDataUnsafe).length > 0,
     });
     if (!currentInitData) {
-      const savedInitData = sessionStorage.getItem("tg_init_data");
-      const savedInitDataUnsafe = sessionStorage.getItem("tg_init_data_unsafe");
-      if (savedInitData) {
-        devLog("🔄 Восстанавливаем initData из sessionStorage");
-        currentInitData = savedInitData;
-        webApp.initData = savedInitData;
-        if (savedInitDataUnsafe) {
-          try {
-            currentInitDataUnsafe = JSON.parse(savedInitDataUnsafe);
-            webApp.initDataUnsafe = currentInitDataUnsafe;
-          } catch (e) {
-            console.error("Ошибка при парсинге сохранённого initDataUnsafe:", e);
-          }
-        }
+      if (webApp.platform !== "unknown") {
+        devWarn("⚠️ initData пустой. Платформа:", webApp.platform);
       } else {
-        if (webApp.platform !== "unknown") {
-          devWarn("⚠️ initData пустой и не найден в sessionStorage. Платформа:", webApp.platform);
-        } else {
-          devLog("ℹ️ Запуск вне Telegram (платформа: unknown)");
-        }
-      }
-    } else {
-      devLog("💾 Сохраняем initData в sessionStorage");
-      sessionStorage.setItem("tg_init_data", currentInitData);
-      if (webApp.initDataUnsafe) {
-        sessionStorage.setItem("tg_init_data_unsafe", JSON.stringify(webApp.initDataUnsafe));
+        devLog("ℹ️ Запуск вне Telegram (платформа: unknown)");
       }
     }
     user.value = currentInitDataUnsafe?.user || null;
     initData.value = currentInitData;
     const tgStartParam = currentInitDataUnsafe?.start_param;
     startParam.value = tgStartParam || null;
-    window.__telegramInitDataOverride = currentInitData;
-    window.__telegramStartParam = tgStartParam || null;
     webApp.ready();
     webApp.expand();
     const isVersionAtLeast = (version) => {
@@ -75,10 +51,10 @@ export const useTelegramStore = defineStore("telegram", () => {
     if (isVersionAtLeast("6.1")) {
       try {
         if (typeof webApp.setHeaderColor === "function") {
-          webApp.setHeaderColor("#000000");
+          webApp.setHeaderColor("#FFFFFF");
         }
         if (typeof webApp.setBackgroundColor === "function") {
-          webApp.setBackgroundColor("#F5F5F5");
+          webApp.setBackgroundColor("#FFFFFF");
         }
       } catch (error) {}
     }

@@ -1,10 +1,12 @@
 import { defineStore } from "pinia";
-import { getInitData } from "@/shared/services/telegram.js";
+import { getInitData, getCloudStorageItem, setCloudStorageItem, removeCloudStorageItem } from "@/shared/services/telegram.js";
 
-const SESSION_TOKEN_KEY = "token";
+const ACCESS_TOKEN_KEY = "access_token";
 const SESSION_USER_KEY = "user";
-const LEGACY_TOKEN_KEY = "token";
-const LEGACY_USER_KEY = "user";
+const SESSION_HINT_KEY = "auth_session_hint";
+const CLOUD_ACCESS_TOKEN_KEY = "miniapp_access_token";
+const CLOUD_SESSION_HINT_KEY = "miniapp_session_hint";
+
 const STORAGE_KEYS = [
   "cart",
   "cart_bonus_usage",
@@ -22,39 +24,62 @@ const STORAGE_KEYS = [
   "deliveryZoneByCity",
   "geo_permission_state",
 ];
-const SESSION_STORAGE_KEYS = ["tg_init_data", "tg_init_data_unsafe"];
-const readSessionToken = () => sessionStorage.getItem(SESSION_TOKEN_KEY) || localStorage.getItem(LEGACY_TOKEN_KEY) || null;
+const SESSION_STORAGE_KEYS = [];
+
+const getApiBase = () => (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
+
+const parseJwtPayload = (token) => {
+  if (!token || typeof token !== "string") return null;
+  const parts = token.split(".");
+  if (parts.length !== 3) return null;
+  try {
+    const normalized = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4 || 4)) % 4), "=");
+    const decoded = atob(padded);
+    return JSON.parse(decoded);
+  } catch {
+    return null;
+  }
+};
+
+const isTokenExpired = (token) => {
+  const payload = parseJwtPayload(token);
+  if (!payload?.exp) return false;
+  return Date.now() >= payload.exp * 1000;
+};
+
 const readSessionUser = () => {
-  const raw = sessionStorage.getItem(SESSION_USER_KEY) || localStorage.getItem(LEGACY_USER_KEY) || "null";
+  const raw = sessionStorage.getItem(SESSION_USER_KEY) || "null";
   try {
     return JSON.parse(raw);
   } catch {
     return null;
   }
 };
-const migrateLegacyAuthState = () => {
-  const legacyToken = localStorage.getItem(LEGACY_TOKEN_KEY);
-  const legacyUser = localStorage.getItem(LEGACY_USER_KEY);
-  if (legacyToken && !sessionStorage.getItem(SESSION_TOKEN_KEY)) {
-    sessionStorage.setItem(SESSION_TOKEN_KEY, legacyToken);
+
+const readPersistedAccessToken = () => {
+  const token = localStorage.getItem(ACCESS_TOKEN_KEY);
+  if (!token) return null;
+  if (isTokenExpired(token)) {
+    localStorage.removeItem(ACCESS_TOKEN_KEY);
+    return null;
   }
+  return token;
+};
+
+const migrateLegacyAuthState = () => {
+  const legacyUser = localStorage.getItem("user");
   if (legacyUser && !sessionStorage.getItem(SESSION_USER_KEY)) {
     sessionStorage.setItem(SESSION_USER_KEY, legacyUser);
   }
-  localStorage.removeItem(LEGACY_TOKEN_KEY);
-  localStorage.removeItem(LEGACY_USER_KEY);
-};
-const clearAccessibleCookies = () => {
-  if (typeof document === "undefined") return;
-  const cookies = document.cookie ? document.cookie.split(";") : [];
-  for (const cookie of cookies) {
-    const cookieName = cookie.split("=")[0]?.trim();
-    if (!cookieName) continue;
-    document.cookie = `${cookieName}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/`;
-    document.cookie = `${cookieName}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Strict`;
+  const legacyToken = localStorage.getItem("token");
+  if (legacyToken && !localStorage.getItem(ACCESS_TOKEN_KEY) && !isTokenExpired(legacyToken)) {
+    localStorage.setItem(ACCESS_TOKEN_KEY, legacyToken);
   }
+  localStorage.removeItem("token");
+  localStorage.removeItem("user");
 };
-const getApiBase = () => (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
+
 const fetchUserProfile = async (token) => {
   if (!token) return null;
   const response = await fetch(`${getApiBase()}/api/users/profile`, {
@@ -69,6 +94,7 @@ const fetchUserProfile = async (token) => {
   const payload = await response.json();
   return payload?.user || null;
 };
+
 const tryRefreshSessionToken = async () => {
   const refreshResponse = await fetch(`${getApiBase()}/api/auth/refresh`, {
     method: "POST",
@@ -78,111 +104,174 @@ const tryRefreshSessionToken = async () => {
     },
     credentials: "include",
   });
-  if (refreshResponse.ok) {
-    const refreshPayload = await refreshResponse.json();
-    if (refreshPayload?.token) return refreshPayload.token;
-  }
-
-  const initData = getInitData();
-  if (!initData) return null;
-  const loginResponse = await fetch(`${getApiBase()}/api/auth/telegram`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json; charset=utf-8",
-      Accept: "application/json; charset=utf-8",
-    },
-    credentials: "include",
-    body: JSON.stringify({ initData }),
-  });
-  if (!loginResponse.ok) return null;
-  const loginPayload = await loginResponse.json();
-  return loginPayload?.token || null;
+  if (!refreshResponse.ok) return null;
+  const refreshPayload = await refreshResponse.json();
+  return refreshPayload?.token || null;
 };
+
 migrateLegacyAuthState();
+const initialToken = readPersistedAccessToken();
 
 export const useAuthStore = defineStore("auth", {
   state: () => ({
-    token: readSessionToken(),
+    token: initialToken,
     user: readSessionUser(),
-    isAuthenticated: !!readSessionToken(),
+    isAuthenticated: !!initialToken,
     sessionChecked: false,
+    verifySessionPromise: null,
   }),
   getters: {
     isLoggedIn: (state) => state.isAuthenticated,
     currentUser: (state) => state.user,
   },
   actions: {
+    async restoreTokenFromStorage() {
+      if (this.token && !isTokenExpired(this.token)) {
+        return this.token;
+      }
+      const localToken = readPersistedAccessToken();
+      if (localToken) {
+        this.token = localToken;
+        this.isAuthenticated = true;
+        return localToken;
+      }
+      const cloudToken = await getCloudStorageItem(CLOUD_ACCESS_TOKEN_KEY);
+      if (cloudToken && !isTokenExpired(cloudToken)) {
+        localStorage.setItem(ACCESS_TOKEN_KEY, cloudToken);
+        this.token = cloudToken;
+        this.isAuthenticated = true;
+        return cloudToken;
+      }
+      return null;
+    },
     setToken(token) {
-      this.token = token;
+      this.token = token || null;
       this.isAuthenticated = !!token;
+
       if (token) {
-        sessionStorage.setItem(SESSION_TOKEN_KEY, token);
-        localStorage.setItem(LEGACY_TOKEN_KEY, token);
+        localStorage.setItem(ACCESS_TOKEN_KEY, token);
+        setCloudStorageItem(CLOUD_ACCESS_TOKEN_KEY, token).catch(() => {});
       } else {
-        sessionStorage.removeItem(SESSION_TOKEN_KEY);
-        localStorage.removeItem(LEGACY_TOKEN_KEY);
+        localStorage.removeItem(ACCESS_TOKEN_KEY);
+        removeCloudStorageItem(CLOUD_ACCESS_TOKEN_KEY).catch(() => {});
       }
     },
     setUser(user) {
-      this.user = user;
+      this.user = user || null;
       if (user) {
-        const serialized = JSON.stringify(user);
-        sessionStorage.setItem(SESSION_USER_KEY, serialized);
-        localStorage.setItem(LEGACY_USER_KEY, serialized);
+        sessionStorage.setItem(SESSION_USER_KEY, JSON.stringify(user));
+        localStorage.setItem(SESSION_HINT_KEY, "1");
+        setCloudStorageItem(CLOUD_SESSION_HINT_KEY, "1").catch(() => {});
       } else {
         sessionStorage.removeItem(SESSION_USER_KEY);
-        localStorage.removeItem(LEGACY_USER_KEY);
       }
     },
-    clearPersistedSessionData() {
-      sessionStorage.removeItem(SESSION_TOKEN_KEY);
+    async hasSessionHint() {
+      if (localStorage.getItem(SESSION_HINT_KEY) === "1") {
+        return true;
+      }
+      const cloudHint = await getCloudStorageItem(CLOUD_SESSION_HINT_KEY);
+      if (cloudHint === "1") {
+        localStorage.setItem(SESSION_HINT_KEY, "1");
+        return true;
+      }
+      return false;
+    },
+    clearPersistedSessionData({ clearAppState = false } = {}) {
       sessionStorage.removeItem(SESSION_USER_KEY);
-      localStorage.removeItem(LEGACY_TOKEN_KEY);
-      localStorage.removeItem(LEGACY_USER_KEY);
-      for (const key of STORAGE_KEYS) {
-        localStorage.removeItem(key);
+      localStorage.removeItem(ACCESS_TOKEN_KEY);
+      localStorage.removeItem(SESSION_HINT_KEY);
+      removeCloudStorageItem(CLOUD_ACCESS_TOKEN_KEY).catch(() => {});
+      removeCloudStorageItem(CLOUD_SESSION_HINT_KEY).catch(() => {});
+
+      if (clearAppState) {
+        for (const key of STORAGE_KEYS) {
+          localStorage.removeItem(key);
+        }
+        for (const key of SESSION_STORAGE_KEYS) {
+          sessionStorage.removeItem(key);
+        }
       }
-      for (const key of SESSION_STORAGE_KEYS) {
-        sessionStorage.removeItem(key);
-      }
-      clearAccessibleCookies();
     },
     async verifySession() {
-      if (!this.token) {
-        this.sessionChecked = true;
-        return false;
-      }
-      try {
-        let token = this.token;
-        let user = await fetchUserProfile(token);
-        if (!user) {
-          const nextToken = await tryRefreshSessionToken();
-          if (!nextToken) {
-            await this.logout({ notifyServer: true });
+      if (this.verifySessionPromise) return this.verifySessionPromise;
+
+      this.verifySessionPromise = (async () => {
+        try {
+          let token = await this.restoreTokenFromStorage();
+          let user = token ? await fetchUserProfile(token) : null;
+
+          if (!user) {
+            const refreshedToken = await tryRefreshSessionToken();
+            if (refreshedToken) {
+              token = refreshedToken;
+              this.setToken(refreshedToken);
+              user = await fetchUserProfile(refreshedToken);
+            }
+          }
+
+          // Для ранее авторизованных пользователей используем тихий fallback через initData.
+          if (!user) {
+            const hadSession = await this.hasSessionHint();
+            if (hadSession) {
+              const reauthed = await this.loginWithTelegramInitData();
+              if (reauthed) {
+                token = this.token;
+                user = this.user || (token ? await fetchUserProfile(token) : null);
+              }
+            }
+          }
+
+          if (!user) {
+            this.setToken(null);
+            this.setUser(null);
+            this.isAuthenticated = false;
             this.sessionChecked = true;
             return false;
           }
-          token = nextToken;
-          this.setToken(token);
-          user = await fetchUserProfile(token);
-        }
-        if (!user) {
-          await this.logout({ notifyServer: true });
+
+          this.setUser(user);
+          this.isAuthenticated = true;
+          this.sessionChecked = true;
+          return true;
+        } catch {
+          await this.logout({ notifyServer: false, clearAppState: false });
           this.sessionChecked = true;
           return false;
+        } finally {
+          this.verifySessionPromise = null;
         }
-        this.setUser(user);
-        this.sessionChecked = true;
-        return true;
-      } catch (error) {
-        await this.logout({ notifyServer: true });
-        this.sessionChecked = true;
-        return false;
-      }
+      })();
+
+      return this.verifySessionPromise;
     },
-    async logout({ notifyServer = true } = {}) {
+    async loginWithTelegramInitData() {
+      const initData = getInitData();
+      if (!initData) return false;
+
+      const response = await fetch(`${getApiBase()}/api/auth/telegram`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json; charset=utf-8",
+          Accept: "application/json; charset=utf-8",
+        },
+        credentials: "include",
+        body: JSON.stringify({ initData }),
+      });
+
+      if (!response.ok) return false;
+      const payload = await response.json();
+      if (!payload?.token) return false;
+
+      this.setToken(payload.token);
+      this.setUser(payload.user || null);
+      this.isAuthenticated = true;
+      return true;
+    },
+    async logout({ notifyServer = true, clearAppState = true } = {}) {
       const currentToken = this.token;
-      const apiBase = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
+      const apiBase = getApiBase();
+
       if (notifyServer) {
         try {
           await fetch(`${apiBase}/api/auth/logout`, {
@@ -194,15 +283,16 @@ export const useAuthStore = defineStore("auth", {
             },
             credentials: "include",
           });
-        } catch (error) {
+        } catch {
           // Ошибка logout на сервере не блокирует локальную очистку.
         }
       }
+
       this.token = null;
       this.user = null;
       this.isAuthenticated = false;
       this.sessionChecked = true;
-      this.clearPersistedSessionData();
+      this.clearPersistedSessionData({ clearAppState });
     },
   },
 });

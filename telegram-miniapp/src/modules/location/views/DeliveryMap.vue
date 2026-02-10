@@ -1,5 +1,6 @@
 <template>
   <div class="delivery-map">
+    <PageHeader title="Адрес доставки" />
     <div class="map-section">
       <div ref="mapContainerRef" class="map"></div>
       <div class="center-marker" aria-hidden="true">
@@ -14,13 +15,13 @@
           </div>
         </div>
         <div class="map-controls">
-          <button class="map-btn" type="button" @click="zoomIn">
+          <button class="map-btn" type="button" aria-label="Увеличить масштаб карты" @click="zoomIn">
             <Plus :size="18" />
           </button>
-          <button class="map-btn" type="button" @click="zoomOut">
+          <button class="map-btn" type="button" aria-label="Уменьшить масштаб карты" @click="zoomOut">
             <Minus :size="18" />
           </button>
-          <button class="map-btn map-btn-primary" type="button" @click="locateUser">
+          <button class="map-btn map-btn-primary" type="button" aria-label="Определить мою геопозицию" @click="locateUser">
             <LocateFixed :size="18" />
           </button>
         </div>
@@ -44,6 +45,7 @@
           v-if="deliveryAddress"
           class="clear-btn"
           type="button"
+          aria-label="Очистить адрес"
           @pointerdown.stop="onInputControlPointerDown"
           @touchstart.stop="onInputControlPointerDown"
           @mousedown.stop="onInputControlPointerDown"
@@ -89,6 +91,7 @@
 import { ref, computed, onMounted, onUnmounted, reactive, watch } from "vue";
 import { LocateFixed, MapPin, Minus, Plus, X } from "lucide-vue-next";
 import { useRouter } from "vue-router";
+import PageHeader from "@/shared/components/PageHeader.vue";
 import { useLocationStore } from "@/modules/location/stores/location.js";
 import { addressesAPI } from "@/shared/api/endpoints.js";
 import { hapticFeedback } from "@/shared/services/telegram.js";
@@ -743,10 +746,14 @@ async function loadLeaflet() {
     const css = document.createElement("link");
     css.rel = "stylesheet";
     css.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+    css.integrity = "sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H";
+    css.crossOrigin = "anonymous";
     document.head.appendChild(css);
 
     const script = document.createElement("script");
     script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+    script.integrity = "sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH";
+    script.crossOrigin = "anonymous";
     script.async = true;
     script.onload = () => resolve(window.L);
     script.onerror = () => resolve(null);
@@ -887,12 +894,11 @@ watch(
 }
 
 .form-section {
-  margin-top: -16px;
+  margin-top: -32px;
   background: var(--color-background);
   border-radius: var(--border-radius-xl);
   padding: 12px;
   z-index: 20;
-  box-shadow: var(--shadow-md);
 }
 
 .sheet-handle {

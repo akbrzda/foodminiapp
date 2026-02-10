@@ -98,14 +98,9 @@ function scheduleSync() {
   }, 600);
 }
 onMounted(async () => {
-  if (authStore.isAuthenticated) {
-    const isSessionValid = await authStore.verifySession();
-    if (!isSessionValid) {
-      await router.replace("/login");
-      return;
-    }
-  } else {
-    authStore.sessionChecked = true;
+  const isSessionValid = await authStore.verifySession();
+  if (!isSessionValid && router.currentRoute.value.meta?.requiresAuth) {
+    await router.replace("/login");
   }
   await settingsStore.loadSettings();
   if (settingsStore.bonusesEnabled && authStore.isAuthenticated) {
@@ -126,8 +121,9 @@ onUnmounted(() => {
   detachBlurListeners();
 });
 function setupWebSocket() {
-  if (!authStore.isAuthenticated) return;
-  wsService.connect(authStore.token);
+  if (authStore.token) {
+    wsService.connect(authStore.token);
+  }
   wsService.on("order-status-updated", (data) => {
     devLog("Order status updated:", data);
   });
@@ -135,10 +131,10 @@ function setupWebSocket() {
     devLog("Bonus updated:", data);
   });
   watch(
-    () => authStore.isAuthenticated,
-    (isAuth) => {
-      if (isAuth) {
-        wsService.connect(authStore.token);
+    () => authStore.token,
+    (token) => {
+      if (token) {
+        wsService.connect(token);
       } else {
         wsService.disconnect();
       }
@@ -224,14 +220,9 @@ watch(
 );
 watch(
   () => authStore.isAuthenticated,
-  async (isAuth) => {
+  (isAuth) => {
     if (isAuth) {
-      const isSessionValid = await authStore.verifySession();
-      if (isSessionValid) {
-        loadRemoteState();
-      } else {
-        await router.replace("/login");
-      }
+      loadRemoteState();
     } else {
       isHydrated.value = false;
     }

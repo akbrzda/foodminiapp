@@ -1,15 +1,17 @@
 <template>
   <div class="login">
-    <div class="login-content">
-      <div class="logo"><img src="../../../panda.png" alt="Panda Pizza" /></div>
-    </div>
+    <div class="page-container page-container--safe-bottom login-shell">
+      <div class="login-content">
+        <div class="logo"><img src="../../../panda.png" alt="Panda Pizza" /></div>
+      </div>
 
-    <div class="login-footer">
-      <p>Нажмите кнопку ниже, чтобы войти</p>
-      <button class="login-btn" @click="handleLogin" :disabled="loading">
-        {{ loading ? "Вход..." : "Поделиться номером" }}
-      </button>
-      <div v-if="error" class="error">{{ error }}</div>
+      <div class="login-footer">
+        <p>Нажмите кнопку ниже, чтобы войти</p>
+        <button class="login-btn" @click="handleLogin" :disabled="loading">
+          {{ loading ? "Вход..." : "Войти через Telegram" }}
+        </button>
+        <div v-if="error" class="error">{{ error }}</div>
+      </div>
     </div>
   </div>
 </template>
@@ -17,28 +19,18 @@
 import { ref, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { useAuthStore } from "@/modules/auth/stores/auth.js";
-import { useTelegramStore } from "@/shared/stores/telegram.js";
+import PageHeader from "@/shared/components/PageHeader.vue";
 import { authAPI } from "@/shared/api/endpoints.js";
 import { getInitData, getTelegramUser, hapticFeedback, requestContact } from "@/shared/services/telegram.js";
 import { devError, devLog } from "@/shared/utils/logger.js";
 const router = useRouter();
 const authStore = useAuthStore();
-const telegramStore = useTelegramStore();
 const loading = ref(false);
 const error = ref("");
 onMounted(() => {
-  if (window.Telegram?.WebApp) {
-    const originalOnEvent = window.Telegram.WebApp.onEvent.bind(window.Telegram.WebApp);
-    window.Telegram.WebApp.onEvent = function (eventType, eventHandler) {
-      devLog("[Login] WebApp.onEvent registered:", eventType);
-      return originalOnEvent(eventType, function (...args) {
-        devLog("[Login] WebApp event fired:", eventType, args);
-        return eventHandler(...args);
-      });
-    };
-  }
   if (authStore.isAuthenticated) {
     router.push("/");
+    return;
   }
 });
 async function handleLogin() {
@@ -53,10 +45,13 @@ async function handleLogin() {
       hapticFeedback("error");
       return;
     }
-    const response = await authAPI.loginWithTelegram(initData);
-    authStore.setToken(response.data.token);
-    authStore.setUser(response.data.user);
-    if (!response.data.user?.phone) {
+    const isLoggedIn = await authStore.loginWithTelegramInitData();
+    if (!isLoggedIn) {
+      error.value = "Ошибка авторизации";
+      hapticFeedback("error");
+      return;
+    }
+    if (!authStore.user?.phone) {
       devLog("[Login] User has no phone, requesting contact...");
       const phoneNumber = await requestContact();
       devLog("[Login] Received phone number:", phoneNumber);
@@ -89,12 +84,16 @@ async function handleLogin() {
   position: relative;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
   min-height: 100vh;
   min-height: 100dvh;
   background: var(--color-background);
   overflow: hidden;
-  padding: 16px 12px calc(12px + env(safe-area-inset-bottom));
+}
+.login-shell {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
 }
 .login-content {
   flex: 1;
@@ -106,10 +105,12 @@ async function handleLogin() {
   color: var(--color-text-primary);
   max-width: 400px;
   width: 100%;
+  margin: 0 auto;
 }
 .login-footer {
   width: 100%;
   max-width: 400px;
+  margin: 0 auto;
 }
 /* Контейнер логотипа */
 .logo {

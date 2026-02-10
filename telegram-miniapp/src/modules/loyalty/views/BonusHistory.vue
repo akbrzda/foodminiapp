@@ -1,6 +1,7 @@
 <template>
   <div class="bonus-history">
-    <div class="content">
+    <PageHeader title="Бонусы" />
+    <div class="content page-container">
       <div v-if="!bonusesEnabled" class="bonus-disabled">Бонусная система временно отключена</div>
       <template v-else>
         <div class="loyalty-card">
@@ -15,7 +16,7 @@
               <div class="loyalty-rate">Ваш статус {{ currentRateLabel }}%</div>
               <div class="loyalty-tier">
                 <span>{{ currentLevel.name }}</span>
-                <button class="level-info-button" type="button" @click="openLevelsPopup">!</button>
+                <button class="level-info-button" type="button" aria-label="Показать уровни бонусной программы" @click="openLevelsPopup">!</button>
               </div>
             </div>
           </div>
@@ -135,6 +136,7 @@
 <script setup>
 import { computed, ref, onMounted } from "vue";
 import { X, Plus, Minus, Award, Trophy, AlertTriangle, Info } from "lucide-vue-next";
+import PageHeader from "@/shared/components/PageHeader.vue";
 import { bonusesAPI } from "@/shared/api/endpoints.js";
 import { formatPrice } from "@/shared/utils/format";
 import { useLoyaltyStore } from "@/modules/loyalty/stores/loyalty.js";
@@ -293,9 +295,6 @@ function formatDateShort(dateString) {
   background: var(--color-background);
   padding-bottom: 24px;
 }
-.content {
-  padding: 16px 12px;
-}
 .bonus-disabled {
   padding: 20px;
   border-radius: var(--border-radius-lg);
@@ -308,7 +307,8 @@ function formatDateShort(dateString) {
   padding: 20px;
   background: var(--color-primary);
   border-radius: var(--border-radius-lg);
-  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--color-primary);
+  margin-bottom: 8px;
 }
 .loyalty-card-header {
   display: flex;
@@ -408,7 +408,7 @@ function formatDateShort(dateString) {
   background: var(--color-background);
   border-radius: var(--border-radius-md);
   padding: 16px;
-  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--color-border);
   margin-bottom: 20px;
 }
 .progress-values {
@@ -524,7 +524,7 @@ function formatDateShort(dateString) {
   padding: 12px 16px;
   background: var(--color-background);
   border-radius: var(--border-radius-md);
-  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--color-border);
 }
 
 .expiring-amount {
@@ -706,11 +706,11 @@ function formatDateShort(dateString) {
   padding: 16px;
   background: var(--color-background);
   border-radius: var(--border-radius-md);
-  box-shadow: var(--shadow-sm);
-  transition: box-shadow var(--transition-duration) var(--transition-easing);
+  border: 1px solid var(--color-border);
+  transition: border-color var(--transition-duration) var(--transition-easing);
 }
 .transaction-item:hover {
-  box-shadow: 0px 4px 12px rgba(0, 0, 0, 0.12);
+  border-color: var(--color-border-hover);
 }
 .transaction-icon {
   width: 40px;

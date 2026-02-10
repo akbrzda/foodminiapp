@@ -2,7 +2,7 @@
   <div class="order-detail">
     <PageHeader :title="`Заказ #${order?.order_number || ''}`" />
     <div v-if="loading" class="loading">Загрузка...</div>
-    <div v-else-if="order" class="order-content">
+    <div v-else-if="order" class="order-content page-container">
       <div class="status-card">
         <div :class="['status-badge', `status-${order.status}`]">
           {{ getStatusText(order.status) }}
@@ -128,7 +128,7 @@
       </div>
       <div class="actions" v-if="canRepeatOrder">
         <button class="repeat-btn" @click="repeatOrder">
-          <span>🔄</span>
+          <RefreshCw :size="20" />
           Повторить заказ
         </button>
       </div>
@@ -137,6 +137,7 @@
 </template>
 <script setup>
 import { computed, ref, onMounted, onUnmounted } from "vue";
+import { RefreshCw } from "lucide-vue-next";
 import PageHeader from "@/shared/components/PageHeader.vue";
 import { useRoute, useRouter } from "vue-router";
 import { useCartStore } from "@/modules/cart/stores/cart.js";
@@ -280,16 +281,13 @@ function getChangeAmount(orderData) {
   color: var(--color-text-secondary);
   font-size: var(--font-size-body);
 }
-.order-content {
-  padding: 16px 12px;
-}
 .status-card {
   padding: 20px;
   background: var(--color-background);
   border-radius: var(--border-radius-md);
   text-align: center;
-  margin-bottom: 16px;
-  box-shadow: var(--shadow-sm);
+  margin-bottom: 8px;
+  border: 1px solid var(--color-border);
 }
 .status-badge {
   display: inline-block;
@@ -335,8 +333,8 @@ function getChangeAmount(orderData) {
   padding: 16px;
   background: var(--color-background);
   border-radius: var(--border-radius-md);
-  margin-bottom: 16px;
-  box-shadow: var(--shadow-sm);
+  margin-bottom: 8px;
+  border: 1px solid var(--color-border);
 }
 .section h3 {
   font-size: var(--font-size-h3);
@@ -447,7 +445,7 @@ function getChangeAmount(orderData) {
 }
 .actions {
   padding: 0 16px;
-  margin-top: 16px;
+  margin-top: 8px;
 }
 .repeat-btn {
   width: 100%;

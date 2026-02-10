@@ -1,8 +1,9 @@
 <template>
   <div class="item-detail">
+    <PageHeader :title="pageTitle" />
     <div v-if="loading" class="loading">Загрузка...</div>
     <div v-else-if="error" class="error">{{ error }}</div>
-    <div v-else-if="item" class="content">
+    <div v-else-if="item" class="content page-container">
       <div class="item-image-wrapper" v-if="displayImageUrl">
         <img :src="displayImageUrl" :alt="item.name" class="item-image" />
       </div>
@@ -67,6 +68,7 @@
                 v-if="getModifierCount(group.id, modifier.id) > 0"
                 type="button"
                 class="modifier-ctrl"
+                aria-label="Уменьшить количество добавки"
                 @click.stop="decreaseModifier(group, modifier)"
               >
                 <Minus size="12" />
@@ -77,6 +79,7 @@
                 v-if="getModifierCount(group.id, modifier.id) > 0"
                 type="button"
                 class="modifier-ctrl"
+                aria-label="Увеличить количество добавки"
                 @click.stop="increaseModifier(group, modifier)"
               >
                 <Plus size="12" />
@@ -113,6 +116,7 @@
                 v-if="getModifierCount(group.id, modifier.id) > 0"
                 type="button"
                 class="modifier-ctrl"
+                aria-label="Уменьшить количество добавки"
                 @click.stop="decreaseModifier(group, modifier)"
               >
                 <Minus size="12" />
@@ -123,6 +127,7 @@
                 v-if="getModifierCount(group.id, modifier.id) > 0"
                 type="button"
                 class="modifier-ctrl"
+                aria-label="Увеличить количество добавки"
                 @click.stop="increaseModifier(group, modifier)"
               >
                 <Plus size="12" />
@@ -137,18 +142,18 @@
     <div class="footer" :class="{ 'hidden-on-keyboard': isKeyboardOpen }" v-if="item">
       <div class="footer-content">
         <div v-if="!cartItem" class="add-button-wrapper">
-          <button class="add-to-cart-btn" :disabled="!canAddToCart" @click="addToCart">
+          <button class="add-to-cart-btn action-btn btn-primary" :disabled="!canAddToCart" @click="addToCart">
             {{ canAddToCart ? `Добавить за ${formatPrice(totalPrice)} ₽` : addDisabledReason }}
           </button>
         </div>
         <div v-else class="quantity-button-wrapper">
-          <button class="qty-btn" :disabled="!canOrder" @click="decreaseQuantity"><Minus size="12" /></button>
+          <button class="qty-btn" aria-label="Уменьшить количество" :disabled="!canOrder" @click="decreaseQuantity"><Minus size="12" /></button>
           <div class="qty-info">
             <span class="qty-price"> {{ formatPrice(cartItem.totalPrice) }} ₽ × {{ cartItem.quantity }} </span>
           </div>
-          <button class="qty-btn" :disabled="!canOrder" @click="increaseQuantity"><Plus size="12" /></button>
+          <button class="qty-btn" aria-label="Увеличить количество" :disabled="!canOrder" @click="increaseQuantity"><Plus size="12" /></button>
         </div>
-        <button v-if="ordersEnabled && cartStore.itemsCount > 0" class="cart-btn" @click="goToCart">
+        <button v-if="ordersEnabled && cartStore.itemsCount > 0" class="cart-btn" aria-label="Перейти в корзину" @click="goToCart">
           <ShoppingCart :size="24" />
           <span v-if="cartStore.itemsCount > 0" class="cart-badge">{{ cartStore.itemsCount }}</span>
         </button>
@@ -160,6 +165,7 @@
 import { ref, computed, onMounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ShoppingCart, Minus, Plus } from "lucide-vue-next";
+import PageHeader from "@/shared/components/PageHeader.vue";
 import { useCartStore } from "@/modules/cart/stores/cart.js";
 import { useMenuStore } from "@/modules/menu/stores/menu.js";
 import { useLocationStore } from "@/modules/location/stores/location.js";
@@ -184,6 +190,7 @@ const selectedVariant = ref(null);
 const selectedModifiers = ref({});
 const quantity = ref(1);
 const isAdded = ref(false);
+const pageTitle = computed(() => item.value?.name || "Блюдо");
 const ordersEnabled = computed(() => settingsStore.ordersEnabled);
 const canOrder = computed(() => {
   if (!ordersEnabled.value) return false;
@@ -604,9 +611,6 @@ function addToCart() {
 .error {
   color: #ff0000;
 }
-.content {
-  padding: 12px;
-}
 .item-image-wrapper {
   width: 100%;
   max-height: 300px;
@@ -867,33 +871,6 @@ function addToCart() {
 }
 .add-button-wrapper {
   flex: 1;
-}
-.add-to-cart-btn {
-  width: 100%;
-  padding: 12px;
-  border: none;
-  border-radius: var(--border-radius-md);
-  background: var(--color-primary);
-  color: var(--color-text-primary);
-  font-size: var(--font-size-h3);
-  font-weight: var(--font-weight-semibold);
-  cursor: pointer;
-  transition:
-    background-color var(--transition-duration) var(--transition-easing),
-    transform 0.15s ease;
-  min-height: 56px;
-}
-.add-to-cart-btn:disabled {
-  background: var(--color-background-secondary);
-  color: var(--color-text-secondary);
-  cursor: not-allowed;
-  transform: none;
-}
-.add-to-cart-btn:not(:disabled):hover {
-  background: var(--color-primary-hover);
-}
-.add-to-cart-btn:active {
-  transform: scale(0.98);
 }
 .quantity-button-wrapper {
   flex: 1;
