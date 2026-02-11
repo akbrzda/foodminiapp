@@ -13,6 +13,7 @@ import { useLocationStore } from "@/modules/location/stores/location.js";
 import { useSettingsStore } from "@/modules/settings/stores/settings.js";
 import { citiesAPI, userStateAPI } from "@/shared/api/endpoints.js";
 import { wsService } from "@/shared/services/websocket.js";
+import { getWebApp, isDesktop } from "@/shared/services/telegram.js";
 import { devLog } from "@/shared/utils/logger.js";
 const router = useRouter();
 const authStore = useAuthStore();
@@ -26,6 +27,8 @@ let syncTimer = null;
 let blurListenersAttached = false;
 let blurScrollHandler = null;
 let blurTouchHandler = null;
+let viewportChangedHandler = null;
+let resizeHandler = null;
 const stateToSync = computed(() => ({
   selected_city_id: locationStore.selectedCity?.id || null,
   selected_branch_id: locationStore.selectedBranch?.id || null,
@@ -115,10 +118,12 @@ onMounted(async () => {
   applyDeliveryTypeSettings();
   setupWebSocket();
   attachBlurListeners();
+  attachRuntimeLayoutClasses();
 });
 onUnmounted(() => {
   wsService.disconnect();
   detachBlurListeners();
+  detachRuntimeLayoutClasses();
 });
 function setupWebSocket() {
   if (authStore.token) {
@@ -203,6 +208,46 @@ function applyDeliveryTypeSettings() {
       locationStore.setDeliveryType("delivery");
     }
   }
+}
+
+function syncRuntimeLayoutClasses() {
+  if (typeof window === "undefined") return;
+  const root = document.documentElement;
+  const body = document.body;
+  const webApp = getWebApp();
+  const desktopMode = webApp ? isDesktop() : window.matchMedia("(min-width: 768px)").matches;
+  const expandedMode = typeof webApp?.isExpanded === "boolean" ? webApp.isExpanded : false;
+  const fullscreenMode = typeof webApp?.isFullscreen === "boolean" ? webApp.isFullscreen : false;
+  const fullsizeMode = expandedMode && !fullscreenMode;
+
+  const targets = [root, body];
+  for (const target of targets) {
+    target.classList.toggle("desktop", desktopMode);
+    target.classList.toggle("mobile", !desktopMode);
+    target.classList.toggle("fullsize", fullsizeMode);
+    target.classList.toggle("fullscreen", fullscreenMode);
+  }
+}
+
+function attachRuntimeLayoutClasses() {
+  if (typeof window === "undefined") return;
+  syncRuntimeLayoutClasses();
+  viewportChangedHandler = () => syncRuntimeLayoutClasses();
+  resizeHandler = () => syncRuntimeLayoutClasses();
+  window.addEventListener("telegram-viewport-changed", viewportChangedHandler);
+  window.addEventListener("resize", resizeHandler, { passive: true });
+}
+
+function detachRuntimeLayoutClasses() {
+  if (typeof window === "undefined") return;
+  if (viewportChangedHandler) {
+    window.removeEventListener("telegram-viewport-changed", viewportChangedHandler);
+  }
+  if (resizeHandler) {
+    window.removeEventListener("resize", resizeHandler);
+  }
+  viewportChangedHandler = null;
+  resizeHandler = null;
 }
 watch(
   stateToSync,

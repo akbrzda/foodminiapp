@@ -578,14 +578,15 @@ export const updateOrderStatus = async (req, res, next, forcedStatus = null) => 
 
     // Telegram уведомление
     try {
-      const { sendTelegramNotification, formatOrderStatusMessage } = await import("../../../utils/telegram.js");
+      const { sendTelegramNotification, formatOrderStatusMessage, buildOrderDetailsReplyMarkup } = await import("../../../utils/telegram.js");
       const [users] = await db.query("SELECT telegram_id FROM users WHERE id = ?", [userId]);
 
       if (users.length > 0 && users[0].telegram_id) {
         const orderNumber = updatedOrders[0].order_number;
         const orderType = updatedOrders[0].order_type;
         const message = formatOrderStatusMessage(orderNumber, status, orderType);
-        await sendTelegramNotification(users[0].telegram_id, message);
+        const replyMarkup = buildOrderDetailsReplyMarkup(orderId);
+        await sendTelegramNotification(users[0].telegram_id, message, { replyMarkup });
       }
     } catch (telegramError) {
       // Telegram errors are non-critical

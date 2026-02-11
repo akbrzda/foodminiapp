@@ -36,7 +36,32 @@ export const parseTelegramUser = (telegramInitData) => {
     return null;
   }
 };
-export const sendTelegramNotification = async (telegramId, message) => {
+const resolveMiniAppBaseUrl = () => {
+  const raw = process.env.TELEGRAM_MINIAPP_URL || process.env.MINIAPP_URL || "";
+  const normalized = String(raw).trim();
+  if (!normalized) return "";
+  return normalized.replace(/\/$/, "");
+};
+
+export const buildOrderDetailsReplyMarkup = (orderId) => {
+  if (!orderId) return null;
+  const miniAppBaseUrl = resolveMiniAppBaseUrl();
+  if (!miniAppBaseUrl) return null;
+
+  const webAppUrl = `${miniAppBaseUrl}/order/${encodeURIComponent(String(orderId))}`;
+  return {
+    inline_keyboard: [
+      [
+        {
+          text: "Открыть заказ",
+          web_app: { url: webAppUrl },
+        },
+      ],
+    ],
+  };
+};
+
+export const sendTelegramNotification = async (telegramId, message, { replyMarkup = null } = {}) => {
   try {
     const botToken = process.env.TELEGRAM_BOT_TOKEN;
     if (!botToken) {
@@ -52,6 +77,7 @@ export const sendTelegramNotification = async (telegramId, message) => {
         chat_id: telegramId,
         text: message,
         parse_mode: "HTML",
+        ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
       }),
     });
     const result = await response.json();

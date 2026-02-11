@@ -248,8 +248,8 @@ export async function getTransactionById(id, { connection = null, forUpdate = fa
 export async function getEarnTransactions(userId, { onlyActive = false, connection = null, forUpdate = false } = {}) {
   const executor = getExecutor(connection);
   const baseSql =
-    "SELECT id, amount, remaining_amount, expires_at, created_at FROM loyalty_transactions WHERE user_id = ? AND type IN ('earn','registration','birthday') AND status = 'completed' AND remaining_amount > 0";
-  const activeFilter = onlyActive ? " AND expires_at > NOW()" : "";
+    "SELECT id, amount, remaining_amount, expires_at, created_at FROM loyalty_transactions WHERE user_id = ? AND type IN ('earn','registration','birthday','adjustment') AND status = 'completed' AND remaining_amount > 0";
+  const activeFilter = onlyActive ? " AND (expires_at IS NULL OR expires_at > NOW())" : "";
   const orderSql = " ORDER BY created_at ASC, id ASC";
   const lockSql = forUpdate ? " FOR UPDATE" : "";
   const [rows] = await executor.query(`${baseSql}${activeFilter}${orderSql}${lockSql}`, [userId]);

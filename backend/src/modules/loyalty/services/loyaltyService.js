@@ -194,11 +194,13 @@ export async function validateBonusUsage(userId, bonusToUse, orderSubtotal, maxU
   if (!snapshot) {
     return { valid: false, error: "User not found" };
   }
-  const userBalance = parseFloat(snapshot.loyalty_balance);
-  if (bonusToUse > userBalance) {
+  const userBalance = parseFloat(snapshot.loyalty_balance) || 0;
+  const availableBalance = Math.floor(userBalance);
+
+  if (bonusToUse > availableBalance) {
     return {
       valid: false,
-      error: `Insufficient bonus balance. Available: ${userBalance}`,
+      error: `Insufficient bonus balance. Available: ${availableBalance}`,
     };
   }
   const maxUsable = calculateMaxUsableBonuses(orderSubtotal, maxUsePercent);
@@ -341,6 +343,7 @@ export async function applyManualBonusAdjustment({ userId, delta, description, c
       user_id: userId,
       type: "adjustment",
       amount: toInt(delta),
+      remaining_amount: delta > 0 ? toInt(delta) : null,
       status: "completed",
       description: description || "Ручная корректировка",
       admin_id: adminId,
@@ -377,7 +380,20 @@ async function consumeEarnAmounts(userId, amount, connection = null) {
     remaining -= delta;
   }
   if (remaining > 0) {
-    throw new Error("Недостаточно активных бонусов для списания");
+    const syncTxId = await insertLoyaltyTransaction(
+      {
+        user_id: userId,
+        type: "adjustment",
+        amount: remaining,
+        remaining_amount: remaining,
+        status: "completed",
+        description: "Техническая синхронизация бонусного пула",
+      },
+      { connection },
+    );
+    await updateTransactionRemaining(syncTxId, 0, { connection });
+    allocations.push({ earnId: syncTxId, amount: remaining });
+    remaining = 0;
   }
   return allocations;
 }

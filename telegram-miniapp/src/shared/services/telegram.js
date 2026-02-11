@@ -79,8 +79,9 @@ export function isDesktop() {
   if (!webApp) {
     return true;
   }
-  const platform = webApp.platform || "";
-  return platform === "web" || platform === "desktop" || platform === "unknown";
+  const platform = String(webApp.platform || "").toLowerCase();
+  const desktopPlatforms = new Set(["web", "desktop", "unknown", "weba", "webk", "tdesktop", "macos"]);
+  return desktopPlatforms.has(platform);
 }
 export function showBackButton(handler) {
   const webApp = resolveWebApp();

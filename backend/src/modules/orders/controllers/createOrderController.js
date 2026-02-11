@@ -83,8 +83,29 @@ const ensureBranchIsOpen = async (connection, branchId, cityId) => {
 };
 
 const generateOrderNumber = async (connection) => {
-  const [result] = await connection.query("SELECT LPAD(COALESCE(MAX(CAST(order_number AS UNSIGNED)), 0) + 1, 5, '0') as next_number FROM orders");
-  return result[0]?.next_number || "00001";
+  const [result] = await connection.query(
+    `SELECT LPAD(
+       CASE
+         WHEN COALESCE(MAX(CAST(order_number AS UNSIGNED)), 0) >= 9999 THEN 1
+         ELSE COALESCE(MAX(CAST(order_number AS UNSIGNED)), 0) + 1
+       END,
+       4,
+       '0'
+     ) as next_number
+     FROM orders`,
+  );
+  return result[0]?.next_number || "0001";
+};
+
+const resolveInternalApiBaseUrl = (req) => {
+  const fromEnv = (process.env.INTERNAL_API_URL || process.env.API_INTERNAL_URL || "").trim();
+  if (fromEnv) {
+    return fromEnv.replace(/\/$/, "");
+  }
+
+  const host = req.get("host");
+  const protocol = req.protocol === "https" && /^(localhost|127\.0\.0\.1)(:\d+)?$/i.test(host || "") ? "http" : req.protocol;
+  return `${protocol}://${host}`;
 };
 
 const calculateOrderCost = async (items, { cityId, fulfillmentType, bonusToUse }) => {
@@ -99,10 +120,9 @@ const calculateOrderCost = async (items, { cityId, fulfillmentType, bonusToUse }
     }
 
     // Получение товара
-    const [menuItems] = await db.query(
-      "SELECT id, name, price, category_id, weight, weight_unit, is_active FROM menu_items WHERE id = ? AND is_active = TRUE",
-      [item_id],
-    );
+    const [menuItems] = await db.query("SELECT id, name, price, weight, weight_unit, is_active FROM menu_items WHERE id = ? AND is_active = TRUE", [
+      item_id,
+    ]);
 
     if (menuItems.length === 0) {
       throw new Error(`Menu item ${item_id} not found or inactive`);
@@ -114,25 +134,44 @@ const calculateOrderCost = async (items, { cityId, fulfillmentType, bonusToUse }
 
     // Проверка городских цен
     if (cityId) {
-      const [cityPrices] = await db.query(
-        `SELECT price, is_active 
-         FROM menu_prices 
-         WHERE item_id = ? AND city_id = ? 
+      const [cityAvailability] = await db.query(
+        `SELECT is_active
+         FROM menu_item_cities
+         WHERE item_id = ? AND city_id = ?
          LIMIT 1`,
         [item_id, cityId],
       );
+      if (cityAvailability.length > 0 && !cityAvailability[0].is_active) {
+        throw new Error(`Item ${item_id} is not available in this city`);
+      }
+
+      const [cityPrices] = await db.query(
+        `SELECT price
+         FROM menu_item_prices
+         WHERE item_id = ? AND city_id = ? AND fulfillment_type = ?
+         LIMIT 1`,
+        [item_id, cityId, fulfillmentType],
+      );
 
       if (cityPrices.length > 0) {
-        if (!cityPrices[0].is_active) {
-          throw new Error(`Item ${item_id} is not available in this city`);
-        }
         itemBasePrice = parseFloat(cityPrices[0].price);
+      } else {
+        const [fallbackPrices] = await db.query(
+          `SELECT price
+           FROM menu_item_prices
+           WHERE item_id = ? AND city_id IS NULL AND fulfillment_type = ?
+           LIMIT 1`,
+          [item_id, fulfillmentType],
+        );
+        if (fallbackPrices.length > 0) {
+          itemBasePrice = parseFloat(fallbackPrices[0].price);
+        }
       }
     }
 
     // Проверка варианта
     if (variant_id) {
-      const [variants] = await db.query("SELECT id, name, price, is_active FROM menu_variants WHERE id = ? AND item_id = ?", [variant_id, item_id]);
+      const [variants] = await db.query("SELECT id, name, price, is_active FROM item_variants WHERE id = ? AND item_id = ?", [variant_id, item_id]);
 
       if (variants.length === 0 || !variants[0].is_active) {
         throw new Error(`Variant ${variant_id} not found or inactive`);
@@ -144,18 +183,26 @@ const calculateOrderCost = async (items, { cityId, fulfillmentType, bonusToUse }
 
       if (cityId) {
         const [cityVariantPrices] = await db.query(
-          `SELECT price, is_active 
-           FROM menu_variant_prices 
-           WHERE variant_id = ? AND city_id = ? 
+          `SELECT price
+           FROM menu_variant_prices
+           WHERE variant_id = ? AND city_id = ? AND fulfillment_type = ?
            LIMIT 1`,
-          [variant_id, cityId],
+          [variant_id, cityId, fulfillmentType],
         );
 
         if (cityVariantPrices.length > 0) {
-          if (!cityVariantPrices[0].is_active) {
-            throw new Error(`Variant ${variant_id} is not available in this city`);
-          }
           itemBasePrice = parseFloat(cityVariantPrices[0].price);
+        } else {
+          const [fallbackVariantPrices] = await db.query(
+            `SELECT price
+             FROM menu_variant_prices
+             WHERE variant_id = ? AND city_id IS NULL AND fulfillment_type = ?
+             LIMIT 1`,
+            [variant_id, fulfillmentType],
+          );
+          if (fallbackVariantPrices.length > 0) {
+            itemBasePrice = parseFloat(fallbackVariantPrices[0].price);
+          }
         }
       }
     }
@@ -236,7 +283,6 @@ const calculateOrderCost = async (items, { cityId, fulfillmentType, bonusToUse }
 
     validatedItems.push({
       item_id: menuItem.id,
-      category_id: menuItem.category_id,
       item_name: menuItem.name,
       variant_id: variant_id || null,
       variant_name: variantName,
@@ -358,6 +404,7 @@ export const createOrder = async (req, res, next) => {
     // Обработка доставки
     if (order_type === "delivery") {
       try {
+        const internalApiBaseUrl = resolveInternalApiBaseUrl(req);
         const providedLat = Number(delivery_latitude);
         const providedLng = Number(delivery_longitude);
 
@@ -379,7 +426,7 @@ export const createOrder = async (req, res, next) => {
         if (!Number.isFinite(deliveryLatitude) || !Number.isFinite(deliveryLongitude)) {
           if (delivery_street && delivery_house) {
             const geocodeResponse = await axios.post(
-              `${req.protocol}://${req.get("host")}/api/polygons/geocode`,
+              `${internalApiBaseUrl}/api/polygons/geocode`,
               { address: `${delivery_street}, ${delivery_house}` },
               { headers: { "Content-Type": "application/json" } },
             );
@@ -402,7 +449,7 @@ export const createOrder = async (req, res, next) => {
         // Проверка зоны доставки
         const checkDeliveryZone = async (lat, lon) => {
           const response = await axios.post(
-            `${req.protocol}://${req.get("host")}/api/polygons/check-delivery`,
+            `${internalApiBaseUrl}/api/polygons/check-delivery`,
             {
               latitude: lat,
               longitude: lon,

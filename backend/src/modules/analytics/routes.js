@@ -337,8 +337,8 @@ router.get("/sales-report", async (req, res, next) => {
       `SELECT 
         ${dateGrouping} as period,
         COUNT(*) as orders_count,
-        COALESCE(SUM(o.total_amount), 0) as revenue,
-        COALESCE(AVG(o.total_amount), 0) as avg_order_value,
+        COALESCE(SUM(o.total), 0) as revenue,
+        COALESCE(AVG(o.total), 0) as avg_order_value,
         COUNT(CASE WHEN o.order_type = 'delivery' THEN 1 END) as delivery_orders,
         COUNT(CASE WHEN o.order_type = 'pickup' THEN 1 END) as pickup_orders
       FROM orders o
@@ -370,7 +370,12 @@ router.get("/popular-items", async (req, res, next) => {
       params.push(city_id);
     }
     if (category_id) {
-      categoryFilter = " AND mi.category_id = ?";
+      categoryFilter = ` AND EXISTS (
+        SELECT 1
+        FROM menu_item_categories mic_filter
+        WHERE mic_filter.item_id = mi.id
+          AND mic_filter.category_id = ?
+      )`;
       params.push(category_id);
     }
     params.push(parseInt(limit));
@@ -378,18 +383,19 @@ router.get("/popular-items", async (req, res, next) => {
       `SELECT 
         mi.id,
         mi.name,
-        mc.name as category_name,
+        COALESCE(GROUP_CONCAT(DISTINCT mc.name ORDER BY mc.name SEPARATOR ', '), 'Без категории') as category_name,
         COUNT(DISTINCT oi.order_id) as orders_count,
         SUM(oi.quantity) as total_quantity,
-        COALESCE(SUM(oi.price * oi.quantity), 0) as revenue,
-        COALESCE(AVG(oi.price), 0) as avg_price
+        COALESCE(SUM(oi.item_price * oi.quantity), 0) as revenue,
+        COALESCE(AVG(oi.item_price), 0) as avg_price
       FROM order_items oi
       JOIN menu_items mi ON oi.item_id = mi.id
-      JOIN menu_categories mc ON mi.category_id = mc.id
+      LEFT JOIN menu_item_categories mic ON mic.item_id = mi.id
+      LEFT JOIN menu_categories mc ON mc.id = mic.category_id
       JOIN orders o ON oi.order_id = o.id
       LEFT JOIN branches b ON o.branch_id = b.id
       WHERE o.status != 'cancelled'${dateFilter}${cityFilter}${categoryFilter}
-      GROUP BY mi.id, mi.name, mc.name
+      GROUP BY mi.id, mi.name
       ORDER BY revenue DESC
       LIMIT ?`,
       params,
@@ -425,8 +431,8 @@ router.get("/customer-report", async (req, res, next) => {
         u.phone,
         u.current_loyalty_level_id,
         COUNT(o.id) as orders_count,
-        COALESCE(SUM(o.total_amount), 0) as total_revenue,
-        COALESCE(AVG(o.total_amount), 0) as avg_order_value,
+        COALESCE(SUM(o.total), 0) as total_revenue,
+        COALESCE(AVG(o.total), 0) as avg_order_value,
         MAX(o.created_at) as last_order_date
       FROM users u
       JOIN orders o ON u.id = o.user_id

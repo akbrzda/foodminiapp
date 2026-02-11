@@ -437,10 +437,18 @@ export const getItemById = async (req, res, next) => {
     const fulfillmentType = fulfillment_type || "delivery";
 
     const [items] = await db.query(
-      `SELECT id, category_id, name, description, price, image_url, 
-              weight, weight_value, weight_unit, calories, sort_order, is_active, created_at, updated_at
-       FROM menu_items
-       WHERE id = ? AND is_active = TRUE`,
+      `SELECT mi.id,
+              (
+                SELECT mic.category_id
+                FROM menu_item_categories mic
+                WHERE mic.item_id = mi.id
+                ORDER BY mic.sort_order, mic.category_id
+                LIMIT 1
+              ) AS category_id,
+              mi.name, mi.description, mi.price, mi.image_url,
+              mi.weight, mi.weight_value, mi.weight_unit, mi.calories, mi.sort_order, mi.is_active, mi.created_at, mi.updated_at
+       FROM menu_items mi
+       WHERE mi.id = ? AND mi.is_active = TRUE`,
       [itemId],
     );
 

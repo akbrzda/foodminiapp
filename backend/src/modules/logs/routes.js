@@ -126,13 +126,13 @@ router.get("/stats", authenticateToken, requireRole("admin", "ceo"), async (req,
     const [adminUserStats] = await db.query(
       `SELECT 
          au.id,
-         au.username,
+         CONCAT(au.first_name, ' ', au.last_name) as admin_name,
          au.role,
          COUNT(al.id) as action_count
        FROM admin_action_logs al
        LEFT JOIN admin_users au ON al.admin_user_id = au.id
        WHERE 1=1 ${dateFilter}
-       GROUP BY au.id, au.username, au.role
+       GROUP BY au.id, au.first_name, au.last_name, au.role
        ORDER BY action_count DESC
        LIMIT 10`,
       params,

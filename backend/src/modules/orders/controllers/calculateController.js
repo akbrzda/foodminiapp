@@ -1,6 +1,6 @@
 import db from "../../../config/database.js";
 import { findTariffForAmount } from "../../polygons/utils/deliveryTariffs.js";
-import { validateBonusUsage, getRedeemPercentForLevel } from "../../loyalty/services/loyaltyService.js";
+import { validateBonusUsage, getLoyaltyLevelsFromDb, getRedeemPercentForLevel } from "../../loyalty/services/loyaltyService.js";
 import { logger } from "../../../utils/logger.js";
 import { badRequest, notFound } from "../../../utils/errors.js";
 
@@ -42,7 +42,7 @@ export const calculateOrder = async (req, res, next) => {
       throw badRequest("Items are required");
     }
 
-    const userId = req.user.userId;
+    const userId = req.user?.id || req.user?.userId;
     const cityId = city_id || null;
 
     // Валидация товаров
@@ -57,10 +57,9 @@ export const calculateOrder = async (req, res, next) => {
       }
 
       // Получение товара
-      const [menuItems] = await db.query(
-        "SELECT id, name, price, category_id, weight, weight_unit, is_active FROM menu_items WHERE id = ? AND is_active = TRUE",
-        [item_id],
-      );
+      const [menuItems] = await db.query("SELECT id, name, price, weight, weight_unit, is_active FROM menu_items WHERE id = ? AND is_active = TRUE", [
+        item_id,
+      ]);
 
       if (menuItems.length === 0) {
         return res.status(400).json({ error: `Menu item ${item_id} not found or inactive` });
@@ -72,25 +71,44 @@ export const calculateOrder = async (req, res, next) => {
 
       // Проверка городских цен
       if (cityId) {
+        const [cityAvailability] = await db.query(
+          `SELECT is_active
+           FROM menu_item_cities
+           WHERE item_id = ? AND city_id = ?
+           LIMIT 1`,
+          [item_id, cityId],
+        );
+        if (cityAvailability.length > 0 && !cityAvailability[0].is_active) {
+          return res.status(400).json({ error: `Item ${item_id} is not available in this city` });
+        }
+
         const [cityPrices] = await db.query(
-          `SELECT price, is_active 
-           FROM menu_prices 
-           WHERE item_id = ? AND city_id = ? 
+          `SELECT price
+           FROM menu_item_prices
+           WHERE item_id = ? AND city_id = ? AND fulfillment_type = 'delivery'
            LIMIT 1`,
           [item_id, cityId],
         );
 
         if (cityPrices.length > 0) {
-          if (!cityPrices[0].is_active) {
-            return res.status(400).json({ error: `Item ${item_id} is not available in this city` });
-          }
           itemBasePrice = parseFloat(cityPrices[0].price);
+        } else {
+          const [fallbackPrices] = await db.query(
+            `SELECT price
+             FROM menu_item_prices
+             WHERE item_id = ? AND city_id IS NULL AND fulfillment_type = 'delivery'
+             LIMIT 1`,
+            [item_id],
+          );
+          if (fallbackPrices.length > 0) {
+            itemBasePrice = parseFloat(fallbackPrices[0].price);
+          }
         }
       }
 
       // Проверка варианта
       if (variant_id) {
-        const [variants] = await db.query("SELECT id, name, price, is_active FROM menu_variants WHERE id = ? AND item_id = ?", [variant_id, item_id]);
+        const [variants] = await db.query("SELECT id, name, price, is_active FROM item_variants WHERE id = ? AND item_id = ?", [variant_id, item_id]);
 
         if (variants.length === 0 || !variants[0].is_active) {
           return res.status(400).json({ error: `Variant ${variant_id} not found or inactive` });
@@ -102,18 +120,26 @@ export const calculateOrder = async (req, res, next) => {
 
         if (cityId) {
           const [cityVariantPrices] = await db.query(
-            `SELECT price, is_active 
-             FROM menu_variant_prices 
-             WHERE variant_id = ? AND city_id = ? 
+            `SELECT price
+             FROM menu_variant_prices
+             WHERE variant_id = ? AND city_id = ? AND fulfillment_type = 'delivery'
              LIMIT 1`,
             [variant_id, cityId],
           );
 
           if (cityVariantPrices.length > 0) {
-            if (!cityVariantPrices[0].is_active) {
-              return res.status(400).json({ error: `Variant ${variant_id} is not available in this city` });
-            }
             itemBasePrice = parseFloat(cityVariantPrices[0].price);
+          } else {
+            const [fallbackVariantPrices] = await db.query(
+              `SELECT price
+               FROM menu_variant_prices
+               WHERE variant_id = ? AND city_id IS NULL AND fulfillment_type = 'delivery'
+               LIMIT 1`,
+              [variant_id],
+            );
+            if (fallbackVariantPrices.length > 0) {
+              itemBasePrice = parseFloat(fallbackVariantPrices[0].price);
+            }
           }
         }
       }
@@ -194,7 +220,6 @@ export const calculateOrder = async (req, res, next) => {
 
       validatedItems.push({
         item_id: menuItem.id,
-        category_id: menuItem.category_id,
         item_name: menuItem.name,
         variant_id: variant_id || null,
         variant_name: variantName,
@@ -208,22 +233,19 @@ export const calculateOrder = async (req, res, next) => {
     // Валидация бонусов
     let bonusUsed = 0;
     if (bonus_to_use > 0) {
-      const [userRows] = await db.query("SELECT bonus_balance, loyalty_level FROM users WHERE id = ?", [userId]);
+      const [userRows] = await db.query("SELECT current_loyalty_level_id FROM users WHERE id = ?", [userId]);
 
       if (userRows.length === 0) {
         return res.status(404).json({ error: "User not found" });
       }
 
-      const user = userRows[0];
-      const redeemPercent = await getRedeemPercentForLevel(user.loyalty_level);
-      const maxRedeemable = Math.floor(subtotal * (redeemPercent / 100));
-      const availableBonuses = Math.min(user.bonus_balance, maxRedeemable);
-
-      if (bonus_to_use > availableBonuses) {
+      const loyaltyLevelId = userRows[0]?.current_loyalty_level_id || 1;
+      const loyaltyLevels = await getLoyaltyLevelsFromDb();
+      const maxUsePercent = getRedeemPercentForLevel(loyaltyLevelId, loyaltyLevels);
+      const bonusValidation = await validateBonusUsage(userId, bonus_to_use, subtotal, maxUsePercent);
+      if (!bonusValidation.valid) {
         return res.status(400).json({
-          error: "Insufficient bonuses",
-          available_bonuses: availableBonuses,
-          max_redeemable: maxRedeemable,
+          error: bonusValidation.error,
         });
       }
 

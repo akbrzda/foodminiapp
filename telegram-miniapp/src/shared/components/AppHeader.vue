@@ -427,4 +427,9 @@ onBeforeUnmount(() => {
 .fade-leave-to {
   opacity: 0;
 }
+.fullsize .app-header,
+.fullsize .sidebar {
+  padding-top: 0;
+  margin-top: 0;
+}
 </style>

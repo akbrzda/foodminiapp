@@ -82,6 +82,23 @@ const router = createRouter({
 });
 let backButtonCleanup = null;
 let isRedirecting = false;
+
+const resolveBackFallback = (route) => {
+  if (route?.name === "OrderDetail") {
+    return "/orders";
+  }
+  return "/";
+};
+
+const navigateBackWithFallback = (router, route) => {
+  if (window.history.length > 1) {
+    router.back();
+    return;
+  }
+  const fallbackPath = resolveBackFallback(route);
+  router.replace(fallbackPath);
+};
+
 router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore();
   const locationStore = useLocationStore();
@@ -128,7 +145,7 @@ router.afterEach((to) => {
   if (!isDesktop()) {
     if (to.meta.showBackButton) {
       backButtonCleanup = showBackButton(() => {
-        router.back();
+        navigateBackWithFallback(router, to);
       });
     } else {
       hideBackButton();
