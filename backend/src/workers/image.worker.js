@@ -10,7 +10,7 @@ const __dirname = path.dirname(__filename);
 const UPLOAD_DIR = CDN_IMAGES_PATH;
 const OPTIMIZED_DIR = path.join(UPLOAD_DIR, "optimized");
 const THUMBNAILS_DIR = path.join(UPLOAD_DIR, "thumbnails");
-const MAX_FILE_SIZE = 500 * 1024;
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
 async function ensureDirectories() {
   try {
     await fs.mkdir(UPLOAD_DIR, { recursive: true });
