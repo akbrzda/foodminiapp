@@ -27,11 +27,17 @@ const fileFilter = (req, file, cb) => {
     return cb(new Error(`Invalid file extension. Allowed extensions: ${ALLOWED_EXTENSIONS.join(", ")}`), false);
   }
 
-  // Проверка имени файла на опасные символы
-  const filename = path.basename(file.originalname);
-  const safeFilenamePattern = /^[a-zA-Z0-9_\-. ]+$/;
-  if (!safeFilenamePattern.test(filename)) {
-    return cb(new Error("Filename contains invalid characters"), false);
+  // Проверка имени файла на технически опасные значения.
+  // Символы языка (в т.ч. кириллица) не ограничиваем, т.к. финальное имя файла генерируется на сервере.
+  const filename = path.basename(String(file.originalname || "").normalize("NFC")).trim();
+  if (!filename) {
+    return cb(new Error("Filename is empty"), false);
+  }
+  if (filename.includes("\0") || /[\\/]/.test(filename)) {
+    return cb(new Error("Filename contains invalid path characters"), false);
+  }
+  if (filename.length > 255) {
+    return cb(new Error("Filename is too long"), false);
   }
 
   cb(null, true);
@@ -75,11 +81,17 @@ export async function processAndSaveImage(buffer, category, entityId, options = 
   // Валидируем содержимое изображения
   await validateImageContent(buffer);
 
-  const { width = 1200, height = null, quality = 85, format = "webp" } = options;
+  const { width = 1200, height = null, quality = 85 } = options;
 
   const hash = crypto.randomBytes(8).toString("hex");
   const timestamp = Date.now();
-  const filename = `${timestamp}-${hash}.${format}`;
+  const safeEntityId = String(entityId)
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "") || "entity";
+  const filename = `${safeEntityId}-${timestamp}-${hash}.webp`;
 
   const uploadPath = await ensureUploadDir(category, entityId);
   const filePath = path.join(uploadPath, filename);
@@ -99,7 +111,7 @@ export async function processAndSaveImage(buffer, category, entityId, options = 
     icc: {},
   });
 
-  await processor.toFormat(format, { quality }).toFile(filePath);
+  await processor.webp({ quality }).toFile(filePath);
 
   const url = getImageUrl(category, entityId, filename);
   return { filename, url };

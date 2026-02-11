@@ -56,7 +56,7 @@
                     <input ref="fileInput" type="file" accept="image/*" class="hidden" @change="onFileChange" />
                     <Button type="button" variant="outline" size="sm" @click="triggerFile">
                       <UploadCloud :size="16" />
-                      Загрузить (до 500KB)
+                      Загрузить (до 10МБ)
                     </Button>
                     <span>или перетащите файл сюда</span>
                     <span v-if="uploadState.error" class="text-xs text-red-600">{{ uploadState.error }}</span>
