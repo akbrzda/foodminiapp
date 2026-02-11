@@ -204,6 +204,10 @@ const dayOrder = days.reduce((acc, day, index) => {
 }, {});
 
 const goBack = () => {
+  if (window.history.state?.back) {
+    router.back();
+    return;
+  }
   router.push({ name: "branches" });
 };
 

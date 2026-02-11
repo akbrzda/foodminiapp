@@ -16,6 +16,12 @@ export const errorHandler = (err, req, res, next) => {
     });
   }
 
+  if (err.status === 400) {
+    return res.status(400).json({
+      error: err.message || "Bad request",
+    });
+  }
+
   if (err.name === "UnauthorizedError" || err.status === 401) {
     return res.status(401).json({
       error: "Authentication required",

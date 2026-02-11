@@ -612,9 +612,10 @@ function addToCart() {
   color: #ff0000;
 }
 .item-image-wrapper {
-  width: 100%;
+  max-width: 300px;
   max-height: 300px;
   overflow: hidden;
+  margin: 0 auto;
 }
 .item-image {
   width: 100%;

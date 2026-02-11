@@ -33,6 +33,12 @@ import BroadcastDashboard from "@/modules/broadcasts/views/BroadcastDashboard.vu
 import NotFound from "@/shared/components/NotFound.vue";
 const router = createRouter({
   history: createWebHistory(),
+  scrollBehavior(to, from, savedPosition) {
+    if (savedPosition) {
+      return savedPosition;
+    }
+    return { top: 0, left: 0 };
+  },
   routes: [
     { path: "/login", name: "login", component: Login, meta: { public: true } },
     {

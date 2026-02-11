@@ -142,6 +142,10 @@ let cityMarker = null;
 let cityTileLayer = null;
 
 const goBack = () => {
+  if (window.history.state?.back) {
+    router.back();
+    return;
+  }
   router.push({ name: "cities" });
 };
 

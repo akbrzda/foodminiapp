@@ -1,10 +1,45 @@
 import express from "express";
+import multer from "multer";
 import { authenticateToken, requireRole } from "../../middleware/auth.js";
 import { upload, processAndSaveImage } from "../../middleware/upload.js";
 import { createLimiter, redisRateLimiter } from "../../middleware/rateLimiter.js";
 import { IMAGE_CATEGORIES, deleteImage, deleteEntityImages } from "../../config/uploads.js";
 
 const router = express.Router();
+
+const createBadRequestError = (message) => {
+  const error = new Error(message);
+  error.status = 400;
+  return error;
+};
+
+const parseEntityId = (rawId, allowTemp = true) => {
+  if (allowTemp && (rawId === "temp" || rawId === "new")) {
+    return `temp-${Date.now()}`;
+  }
+  const parsedId = Number.parseInt(rawId, 10);
+  if (!Number.isInteger(parsedId) || parsedId <= 0) {
+    throw createBadRequestError("Некорректный идентификатор сущности");
+  }
+  return parsedId;
+};
+
+const uploadImage = (category, { allowTemp = true } = {}) => async (req, res, next) => {
+  try {
+    if (!req.file) {
+      throw createBadRequestError("Файл изображения не получен");
+    }
+    const entityId = parseEntityId(req.params.id, allowTemp);
+    const result = await processAndSaveImage(req.file.buffer, category, entityId);
+    res.json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 router.use(authenticateToken, requireRole("admin", "manager", "ceo"));
 router.use(createLimiter);
 router.use(
@@ -19,140 +54,55 @@ router.use(
   }),
 );
 
-router.post("/menu-items/:id", upload.single("image"), async (req, res) => {
-  try {
-    const { id } = req.params;
-    if (!req.file) {
-      return res.status(400).json({ error: "No image file provided" });
-    }
-    const entityId = id === "temp" ? `temp-${Date.now()}` : parseInt(id);
-    const result = await processAndSaveImage(req.file.buffer, IMAGE_CATEGORIES.MENU_ITEMS, entityId);
-    res.json({
-      success: true,
-      data: result,
-    });
-  } catch (error) {
-    res.status(500).json({ error: "Failed to upload image" });
-  }
-});
+router.post("/menu-items/:id", upload.single("image"), uploadImage(IMAGE_CATEGORIES.MENU_ITEMS));
+router.post("/menu-categories/:id", upload.single("image"), uploadImage(IMAGE_CATEGORIES.MENU_CATEGORIES));
+router.post("/modifiers/:id", upload.single("image"), uploadImage(IMAGE_CATEGORIES.MODIFIERS));
+router.post("/modifier-groups/:id", upload.single("image"), uploadImage(IMAGE_CATEGORIES.MODIFIER_GROUPS, { allowTemp: false }));
+router.post("/tags/:id", upload.single("image"), uploadImage(IMAGE_CATEGORIES.TAGS, { allowTemp: false }));
+router.post("/broadcasts/:id", upload.single("image"), uploadImage(IMAGE_CATEGORIES.BROADCASTS));
 
-router.post("/menu-categories/:id", upload.single("image"), async (req, res) => {
+router.delete("/:category/:id/:filename", async (req, res, next) => {
   try {
-    const { id } = req.params;
-    if (!req.file) {
-      return res.status(400).json({ error: "No image file provided" });
-    }
-    const entityId = id === "temp" ? `temp-${Date.now()}` : parseInt(id);
-    const result = await processAndSaveImage(req.file.buffer, IMAGE_CATEGORIES.MENU_CATEGORIES, entityId);
-    res.json({
-      success: true,
-      data: result,
-    });
-  } catch (error) {
-    res.status(500).json({ error: "Failed to upload image" });
-  }
-});
-
-/* Accepts 'temp' as ID for temporary uploads
- */
-router.post("/modifiers/:id", upload.single("image"), async (req, res) => {
-  try {
-    const { id } = req.params;
-    if (!req.file) {
-      return res.status(400).json({ error: "No image file provided" });
-    }
-    const entityId = id === "temp" ? `temp-${Date.now()}` : parseInt(id);
-    const result = await processAndSaveImage(req.file.buffer, IMAGE_CATEGORIES.MODIFIERS, entityId);
-    res.json({
-      success: true,
-      data: result,
-    });
-  } catch (error) {
-    res.status(500).json({ error: "Failed to upload image" });
-  }
-});
-
-router.post("/modifier-groups/:id", upload.single("image"), async (req, res) => {
-  try {
-    const { id } = req.params;
-    if (!req.file) {
-      return res.status(400).json({ error: "No image file provided" });
-    }
-    const result = await processAndSaveImage(req.file.buffer, IMAGE_CATEGORIES.MODIFIER_GROUPS, parseInt(id));
-    res.json({
-      success: true,
-      data: result,
-    });
-  } catch (error) {
-    res.status(500).json({ error: "Failed to upload image" });
-  }
-});
-
-router.post("/tags/:id", upload.single("image"), async (req, res) => {
-  try {
-    const { id } = req.params;
-    if (!req.file) {
-      return res.status(400).json({ error: "No image file provided" });
-    }
-    const result = await processAndSaveImage(req.file.buffer, IMAGE_CATEGORIES.TAGS, parseInt(id));
-    res.json({
-      success: true,
-      data: result,
-    });
-  } catch (error) {
-    res.status(500).json({ error: "Failed to upload image" });
-  }
-});
-
-router.post("/broadcasts/:id", upload.single("image"), async (req, res) => {
-  try {
-    const { id } = req.params;
-    if (!req.file) {
-      return res.status(400).json({ error: "Файл изображения не получен" });
-    }
-    const entityId = id === "temp" ? `temp-${Date.now()}` : parseInt(id);
-    const result = await processAndSaveImage(req.file.buffer, IMAGE_CATEGORIES.BROADCASTS, entityId);
-    res.json({
-      success: true,
-      data: result,
-    });
-  } catch (error) {
-    res.status(500).json({ error: "Не удалось загрузить изображение" });
-  }
-});
-
-router.delete("/:category/:id/:filename", async (req, res) => {
-  try {
-    const { category, id, filename } = req.params;
+    const { category, filename } = req.params;
     if (!Object.values(IMAGE_CATEGORIES).includes(category)) {
-      return res.status(400).json({ error: "Invalid category" });
+      throw createBadRequestError("Некорректная категория");
     }
-    const success = await deleteImage(category, parseInt(id), filename);
+    const entityId = parseEntityId(req.params.id, false);
+    const success = await deleteImage(category, entityId, filename);
     if (success) {
-      res.json({ success: true, message: "Image deleted" });
-    } else {
-      res.status(404).json({ error: "Image not found" });
+      return res.json({ success: true, message: "Image deleted" });
     }
+    return res.status(404).json({ error: "Image not found" });
   } catch (error) {
-    res.status(500).json({ error: "Failed to delete image" });
+    next(error);
   }
 });
 
-router.delete("/:category/:id", async (req, res) => {
+router.delete("/:category/:id", async (req, res, next) => {
   try {
-    const { category, id } = req.params;
+    const { category } = req.params;
     if (!Object.values(IMAGE_CATEGORIES).includes(category)) {
-      return res.status(400).json({ error: "Invalid category" });
+      throw createBadRequestError("Некорректная категория");
     }
-    const success = await deleteEntityImages(category, parseInt(id));
+    const entityId = parseEntityId(req.params.id, false);
+    const success = await deleteEntityImages(category, entityId);
     if (success) {
-      res.json({ success: true, message: "All images deleted" });
-    } else {
-      res.status(404).json({ error: "Images not found" });
+      return res.json({ success: true, message: "All images deleted" });
     }
+    return res.status(404).json({ error: "Images not found" });
   } catch (error) {
-    res.status(500).json({ error: "Failed to delete images" });
+    next(error);
   }
+});
+
+router.use((error, req, res, next) => {
+  if (error instanceof multer.MulterError) {
+    if (error.code === "LIMIT_FILE_SIZE") {
+      return res.status(400).json({ error: "Файл слишком большой. Максимум 10MB" });
+    }
+    return res.status(400).json({ error: error.message || "Ошибка загрузки файла" });
+  }
+  return next(error);
 });
 
 export default router;

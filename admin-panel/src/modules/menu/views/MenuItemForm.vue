@@ -632,6 +632,10 @@ const getOrCreateVariantPriceEntry = (variant, cityId, fulfillmentType) => {
   return getOrCreatePriceEntry(variant.prices, cityId, fulfillmentType, Number(variant.price) || 0);
 };
 const goBack = () => {
+  if (window.history.state?.back) {
+    router.back();
+    return;
+  }
   router.push({ name: "menu-items" });
 };
 const loadCategories = async () => {

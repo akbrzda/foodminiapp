@@ -36,7 +36,7 @@ export async function startWorkers() {
     birthdayBonusWorker.start();
     broadcastWorker.start();
     triggerWorker.start();
-    logger.system.startup("Background workers started");
+    logger.system.info("Background workers started");
     return {
       telegramWorker,
       imageWorker,

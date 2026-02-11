@@ -130,6 +130,8 @@ export const logger = {
   },
   system: {
     startup: (port) => logSystem("info", "system", `Server started on port ${port}`, { port }),
+    info: (message, context = null) => logSystem("info", "system", message, context || undefined),
+    warn: (message, context = null) => logSystem("warn", "system", message, context || undefined),
     shutdown: (reason) => logSystem("warn", "system", `Server shutting down: ${reason}`, { reason }),
     dbConnected: () => logSystem("info", "system", "Database connected successfully"),
     dbError: (error) => logSystem("error", "system", `Database error: ${error}`, { error }),

@@ -39,10 +39,17 @@ const PORT = process.env.PORT || 3000;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const rawCorsOrigins = process.env.CORS_ORIGINS || "";
-const corsOrigins = rawCorsOrigins
-  .split(",")
+const defaultProductionOrigins = ["https://app.panda.akbrzda.ru", "https://admin.panda.akbrzda.ru"];
+const corsOrigins = [
+  ...rawCorsOrigins
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean),
+  ...(process.env.NODE_ENV === "production" ? defaultProductionOrigins : []),
+]
   .map((origin) => origin.trim())
-  .filter(Boolean);
+  .filter(Boolean)
+  .filter((origin, index, array) => array.indexOf(origin) === index);
 const normalizeOrigin = (value) => {
   if (!value || typeof value !== "string") return "";
   return value.trim().replace(/\/$/, "");
@@ -71,15 +78,9 @@ const isOriginAllowed = (origin) => {
 };
 const corsOptions = {
   origin: (origin, callback) => {
-    // В production требуем наличие origin
-    if (process.env.NODE_ENV === "production" && !origin) {
-      const error = new Error("Origin header is required");
-      error.status = 403;
-      return callback(error, false);
-    }
-
-    // В development разрешаем отсутствие origin (для Postman и т.д.)
-    if (!origin && process.env.NODE_ENV !== "production") {
+    // Для non-browser клиентов (мониторинг, боты, curl) Origin может отсутствовать.
+    // CORS в этом случае не является защитным механизмом, поэтому пропускаем запрос.
+    if (!origin) {
       return callback(null, true);
     }
 
@@ -140,7 +141,9 @@ if (process.env.NODE_ENV === "production") {
 app.use(cors(corsOptions));
 app.options(/.*/, cors(corsOptions));
 app.use(cookieParser());
-app.use(express.json({ charset: "utf-8", limit: "2mb" }));
+// strict=false позволяет корректно обработать payload `null` на /auth/refresh
+// и вернуть контролируемый 401 вместо SyntaxError от body-parser.
+app.use(express.json({ charset: "utf-8", limit: "2mb", strict: false }));
 app.use(express.urlencoded({ extended: true, charset: "utf-8", limit: "2mb" }));
 
 // Глобальный rate limiter

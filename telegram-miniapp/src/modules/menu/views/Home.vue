@@ -615,7 +615,7 @@ function goToCart() {
 <style scoped>
 .home {
   min-height: 100vh;
-  padding-bottom: env(safe-area-inset-bottom);
+  padding-bottom: 100px;
   background: var(--color-background);
 }
 .order-disabled {

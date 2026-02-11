@@ -22,6 +22,15 @@ const statsEmitState = new Map();
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+const isSchemaUnavailableError = (error) => {
+  const message = String(error?.message || "").toLowerCase();
+  return (
+    message.includes("unknown database") ||
+    ((message.includes("broadcast_queue") || message.includes("broadcast_messages")) &&
+      (message.includes("doesn't exist") || message.includes("does not exist") || message.includes("unknown table")))
+  );
+};
+
 const buildInlineKeyboard = (buttons, campaignId, messageId) => {
   if (!Array.isArray(buttons) || !buttons.length) return null;
   const rows = [];
@@ -254,10 +263,11 @@ const processQueueItem = async (queueItem) => {
 
 export function createBroadcastWorker() {
   let intervalId = null;
+  let stoppedBySchemaError = false;
   const workerId = `broadcast-${process.pid}-${Date.now()}`;
 
   const run = async () => {
-    if (!WORKER_ENABLED) return;
+    if (!WORKER_ENABLED || stoppedBySchemaError) return;
     try {
       const batch = await fetchQueueBatch(workerId);
       if (!batch.length) return;
@@ -269,13 +279,22 @@ export function createBroadcastWorker() {
         }
       }
     } catch (error) {
+      if (isSchemaUnavailableError(error)) {
+        stoppedBySchemaError = true;
+        if (intervalId) {
+          clearInterval(intervalId);
+          intervalId = null;
+        }
+        logger.system.warn("Broadcast worker disabled: schema is not ready", { error: error.message });
+        return;
+      }
       logger.system.dbError(`BroadcastWorker error: ${error.message}`);
     }
   };
 
   return {
     start() {
-      if (intervalId) return;
+      if (intervalId || stoppedBySchemaError) return;
       intervalId = setInterval(run, INTERVAL_MS);
       run();
     },

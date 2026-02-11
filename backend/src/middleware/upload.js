@@ -14,30 +14,35 @@ const ALLOWED_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp", ".gif"];
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
 const storage = multer.memoryStorage();
+const createUploadValidationError = (message) => {
+  const error = new Error(message);
+  error.status = 400;
+  return error;
+};
 
 const fileFilter = (req, file, cb) => {
   // Проверка MIME типа
   if (!ALLOWED_MIME_TYPES.includes(file.mimetype)) {
-    return cb(new Error(`Invalid file type. Allowed types: ${ALLOWED_MIME_TYPES.join(", ")}`), false);
+    return cb(createUploadValidationError(`Invalid file type. Allowed types: ${ALLOWED_MIME_TYPES.join(", ")}`), false);
   }
 
   // Проверка расширения файла
   const ext = path.extname(file.originalname).toLowerCase();
   if (!ALLOWED_EXTENSIONS.includes(ext)) {
-    return cb(new Error(`Invalid file extension. Allowed extensions: ${ALLOWED_EXTENSIONS.join(", ")}`), false);
+    return cb(createUploadValidationError(`Invalid file extension. Allowed extensions: ${ALLOWED_EXTENSIONS.join(", ")}`), false);
   }
 
   // Проверка имени файла на технически опасные значения.
   // Символы языка (в т.ч. кириллица) не ограничиваем, т.к. финальное имя файла генерируется на сервере.
   const filename = path.basename(String(file.originalname || "").normalize("NFC")).trim();
   if (!filename) {
-    return cb(new Error("Filename is empty"), false);
+    return cb(createUploadValidationError("Filename is empty"), false);
   }
   if (filename.includes("\0") || /[\\/]/.test(filename)) {
-    return cb(new Error("Filename contains invalid path characters"), false);
+    return cb(createUploadValidationError("Filename contains invalid path characters"), false);
   }
   if (filename.length > 255) {
-    return cb(new Error("Filename is too long"), false);
+    return cb(createUploadValidationError("Filename is too long"), false);
   }
 
   cb(null, true);
@@ -63,17 +68,20 @@ async function validateImageContent(buffer) {
     // Проверяем, что формат соответствует разрешенным
     const allowedFormats = ["jpeg", "png", "webp", "gif"];
     if (!allowedFormats.includes(metadata.format)) {
-      throw new Error("Invalid image format");
+      throw createUploadValidationError("Invalid image format");
     }
 
     // Проверяем разумные размеры (защита от бомб)
     if (metadata.width > 10000 || metadata.height > 10000) {
-      throw new Error("Image dimensions are too large");
+      throw createUploadValidationError("Image dimensions are too large");
     }
 
     return true;
   } catch (error) {
-    throw new Error(`Image validation failed: ${error.message}`);
+    if (error?.status === 400) {
+      throw error;
+    }
+    throw createUploadValidationError(`Image validation failed: ${error.message}`);
   }
 }
 
@@ -105,11 +113,8 @@ export async function processAndSaveImage(buffer, category, entityId, options = 
     });
   }
 
-  // Удаляем метаданные для безопасности и уменьшения размера
-  processor = processor.withMetadata({
-    exif: {},
-    icc: {},
-  });
+  // По умолчанию sharp не сохраняет метаданные (EXIF/ICC), поэтому
+  // дополнительный вызов withMetadata здесь не нужен.
 
   await processor.webp({ quality }).toFile(filePath);
 

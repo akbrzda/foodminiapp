@@ -78,6 +78,12 @@ const routes = [
 ];
 const router = createRouter({
   history: createWebHistory(),
+  scrollBehavior(to, from, savedPosition) {
+    if (savedPosition) {
+      return savedPosition;
+    }
+    return { top: 0, left: 0 };
+  },
   routes,
 });
 let backButtonCleanup = null;
@@ -91,7 +97,7 @@ const resolveBackFallback = (route) => {
 };
 
 const navigateBackWithFallback = (router, route) => {
-  if (window.history.length > 1) {
+  if (window.history.state?.back) {
     router.back();
     return;
   }
