@@ -101,7 +101,7 @@ import { devError } from "@/shared/utils/logger";
   </div>
 </template>
 <script setup>
-import { computed, onMounted, reactive, ref } from "vue";
+import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { Pencil, Plus, Trash2 } from "lucide-vue-next";
 import api from "@/shared/api/client.js";
@@ -123,6 +123,7 @@ import { formatCurrency } from "@/shared/utils/format.js";
 const router = useRouter();
 const items = ref([]);
 const { showErrorNotification } = useNotifications();
+const CATEGORY_FILTER_STORAGE_KEY = "menu-items-filter-category-id";
 const filters = reactive({
   search: "",
   status: "all",
@@ -198,4 +199,22 @@ const deleteItem = async (item) => {
   }
 };
 onMounted(loadItems);
+
+onMounted(() => {
+  const savedCategoryId = sessionStorage.getItem(CATEGORY_FILTER_STORAGE_KEY);
+  if (savedCategoryId) {
+    filters.categoryId = savedCategoryId;
+  }
+});
+
+watch(
+  () => filters.categoryId,
+  (value) => {
+    if (!value || value === "all") {
+      sessionStorage.removeItem(CATEGORY_FILTER_STORAGE_KEY);
+      return;
+    }
+    sessionStorage.setItem(CATEGORY_FILTER_STORAGE_KEY, String(value));
+  },
+);
 </script>
