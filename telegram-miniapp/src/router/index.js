@@ -2,6 +2,25 @@ import { createRouter, createWebHistory } from "vue-router";
 import { useAuthStore } from "@/modules/auth/stores/auth.js";
 import { useLocationStore } from "@/modules/location/stores/location.js";
 import { showBackButton, hideBackButton, isDesktop } from "@/shared/services/telegram.js";
+
+const HOME_SCROLL_Y_STORAGE_KEY = "home-scroll-y-before-item-detail";
+
+const saveHomeScrollY = () => {
+  if (typeof window === "undefined") return;
+  const scrollY = Number(window.scrollY || window.pageYOffset || 0);
+  window.sessionStorage.setItem(HOME_SCROLL_Y_STORAGE_KEY, String(scrollY));
+};
+
+const consumeHomeScrollY = () => {
+  if (typeof window === "undefined") return null;
+  const raw = window.sessionStorage.getItem(HOME_SCROLL_Y_STORAGE_KEY);
+  if (raw === null) return null;
+  window.sessionStorage.removeItem(HOME_SCROLL_Y_STORAGE_KEY);
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed < 0) return 0;
+  return parsed;
+};
+
 const routes = [
   {
     path: "/",
@@ -79,6 +98,12 @@ const routes = [
 const router = createRouter({
   history: createWebHistory(),
   scrollBehavior(to, from, savedPosition) {
+    if (to.name === "Home" && from.name === "ItemDetail") {
+      const homeScrollY = consumeHomeScrollY();
+      if (homeScrollY !== null) {
+        return { top: homeScrollY, left: 0 };
+      }
+    }
     if (savedPosition) {
       return savedPosition;
     }
@@ -108,6 +133,11 @@ const navigateBackWithFallback = (router, route) => {
 router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore();
   const locationStore = useLocationStore();
+
+  if (from.name === "Home" && to.name === "ItemDetail") {
+    saveHomeScrollY();
+  }
+
   if (backButtonCleanup) {
     backButtonCleanup();
     backButtonCleanup = null;

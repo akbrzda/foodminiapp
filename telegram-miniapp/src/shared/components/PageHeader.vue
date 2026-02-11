@@ -13,7 +13,6 @@ defineProps({
 </script>
 <style scoped>
 .page-header {
-  --page-header-safe-top: env(safe-area-inset-top, 0px);
   position: sticky;
   top: 0;
   z-index: 100;

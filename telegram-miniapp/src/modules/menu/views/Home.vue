@@ -861,7 +861,6 @@ function goToCart() {
   gap: 6px;
   padding: 12px;
   overflow-x: auto;
-  padding-top: calc(env(safe-area-inset-top));
 }
 .categories::-webkit-scrollbar {
   display: none;

@@ -183,7 +183,6 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   padding: 0 12px;
   background: var(--color-background);
-  margin-top: calc(env(safe-area-inset-top) + 48px);
 }
 .menu-button {
   width: 40px;
@@ -273,7 +272,6 @@ onBeforeUnmount(() => {
   box-shadow: 2px 0 8px rgba(0, 0, 0, 0.1);
   display: flex;
   flex-direction: column;
-  padding-top: calc(env(safe-area-inset-top) + 48px);
 }
 .sidebar-header {
   display: flex;
@@ -426,10 +424,5 @@ onBeforeUnmount(() => {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
-}
-.fullsize .app-header,
-.fullsize .sidebar {
-  padding-top: 0;
-  margin-top: 0;
 }
 </style>
