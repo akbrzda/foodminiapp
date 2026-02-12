@@ -1,6 +1,5 @@
 <template>
   <div class="contacts">
-    <PageHeader title="Контакты" />
     <div class="contacts-content page-container page-container--spacious-bottom">
       <p class="page-subtitle" v-if="cityName">Город: {{ cityName }}</p>
 

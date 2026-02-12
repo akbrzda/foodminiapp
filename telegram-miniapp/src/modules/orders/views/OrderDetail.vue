@@ -1,6 +1,5 @@
 <template>
   <div class="order-detail">
-    <PageHeader :title="`Заказ #${order?.order_number || ''}`" />
     <div v-if="loading" class="loading">Загрузка...</div>
     <div v-else-if="order" class="order-content page-container">
       <div class="status-card">

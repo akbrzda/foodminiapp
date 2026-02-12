@@ -218,62 +218,41 @@ const calculateOrderCost = async (items, { cityId, fulfillmentType, bonusToUse }
           [modId],
         );
 
-        if (newModifiers.length > 0) {
-          const modifier = newModifiers[0];
-          let modifierPrice = parseFloat(modifier.price);
-
-          if (cityId) {
-            const [cityModifierPrices] = await db.query(
-              `SELECT price, is_active
-               FROM menu_modifier_prices
-               WHERE modifier_id = ? AND city_id = ?
-               LIMIT 1`,
-              [modifier.id, cityId],
-            );
-
-            if (cityModifierPrices.length > 0) {
-              if (!cityModifierPrices[0].is_active) {
-                throw new Error(`Modifier ${modifier.id} is not available in this city`);
-              }
-              modifierPrice = parseFloat(cityModifierPrices[0].price);
-            }
-          }
-
-          modifiersTotal += modifierPrice;
-          validatedModifiers.push({
-            id: modifier.id,
-            name: modifier.name,
-            price: modifierPrice,
-            group_id: modifier.group_id,
-            type: modifier.type,
-            is_required: modifier.is_required,
-            weight_value: modifier.weight ?? null,
-            weight_unit: modifier.weight_unit ?? null,
-          });
-        } else {
-          // Старая система модификаторов
-          const [oldModifiers] = await db.query("SELECT id, name, price, is_active FROM menu_modifiers WHERE id = ? AND item_id = ?", [
-            modId,
-            item_id,
-          ]);
-
-          if (oldModifiers.length === 0 || !oldModifiers[0].is_active) {
-            throw new Error(`Modifier ${modId} not found or inactive`);
-          }
-
-          const modifier = oldModifiers[0];
-          const modifierPrice = parseFloat(modifier.price);
-          modifiersTotal += modifierPrice;
-
-          validatedModifiers.push({
-            id: modifier.id,
-            name: modifier.name,
-            price: modifierPrice,
-            old_system: true,
-            weight_value: null,
-            weight_unit: null,
-          });
+        if (newModifiers.length === 0) {
+          throw new Error(`Modifier ${modId} not found or inactive`);
         }
+
+        const modifier = newModifiers[0];
+        let modifierPrice = parseFloat(modifier.price);
+
+        if (cityId) {
+          const [cityModifierPrices] = await db.query(
+            `SELECT price, is_active
+             FROM menu_modifier_prices
+             WHERE modifier_id = ? AND city_id = ?
+             LIMIT 1`,
+            [modifier.id, cityId],
+          );
+
+          if (cityModifierPrices.length > 0) {
+            if (!cityModifierPrices[0].is_active) {
+              throw new Error(`Modifier ${modifier.id} is not available in this city`);
+            }
+            modifierPrice = parseFloat(cityModifierPrices[0].price);
+          }
+        }
+
+        modifiersTotal += modifierPrice;
+        validatedModifiers.push({
+          id: modifier.id,
+          name: modifier.name,
+          price: modifierPrice,
+          group_id: modifier.group_id,
+          type: modifier.type,
+          is_required: modifier.is_required,
+          weight_value: modifier.weight ?? null,
+          weight_unit: modifier.weight_unit ?? null,
+        });
       }
     }
 
@@ -619,29 +598,20 @@ export const createOrder = async (req, res, next) => {
 
       // Добавление модификаторов
       for (const modifier of item.modifiers) {
-        if (modifier.old_system) {
-          await connection.query(
-            `INSERT INTO order_item_modifiers 
-             (order_item_id, modifier_id, modifier_name, modifier_price, old_modifier_id, modifier_weight, modifier_weight_unit)
-             VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [orderItemId, null, modifier.name, modifier.price, modifier.id, modifier.weight_value || null, modifier.weight_unit || null],
-          );
-        } else {
-          await connection.query(
-            `INSERT INTO order_item_modifiers 
-             (order_item_id, modifier_id, modifier_name, modifier_price, modifier_group_id, modifier_weight, modifier_weight_unit)
-             VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [
-              orderItemId,
-              modifier.id,
-              modifier.name,
-              modifier.price,
-              modifier.group_id || null,
-              modifier.weight_value || null,
-              modifier.weight_unit || null,
-            ],
-          );
-        }
+        await connection.query(
+          `INSERT INTO order_item_modifiers 
+           (order_item_id, modifier_id, modifier_name, modifier_price, modifier_group_id, modifier_weight, modifier_weight_unit)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [
+            orderItemId,
+            modifier.id,
+            modifier.name,
+            modifier.price,
+            modifier.group_id || null,
+            modifier.weight_value || null,
+            modifier.weight_unit || null,
+          ],
+        );
       }
     }
 

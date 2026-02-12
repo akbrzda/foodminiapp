@@ -1,6 +1,5 @@
 <template>
   <div class="item-detail">
-    <PageHeader :title="pageTitle" />
     <div v-if="loading" class="loading">Загрузка...</div>
     <div v-else-if="error" class="error">{{ error }}</div>
     <div v-else-if="item" class="content page-container">

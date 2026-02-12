@@ -1,6 +1,5 @@
 <template>
   <div class="cart">
-    <PageHeader title="Корзина" />
     <div class="page-container page-container--with-fixed-footer">
       <div v-if="cartStore.items.length === 0" class="empty">
         <p>Корзина пуста</p>

@@ -280,16 +280,6 @@ export const getMenu = async (req, res, next) => {
         }
         item.modifier_groups = modifierGroups;
 
-        // Получение старых модификаторов (legacy)
-        const [oldModifiers] = await db.query(
-          `SELECT id, item_id, name, price, is_required, is_active
-           FROM menu_modifiers
-           WHERE item_id = ? AND is_active = TRUE
-           ORDER BY name`,
-          [item.id],
-        );
-        item.modifiers = oldModifiers;
-
         // Фильтрация товаров без цен
         if (fulfillment_type) {
           if (item.variants.length > 0) {
@@ -438,13 +428,14 @@ export const getItemById = async (req, res, next) => {
 
     const [items] = await db.query(
       `SELECT mi.id,
-              (
-                SELECT mic.category_id
-                FROM menu_item_categories mic
-                WHERE mic.item_id = mi.id
-                ORDER BY mic.sort_order, mic.category_id
-                LIMIT 1
-              ) AS category_id,
+              COALESCE(
+                (
+                  SELECT JSON_ARRAYAGG(mic.category_id ORDER BY mic.sort_order, mic.category_id)
+                  FROM menu_item_categories mic
+                  WHERE mic.item_id = mi.id
+                ),
+                JSON_ARRAY()
+              ) AS category_ids,
               mi.name, mi.description, mi.price, mi.image_url,
               mi.weight, mi.weight_value, mi.weight_unit, mi.calories, mi.sort_order, mi.is_active, mi.created_at, mi.updated_at
        FROM menu_items mi
@@ -457,6 +448,20 @@ export const getItemById = async (req, res, next) => {
     }
 
     const item = items[0];
+    let categoryIds = item.category_ids;
+    if (typeof categoryIds === "string") {
+      try {
+        categoryIds = JSON.parse(categoryIds);
+      } catch (error) {
+        categoryIds = [];
+      }
+    }
+    if (!Array.isArray(categoryIds)) {
+      categoryIds = [];
+    }
+    item.category_ids = categoryIds;
+    // Оставляем обратную совместимость для клиентов, ожидающих одно значение.
+    item.category_id = categoryIds[0] || null;
 
     // Получение цены товара по городу
     if (city_id) {
@@ -543,21 +548,11 @@ export const getItemById = async (req, res, next) => {
       }
     }
 
-    // Получение старых модификаторов (legacy)
-    const [oldModifiers] = await db.query(
-      `SELECT id, item_id, name, price, is_required, is_active
-       FROM menu_modifiers
-       WHERE item_id = ? AND is_active = TRUE
-       ORDER BY name`,
-      [itemId],
-    );
-
     res.json({
       item: {
         ...item,
         variants: variants,
         modifier_groups: modifierGroups,
-        modifiers: oldModifiers,
       },
     });
   } catch (error) {
@@ -565,17 +560,22 @@ export const getItemById = async (req, res, next) => {
   }
 };
 
-// GET /items/:itemId/modifiers - Получение модификаторов товара (legacy)
+// GET /items/:itemId/modifiers - Получение модификаторов товара
 export const getItemModifiers = async (req, res, next) => {
   try {
     const itemId = req.params.itemId;
 
     const [modifiers] = await db.query(
-      `SELECT id, item_id, name, price, is_required, is_active, created_at, updated_at
-       FROM menu_modifiers
-       WHERE item_id = ? AND is_active = TRUE
-       ORDER BY name`,
-      [itemId],
+      `SELECT m.id, ? as item_id, m.group_id, m.name, m.price, m.weight, m.weight_unit, m.image_url,
+              m.sort_order, m.is_active, m.created_at, m.updated_at
+       FROM modifiers m
+       JOIN item_modifier_groups img ON img.modifier_group_id = m.group_id
+       LEFT JOIN menu_item_disabled_modifiers midm ON midm.item_id = img.item_id AND midm.modifier_id = m.id
+       WHERE img.item_id = ?
+         AND m.is_active = TRUE
+         AND midm.id IS NULL
+       ORDER BY m.sort_order, m.name`,
+      [itemId, itemId],
     );
 
     res.json({ modifiers });

@@ -1,6 +1,5 @@
 <template>
   <div class="orders">
-    <PageHeader title="Мои заказы" />
     <div class="page-container">
       <div v-if="loading" class="loading">Загрузка...</div>
       <div v-else-if="orders.length === 0" class="empty">

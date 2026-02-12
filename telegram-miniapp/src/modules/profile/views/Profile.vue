@@ -1,6 +1,5 @@
 <template>
   <div class="profile">
-    <PageHeader title="Профиль" />
     <div class="profile-content page-container page-container--spacious-bottom">
       <div class="form-card phone-card">
         <label class="field-label">Телефон</label>

@@ -155,62 +155,41 @@ export const calculateOrder = async (req, res, next) => {
             [modId],
           );
 
-          if (newModifiers.length > 0) {
-            const modifier = newModifiers[0];
-            let modifierPrice = parseFloat(modifier.price);
-
-            if (cityId) {
-              const [cityModifierPrices] = await db.query(
-                `SELECT price, is_active
-                 FROM menu_modifier_prices
-                 WHERE modifier_id = ? AND city_id = ?
-                 LIMIT 1`,
-                [modifier.id, cityId],
-              );
-
-              if (cityModifierPrices.length > 0) {
-                if (!cityModifierPrices[0].is_active) {
-                  return res.status(400).json({ error: `Modifier ${modifier.id} is not available in this city` });
-                }
-                modifierPrice = parseFloat(cityModifierPrices[0].price);
-              }
-            }
-
-            modifiersTotal += modifierPrice;
-            validatedModifiers.push({
-              id: modifier.id,
-              name: modifier.name,
-              price: modifierPrice,
-              group_id: modifier.group_id,
-              type: modifier.type,
-              is_required: modifier.is_required,
-              weight_value: modifier.weight ?? null,
-              weight_unit: modifier.weight_unit ?? null,
-            });
-          } else {
-            // Старая система модификаторов
-            const [oldModifiers] = await db.query("SELECT id, name, price, is_active FROM menu_modifiers WHERE id = ? AND item_id = ?", [
-              modId,
-              item_id,
-            ]);
-
-            if (oldModifiers.length === 0 || !oldModifiers[0].is_active) {
-              return res.status(400).json({ error: `Modifier ${modId} not found or inactive` });
-            }
-
-            const modifier = oldModifiers[0];
-            const modifierPrice = parseFloat(modifier.price);
-            modifiersTotal += modifierPrice;
-
-            validatedModifiers.push({
-              id: modifier.id,
-              name: modifier.name,
-              price: modifierPrice,
-              old_system: true,
-              weight_value: null,
-              weight_unit: null,
-            });
+          if (newModifiers.length === 0) {
+            return res.status(400).json({ error: `Modifier ${modId} not found or inactive` });
           }
+
+          const modifier = newModifiers[0];
+          let modifierPrice = parseFloat(modifier.price);
+
+          if (cityId) {
+            const [cityModifierPrices] = await db.query(
+              `SELECT price, is_active
+               FROM menu_modifier_prices
+               WHERE modifier_id = ? AND city_id = ?
+               LIMIT 1`,
+              [modifier.id, cityId],
+            );
+
+            if (cityModifierPrices.length > 0) {
+              if (!cityModifierPrices[0].is_active) {
+                return res.status(400).json({ error: `Modifier ${modifier.id} is not available in this city` });
+              }
+              modifierPrice = parseFloat(cityModifierPrices[0].price);
+            }
+          }
+
+          modifiersTotal += modifierPrice;
+          validatedModifiers.push({
+            id: modifier.id,
+            name: modifier.name,
+            price: modifierPrice,
+            group_id: modifier.group_id,
+            type: modifier.type,
+            is_required: modifier.is_required,
+            weight_value: modifier.weight ?? null,
+            weight_unit: modifier.weight_unit ?? null,
+          });
         }
       }
 

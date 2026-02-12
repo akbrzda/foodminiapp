@@ -1,6 +1,5 @@
 <template>
   <div class="delivery-map">
-    <PageHeader title="Адрес доставки" />
     <div class="map-section">
       <div ref="mapContainerRef" class="map"></div>
       <div class="center-marker" aria-hidden="true">

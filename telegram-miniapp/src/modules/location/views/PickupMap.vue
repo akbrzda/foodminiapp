@@ -1,6 +1,5 @@
 <template>
   <div class="pickup-map">
-    <PageHeader title="Самовывоз" />
     <div ref="mapContainerRef" class="map"></div>
     <div class="search-bar">
       <input v-model="searchQuery" class="search-input" placeholder="Найти пиццерию" />

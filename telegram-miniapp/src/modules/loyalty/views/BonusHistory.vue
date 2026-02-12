@@ -1,6 +1,5 @@
 <template>
   <div class="bonus-history">
-    <PageHeader title="Бонусы" />
     <div class="content page-container">
       <div v-if="!bonusesEnabled" class="bonus-disabled">Бонусная система временно отключена</div>
       <template v-else>

@@ -1,6 +1,5 @@
 <template>
   <div class="checkout">
-    <PageHeader title="Оформление" />
     <div class="content page-container page-container--with-fixed-footer">
       <div v-if="!ordersEnabled" class="order-disabled">{{ orderDisabledReason }}</div>
       <div v-else-if="!deliveryEnabled && !pickupEnabled" class="order-disabled">Нет доступных способов заказа</div>
