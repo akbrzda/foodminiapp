@@ -295,31 +295,31 @@
     >
       <DialogContent class="w-full max-w-4xl">
         <DialogHeader>
-          <DialogTitle>Цены по вариантам блюд</DialogTitle>
-          <DialogDescription>Можно задавать цены только для вариантов блюд, где модификатор реально подключен</DialogDescription>
+          <DialogTitle>Цены по группам вариантов</DialogTitle>
+          <DialogDescription>Группируются только варианты блюд, где модификатор реально подключен</DialogDescription>
         </DialogHeader>
         <form class="space-y-4" @submit.prevent="submitVariantGroupPrices">
           <div class="rounded-lg border border-border/60 bg-muted/20 p-3 text-sm">
             Базовая цена модификатора:
             <strong>{{ formatCurrency(activeModifierForVariantGroups?.price || 0) }}</strong>
-            <span class="text-muted-foreground"> — используется, если для конкретного варианта не задана отдельная цена.</span>
+            <span class="text-muted-foreground"> — используется, если для группы вариантов не задана отдельная цена.</span>
           </div>
           <div class="grid gap-2 md:grid-cols-2">
             <div
-              v-for="variant in variantGroupsCatalog"
-              :key="variant.variant_id"
+              v-for="group in variantGroupsCatalog"
+              :key="group.key"
               class="rounded-lg border border-border/60 bg-muted/10 px-3 py-2"
             >
               <div class="mb-2 flex items-center justify-between text-sm">
-                <span class="font-medium">{{ variant.item_name }} · {{ variant.variant_name }}</span>
-                <span class="text-xs text-muted-foreground">ID варианта: {{ variant.variant_id }}</span>
+                <span class="font-medium">{{ group.name }}</span>
+                <span class="text-xs text-muted-foreground">{{ group.items_count }} блюд · {{ group.variants_count }} вариантов</span>
               </div>
               <Input
-                v-model.number="getOrCreateModifierVariantGroupPrice(variant).price"
+                v-model.number="getOrCreateModifierVariantGroupPrice(group).price"
                 type="number"
                 step="0.01"
                 min="0"
-                placeholder="Цена для варианта"
+                placeholder="Цена для группы вариантов"
               />
             </div>
           </div>
@@ -424,6 +424,64 @@ const updateDocumentTitle = (baseTitle) => {
   document.title = count > 0 ? `(${count}) ${baseTitle}` : baseTitle;
 };
 const activeCities = computed(() => referenceStore.cities.filter((city) => modifierCityIds.value.includes(city.id)));
+const normalizeVariantNameKey = (value) =>
+  String(value || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+
+const buildVariantGroupsCatalog = (variants = [], prices = []) => {
+  const priceByVariantId = new Map();
+  for (const row of prices) {
+    const variantId = Number(row?.variant_id);
+    const price = Number(row?.price);
+    if (Number.isFinite(variantId) && Number.isFinite(price)) {
+      priceByVariantId.set(variantId, price);
+    }
+  }
+
+  const groupsMap = new Map();
+  for (const variant of variants) {
+    const variantId = Number(variant?.variant_id);
+    const itemId = Number(variant?.item_id);
+    const variantName = String(variant?.variant_name || "").trim();
+    const key = normalizeVariantNameKey(variantName);
+    if (!Number.isFinite(variantId) || !key) continue;
+    if (!groupsMap.has(key)) {
+      groupsMap.set(key, {
+        key,
+        name: variantName,
+        variant_ids: [],
+        item_ids: new Set(),
+        prices: [],
+      });
+    }
+    const group = groupsMap.get(key);
+    group.variant_ids.push(variantId);
+    if (Number.isFinite(itemId)) {
+      group.item_ids.add(itemId);
+    }
+    if (priceByVariantId.has(variantId)) {
+      group.prices.push(priceByVariantId.get(variantId));
+    }
+  }
+
+  return [...groupsMap.values()]
+    .map((group) => {
+      const uniquePrices = [...new Set(group.prices.map((value) => Number(value).toFixed(2)))];
+      const price = uniquePrices.length === 1 ? Number(uniquePrices[0]) : null;
+      return {
+        key: group.key,
+        name: group.name,
+        variant_ids: group.variant_ids,
+        variants_count: group.variant_ids.length,
+        items_count: group.item_ids.size,
+        price,
+      };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name, "ru"));
+};
+
 const normalizeCityId = (value) => {
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : null;
@@ -442,13 +500,14 @@ const getOrCreateModifierCityPrice = (cityId) => {
   return entry;
 };
 const getOrCreateModifierVariantGroupPrice = (variantGroup) => {
-  const variantId = Number(variantGroup?.variant_id);
-  if (!Number.isFinite(variantId)) return { variant_id: null, price: null };
-  let entry = modifierVariantGroupPrices.value.find((row) => Number(row.variant_id) === variantId);
+  const key = String(variantGroup?.key || "").trim();
+  if (!key) return { key: "", variant_ids: [], price: null };
+  let entry = modifierVariantGroupPrices.value.find((row) => row.key === key);
   if (!entry) {
     entry = {
-      variant_id: variantId,
-      price: null,
+      key,
+      variant_ids: Array.isArray(variantGroup?.variant_ids) ? [...variantGroup.variant_ids] : [],
+      price: Number.isFinite(Number(variantGroup?.price)) ? Number(variantGroup.price) : null,
     };
     modifierVariantGroupPrices.value.push(entry);
   }
@@ -570,12 +629,11 @@ const openVariantGroupPricesModal = async (modifier) => {
   try {
     saving.value = true;
     const response = await api.get(`/api/menu/admin/modifiers/${modifier.id}/variant-prices`);
-    variantGroupsCatalog.value = response.data.variants || [];
-    modifierVariantGroupPrices.value = (response.data.prices || []).map((row) => ({
-      variant_id: Number(row.variant_id),
-      price: row.price,
-      weight: row.weight,
-      weight_unit: row.weight_unit,
+    variantGroupsCatalog.value = buildVariantGroupsCatalog(response.data.variants || [], response.data.prices || []);
+    modifierVariantGroupPrices.value = variantGroupsCatalog.value.map((group) => ({
+      key: group.key,
+      variant_ids: [...group.variant_ids],
+      price: group.price,
     }));
     activeModifierForVariantGroups.value = modifier;
     showVariantGroupPricesModal.value = true;
@@ -694,14 +752,22 @@ const submitVariantGroupPrices = async () => {
   if (!activeModifierForVariantGroups.value) return;
   saving.value = true;
   try {
+    const expandedPrices = [];
+    for (const group of modifierVariantGroupPrices.value) {
+      const groupPrice = Number(group?.price);
+      if (!Number.isFinite(groupPrice) || groupPrice < 0) continue;
+      const variantIds = Array.isArray(group?.variant_ids) ? group.variant_ids : [];
+      for (const variantId of variantIds) {
+        const normalizedVariantId = Number(variantId);
+        if (!Number.isFinite(normalizedVariantId)) continue;
+        expandedPrices.push({
+          variant_id: normalizedVariantId,
+          price: groupPrice,
+        });
+      }
+    }
     const payload = {
-      prices: modifierVariantGroupPrices.value
-        .filter((row) => Number.isFinite(Number(row.variant_id)) && row.price !== null && row.price !== undefined && row.price !== "")
-        .map((row) => ({
-          variant_id: Number(row.variant_id),
-          price: Number(row.price),
-        }))
-        .filter((row) => Number.isFinite(row.price) && row.price >= 0),
+      prices: expandedPrices,
     };
     await api.put(`/api/menu/admin/modifiers/${activeModifierForVariantGroups.value.id}/variant-prices`, payload);
     showSuccessNotification("Цены вариантов сохранены");
