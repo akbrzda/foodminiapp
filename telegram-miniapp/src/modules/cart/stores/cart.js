@@ -26,6 +26,7 @@ export const useCartStore = defineStore("cart", {
           basePrice = parseFloat(cartItem.price) || 0;
         }
         let modifiersTotal = 0;
+        const selectedVariantId = variant?.id || cartItem.variant_id || null;
         const updatedModifiers = Array.isArray(cartItem.modifiers)
           ? cartItem.modifiers.map((mod) => {
               const modifierId = typeof mod === "number" ? mod : mod?.id;
@@ -33,7 +34,16 @@ export const useCartStore = defineStore("cart", {
               const group = menuItem.modifier_groups?.find((g) => g.modifiers?.some((m) => m.id === modifierId));
               const modifier = group?.modifiers?.find((m) => m.id === modifierId);
               if (!modifier) return mod;
-              const price = parseFloat(modifier.price) || 0;
+              let price = parseFloat(modifier.price) || 0;
+              if (selectedVariantId && Array.isArray(modifier.variant_prices) && modifier.variant_prices.length > 0) {
+                const matched = modifier.variant_prices.find((row) => Number(row.variant_id) === Number(selectedVariantId));
+                if (matched && matched.price !== null && matched.price !== undefined) {
+                  const parsed = parseFloat(matched.price);
+                  if (Number.isFinite(parsed)) {
+                    price = parsed;
+                  }
+                }
+              }
               modifiersTotal += price;
               if (typeof mod === "number") return mod;
               return { ...mod, price };

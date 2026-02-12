@@ -171,15 +171,28 @@ export const calculateOrder = async (req, res, next) => {
               [modifier.id, cityId],
             );
 
-            if (cityModifierPrices.length > 0) {
-              if (!cityModifierPrices[0].is_active) {
-                return res.status(400).json({ error: `Modifier ${modifier.id} is not available in this city` });
-              }
-              modifierPrice = parseFloat(cityModifierPrices[0].price);
+          if (cityModifierPrices.length > 0) {
+            if (!cityModifierPrices[0].is_active) {
+              return res.status(400).json({ error: `Modifier ${modifier.id} is not available in this city` });
             }
+            modifierPrice = parseFloat(cityModifierPrices[0].price);
           }
+        }
 
-          modifiersTotal += modifierPrice;
+        if (variant_id) {
+          const [variantPrices] = await db.query(
+            `SELECT price
+             FROM menu_modifier_variant_prices
+             WHERE modifier_id = ? AND variant_id = ?
+             LIMIT 1`,
+            [modifier.id, variant_id],
+          );
+          if (variantPrices.length > 0) {
+            modifierPrice = parseFloat(variantPrices[0].price);
+          }
+        }
+
+        modifiersTotal += modifierPrice;
           validatedModifiers.push({
             id: modifier.id,
             name: modifier.name,

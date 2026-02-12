@@ -516,6 +516,13 @@ function isModifierUnavailable(modifier) {
 }
 function getModifierPrice(modifier) {
   if (!modifier) return 0;
+  if (selectedVariant.value?.id && Array.isArray(modifier.variant_prices) && modifier.variant_prices.length > 0) {
+    const matched = modifier.variant_prices.find((row) => Number(row.variant_id) === Number(selectedVariant.value.id));
+    if (matched && matched.price !== null && matched.price !== undefined) {
+      const parsed = parseFloat(matched.price);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+  }
   return parseFloat(modifier.price) || 0;
 }
 function getModifierWeight(modifier) {

@@ -96,6 +96,18 @@ router.get("/admin/modifiers", authenticateToken, requireRole("admin", "manager"
 router.get("/admin/modifiers/:modifierId/prices", authenticateToken, requireRole("admin", "manager", "ceo"), modifiersController.getModifierPrices);
 router.post("/admin/modifiers/:modifierId/prices", authenticateToken, requireRole("admin", "manager", "ceo"), modifiersController.createModifierPrice);
 router.put("/admin/modifiers/:modifierId/cities", authenticateToken, requireRole("admin", "manager", "ceo"), modifiersController.updateModifierCities);
+router.get(
+  "/admin/modifiers/:modifierId/variant-prices",
+  authenticateToken,
+  requireRole("admin", "manager", "ceo"),
+  modifiersController.getModifierVariantPrices,
+);
+router.put(
+  "/admin/modifiers/:modifierId/variant-prices",
+  authenticateToken,
+  requireRole("admin", "manager", "ceo"),
+  modifiersController.replaceModifierVariantPrices,
+);
 
 // ==================== АДМИН: ВАРИАНТЫ И ЦЕНЫ ====================
 

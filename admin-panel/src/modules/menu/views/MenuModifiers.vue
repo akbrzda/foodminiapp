@@ -1,4 +1,3 @@
-import { devError } from "@/shared/utils/logger";
 <template>
   <div class="space-y-6">
     <Card>
@@ -54,6 +53,7 @@ import { devError } from "@/shared/utils/logger";
                 <div class="font-medium text-foreground">{{ modifier.name }}</div>
                 <div class="text-xs text-muted-foreground">
                   {{ formatCurrency(modifier.price) }}
+                  <span> · Порядок: {{ modifier.sort_order || 0 }}</span>
                   <span v-if="modifier.weight"> · {{ modifier.weight }}{{ modifier.weight_unit || "г" }}</span>
                 </div>
               </div>
@@ -64,6 +64,9 @@ import { devError } from "@/shared/utils/logger";
               </Button>
               <Button variant="ghost" size="icon" @click="openCityPricesModal(modifier)">
                 <Settings2 :size="16" />
+              </Button>
+              <Button variant="ghost" size="icon" @click="openVariantGroupPricesModal(modifier)">
+                <List :size="16" />
               </Button>
               <Button variant="ghost" size="icon" @click="deleteModifier(modifier)">
                 <Trash2 :size="16" class="text-red-600" />
@@ -159,12 +162,20 @@ import { devError } from "@/shared/utils/logger";
                 <Input v-model="modifierForm.name" required />
               </FieldContent>
             </Field>
-            <Field>
-              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Цена</FieldLabel>
-              <FieldContent>
-                <Input v-model.number="modifierForm.price" type="number" step="0.01" />
-              </FieldContent>
-            </Field>
+            <FieldGroup class="grid gap-4 md:grid-cols-2">
+              <Field>
+                <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Цена</FieldLabel>
+                <FieldContent>
+                  <Input v-model.number="modifierForm.price" type="number" step="0.01" />
+                </FieldContent>
+              </Field>
+              <Field>
+                <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Порядок</FieldLabel>
+                <FieldContent>
+                  <Input v-model.number="modifierForm.sort_order" type="number" min="0" placeholder="0" />
+                </FieldContent>
+              </Field>
+            </FieldGroup>
             <FieldGroup class="grid gap-4 md:grid-cols-2">
               <Field>
                 <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Вес</FieldLabel>
@@ -277,11 +288,53 @@ import { devError } from "@/shared/utils/logger";
         </form>
       </DialogContent>
     </Dialog>
+    <Dialog
+      v-if="showVariantGroupPricesModal"
+      :open="showVariantGroupPricesModal"
+      @update:open="(value) => (value ? null : closeVariantGroupPricesModal())"
+    >
+      <DialogContent class="w-full max-w-4xl">
+        <DialogHeader>
+          <DialogTitle>Цены по вариантам блюд</DialogTitle>
+          <DialogDescription>Можно задавать цены только для вариантов блюд, где модификатор реально подключен</DialogDescription>
+        </DialogHeader>
+        <form class="space-y-4" @submit.prevent="submitVariantGroupPrices">
+          <div class="rounded-lg border border-border/60 bg-muted/20 p-3 text-sm">
+            Базовая цена модификатора:
+            <strong>{{ formatCurrency(activeModifierForVariantGroups?.price || 0) }}</strong>
+            <span class="text-muted-foreground"> — используется, если для конкретного варианта не задана отдельная цена.</span>
+          </div>
+          <div class="grid gap-2 md:grid-cols-2">
+            <div
+              v-for="variant in variantGroupsCatalog"
+              :key="variant.variant_id"
+              class="rounded-lg border border-border/60 bg-muted/10 px-3 py-2"
+            >
+              <div class="mb-2 flex items-center justify-between text-sm">
+                <span class="font-medium">{{ variant.item_name }} · {{ variant.variant_name }}</span>
+                <span class="text-xs text-muted-foreground">ID варианта: {{ variant.variant_id }}</span>
+              </div>
+              <Input
+                v-model.number="getOrCreateModifierVariantGroupPrice(variant).price"
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="Цена для варианта"
+              />
+            </div>
+          </div>
+          <Button class="w-full" type="submit" :disabled="saving">
+            <Save :size="16" />
+            {{ saving ? "Сохранение..." : "Сохранить цены групп" }}
+          </Button>
+        </form>
+      </DialogContent>
+    </Dialog>
   </div>
 </template>
 <script setup>
 import { computed, onMounted, ref, watch } from "vue";
-import { Pencil, Plus, Save, Settings2, Trash2, UploadCloud } from "lucide-vue-next";
+import { List, Pencil, Plus, Save, Settings2, Trash2, UploadCloud } from "lucide-vue-next";
 import api from "@/shared/api/client.js";
 import Button from "@/shared/components/ui/button/Button.vue";
 import Card from "@/shared/components/ui/card/Card.vue";
@@ -295,6 +348,7 @@ import PageHeader from "@/shared/components/PageHeader.vue";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/components/ui/select";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
 import { formatCurrency, normalizeBoolean } from "@/shared/utils/format.js";
+import { devError } from "@/shared/utils/logger";
 import { Field, FieldContent, FieldGroup, FieldLabel } from "@/shared/components/ui/field";
 import { Label } from "@/shared/components/ui/label";
 import Spinner from "@/shared/components/ui/spinner/Spinner.vue";
@@ -307,13 +361,17 @@ const referenceStore = useReferenceStore();
 const showModal = ref(false);
 const showModifierModal = ref(false);
 const showCityPricesModal = ref(false);
+const showVariantGroupPricesModal = ref(false);
 const editing = ref(null);
 const activeGroup = ref(null);
 const editingModifier = ref(null);
 const activeModifierForPrices = ref(null);
+const activeModifierForVariantGroups = ref(null);
 const fileInput = ref(null);
 const modifierCityIds = ref([]);
 const modifierCityPrices = ref([]);
+const modifierVariantGroupPrices = ref([]);
+const variantGroupsCatalog = ref([]);
 const selectedCityId = ref(null);
 const saving = ref(false);
 const uploadState = ref({
@@ -333,6 +391,7 @@ const form = ref({
 const modifierForm = ref({
   name: "",
   price: 0,
+  sort_order: 0,
   weight: null,
   weight_unit: "",
   image_url: "",
@@ -379,6 +438,19 @@ const getOrCreateModifierCityPrice = (cityId) => {
       price: activeModifierForPrices.value?.price || 0,
     };
     modifierCityPrices.value.push(entry);
+  }
+  return entry;
+};
+const getOrCreateModifierVariantGroupPrice = (variantGroup) => {
+  const variantId = Number(variantGroup?.variant_id);
+  if (!Number.isFinite(variantId)) return { variant_id: null, price: null };
+  let entry = modifierVariantGroupPrices.value.find((row) => Number(row.variant_id) === variantId);
+  if (!entry) {
+    entry = {
+      variant_id: variantId,
+      price: null,
+    };
+    modifierVariantGroupPrices.value.push(entry);
   }
   return entry;
 };
@@ -438,7 +510,7 @@ const deleteGroup = async (group) => {
 const openModifierModal = (group) => {
   activeGroup.value = group;
   editingModifier.value = null;
-  modifierForm.value = { name: "", price: 0, weight: null, weight_unit: "", image_url: "" };
+  modifierForm.value = { name: "", price: 0, sort_order: 0, weight: null, weight_unit: "", image_url: "" };
   uploadState.value = { loading: false, error: null, preview: null };
   showModifierModal.value = true;
 };
@@ -448,6 +520,7 @@ const editModifier = (group, modifier) => {
   modifierForm.value = {
     name: modifier.name,
     price: modifier.price,
+    sort_order: modifier.sort_order || 0,
     weight: modifier.weight || null,
     weight_unit: modifier.weight_unit || "",
     image_url: modifier.image_url || "",
@@ -492,6 +565,32 @@ const closeCityPricesModal = () => {
   modifierCityPrices.value = [];
   modifierCityIds.value = [];
   selectedCityId.value = null;
+};
+const openVariantGroupPricesModal = async (modifier) => {
+  try {
+    saving.value = true;
+    const response = await api.get(`/api/menu/admin/modifiers/${modifier.id}/variant-prices`);
+    variantGroupsCatalog.value = response.data.variants || [];
+    modifierVariantGroupPrices.value = (response.data.prices || []).map((row) => ({
+      variant_id: Number(row.variant_id),
+      price: row.price,
+      weight: row.weight,
+      weight_unit: row.weight_unit,
+    }));
+    activeModifierForVariantGroups.value = modifier;
+    showVariantGroupPricesModal.value = true;
+  } catch (error) {
+    devError("Failed to load modifier variant group prices:", error);
+    showErrorNotification("Ошибка при загрузке цен вариантов");
+  } finally {
+    saving.value = false;
+  }
+};
+const closeVariantGroupPricesModal = () => {
+  showVariantGroupPricesModal.value = false;
+  activeModifierForVariantGroups.value = null;
+  variantGroupsCatalog.value = [];
+  modifierVariantGroupPrices.value = [];
 };
 const triggerFile = () => {
   fileInput.value?.click();
@@ -550,6 +649,7 @@ const submitModifier = async () => {
     const payload = {
       ...modifierForm.value,
       name: String(modifierForm.value.name || "").trim(),
+      sort_order: Number(modifierForm.value.sort_order) || 0,
       weight: modifierForm.value.weight ?? null,
       weight_unit: modifierForm.value.weight_unit || null,
       image_url: modifierForm.value.image_url || null,
@@ -586,6 +686,30 @@ const submitCityPrices = async () => {
   } catch (error) {
     devError("Failed to save modifier prices:", error);
     showErrorNotification("Ошибка при сохранении цен модификатора");
+  } finally {
+    saving.value = false;
+  }
+};
+const submitVariantGroupPrices = async () => {
+  if (!activeModifierForVariantGroups.value) return;
+  saving.value = true;
+  try {
+    const payload = {
+      prices: modifierVariantGroupPrices.value
+        .filter((row) => Number.isFinite(Number(row.variant_id)) && row.price !== null && row.price !== undefined && row.price !== "")
+        .map((row) => ({
+          variant_id: Number(row.variant_id),
+          price: Number(row.price),
+        }))
+        .filter((row) => Number.isFinite(row.price) && row.price >= 0),
+    };
+    await api.put(`/api/menu/admin/modifiers/${activeModifierForVariantGroups.value.id}/variant-prices`, payload);
+    showSuccessNotification("Цены вариантов сохранены");
+    closeVariantGroupPricesModal();
+    await loadGroups();
+  } catch (error) {
+    devError("Failed to save modifier variant group prices:", error);
+    showErrorNotification("Ошибка при сохранении цен вариантов");
   } finally {
     saving.value = false;
   }

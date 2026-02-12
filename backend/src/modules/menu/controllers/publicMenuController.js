@@ -23,6 +23,44 @@ async function setMenuCache(cacheKey, payload) {
   }
 }
 
+async function attachVariantPricesToModifiers(modifierGroups = [], variants = []) {
+  const allModifiers = modifierGroups.flatMap((group) => group.modifiers || []);
+  if (allModifiers.length === 0) return;
+
+  const modifierIds = [...new Set(allModifiers.map((modifier) => Number(modifier.id)).filter(Number.isFinite))];
+  const variantIds = [...new Set((variants || []).map((variant) => Number(variant.id)).filter(Number.isFinite))];
+
+  for (const modifier of allModifiers) {
+    modifier.variant_prices = [];
+  }
+
+  if (variantIds.length === 0 || modifierIds.length === 0) return;
+  const [rows] = await db.query(
+    `SELECT modifier_id, variant_id, price, weight, weight_unit
+     FROM menu_modifier_variant_prices
+     WHERE modifier_id IN (${modifierIds.map(() => "?").join(",")})
+       AND variant_id IN (${variantIds.map(() => "?").join(",")})`,
+    [...modifierIds, ...variantIds],
+  );
+
+  const pricesMap = new Map();
+  for (const row of rows) {
+    if (!pricesMap.has(row.modifier_id)) {
+      pricesMap.set(row.modifier_id, []);
+    }
+    pricesMap.get(row.modifier_id).push({
+      variant_id: row.variant_id,
+      price: row.price,
+      weight: row.weight,
+      weight_unit: row.weight_unit,
+    });
+  }
+
+  for (const modifier of allModifiers) {
+    modifier.variant_prices = pricesMap.get(modifier.id) || [];
+  }
+}
+
 // GET / - Получение полного меню с фильтрацией по городу и филиалу
 export const getMenu = async (req, res, next) => {
   try {
@@ -278,6 +316,8 @@ export const getMenu = async (req, res, next) => {
 
           group.modifiers = modifiersWithCity;
         }
+
+        await attachVariantPricesToModifiers(modifierGroups, variants);
         item.modifier_groups = modifierGroups;
 
         // Фильтрация товаров без цен
@@ -410,6 +450,8 @@ export const getCategoryItems = async (req, res, next) => {
         );
         group.modifiers = modifiers;
       }
+
+      await attachVariantPricesToModifiers(modifierGroups, variants);
       item.modifier_groups = modifierGroups;
     }
 
@@ -547,6 +589,8 @@ export const getItemById = async (req, res, next) => {
         group.modifiers = modifiers;
       }
     }
+
+    await attachVariantPricesToModifiers(modifierGroups, variants);
 
     res.json({
       item: {

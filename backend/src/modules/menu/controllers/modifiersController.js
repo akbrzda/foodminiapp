@@ -598,3 +598,119 @@ export const updateModifierCities = async (req, res, next) => {
     next(error);
   }
 };
+
+// Список вариантов, где модификатор доступен (через группу модификаторов и без отключения на товаре)
+async function getAvailableVariantsForModifier(modifierId) {
+  const [rows] = await db.query(
+    `SELECT DISTINCT
+            iv.id AS variant_id,
+            iv.item_id,
+            iv.name AS variant_name,
+            iv.sort_order AS variant_sort_order,
+            mi.name AS item_name,
+            mi.sort_order AS item_sort_order
+     FROM modifiers m
+     JOIN modifier_groups mg ON mg.id = m.group_id
+     JOIN item_modifier_groups img ON img.modifier_group_id = mg.id
+     JOIN menu_items mi ON mi.id = img.item_id
+     JOIN item_variants iv ON iv.item_id = mi.id
+     LEFT JOIN menu_item_disabled_modifiers midm
+       ON midm.item_id = mi.id
+      AND midm.modifier_id = m.id
+     WHERE m.id = ?
+       AND m.is_active = TRUE
+       AND mg.is_active = TRUE
+       AND mi.is_active = TRUE
+       AND iv.is_active = TRUE
+       AND midm.id IS NULL
+     ORDER BY mi.sort_order, mi.name, iv.sort_order, iv.name`,
+    [modifierId],
+  );
+  return rows;
+}
+
+// GET /admin/modifiers/:modifierId/variant-prices - Цены модификатора по конкретным вариантам
+export const getModifierVariantPrices = async (req, res, next) => {
+  try {
+    const modifierId = req.params.modifierId;
+
+    const [modifiers] = await db.query("SELECT id FROM modifiers WHERE id = ?", [modifierId]);
+    if (modifiers.length === 0) {
+      return res.status(404).json({ error: "Modifier not found" });
+    }
+
+    const variants = await getAvailableVariantsForModifier(modifierId);
+    const variantIds = variants.map((row) => row.variant_id);
+
+    let prices = [];
+    if (variantIds.length > 0) {
+      const [priceRows] = await db.query(
+        `SELECT id, modifier_id, variant_id, price, weight, weight_unit, created_at, updated_at
+       FROM menu_modifier_variant_prices
+       WHERE modifier_id = ?
+         AND variant_id IN (${variantIds.map(() => "?").join(",")})
+       ORDER BY variant_id`,
+        [modifierId, ...variantIds],
+      );
+      prices = priceRows;
+    }
+
+    res.json({ variants, prices });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// PUT /admin/modifiers/:modifierId/variant-prices - Полная замена цен модификатора по конкретным вариантам
+export const replaceModifierVariantPrices = async (req, res, next) => {
+  const connection = await db.getConnection();
+  try {
+    const modifierId = req.params.modifierId;
+    const { prices } = req.body;
+
+    if (!Array.isArray(prices)) {
+      return res.status(400).json({ error: "prices must be an array" });
+    }
+
+    const [modifiers] = await connection.query("SELECT id FROM modifiers WHERE id = ?", [modifierId]);
+    if (modifiers.length === 0) {
+      return res.status(404).json({ error: "Modifier not found" });
+    }
+
+    const availableVariants = await getAvailableVariantsForModifier(modifierId);
+    const availableVariantIds = new Set(availableVariants.map((row) => Number(row.variant_id)));
+
+    await connection.beginTransaction();
+    await connection.query("DELETE FROM menu_modifier_variant_prices WHERE modifier_id = ?", [modifierId]);
+
+    for (const row of prices) {
+      const variantId = Number(row?.variant_id);
+      const priceValue = Number(row?.price);
+      const weightValue =
+        row?.weight === null || row?.weight === undefined || row?.weight === "" ? null : Number(row.weight);
+      const weightUnit = row?.weight_unit ? String(row.weight_unit).trim() : null;
+
+      if (!Number.isFinite(variantId) || !availableVariantIds.has(variantId)) continue;
+      if (!Number.isFinite(priceValue) || priceValue < 0) continue;
+      if (weightValue !== null && (!Number.isFinite(weightValue) || weightValue < 0)) continue;
+      if (weightUnit && !["g", "kg", "ml", "l", "pcs"].includes(weightUnit)) continue;
+
+      await connection.query(
+        `INSERT INTO menu_modifier_variant_prices (modifier_id, variant_id, price, weight, weight_unit)
+         VALUES (?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE price = VALUES(price), weight = VALUES(weight), weight_unit = VALUES(weight_unit)`,
+        [modifierId, variantId, priceValue, weightValue, weightUnit],
+      );
+    }
+
+    await connection.commit();
+    await invalidateAllMenuCache();
+
+    res.json({ message: "Modifier variant prices replaced successfully" });
+  } catch (error) {
+    await connection.rollback();
+    next(error);
+  } finally {
+    connection.release();
+  }
+};

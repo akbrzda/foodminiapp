@@ -242,6 +242,19 @@ const calculateOrderCost = async (items, { cityId, fulfillmentType, bonusToUse }
           }
         }
 
+        if (variant_id) {
+          const [variantPrices] = await db.query(
+            `SELECT price
+             FROM menu_modifier_variant_prices
+             WHERE modifier_id = ? AND variant_id = ?
+             LIMIT 1`,
+            [modifier.id, variant_id],
+          );
+          if (variantPrices.length > 0) {
+            modifierPrice = parseFloat(variantPrices[0].price);
+          }
+        }
+
         modifiersTotal += modifierPrice;
         validatedModifiers.push({
           id: modifier.id,

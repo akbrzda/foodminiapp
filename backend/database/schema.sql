@@ -750,7 +750,6 @@ CREATE TABLE `menu_modifier_variant_prices` (
   CONSTRAINT `menu_modifier_variant_prices_ibfk_2` FOREIGN KEY (`variant_id`) REFERENCES `item_variants` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Цены модификаторов для разных вариаций';
 
-
 CREATE TABLE `menu_variant_prices` (
   `id` int NOT NULL AUTO_INCREMENT,
   `variant_id` int NOT NULL,
