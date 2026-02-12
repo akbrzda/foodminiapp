@@ -649,7 +649,13 @@ const loadCategories = async () => {
 const loadModifierGroups = async () => {
   try {
     const response = await api.get("/api/menu/admin/modifier-groups");
-    modifierGroups.value = response.data.modifier_groups || response.data.groups || [];
+    const groups = response.data.modifier_groups || response.data.groups || [];
+    modifierGroups.value = [...groups].sort((a, b) => {
+      const aOrder = Number(a.sort_order) || 0;
+      const bOrder = Number(b.sort_order) || 0;
+      if (aOrder !== bOrder) return aOrder - bOrder;
+      return String(a.name || "").localeCompare(String(b.name || ""), "ru");
+    });
   } catch (error) {
     devError("Failed to load modifier groups:", error);
   }

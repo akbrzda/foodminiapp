@@ -58,11 +58,12 @@ CREATE TABLE `modifier_groups` (
   `is_global` tinyint(1) DEFAULT '0' COMMENT 'Глобальная группа (переиспользуемая)',
   `min_selections` int DEFAULT '0' COMMENT 'Минимальное количество выборов',
   `max_selections` int DEFAULT '1' COMMENT 'Максимальное количество выборов',
+  `sort_order` int DEFAULT '0',
   `is_active` tinyint(1) DEFAULT '1',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  KEY `idx_active` (`is_active`)
+  KEY `idx_active_sort` (`is_active`,`sort_order`)
 ) ENGINE=InnoDB AUTO_INCREMENT=29 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 

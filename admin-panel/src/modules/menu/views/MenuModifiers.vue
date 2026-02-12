@@ -22,6 +22,7 @@ import { devError } from "@/shared/utils/logger";
               {{ group.type === "single" ? "Одиночный" : "Множественный" }} ·
               {{ group.is_required ? "Обязательный" : "Опциональный" }}
               {{ group.is_global ? " · Глобальная" : "" }}
+              · Порядок: {{ group.sort_order || 0 }}
               <span v-if="group.min_selections || group.max_selections">
                 · Выбор: {{ group.min_selections || 0 }}-{{ group.max_selections || "∞" }}
               </span>
@@ -104,7 +105,7 @@ import { devError } from "@/shared/utils/logger";
                 </Select>
               </FieldContent>
             </Field>
-            <FieldGroup class="grid gap-4 md:grid-cols-2">
+            <FieldGroup class="grid gap-4 md:grid-cols-3">
               <Field>
                 <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Минимум выборов</FieldLabel>
                 <FieldContent>
@@ -115,6 +116,12 @@ import { devError } from "@/shared/utils/logger";
                 <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Максимум выборов</FieldLabel>
                 <FieldContent>
                   <Input v-model.number="form.max_selections" type="number" min="1" placeholder="1" />
+                </FieldContent>
+              </Field>
+              <Field>
+                <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Порядок</FieldLabel>
+                <FieldContent>
+                  <Input v-model.number="form.sort_order" type="number" min="0" placeholder="0" />
                 </FieldContent>
               </Field>
             </FieldGroup>
@@ -321,6 +328,7 @@ const form = ref({
   is_global: false,
   min_selections: 0,
   max_selections: 1,
+  sort_order: 0,
 });
 const modifierForm = ref({
   name: "",
@@ -393,8 +401,9 @@ const openModal = (group = null) => {
         is_global: normalizeBoolean(group.is_global, false),
         min_selections: group.min_selections || 0,
         max_selections: group.max_selections || 1,
+        sort_order: group.sort_order || 0,
       }
-    : { name: "", type: "single", is_required: false, is_global: false, min_selections: 0, max_selections: 1 };
+    : { name: "", type: "single", is_required: false, is_global: false, min_selections: 0, max_selections: 1, sort_order: 0 };
   showModal.value = true;
 };
 const closeModal = () => {

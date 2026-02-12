@@ -203,11 +203,11 @@ export const getMenu = async (req, res, next) => {
         // Получение групп модификаторов
         const [modifierGroups] = await db.query(
           `SELECT mg.id, mg.name, mg.type, mg.is_required, mg.is_global, 
-                  mg.min_selections, mg.max_selections, mg.is_active
+                  mg.min_selections, mg.max_selections, mg.sort_order, mg.is_active
            FROM modifier_groups mg
            JOIN item_modifier_groups img ON mg.id = img.modifier_group_id
            WHERE img.item_id = ? AND mg.is_active = TRUE
-           ORDER BY mg.is_required DESC, mg.name`,
+           ORDER BY mg.sort_order, mg.is_required DESC, mg.name`,
           [item.id],
         );
 
@@ -392,11 +392,11 @@ export const getCategoryItems = async (req, res, next) => {
 
       // Получение групп модификаторов
       const [modifierGroups] = await db.query(
-        `SELECT mg.id, mg.name, mg.type, mg.is_required, mg.min_selections, mg.max_selections, mg.is_active
+        `SELECT mg.id, mg.name, mg.type, mg.is_required, mg.min_selections, mg.max_selections, mg.sort_order, mg.is_active
          FROM modifier_groups mg
          JOIN item_modifier_groups img ON mg.id = img.modifier_group_id
          WHERE img.item_id = ? AND mg.is_active = TRUE
-         ORDER BY mg.name`,
+         ORDER BY mg.sort_order, mg.name`,
         [item.id],
       );
 
@@ -503,11 +503,11 @@ export const getItemById = async (req, res, next) => {
 
     // Получение групп модификаторов
     const [modifierGroups] = await db.query(
-      `SELECT mg.id, mg.name, mg.type, mg.is_required, mg.min_selections, mg.max_selections, mg.is_active
+      `SELECT mg.id, mg.name, mg.type, mg.is_required, mg.min_selections, mg.max_selections, mg.sort_order, mg.is_active
        FROM modifier_groups mg
        JOIN item_modifier_groups img ON mg.id = img.modifier_group_id
        WHERE img.item_id = ? AND mg.is_active = TRUE
-       ORDER BY mg.name`,
+       ORDER BY mg.sort_order, mg.name`,
       [itemId],
     );
 
@@ -607,11 +607,11 @@ export const getItemVariants = async (req, res, next) => {
 export const getModifierGroups = async (req, res, next) => {
   try {
     const [groups] = await db.query(
-      `SELECT id, name, type, is_required, is_global, min_selections, max_selections,
+      `SELECT id, name, type, is_required, is_global, min_selections, max_selections, sort_order,
               is_active, created_at, updated_at
        FROM modifier_groups
        WHERE is_active = TRUE
-       ORDER BY name`,
+       ORDER BY sort_order, name`,
       [],
     );
 
@@ -638,7 +638,7 @@ export const getModifierGroupById = async (req, res, next) => {
     const groupId = req.params.id;
 
     const [groups] = await db.query(
-      `SELECT id, name, type, is_required, is_global, min_selections, max_selections,
+      `SELECT id, name, type, is_required, is_global, min_selections, max_selections, sort_order,
               is_active, created_at, updated_at
        FROM modifier_groups
        WHERE id = ? AND is_active = TRUE`,

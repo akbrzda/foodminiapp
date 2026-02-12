@@ -30,10 +30,10 @@ async function invalidateAllMenuCache() {
 export const getAdminModifierGroups = async (req, res, next) => {
   try {
     const [groups] = await db.query(
-      `SELECT id, name, type, is_required, is_global, min_selections, max_selections,
+      `SELECT id, name, type, is_required, is_global, min_selections, max_selections, sort_order,
               is_active, created_at, updated_at
        FROM modifier_groups
-       ORDER BY name`,
+       ORDER BY sort_order, name`,
       [],
     );
 
@@ -57,7 +57,7 @@ export const getAdminModifierGroups = async (req, res, next) => {
 // POST /admin/modifier-groups - Создание группы модификаторов
 export const createModifierGroup = async (req, res, next) => {
   try {
-    const { name, type, is_required, is_global, min_selections, max_selections, modifiers } = req.body;
+    const { name, type, is_required, is_global, min_selections, max_selections, sort_order, modifiers } = req.body;
 
     if (!name || !type) {
       return res.status(400).json({
@@ -77,8 +77,8 @@ export const createModifierGroup = async (req, res, next) => {
 
       // Создание группы модификаторов
       const [groupResult] = await connection.query(
-        `INSERT INTO modifier_groups (name, type, is_required, is_global, min_selections, max_selections)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO modifier_groups (name, type, is_required, is_global, min_selections, max_selections, sort_order)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
         [
           name,
           type,
@@ -86,6 +86,7 @@ export const createModifierGroup = async (req, res, next) => {
           is_global || false,
           min_selections !== undefined ? min_selections : is_required ? 1 : 0,
           max_selections !== undefined ? max_selections : type === "multiple" ? 10 : 1,
+          Number.isFinite(Number(sort_order)) ? Number(sort_order) : 0,
         ],
       );
 
@@ -113,7 +114,7 @@ export const createModifierGroup = async (req, res, next) => {
       await connection.commit();
 
       const [newGroup] = await connection.query(
-        `SELECT id, name, type, is_required, is_global, min_selections, max_selections,
+        `SELECT id, name, type, is_required, is_global, min_selections, max_selections, sort_order,
                 is_active, created_at, updated_at
          FROM modifier_groups WHERE id = ?`,
         [groupId],
@@ -145,7 +146,7 @@ export const createModifierGroup = async (req, res, next) => {
 export const updateModifierGroup = async (req, res, next) => {
   try {
     const groupId = req.params.id;
-    const { name, type, is_required, is_global, min_selections, max_selections, is_active } = req.body;
+    const { name, type, is_required, is_global, min_selections, max_selections, sort_order, is_active } = req.body;
 
     const [groups] = await db.query("SELECT id FROM modifier_groups WHERE id = ?", [groupId]);
     if (groups.length === 0) {
@@ -182,6 +183,10 @@ export const updateModifierGroup = async (req, res, next) => {
       updates.push("max_selections = ?");
       values.push(max_selections);
     }
+    if (sort_order !== undefined) {
+      updates.push("sort_order = ?");
+      values.push(Number(sort_order) || 0);
+    }
     if (is_active !== undefined) {
       updates.push("is_active = ?");
       values.push(is_active);
@@ -195,7 +200,7 @@ export const updateModifierGroup = async (req, res, next) => {
     await db.query(`UPDATE modifier_groups SET ${updates.join(", ")} WHERE id = ?`, values);
 
     const [updatedGroup] = await db.query(
-      `SELECT id, name, type, is_required, is_global, min_selections, max_selections,
+      `SELECT id, name, type, is_required, is_global, min_selections, max_selections, sort_order,
               is_active, created_at, updated_at
        FROM modifier_groups WHERE id = ?`,
       [groupId],
@@ -291,11 +296,11 @@ export const getItemAdminModifierGroups = async (req, res, next) => {
     }
 
     const [groups] = await db.query(
-      `SELECT mg.id, mg.name, mg.type, mg.is_required, mg.is_global, mg.min_selections, mg.max_selections
+      `SELECT mg.id, mg.name, mg.type, mg.is_required, mg.is_global, mg.min_selections, mg.max_selections, mg.sort_order
        FROM modifier_groups mg
        JOIN item_modifier_groups img ON mg.id = img.modifier_group_id
        WHERE img.item_id = ?
-       ORDER BY mg.name`,
+       ORDER BY mg.sort_order, mg.name`,
       [itemId],
     );
 
