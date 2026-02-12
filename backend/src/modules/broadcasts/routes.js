@@ -165,8 +165,12 @@ router.post("/telegram/callback", async (req, res) => {
 
 router.get("/dashboard", ensureAdmin, async (req, res, next) => {
   try {
-    const { period = "all" } = req.query;
-    const data = await getDashboardStats(period);
+    const { period = "all", date_from, date_to } = req.query;
+    const data = await getDashboardStats({
+      period,
+      dateFrom: date_from,
+      dateTo: date_to,
+    });
     res.json({ success: true, data });
   } catch (error) {
     next(error);

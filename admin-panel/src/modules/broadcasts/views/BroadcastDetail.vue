@@ -18,7 +18,15 @@ import { devError } from "@/shared/utils/logger";
       </CardContent>
     </Card>
 
-    <div class="grid gap-4 md:grid-cols-3">
+    <div v-if="isLoading" class="grid gap-4 md:grid-cols-3">
+      <Card v-for="index in 6" :key="`stats-loading-${index}`">
+        <CardContent class="pt-6 space-y-2">
+          <Skeleton class="h-3 w-32" />
+          <Skeleton class="h-8 w-24" />
+        </CardContent>
+      </Card>
+    </div>
+    <div v-else class="grid gap-4 md:grid-cols-3">
       <Card>
         <CardContent class="pt-6">
           <div class="text-xs text-muted-foreground">Всего получателей</div>
@@ -92,22 +100,32 @@ import { devError } from "@/shared/utils/logger";
             </TableRow>
           </TableHeader>
           <TableBody>
-            <TableRow v-for="message in messages" :key="message.id">
-              <TableCell>
-                <div class="text-sm">{{ message.first_name }} {{ message.last_name }}</div>
-                <a
-                  v-if="normalizePhone(message.phone)"
-                  class="text-xs text-muted-foreground hover:underline"
-                  :href="`tel:${normalizePhone(message.phone)}`"
-                >
-                  {{ formatPhone(message.phone) }}
-                </a>
-                <div v-else class="text-xs text-muted-foreground">—</div>
-              </TableCell>
-              <TableCell>{{ statusLabel(message.status) }}</TableCell>
-              <TableCell>{{ formatDateTime(message.sent_at) || "—" }}</TableCell>
-              <TableCell class="text-xs text-muted-foreground">{{ message.error_message || "—" }}</TableCell>
-            </TableRow>
+            <template v-if="isLoading">
+              <TableRow v-for="index in 5" :key="`messages-loading-${index}`">
+                <TableCell><Skeleton class="h-4 w-36" /></TableCell>
+                <TableCell><Skeleton class="h-4 w-24" /></TableCell>
+                <TableCell><Skeleton class="h-4 w-28" /></TableCell>
+                <TableCell><Skeleton class="h-4 w-40" /></TableCell>
+              </TableRow>
+            </template>
+            <template v-else>
+              <TableRow v-for="message in messages" :key="message.id">
+                <TableCell>
+                  <div class="text-sm">{{ message.first_name }} {{ message.last_name }}</div>
+                  <a
+                    v-if="normalizePhone(message.phone)"
+                    class="text-xs text-muted-foreground hover:underline"
+                    :href="`tel:${normalizePhone(message.phone)}`"
+                  >
+                    {{ formatPhone(message.phone) }}
+                  </a>
+                  <div v-else class="text-xs text-muted-foreground">—</div>
+                </TableCell>
+                <TableCell>{{ statusLabel(message.status) }}</TableCell>
+                <TableCell>{{ formatDateTime(message.sent_at) || "—" }}</TableCell>
+                <TableCell class="text-xs text-muted-foreground">{{ message.error_message || "—" }}</TableCell>
+              </TableRow>
+            </template>
           </TableBody>
         </Table>
       </CardContent>
@@ -129,23 +147,34 @@ import { devError } from "@/shared/utils/logger";
             </TableRow>
           </TableHeader>
           <TableBody>
-            <TableRow v-for="conversion in conversions" :key="conversion.id">
-              <TableCell>
-                <div class="text-sm">{{ conversion.first_name }} {{ conversion.last_name }}</div>
-                <a
-                  v-if="normalizePhone(conversion.phone)"
-                  class="text-xs text-muted-foreground hover:underline"
-                  :href="`tel:${normalizePhone(conversion.phone)}`"
-                >
-                  {{ formatPhone(conversion.phone) }}
-                </a>
-                <div v-else class="text-xs text-muted-foreground">—</div>
-              </TableCell>
-              <TableCell>#{{ conversion.order_number }}</TableCell>
-              <TableCell>{{ formatCurrency(conversion.order_total || 0) }}</TableCell>
-              <TableCell>{{ formatDateTime(conversion.order_created_at) }}</TableCell>
-              <TableCell>{{ conversion.days_after_broadcast }}</TableCell>
-            </TableRow>
+            <template v-if="isLoading">
+              <TableRow v-for="index in 5" :key="`conversions-loading-${index}`">
+                <TableCell><Skeleton class="h-4 w-36" /></TableCell>
+                <TableCell><Skeleton class="h-4 w-16" /></TableCell>
+                <TableCell><Skeleton class="h-4 w-20" /></TableCell>
+                <TableCell><Skeleton class="h-4 w-28" /></TableCell>
+                <TableCell><Skeleton class="h-4 w-12" /></TableCell>
+              </TableRow>
+            </template>
+            <template v-else>
+              <TableRow v-for="conversion in conversions" :key="conversion.id">
+                <TableCell>
+                  <div class="text-sm">{{ conversion.first_name }} {{ conversion.last_name }}</div>
+                  <a
+                    v-if="normalizePhone(conversion.phone)"
+                    class="text-xs text-muted-foreground hover:underline"
+                    :href="`tel:${normalizePhone(conversion.phone)}`"
+                  >
+                    {{ formatPhone(conversion.phone) }}
+                  </a>
+                  <div v-else class="text-xs text-muted-foreground">—</div>
+                </TableCell>
+                <TableCell>#{{ conversion.order_number }}</TableCell>
+                <TableCell>{{ formatCurrency(conversion.order_total || 0) }}</TableCell>
+                <TableCell>{{ formatDateTime(conversion.order_created_at) }}</TableCell>
+                <TableCell>{{ conversion.days_after_broadcast }}</TableCell>
+              </TableRow>
+            </template>
           </TableBody>
         </Table>
       </CardContent>
@@ -170,6 +199,7 @@ import TableCell from "@/shared/components/ui/table/TableCell.vue";
 import TableHead from "@/shared/components/ui/table/TableHead.vue";
 import TableHeader from "@/shared/components/ui/table/TableHeader.vue";
 import TableRow from "@/shared/components/ui/table/TableRow.vue";
+import Skeleton from "@/shared/components/ui/skeleton/Skeleton.vue";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
 import { useOrdersStore } from "@/modules/orders/stores/orders.js";
 import { formatCurrency, formatDateTime, formatNumber, formatPhone, normalizePhone } from "@/shared/utils/format.js";
@@ -183,6 +213,7 @@ const campaign = ref(null);
 const stats = ref({});
 const messages = ref([]);
 const conversions = ref([]);
+const isLoading = ref(true);
 
 const buttons = computed(() => {
   if (!campaign.value?.content_buttons) return [];
@@ -242,9 +273,13 @@ const editCampaign = () => {
 };
 
 onMounted(async () => {
-  await loadCampaign();
-  await loadMessages();
-  await loadConversions();
+  try {
+    await loadCampaign();
+    await loadMessages();
+    await loadConversions();
+  } finally {
+    isLoading.value = false;
+  }
 });
 
 watch(

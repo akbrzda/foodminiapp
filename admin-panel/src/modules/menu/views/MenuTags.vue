@@ -15,7 +15,7 @@ import { devError } from "@/shared/utils/logger";
     </Card>
     <Card>
       <CardContent class="!p-0">
-        <Table v-if="tags.length > 0">
+        <Table v-if="isLoading || tags.length > 0">
           <TableHeader>
             <TableRow>
               <TableHead>Тег</TableHead>
@@ -25,31 +25,41 @@ import { devError } from "@/shared/utils/logger";
             </TableRow>
           </TableHeader>
           <TableBody>
-            <TableRow v-for="tag in paginatedTags" :key="tag.id">
-              <TableCell>
-                <div class="font-medium text-foreground">{{ tag.name }}</div>
-              </TableCell>
-              <TableCell>
-                <span class="text-2xl">{{ tag.icon || "—" }}</span>
-              </TableCell>
-              <TableCell>
-                <div v-if="tag.color" class="flex items-center gap-2">
-                  <div class="h-6 w-6 rounded border" :style="{ backgroundColor: tag.color }"></div>
-                  <span class="text-xs text-muted-foreground">{{ tag.color }}</span>
-                </div>
-                <span v-else class="text-muted-foreground">—</span>
-              </TableCell>
-              <TableCell class="text-right">
-                <div class="flex justify-end gap-2">
-                  <Button variant="ghost" size="icon" @click="openModal(tag)">
-                    <Pencil :size="16" />
-                  </Button>
-                  <Button variant="ghost" size="icon" @click="deleteTag(tag)">
-                    <Trash2 :size="16" class="text-red-600" />
-                  </Button>
-                </div>
-              </TableCell>
-            </TableRow>
+            <template v-if="isLoading">
+              <TableRow v-for="index in 6" :key="`loading-${index}`">
+                <TableCell><Skeleton class="h-4 w-32" /></TableCell>
+                <TableCell><Skeleton class="h-6 w-6 rounded" /></TableCell>
+                <TableCell><Skeleton class="h-4 w-20" /></TableCell>
+                <TableCell class="text-right"><Skeleton class="ml-auto h-8 w-20" /></TableCell>
+              </TableRow>
+            </template>
+            <template v-else>
+              <TableRow v-for="tag in paginatedTags" :key="tag.id">
+                <TableCell>
+                  <div class="font-medium text-foreground">{{ tag.name }}</div>
+                </TableCell>
+                <TableCell>
+                  <span class="text-2xl">{{ tag.icon || "—" }}</span>
+                </TableCell>
+                <TableCell>
+                  <div v-if="tag.color" class="flex items-center gap-2">
+                    <div class="h-6 w-6 rounded border" :style="{ backgroundColor: tag.color }"></div>
+                    <span class="text-xs text-muted-foreground">{{ tag.color }}</span>
+                  </div>
+                  <span v-else class="text-muted-foreground">—</span>
+                </TableCell>
+                <TableCell class="text-right">
+                  <div class="flex justify-end gap-2">
+                    <Button variant="ghost" size="icon" @click="openModal(tag)">
+                      <Pencil :size="16" />
+                    </Button>
+                    <Button variant="ghost" size="icon" @click="deleteTag(tag)">
+                      <Trash2 :size="16" class="text-red-600" />
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            </template>
           </TableBody>
         </Table>
         <div v-else class="py-12 text-center text-muted-foreground">
@@ -115,6 +125,7 @@ import TableHead from "@/shared/components/ui/table/TableHead.vue";
 import TableHeader from "@/shared/components/ui/table/TableHeader.vue";
 import TableRow from "@/shared/components/ui/table/TableRow.vue";
 import TablePagination from "@/shared/components/TablePagination.vue";
+import Skeleton from "@/shared/components/ui/skeleton/Skeleton.vue";
 import { Field, FieldContent, FieldGroup, FieldLabel } from "@/shared/components/ui/field";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
 import { useOrdersStore } from "@/modules/orders/stores/orders.js";
@@ -122,6 +133,7 @@ import api from "@/shared/api/client.js";
 const { showErrorNotification, showSuccessNotification } = useNotifications();
 const ordersStore = useOrdersStore();
 const tags = ref([]);
+const isLoading = ref(false);
 const page = ref(1);
 const pageSize = ref(20);
 const showModal = ref(false);
@@ -159,6 +171,7 @@ watch(
   { immediate: true },
 );
 async function loadTags() {
+  isLoading.value = true;
   try {
     const response = await api.get("/api/menu/admin/tags");
     tags.value = response.data.tags || [];
@@ -166,6 +179,8 @@ async function loadTags() {
   } catch (error) {
     showErrorNotification("Ошибка загрузки тегов");
     devError("Failed to load tags:", error);
+  } finally {
+    isLoading.value = false;
   }
 }
 const onPageSizeChange = (value) => {

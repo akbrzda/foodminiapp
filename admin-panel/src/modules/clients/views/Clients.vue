@@ -53,33 +53,48 @@ import { devError } from "@/shared/utils/logger";
             </TableRow>
           </TableHeader>
           <TableBody>
-            <TableRow v-for="client in paginatedClients" :key="client.id" class="cursor-pointer" @click="openClient(client.id)">
-              <TableCell>
-                <div class="font-medium text-foreground">{{ client.first_name }} {{ client.last_name }}</div>
-                <div class="text-xs text-muted-foreground">ID: {{ client.id }}</div>
-              </TableCell>
-              <TableCell>
-                <a
-                  v-if="normalizePhone(client.phone)"
-                  class="text-foreground hover:underline"
-                  :href="`tel:${normalizePhone(client.phone)}`"
-                  @click.stop
-                >
-                  {{ formatPhone(client.phone) }}
-                </a>
-                <span v-else>—</span>
-              </TableCell>
-              <TableCell>
-                <Badge variant="secondary">{{ client.city_name || "—" }}</Badge>
-              </TableCell>
-              <TableCell>{{ formatNumber(client.orders_count) }}</TableCell>
-              <TableCell>{{ formatNumber(client.loyalty_balance) }}</TableCell>
-              <TableCell class="text-right">
-                <Button variant="ghost" size="icon">
-                  <ChevronRight :size="16" />
-                </Button>
-              </TableCell>
-            </TableRow>
+            <template v-if="isLoading">
+              <TableRow v-for="index in 6" :key="`loading-${index}`">
+                <TableCell><Skeleton class="h-4 w-44" /></TableCell>
+                <TableCell><Skeleton class="h-4 w-28" /></TableCell>
+                <TableCell><Skeleton class="h-6 w-24" /></TableCell>
+                <TableCell><Skeleton class="h-4 w-12" /></TableCell>
+                <TableCell><Skeleton class="h-4 w-12" /></TableCell>
+                <TableCell class="text-right"><Skeleton class="ml-auto h-8 w-8" /></TableCell>
+              </TableRow>
+            </template>
+            <template v-else>
+              <TableRow v-for="client in paginatedClients" :key="client.id" class="cursor-pointer" @click="openClient(client.id)">
+                <TableCell>
+                  <div class="font-medium text-foreground">{{ client.first_name }} {{ client.last_name }}</div>
+                  <div class="text-xs text-muted-foreground">ID: {{ client.id }}</div>
+                </TableCell>
+                <TableCell>
+                  <a
+                    v-if="normalizePhone(client.phone)"
+                    class="text-foreground hover:underline"
+                    :href="`tel:${normalizePhone(client.phone)}`"
+                    @click.stop
+                  >
+                    {{ formatPhone(client.phone) }}
+                  </a>
+                  <span v-else>—</span>
+                </TableCell>
+                <TableCell>
+                  <Badge variant="secondary">{{ client.city_name || "—" }}</Badge>
+                </TableCell>
+                <TableCell>{{ formatNumber(client.orders_count) }}</TableCell>
+                <TableCell>{{ formatNumber(client.loyalty_balance) }}</TableCell>
+                <TableCell class="text-right">
+                  <Button variant="ghost" size="icon">
+                    <ChevronRight :size="16" />
+                  </Button>
+                </TableCell>
+              </TableRow>
+              <TableRow v-if="clients.length === 0">
+                <TableCell colspan="6" class="py-8 text-center text-sm text-muted-foreground">Клиенты не найдены</TableCell>
+              </TableRow>
+            </template>
           </TableBody>
         </Table>
       </CardContent>
@@ -110,10 +125,12 @@ import TableHead from "@/shared/components/ui/table/TableHead.vue";
 import TableHeader from "@/shared/components/ui/table/TableHeader.vue";
 import TableRow from "@/shared/components/ui/table/TableRow.vue";
 import TablePagination from "@/shared/components/TablePagination.vue";
+import Skeleton from "@/shared/components/ui/skeleton/Skeleton.vue";
 const referenceStore = useReferenceStore();
 const { showErrorNotification } = useNotifications();
 const router = useRouter();
 const clients = ref([]);
+const isLoading = ref(false);
 const page = ref(1);
 const pageSize = ref(20);
 const loadTimer = ref(null);
@@ -126,10 +143,18 @@ const paginatedClients = computed(() => {
   return clients.value.slice(start, start + pageSize.value);
 });
 const loadClients = async () => {
-  const params = Object.fromEntries(Object.entries(filters).filter(([, value]) => value));
-  const response = await api.get("/api/admin/clients", { params });
-  clients.value = response.data.clients || [];
-  page.value = 1;
+  isLoading.value = true;
+  try {
+    const params = Object.fromEntries(Object.entries(filters).filter(([, value]) => value));
+    const response = await api.get("/api/admin/clients", { params });
+    clients.value = response.data.clients || [];
+    page.value = 1;
+  } catch (error) {
+    devError("Ошибка загрузки клиентов:", error);
+    showErrorNotification("Ошибка загрузки клиентов");
+  } finally {
+    isLoading.value = false;
+  }
 };
 const scheduleLoad = () => {
   if (loadTimer.value) {

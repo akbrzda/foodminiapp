@@ -28,25 +28,39 @@ import { devError } from "@/shared/utils/logger";
             </TableRow>
           </TableHeader>
           <TableBody>
-            <TableRow v-for="segment in paginatedSegments" :key="segment.id">
-              <TableCell>
-                <div class="font-medium text-foreground">{{ segment.name }}</div>
-                <div class="text-xs text-muted-foreground">ID: {{ segment.id }}</div>
-              </TableCell>
-              <TableCell>{{ segment.description || "—" }}</TableCell>
-              <TableCell>{{ formatNumber(segment.estimated_size || 0) }}</TableCell>
-              <TableCell>{{ formatDateTime(segment.updated_at) || "—" }}</TableCell>
-              <TableCell class="text-right">
-                <div class="flex justify-end gap-2">
-                  <Button variant="ghost" size="icon" @click="openModal(segment)">
-                    <Pencil :size="16" />
-                  </Button>
-                  <Button variant="ghost" size="icon" @click="deleteSegment(segment)">
-                    <Trash2 :size="16" class="text-red-600" />
-                  </Button>
-                </div>
-              </TableCell>
-            </TableRow>
+            <template v-if="isLoading">
+              <TableRow v-for="index in 6" :key="`loading-${index}`">
+                <TableCell><Skeleton class="h-4 w-44" /></TableCell>
+                <TableCell><Skeleton class="h-4 w-56" /></TableCell>
+                <TableCell><Skeleton class="h-4 w-16" /></TableCell>
+                <TableCell><Skeleton class="h-4 w-28" /></TableCell>
+                <TableCell class="text-right"><Skeleton class="ml-auto h-8 w-20" /></TableCell>
+              </TableRow>
+            </template>
+            <template v-else>
+              <TableRow v-for="segment in paginatedSegments" :key="segment.id">
+                <TableCell>
+                  <div class="font-medium text-foreground">{{ segment.name }}</div>
+                  <div class="text-xs text-muted-foreground">ID: {{ segment.id }}</div>
+                </TableCell>
+                <TableCell>{{ segment.description || "—" }}</TableCell>
+                <TableCell>{{ formatNumber(segment.estimated_size || 0) }}</TableCell>
+                <TableCell>{{ formatDateTime(segment.updated_at) || "—" }}</TableCell>
+                <TableCell class="text-right">
+                  <div class="flex justify-end gap-2">
+                    <Button variant="ghost" size="icon" @click="openModal(segment)">
+                      <Pencil :size="16" />
+                    </Button>
+                    <Button variant="ghost" size="icon" @click="deleteSegment(segment)">
+                      <Trash2 :size="16" class="text-red-600" />
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+              <TableRow v-if="segments.length === 0">
+                <TableCell colspan="5" class="py-8 text-center text-sm text-muted-foreground">Сегменты не найдены</TableCell>
+              </TableRow>
+            </template>
           </TableBody>
         </Table>
       </CardContent>
@@ -105,6 +119,7 @@ import TableHead from "@/shared/components/ui/table/TableHead.vue";
 import TableHeader from "@/shared/components/ui/table/TableHeader.vue";
 import TableRow from "@/shared/components/ui/table/TableRow.vue";
 import TablePagination from "@/shared/components/TablePagination.vue";
+import Skeleton from "@/shared/components/ui/skeleton/Skeleton.vue";
 import SegmentBuilder from "../components/SegmentBuilder.vue";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/shared/components/ui/dialog/index.js";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
@@ -112,6 +127,7 @@ import { formatDateTime, formatNumber } from "@/shared/utils/format.js";
 
 const { showErrorNotification, showSuccessNotification, showWarningNotification } = useNotifications();
 const segments = ref([]);
+const isLoading = ref(false);
 const page = ref(1);
 const pageSize = ref(20);
 const showModal = ref(false);
@@ -131,6 +147,7 @@ const paginatedSegments = computed(() => {
 });
 
 const loadSegments = async () => {
+  isLoading.value = true;
   try {
     const response = await api.get("/api/broadcasts/segments");
     segments.value = response.data?.data?.items || [];
@@ -138,6 +155,8 @@ const loadSegments = async () => {
   } catch (error) {
     devError("Ошибка загрузки сегментов:", error);
     showErrorNotification("Не удалось загрузить сегменты");
+  } finally {
+    isLoading.value = false;
   }
 };
 const onPageSizeChange = (value) => {

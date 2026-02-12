@@ -133,37 +133,52 @@ import { devError } from "@/shared/utils/logger";
             </TableRow>
           </TableHeader>
           <TableBody>
-            <TableRow v-for="order in paginatedOrders" :key="order.id" class="cursor-pointer" :class="orderRowClass(order)" @click="selectOrder(order)">
-              <TableCell>
-                <div class="font-medium text-foreground">#{{ order.order_number }}</div>
-                <div class="text-xs text-muted-foreground">{{ formatDateTime(order.created_at) }}</div>
-              </TableCell>
-              <TableCell>{{ order.city_name || "—" }}</TableCell>
-              <TableCell>
-                <a
-                  v-if="normalizePhone(order.user_phone)"
-                  class="text-foreground hover:underline"
-                  :href="`tel:${normalizePhone(order.user_phone)}`"
-                  @click.stop
-                >
-                  {{ formatPhone(order.user_phone) }}
-                </a>
-                <div v-else>—</div>
-                <div class="text-xs text-muted-foreground">{{ order.branch_name || "" }}</div>
-              </TableCell>
-              <TableCell>
-                <Badge variant="outline">{{ order.order_type === "delivery" ? "Доставка" : "Самовывоз" }}</Badge>
-              </TableCell>
-              <TableCell>
-                <Badge variant="secondary" :class="getStatusBadge(order.status).class" :style="getStatusBadge(order.status).style">
-                  {{ getStatusBadge(order.status).label }}
-                </Badge>
-              </TableCell>
-              <TableCell class="text-right">
-                <div class="font-semibold text-foreground">{{ formatCurrency(order.total) }}</div>
-                <div class="text-xs uppercase text-muted-foreground">{{ order.payment_method }}</div>
-              </TableCell>
-            </TableRow>
+            <template v-if="isLoading">
+              <TableRow v-for="index in 8" :key="`loading-${index}`">
+                <TableCell><Skeleton class="h-4 w-28" /></TableCell>
+                <TableCell><Skeleton class="h-4 w-24" /></TableCell>
+                <TableCell><Skeleton class="h-4 w-36" /></TableCell>
+                <TableCell><Skeleton class="h-6 w-20" /></TableCell>
+                <TableCell><Skeleton class="h-6 w-24" /></TableCell>
+                <TableCell class="text-right"><Skeleton class="ml-auto h-4 w-20" /></TableCell>
+              </TableRow>
+            </template>
+            <template v-else>
+              <TableRow v-for="order in paginatedOrders" :key="order.id" class="cursor-pointer" :class="orderRowClass(order)" @click="selectOrder(order)">
+                <TableCell>
+                  <div class="font-medium text-foreground">#{{ order.order_number }}</div>
+                  <div class="text-xs text-muted-foreground">{{ formatDateTime(order.created_at) }}</div>
+                </TableCell>
+                <TableCell>{{ order.city_name || "—" }}</TableCell>
+                <TableCell>
+                  <a
+                    v-if="normalizePhone(order.user_phone)"
+                    class="text-foreground hover:underline"
+                    :href="`tel:${normalizePhone(order.user_phone)}`"
+                    @click.stop
+                  >
+                    {{ formatPhone(order.user_phone) }}
+                  </a>
+                  <div v-else>—</div>
+                  <div class="text-xs text-muted-foreground">{{ order.branch_name || "" }}</div>
+                </TableCell>
+                <TableCell>
+                  <Badge variant="outline">{{ order.order_type === "delivery" ? "Доставка" : "Самовывоз" }}</Badge>
+                </TableCell>
+                <TableCell>
+                  <Badge variant="secondary" :class="getStatusBadge(order.status).class" :style="getStatusBadge(order.status).style">
+                    {{ getStatusBadge(order.status).label }}
+                  </Badge>
+                </TableCell>
+                <TableCell class="text-right">
+                  <div class="font-semibold text-foreground">{{ formatCurrency(order.total) }}</div>
+                  <div class="text-xs uppercase text-muted-foreground">{{ order.payment_method }}</div>
+                </TableCell>
+              </TableRow>
+              <TableRow v-if="orders.length === 0">
+                <TableCell colspan="6" class="py-8 text-center text-sm text-muted-foreground">Заказы не найдены</TableCell>
+              </TableRow>
+            </template>
           </TableBody>
         </Table>
       </CardContent>
@@ -197,12 +212,14 @@ import TableHead from "@/shared/components/ui/table/TableHead.vue";
 import TableHeader from "@/shared/components/ui/table/TableHeader.vue";
 import TableRow from "@/shared/components/ui/table/TableRow.vue";
 import TablePagination from "@/shared/components/TablePagination.vue";
+import Skeleton from "@/shared/components/ui/skeleton/Skeleton.vue";
 import { Field, FieldContent, FieldLabel } from "@/shared/components/ui/field";
 const router = useRouter();
 const referenceStore = useReferenceStore();
 const ordersStore = useOrdersStore();
 const { showNewOrderNotification, showErrorNotification } = useNotifications();
 const orders = ref([]);
+const isLoading = ref(false);
 const page = ref(1);
 const pageSize = ref(20);
 const recentOrderIds = ref(new Set());
@@ -271,11 +288,19 @@ const paginatedOrders = computed(() => {
   return orders.value.slice(start, start + pageSize.value);
 });
 const loadOrders = async () => {
-  const params = Object.fromEntries(Object.entries(filters).filter(([, value]) => value));
-  const response = await api.get("/api/orders/admin/all", { params });
-  orders.value = response.data.orders || [];
-  page.value = 1;
-  ordersStore.trackOrders(orders.value);
+  isLoading.value = true;
+  try {
+    const params = Object.fromEntries(Object.entries(filters).filter(([, value]) => value));
+    const response = await api.get("/api/orders/admin/all", { params });
+    orders.value = response.data.orders || [];
+    page.value = 1;
+    ordersStore.trackOrders(orders.value);
+  } catch (error) {
+    devError("Ошибка загрузки заказов:", error);
+    showErrorNotification("Ошибка загрузки заказов");
+  } finally {
+    isLoading.value = false;
+  }
 };
 const scheduleLoad = () => {
   if (loadTimer.value) {

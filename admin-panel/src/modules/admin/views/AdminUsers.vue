@@ -69,64 +69,79 @@ import { devError } from "@/shared/utils/logger";
             </TableRow>
           </TableHeader>
           <TableBody>
-            <TableRow v-for="user in paginatedUsers" :key="user.id">
-              <TableCell>
-                <div class="font-medium text-foreground">{{ user.first_name }} {{ user.last_name }}</div>
-                <div class="text-xs text-muted-foreground">{{ user.email }}</div>
-                <div v-if="user.telegram_id" class="text-xs text-muted-foreground">Telegram ID: {{ user.telegram_id }}</div>
-              </TableCell>
-              <TableCell>
-                <Badge :variant="roleVariant(user.role)" :class="roleClass(user.role)">{{ getRoleLabel(user.role) }}</Badge>
-              </TableCell>
-              <TableCell>
-                <Badge
-                  variant="secondary"
-                  :class="user.is_active ? 'bg-emerald-100 text-emerald-700 border-transparent' : 'bg-muted text-muted-foreground border-transparent'"
-                >
-                  {{ user.is_active ? "Активен" : "Неактивен" }}
-                </Badge>
-              </TableCell>
-              <TableCell>
-                <Badge
-                  variant="secondary"
-                  :class="user.eruda_enabled ? 'bg-emerald-100 text-emerald-700 border-transparent' : 'bg-muted text-muted-foreground border-transparent'"
-                >
-                  {{ user.eruda_enabled ? "Включено" : "Выключено" }}
-                </Badge>
-              </TableCell>
-              <TableCell>
-                <div v-if="user.role === 'manager'" class="space-y-2">
-                  <div v-if="user.branches?.length" class="flex flex-wrap gap-1">
-                    <Badge v-for="branch in user.branches" :key="branch.id" variant="secondary">{{ branch.name }}</Badge>
-                  </div>
-                  <div v-if="user.cities?.length" class="flex flex-wrap gap-1">
-                    <Badge v-for="city in user.cities" :key="city.id" variant="outline">{{ city.name }}</Badge>
+            <template v-if="isLoading">
+              <TableRow v-for="index in 6" :key="`loading-${index}`">
+                <TableCell><Skeleton class="h-4 w-48" /></TableCell>
+                <TableCell><Skeleton class="h-6 w-28" /></TableCell>
+                <TableCell><Skeleton class="h-6 w-24" /></TableCell>
+                <TableCell><Skeleton class="h-6 w-24" /></TableCell>
+                <TableCell><Skeleton class="h-6 w-40" /></TableCell>
+                <TableCell class="text-right"><Skeleton class="ml-auto h-8 w-20" /></TableCell>
+              </TableRow>
+            </template>
+            <template v-else>
+              <TableRow v-for="user in paginatedUsers" :key="user.id">
+                <TableCell>
+                  <div class="font-medium text-foreground">{{ user.first_name }} {{ user.last_name }}</div>
+                  <div class="text-xs text-muted-foreground">{{ user.email }}</div>
+                  <div v-if="user.telegram_id" class="text-xs text-muted-foreground">Telegram ID: {{ user.telegram_id }}</div>
+                </TableCell>
+                <TableCell>
+                  <Badge :variant="roleVariant(user.role)" :class="roleClass(user.role)">{{ getRoleLabel(user.role) }}</Badge>
+                </TableCell>
+                <TableCell>
+                  <Badge
+                    variant="secondary"
+                    :class="user.is_active ? 'bg-emerald-100 text-emerald-700 border-transparent' : 'bg-muted text-muted-foreground border-transparent'"
+                  >
+                    {{ user.is_active ? "Активен" : "Неактивен" }}
+                  </Badge>
+                </TableCell>
+                <TableCell>
+                  <Badge
+                    variant="secondary"
+                    :class="user.eruda_enabled ? 'bg-emerald-100 text-emerald-700 border-transparent' : 'bg-muted text-muted-foreground border-transparent'"
+                  >
+                    {{ user.eruda_enabled ? "Включено" : "Выключено" }}
+                  </Badge>
+                </TableCell>
+                <TableCell>
+                  <div v-if="user.role === 'manager'" class="space-y-2">
+                    <div v-if="user.branches?.length" class="flex flex-wrap gap-1">
+                      <Badge v-for="branch in user.branches" :key="branch.id" variant="secondary">{{ branch.name }}</Badge>
+                    </div>
+                    <div v-if="user.cities?.length" class="flex flex-wrap gap-1">
+                      <Badge v-for="city in user.cities" :key="city.id" variant="outline">{{ city.name }}</Badge>
+                    </div>
+                    <span v-else class="text-xs text-muted-foreground">—</span>
                   </div>
                   <span v-else class="text-xs text-muted-foreground">—</span>
-                </div>
-                <span v-else class="text-xs text-muted-foreground">—</span>
-              </TableCell>
-              <TableCell class="text-right">
-                <div class="flex justify-end gap-2">
-                  <Button
-                    v-if="!(authStore.role === 'ceo' && user.role === 'admin')"
-                    variant="ghost"
-                    size="icon"
-                    @click="openModal(user)"
-                  >
-                    <Pencil :size="16" />
-                  </Button>
-                  <Button
-                    v-if="user.id !== authStore.user?.id && !(authStore.role === 'ceo' && user.role === 'admin')"
-                    variant="ghost"
-                    size="icon"
-                    @click="deleteUser(user)"
-                  >
-                    <Trash2 :size="16" class="text-red-600" />
-                  </Button>
-                </div>
-              </TableCell>
-            </TableRow>
+                </TableCell>
+                <TableCell class="text-right">
+                  <div class="flex justify-end gap-2">
+                    <Button
+                      v-if="!(authStore.role === 'ceo' && user.role === 'admin')"
+                      variant="ghost"
+                      size="icon"
+                      @click="openModal(user)"
+                    >
+                      <Pencil :size="16" />
+                    </Button>
+                    <Button
+                      v-if="user.id !== authStore.user?.id && !(authStore.role === 'ceo' && user.role === 'admin')"
+                      variant="ghost"
+                      size="icon"
+                      @click="deleteUser(user)"
+                    >
+                      <Trash2 :size="16" class="text-red-600" />
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+              <TableRow v-if="users.length === 0">
+                <TableCell colspan="6" class="py-8 text-center text-sm text-muted-foreground">Пользователи не найдены</TableCell>
+              </TableRow>
+            </template>
           </TableBody>
         </Table>
       </CardContent>
@@ -275,6 +290,7 @@ import TableHead from "@/shared/components/ui/table/TableHead.vue";
 import TableHeader from "@/shared/components/ui/table/TableHeader.vue";
 import TableRow from "@/shared/components/ui/table/TableRow.vue";
 import TablePagination from "@/shared/components/TablePagination.vue";
+import Skeleton from "@/shared/components/ui/skeleton/Skeleton.vue";
 import { Field, FieldContent, FieldGroup, FieldLabel } from "@/shared/components/ui/field";
 import { Label } from "@/shared/components/ui/label";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
@@ -283,6 +299,7 @@ const referenceStore = useReferenceStore();
 const authStore = useAuthStore();
 const { showErrorNotification } = useNotifications();
 const users = ref([]);
+const isLoading = ref(false);
 const page = ref(1);
 const pageSize = ref(20);
 const showModal = ref(false);
@@ -338,6 +355,7 @@ const roleClass = (role) => {
   return "";
 };
 const loadUsers = async () => {
+  isLoading.value = true;
   try {
     const params = {};
     if (filters.value.role) params.role = filters.value.role;
@@ -347,6 +365,8 @@ const loadUsers = async () => {
     page.value = 1;
   } catch (error) {
     devError("Ошибка загрузки пользователей:", error);
+  } finally {
+    isLoading.value = false;
   }
 };
 const onPageSizeChange = (value) => {

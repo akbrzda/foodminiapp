@@ -73,7 +73,35 @@ export async function getCampaignConversions(campaignId, { limit = 50, offset = 
   return rows;
 }
 
-const getPeriodWhere = (period) => {
+const normalizeDateOnly = (value) => {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(date.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const getPeriodWhere = ({ period, dateFrom, dateTo }) => {
+  if (period === "custom") {
+    const normalizedFrom = normalizeDateOnly(dateFrom);
+    const normalizedTo = normalizeDateOnly(dateTo);
+    if (!normalizedFrom || !normalizedTo) {
+      const error = new Error("Для произвольного периода требуется дата начала и окончания");
+      error.statusCode = 400;
+      throw error;
+    }
+    if (normalizedFrom > normalizedTo) {
+      const error = new Error("Дата окончания не может быть раньше даты начала");
+      error.statusCode = 400;
+      throw error;
+    }
+    return {
+      where: "WHERE DATE(c.created_at) BETWEEN ? AND ?",
+      params: [normalizedFrom, normalizedTo],
+    };
+  }
   if (!period || period === "all") return { where: "", params: [] };
   const now = new Date();
   let start;
@@ -90,8 +118,8 @@ const getPeriodWhere = (period) => {
   return { where: "WHERE c.created_at >= ?", params: [start] };
 };
 
-export async function getDashboardStats(period = "all") {
-  const { where, params } = getPeriodWhere(period);
+export async function getDashboardStats({ period = "all", dateFrom = null, dateTo = null } = {}) {
+  const { where, params } = getPeriodWhere({ period, dateFrom, dateTo });
   const [rows] = await db.query(
     `SELECT
         COUNT(c.id) as total_campaigns,

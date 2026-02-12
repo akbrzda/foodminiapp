@@ -50,54 +50,68 @@ import { devError } from "@/shared/utils/logger";
             </TableRow>
           </TableHeader>
           <TableBody>
-            <TableRow v-for="branch in paginatedBranches" :key="branch.id">
-              <TableCell>
-                <div class="font-medium text-foreground">{{ branch.name }}</div>
-                <div class="text-xs text-muted-foreground">{{ branch.address || "—" }}</div>
-              </TableCell>
-              <TableCell>
-                <div class="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Phone :size="14" />
-                  <a
-                    v-if="normalizePhone(branch.phone)"
-                    class="text-foreground hover:underline"
-                    :href="`tel:${normalizePhone(branch.phone)}`"
+            <template v-if="isLoading">
+              <TableRow v-for="index in 6" :key="`loading-${index}`">
+                <TableCell><Skeleton class="h-4 w-44" /></TableCell>
+                <TableCell><Skeleton class="h-4 w-36" /></TableCell>
+                <TableCell><Skeleton class="h-4 w-28" /></TableCell>
+                <TableCell><Skeleton class="h-6 w-24" /></TableCell>
+                <TableCell class="text-right"><Skeleton class="ml-auto h-8 w-20" /></TableCell>
+              </TableRow>
+            </template>
+            <template v-else>
+              <TableRow v-for="branch in paginatedBranches" :key="branch.id">
+                <TableCell>
+                  <div class="font-medium text-foreground">{{ branch.name }}</div>
+                  <div class="text-xs text-muted-foreground">{{ branch.address || "—" }}</div>
+                </TableCell>
+                <TableCell>
+                  <div class="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Phone :size="14" />
+                    <a
+                      v-if="normalizePhone(branch.phone)"
+                      class="text-foreground hover:underline"
+                      :href="`tel:${normalizePhone(branch.phone)}`"
+                    >
+                      {{ formatPhone(branch.phone) }}
+                    </a>
+                    <span v-else>—</span>
+                  </div>
+                  <div v-if="branch.latitude && branch.longitude" class="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                    <MapPin :size="14" />
+                    {{ branch.latitude }}, {{ branch.longitude }}
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <div class="text-xs text-muted-foreground">Приготовление: {{ formatTimeValue(branch.prep_time) }}</div>
+                  <div class="text-xs text-muted-foreground">Сборка: {{ formatTimeValue(branch.assembly_time) }}</div>
+                </TableCell>
+                <TableCell>
+                  <Badge
+                    variant="secondary"
+                    :class="
+                      branch.is_active ? 'bg-emerald-100 text-emerald-700 border-transparent' : 'bg-muted text-muted-foreground border-transparent'
+                    "
                   >
-                    {{ formatPhone(branch.phone) }}
-                  </a>
-                  <span v-else>—</span>
-                </div>
-                <div v-if="branch.latitude && branch.longitude" class="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-                  <MapPin :size="14" />
-                  {{ branch.latitude }}, {{ branch.longitude }}
-                </div>
-              </TableCell>
-              <TableCell>
-                <div class="text-xs text-muted-foreground">Приготовление: {{ formatTimeValue(branch.prep_time) }}</div>
-                <div class="text-xs text-muted-foreground">Сборка: {{ formatTimeValue(branch.assembly_time) }}</div>
-              </TableCell>
-              <TableCell>
-                <Badge
-                  variant="secondary"
-                  :class="
-                    branch.is_active ? 'bg-emerald-100 text-emerald-700 border-transparent' : 'bg-muted text-muted-foreground border-transparent'
-                  "
-                >
-                  {{ branch.is_active ? "Активен" : "Неактивен" }}
-                </Badge>
-              </TableCell>
-              <TableCell class="text-right">
-                <div v-if="!isManager" class="flex justify-end gap-2">
-                  <Button variant="ghost" size="icon" @click="goToEdit(branch)">
-                    <Pencil :size="16" />
-                  </Button>
-                  <Button variant="ghost" size="icon" @click="deleteBranch(branch)">
-                    <Trash2 :size="16" class="text-red-600" />
-                  </Button>
-                </div>
-                <span v-else class="text-xs text-muted-foreground">—</span>
-              </TableCell>
-            </TableRow>
+                    {{ branch.is_active ? "Активен" : "Неактивен" }}
+                  </Badge>
+                </TableCell>
+                <TableCell class="text-right">
+                  <div v-if="!isManager" class="flex justify-end gap-2">
+                    <Button variant="ghost" size="icon" @click="goToEdit(branch)">
+                      <Pencil :size="16" />
+                    </Button>
+                    <Button variant="ghost" size="icon" @click="deleteBranch(branch)">
+                      <Trash2 :size="16" class="text-red-600" />
+                    </Button>
+                  </div>
+                  <span v-else class="text-xs text-muted-foreground">—</span>
+                </TableCell>
+              </TableRow>
+              <TableRow v-if="branches.length === 0">
+                <TableCell colspan="5" class="py-8 text-center text-sm text-muted-foreground">Филиалы не найдены</TableCell>
+              </TableRow>
+            </template>
           </TableBody>
         </Table>
       </CardContent>
@@ -131,6 +145,7 @@ import TableHead from "@/shared/components/ui/table/TableHead.vue";
 import TableHeader from "@/shared/components/ui/table/TableHeader.vue";
 import TableRow from "@/shared/components/ui/table/TableRow.vue";
 import TablePagination from "@/shared/components/TablePagination.vue";
+import Skeleton from "@/shared/components/ui/skeleton/Skeleton.vue";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
 import { useReferenceStore } from "@/shared/stores/reference.js";
 import { useAuthStore } from "@/shared/stores/auth.js";
@@ -143,6 +158,7 @@ const { showErrorNotification, showSuccessNotification } = useNotifications();
 
 const cityId = ref("");
 const branches = ref([]);
+const isLoading = ref(false);
 const page = ref(1);
 const pageSize = ref(20);
 const isManager = computed(() => authStore.role === "manager");
@@ -154,10 +170,12 @@ let branchesRequestId = 0;
 
 const loadBranches = async () => {
   if (!cityId.value) {
+    isLoading.value = false;
     branches.value = [];
     return;
   }
   const requestId = ++branchesRequestId;
+  isLoading.value = true;
   try {
     const response = await api.get(`/api/cities/${cityId.value}/branches`);
     if (requestId === branchesRequestId) {
@@ -168,6 +186,10 @@ const loadBranches = async () => {
     devError("Ошибка загрузки филиалов:", error);
     if (requestId === branchesRequestId) {
       branches.value = [];
+    }
+  } finally {
+    if (requestId === branchesRequestId) {
+      isLoading.value = false;
     }
   }
 };

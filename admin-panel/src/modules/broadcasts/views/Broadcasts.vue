@@ -80,33 +80,51 @@ import { devError } from "@/shared/utils/logger";
             </TableRow>
           </TableHeader>
           <TableBody>
-            <TableRow v-for="campaign in paginatedCampaigns" :key="campaign.id">
-              <TableCell>
-                <div class="font-medium text-foreground">{{ campaign.name }}</div>
-                <div class="text-xs text-muted-foreground">{{ campaign.description || "—" }}</div>
-              </TableCell>
-              <TableCell>
-                <Badge variant="secondary">{{ campaign.type === "trigger" ? "Триггерная" : "Ручная" }}</Badge>
-              </TableCell>
-              <TableCell>
-                <Badge :class="statusClass(campaign.status)" variant="secondary">{{ statusLabel(campaign.status) }}</Badge>
-              </TableCell>
-              <TableCell>{{ formatNumber(campaign.stats?.total_recipients || 0) }}</TableCell>
-              <TableCell>{{ formatNumber(campaign.stats?.sent_count || 0) }}</TableCell>
-              <TableCell>{{ formatNumber(campaign.stats?.click_count || 0) }}</TableCell>
-              <TableCell>{{ formatNumber(campaign.stats?.conversion_count || 0) }}</TableCell>
-              <TableCell>{{ formatDateTime(campaign.created_at) || "—" }}</TableCell>
-              <TableCell class="text-right">
-                <div class="flex justify-end gap-2">
-                  <Button variant="ghost" size="icon" @click="openDetail(campaign)">
-                    <Eye :size="16" />
-                  </Button>
-                  <Button variant="ghost" size="icon" @click="editCampaign(campaign)">
-                    <Pencil :size="16" />
-                  </Button>
-                </div>
-              </TableCell>
-            </TableRow>
+            <template v-if="isLoading">
+              <TableRow v-for="index in 6" :key="`loading-${index}`">
+                <TableCell><Skeleton class="h-4 w-52" /></TableCell>
+                <TableCell><Skeleton class="h-6 w-24" /></TableCell>
+                <TableCell><Skeleton class="h-6 w-24" /></TableCell>
+                <TableCell><Skeleton class="h-4 w-16" /></TableCell>
+                <TableCell><Skeleton class="h-4 w-16" /></TableCell>
+                <TableCell><Skeleton class="h-4 w-16" /></TableCell>
+                <TableCell><Skeleton class="h-4 w-16" /></TableCell>
+                <TableCell><Skeleton class="h-4 w-28" /></TableCell>
+                <TableCell class="text-right"><Skeleton class="ml-auto h-8 w-20" /></TableCell>
+              </TableRow>
+            </template>
+            <template v-else>
+              <TableRow v-for="campaign in paginatedCampaigns" :key="campaign.id">
+                <TableCell>
+                  <div class="font-medium text-foreground">{{ campaign.name }}</div>
+                  <div class="text-xs text-muted-foreground">{{ campaign.description || "—" }}</div>
+                </TableCell>
+                <TableCell>
+                  <Badge variant="secondary">{{ campaign.type === "trigger" ? "Триггерная" : "Ручная" }}</Badge>
+                </TableCell>
+                <TableCell>
+                  <Badge :class="statusClass(campaign.status)" variant="secondary">{{ statusLabel(campaign.status) }}</Badge>
+                </TableCell>
+                <TableCell>{{ formatNumber(campaign.stats?.total_recipients || 0) }}</TableCell>
+                <TableCell>{{ formatNumber(campaign.stats?.sent_count || 0) }}</TableCell>
+                <TableCell>{{ formatNumber(campaign.stats?.click_count || 0) }}</TableCell>
+                <TableCell>{{ formatNumber(campaign.stats?.conversion_count || 0) }}</TableCell>
+                <TableCell>{{ formatDateTime(campaign.created_at) || "—" }}</TableCell>
+                <TableCell class="text-right">
+                  <div class="flex justify-end gap-2">
+                    <Button variant="ghost" size="icon" @click="openDetail(campaign)">
+                      <Eye :size="16" />
+                    </Button>
+                    <Button variant="ghost" size="icon" @click="editCampaign(campaign)">
+                      <Pencil :size="16" />
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+              <TableRow v-if="filteredCampaigns.length === 0">
+                <TableCell colspan="9" class="py-8 text-center text-sm text-muted-foreground">Рассылки не найдены</TableCell>
+              </TableRow>
+            </template>
           </TableBody>
         </Table>
       </CardContent>
@@ -141,6 +159,7 @@ import TableHead from "@/shared/components/ui/table/TableHead.vue";
 import TableHeader from "@/shared/components/ui/table/TableHeader.vue";
 import TableRow from "@/shared/components/ui/table/TableRow.vue";
 import TablePagination from "@/shared/components/TablePagination.vue";
+import Skeleton from "@/shared/components/ui/skeleton/Skeleton.vue";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
 import { useOrdersStore } from "@/modules/orders/stores/orders.js";
 import { formatDateTime, formatNumber } from "@/shared/utils/format.js";
@@ -149,6 +168,7 @@ const router = useRouter();
 const { showErrorNotification } = useNotifications();
 const ordersStore = useOrdersStore();
 const campaigns = ref([]);
+const isLoading = ref(false);
 const page = ref(1);
 const pageSize = ref(20);
 const filters = ref({
@@ -158,6 +178,7 @@ const filters = ref({
 });
 
 const loadCampaigns = async () => {
+  isLoading.value = true;
   try {
     const response = await api.get("/api/broadcasts");
     campaigns.value = response.data?.data?.items || [];
@@ -165,6 +186,8 @@ const loadCampaigns = async () => {
   } catch (error) {
     devError("Ошибка загрузки рассылок:", error);
     showErrorNotification("Не удалось загрузить рассылки");
+  } finally {
+    isLoading.value = false;
   }
 };
 const onPageSizeChange = (value) => {

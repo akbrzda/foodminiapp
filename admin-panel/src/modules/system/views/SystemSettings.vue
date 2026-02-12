@@ -27,7 +27,15 @@ import { devError } from "@/shared/utils/logger";
         <TabsTrigger v-for="(tab, index) in tabs" :key="tab" :value="index">{{ tab }}</TabsTrigger>
       </TabsList>
       <TabsContent :value="0" class="space-y-6">
-        <Card v-if="moduleGroups.length">
+        <Card v-if="moduleLoading">
+          <CardContent class="space-y-3 pt-6">
+            <Skeleton class="h-4 w-56" />
+            <Skeleton class="h-14 w-full" />
+            <Skeleton class="h-14 w-full" />
+            <Skeleton class="h-14 w-full" />
+          </CardContent>
+        </Card>
+        <Card v-else-if="moduleGroups.length">
           <CardHeader>
             <CardTitle>Модули</CardTitle>
             <CardDescription>Управление состоянием сервисных блоков</CardDescription>
@@ -99,7 +107,7 @@ import { devError } from "@/shared/utils/logger";
                 Добавить причину
               </Button>
             </div>
-            <Table v-if="reasons.length > 0">
+            <Table v-if="reasonsLoading || reasons.length > 0">
               <TableHeader>
                 <TableRow>
                   <TableHead>Название</TableHead>
@@ -109,30 +117,40 @@ import { devError } from "@/shared/utils/logger";
                 </TableRow>
               </TableHeader>
               <TableBody>
-                <TableRow v-for="reason in reasons" :key="reason.id">
-                  <TableCell>{{ reason.name }}</TableCell>
-                  <TableCell>{{ formatNumber(reason.sort_order || 0) }}</TableCell>
-                  <TableCell>
-                    <Badge
-                      variant="secondary"
-                      :class="
-                        reason.is_active ? 'bg-emerald-100 text-emerald-700 border-transparent' : 'bg-muted text-muted-foreground border-transparent'
-                      "
-                    >
-                      {{ reason.is_active ? "Активна" : "Скрыта" }}
-                    </Badge>
-                  </TableCell>
-                  <TableCell class="text-right">
-                    <div class="flex justify-end gap-2">
-                      <Button variant="ghost" size="icon" @click="openModal(reason)">
-                        <Pencil :size="16" />
-                      </Button>
-                      <Button variant="ghost" size="icon" @click="deleteReason(reason)">
-                        <Trash2 :size="16" class="text-red-600" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
+                <template v-if="reasonsLoading">
+                  <TableRow v-for="index in 5" :key="`reasons-loading-${index}`">
+                    <TableCell><Skeleton class="h-4 w-40" /></TableCell>
+                    <TableCell><Skeleton class="h-4 w-12" /></TableCell>
+                    <TableCell><Skeleton class="h-6 w-24" /></TableCell>
+                    <TableCell class="text-right"><Skeleton class="ml-auto h-8 w-20" /></TableCell>
+                  </TableRow>
+                </template>
+                <template v-else>
+                  <TableRow v-for="reason in reasons" :key="reason.id">
+                    <TableCell>{{ reason.name }}</TableCell>
+                    <TableCell>{{ formatNumber(reason.sort_order || 0) }}</TableCell>
+                    <TableCell>
+                      <Badge
+                        variant="secondary"
+                        :class="
+                          reason.is_active ? 'bg-emerald-100 text-emerald-700 border-transparent' : 'bg-muted text-muted-foreground border-transparent'
+                        "
+                      >
+                        {{ reason.is_active ? "Активна" : "Скрыта" }}
+                      </Badge>
+                    </TableCell>
+                    <TableCell class="text-right">
+                      <div class="flex justify-end gap-2">
+                        <Button variant="ghost" size="icon" @click="openModal(reason)">
+                          <Pencil :size="16" />
+                        </Button>
+                        <Button variant="ghost" size="icon" @click="deleteReason(reason)">
+                          <Trash2 :size="16" class="text-red-600" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                </template>
               </TableBody>
             </Table>
             <div v-else class="py-8 text-center text-sm text-muted-foreground">Причины не добавлены</div>
@@ -209,6 +227,7 @@ import TableCell from "@/shared/components/ui/table/TableCell.vue";
 import TableHead from "@/shared/components/ui/table/TableHead.vue";
 import TableHeader from "@/shared/components/ui/table/TableHeader.vue";
 import TableRow from "@/shared/components/ui/table/TableRow.vue";
+import Skeleton from "@/shared/components/ui/skeleton/Skeleton.vue";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
 import { Field, FieldContent, FieldGroup, FieldLabel } from "@/shared/components/ui/field";
 import Spinner from "@/shared/components/ui/spinner/Spinner.vue";
@@ -220,6 +239,7 @@ const moduleForm = ref({});
 const moduleLoading = ref(false);
 const moduleSaving = ref(false);
 const reasons = ref([]);
+const reasonsLoading = ref(false);
 const tabs = ["Модули", "Причины стоп-листа"];
 const activeTab = ref(0);
 const showModal = ref(false);
@@ -310,12 +330,15 @@ const saveModuleSettings = async () => {
 };
 
 const loadReasons = async () => {
+  reasonsLoading.value = true;
   try {
     const response = await api.get("/api/menu/admin/stop-list-reasons");
     reasons.value = response.data.reasons || [];
   } catch (error) {
     devError("Failed to load reasons:", error);
     showErrorNotification("Ошибка при загрузке причин");
+  } finally {
+    reasonsLoading.value = false;
   }
 };
 

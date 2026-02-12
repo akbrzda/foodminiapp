@@ -15,8 +15,7 @@ import { devError } from "@/shared/utils/logger";
     </Card>
     <Card>
       <CardContent class="!p-0">
-        <div v-if="stopList.length === 0" class="py-8 text-center text-sm text-muted-foreground">Стоп-лист пуст</div>
-        <Table v-else>
+        <Table v-if="isLoading || stopList.length > 0">
           <TableHeader>
             <TableRow>
               <TableHead>Филиал</TableHead>
@@ -28,32 +27,45 @@ import { devError } from "@/shared/utils/logger";
             </TableRow>
           </TableHeader>
           <TableBody>
-            <TableRow v-for="item in paginatedStopList" :key="item.id">
-              <TableCell>
-                <div class="text-sm font-medium">{{ getBranchName(item.branch_id) }}</div>
-              </TableCell>
-              <TableCell>
-                <Badge :variant="item.entity_type === 'item' ? 'default' : item.entity_type === 'variant' ? 'secondary' : 'outline'">
-                  {{ item.entity_type === "item" ? "Позиция" : item.entity_type === "variant" ? "Вариант" : "Модификатор" }}
-                </Badge>
-              </TableCell>
-              <TableCell>
-                <div class="text-sm font-medium text-foreground">{{ item.entity_name }}</div>
-              </TableCell>
-              <TableCell>
-                <div class="text-xs text-muted-foreground">{{ item.reason || "—" }}</div>
-              </TableCell>
-              <TableCell>
-                <div class="text-xs text-muted-foreground">{{ formatDate(item.created_at) }}</div>
-              </TableCell>
-              <TableCell class="text-right">
-                <Button variant="ghost" size="icon" @click="removeFromStopList(item)">
-                  <Trash2 :size="16" class="text-red-600" />
-                </Button>
-              </TableCell>
-            </TableRow>
+            <template v-if="isLoading">
+              <TableRow v-for="index in 6" :key="`loading-${index}`">
+                <TableCell><Skeleton class="h-4 w-40" /></TableCell>
+                <TableCell><Skeleton class="h-6 w-24" /></TableCell>
+                <TableCell><Skeleton class="h-4 w-44" /></TableCell>
+                <TableCell><Skeleton class="h-4 w-36" /></TableCell>
+                <TableCell><Skeleton class="h-4 w-28" /></TableCell>
+                <TableCell class="text-right"><Skeleton class="ml-auto h-8 w-8" /></TableCell>
+              </TableRow>
+            </template>
+            <template v-else>
+              <TableRow v-for="item in paginatedStopList" :key="item.id">
+                <TableCell>
+                  <div class="text-sm font-medium">{{ getBranchName(item.branch_id) }}</div>
+                </TableCell>
+                <TableCell>
+                  <Badge :variant="item.entity_type === 'item' ? 'default' : item.entity_type === 'variant' ? 'secondary' : 'outline'">
+                    {{ item.entity_type === "item" ? "Позиция" : item.entity_type === "variant" ? "Вариант" : "Модификатор" }}
+                  </Badge>
+                </TableCell>
+                <TableCell>
+                  <div class="text-sm font-medium text-foreground">{{ item.entity_name }}</div>
+                </TableCell>
+                <TableCell>
+                  <div class="text-xs text-muted-foreground">{{ item.reason || "—" }}</div>
+                </TableCell>
+                <TableCell>
+                  <div class="text-xs text-muted-foreground">{{ formatDate(item.created_at) }}</div>
+                </TableCell>
+                <TableCell class="text-right">
+                  <Button variant="ghost" size="icon" @click="removeFromStopList(item)">
+                    <Trash2 :size="16" class="text-red-600" />
+                  </Button>
+                </TableCell>
+              </TableRow>
+            </template>
           </TableBody>
         </Table>
+        <div v-else class="py-8 text-center text-sm text-muted-foreground">Стоп-лист пуст</div>
       </CardContent>
     </Card>
     <TablePagination :total="stopList.length" :page="page" :page-size="pageSize" @update:page="page = $event" @update:page-size="onPageSizeChange" />
@@ -347,6 +359,7 @@ const modifierListOpen = ref(false);
 const selectedModifier = ref(null);
 const productSearch = ref("");
 const showSelectedOnly = ref(false);
+const isLoading = ref(false);
 const selectedProductIds = ref([]);
 const now = ref(new Date());
 const removeDate = ref("");
@@ -424,6 +437,7 @@ const getBranchName = (branchId) => {
   return referenceStore.branches.find((b) => b.id === branchId)?.name || "Неизвестно";
 };
 const loadStopList = async () => {
+  isLoading.value = true;
   try {
     const response = await api.get("/api/menu/admin/stop-list");
     stopList.value = response.data.items || [];
@@ -431,6 +445,8 @@ const loadStopList = async () => {
   } catch (error) {
     devError("Failed to load stop list:", error);
     showErrorNotification("Ошибка при загрузке стоп-листа");
+  } finally {
+    isLoading.value = false;
   }
 };
 const onPageSizeChange = (value) => {

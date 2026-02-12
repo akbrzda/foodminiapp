@@ -27,41 +27,55 @@ import { devError } from "@/shared/utils/logger";
             </TableRow>
           </TableHeader>
           <TableBody>
-            <TableRow v-for="city in paginatedCities" :key="city.id">
-              <TableCell>
-                <div class="font-medium text-foreground">{{ city.name }}</div>
-                <div class="text-xs text-muted-foreground">ID: {{ city.id }}</div>
-              </TableCell>
-              <TableCell>
-                <div class="flex items-center gap-2 text-sm text-muted-foreground">
-                  <MapPin :size="14" />
-                  {{ city.latitude && city.longitude ? `${city.latitude}, ${city.longitude}` : "—" }}
-                </div>
-              </TableCell>
-              <TableCell>
-                <div class="text-sm text-muted-foreground">
-                  {{ city.timezone || "Europe/Moscow" }}
-                </div>
-              </TableCell>
-              <TableCell>
-                <Badge
-                  variant="secondary"
-                  :class="city.is_active ? 'bg-emerald-100 text-emerald-700 border-transparent' : 'bg-muted text-muted-foreground border-transparent'"
-                >
-                  {{ city.is_active ? "Активен" : "Неактивен" }}
-                </Badge>
-              </TableCell>
-              <TableCell class="text-right">
-                <div class="flex justify-end gap-2">
-                  <Button variant="ghost" size="icon" @click="goToEdit(city)">
-                    <Pencil :size="16" />
-                  </Button>
-                  <Button variant="ghost" size="icon" @click="deleteCity(city)">
-                    <Trash2 :size="16" class="text-red-600" />
-                  </Button>
-                </div>
-              </TableCell>
-            </TableRow>
+            <template v-if="isLoading">
+              <TableRow v-for="index in 6" :key="`loading-${index}`">
+                <TableCell><Skeleton class="h-4 w-36" /></TableCell>
+                <TableCell><Skeleton class="h-4 w-40" /></TableCell>
+                <TableCell><Skeleton class="h-4 w-28" /></TableCell>
+                <TableCell><Skeleton class="h-6 w-24" /></TableCell>
+                <TableCell class="text-right"><Skeleton class="ml-auto h-8 w-20" /></TableCell>
+              </TableRow>
+            </template>
+            <template v-else>
+              <TableRow v-for="city in paginatedCities" :key="city.id">
+                <TableCell>
+                  <div class="font-medium text-foreground">{{ city.name }}</div>
+                  <div class="text-xs text-muted-foreground">ID: {{ city.id }}</div>
+                </TableCell>
+                <TableCell>
+                  <div class="flex items-center gap-2 text-sm text-muted-foreground">
+                    <MapPin :size="14" />
+                    {{ city.latitude && city.longitude ? `${city.latitude}, ${city.longitude}` : "—" }}
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <div class="text-sm text-muted-foreground">
+                    {{ city.timezone || "Europe/Moscow" }}
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <Badge
+                    variant="secondary"
+                    :class="city.is_active ? 'bg-emerald-100 text-emerald-700 border-transparent' : 'bg-muted text-muted-foreground border-transparent'"
+                  >
+                    {{ city.is_active ? "Активен" : "Неактивен" }}
+                  </Badge>
+                </TableCell>
+                <TableCell class="text-right">
+                  <div class="flex justify-end gap-2">
+                    <Button variant="ghost" size="icon" @click="goToEdit(city)">
+                      <Pencil :size="16" />
+                    </Button>
+                    <Button variant="ghost" size="icon" @click="deleteCity(city)">
+                      <Trash2 :size="16" class="text-red-600" />
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+              <TableRow v-if="cities.length === 0">
+                <TableCell colspan="5" class="py-8 text-center text-sm text-muted-foreground">Города не найдены</TableCell>
+              </TableRow>
+            </template>
           </TableBody>
         </Table>
       </CardContent>
@@ -86,11 +100,13 @@ import TableHead from "@/shared/components/ui/table/TableHead.vue";
 import TableHeader from "@/shared/components/ui/table/TableHeader.vue";
 import TableRow from "@/shared/components/ui/table/TableRow.vue";
 import TablePagination from "@/shared/components/TablePagination.vue";
+import Skeleton from "@/shared/components/ui/skeleton/Skeleton.vue";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
 
 const router = useRouter();
 const { showErrorNotification, showSuccessNotification } = useNotifications();
 const cities = ref([]);
+const isLoading = ref(false);
 const page = ref(1);
 const pageSize = ref(20);
 const paginatedCities = computed(() => {
@@ -99,6 +115,7 @@ const paginatedCities = computed(() => {
 });
 
 const loadCities = async () => {
+  isLoading.value = true;
   try {
     const response = await api.get("/api/cities/admin/all");
     cities.value = response.data.cities || [];
@@ -106,6 +123,8 @@ const loadCities = async () => {
   } catch (error) {
     devError("Failed to load cities:", error);
     showErrorNotification("Ошибка при загрузке городов");
+  } finally {
+    isLoading.value = false;
   }
 };
 const onPageSizeChange = (value) => {

@@ -26,33 +26,46 @@ import { devError } from "@/shared/utils/logger";
             </TableRow>
           </TableHeader>
           <TableBody>
-            <TableRow v-for="category in paginatedCategories" :key="category.id">
-              <TableCell>
-                <div class="font-medium text-foreground">{{ category.name }}</div>
-                <div class="text-xs text-muted-foreground">{{ category.description || "—" }}</div>
-              </TableCell>
-              <TableCell>{{ formatNumber(category.sort_order || 0) }}</TableCell>
-              <TableCell>
-                <Badge
-                  variant="secondary"
-                  :class="
-                    category.is_active ? 'bg-emerald-100 text-emerald-700 border-transparent' : 'bg-muted text-muted-foreground border-transparent'
-                  "
-                >
-                  {{ category.is_active ? "Активна" : "Скрыта" }}
-                </Badge>
-              </TableCell>
-              <TableCell class="text-right">
-                <div class="flex justify-end gap-2">
-                  <Button variant="ghost" size="icon" @click="openModal(category)">
-                    <Pencil :size="16" />
-                  </Button>
-                  <Button variant="ghost" size="icon" @click="deleteCategory(category)">
-                    <Trash2 :size="16" class="text-red-600" />
-                  </Button>
-                </div>
-              </TableCell>
-            </TableRow>
+            <template v-if="isLoading">
+              <TableRow v-for="index in 6" :key="`loading-${index}`">
+                <TableCell><Skeleton class="h-4 w-52" /></TableCell>
+                <TableCell><Skeleton class="h-4 w-12" /></TableCell>
+                <TableCell><Skeleton class="h-6 w-24" /></TableCell>
+                <TableCell class="text-right"><Skeleton class="ml-auto h-8 w-20" /></TableCell>
+              </TableRow>
+            </template>
+            <template v-else>
+              <TableRow v-for="category in paginatedCategories" :key="category.id">
+                <TableCell>
+                  <div class="font-medium text-foreground">{{ category.name }}</div>
+                  <div class="text-xs text-muted-foreground">{{ category.description || "—" }}</div>
+                </TableCell>
+                <TableCell>{{ formatNumber(category.sort_order || 0) }}</TableCell>
+                <TableCell>
+                  <Badge
+                    variant="secondary"
+                    :class="
+                      category.is_active ? 'bg-emerald-100 text-emerald-700 border-transparent' : 'bg-muted text-muted-foreground border-transparent'
+                    "
+                  >
+                    {{ category.is_active ? "Активна" : "Скрыта" }}
+                  </Badge>
+                </TableCell>
+                <TableCell class="text-right">
+                  <div class="flex justify-end gap-2">
+                    <Button variant="ghost" size="icon" @click="openModal(category)">
+                      <Pencil :size="16" />
+                    </Button>
+                    <Button variant="ghost" size="icon" @click="deleteCategory(category)">
+                      <Trash2 :size="16" class="text-red-600" />
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+              <TableRow v-if="categories.length === 0">
+                <TableCell colspan="4" class="py-8 text-center text-sm text-muted-foreground">Категории не найдены</TableCell>
+              </TableRow>
+            </template>
           </TableBody>
         </Table>
       </CardContent>
@@ -167,6 +180,7 @@ import TableHead from "@/shared/components/ui/table/TableHead.vue";
 import TableHeader from "@/shared/components/ui/table/TableHeader.vue";
 import TableRow from "@/shared/components/ui/table/TableRow.vue";
 import TablePagination from "@/shared/components/TablePagination.vue";
+import Skeleton from "@/shared/components/ui/skeleton/Skeleton.vue";
 import Textarea from "@/shared/components/ui/textarea/Textarea.vue";
 import { Field, FieldContent, FieldGroup, FieldLabel } from "@/shared/components/ui/field";
 import { Label } from "@/shared/components/ui/label";
@@ -178,6 +192,7 @@ const referenceStore = useReferenceStore();
 const ordersStore = useOrdersStore();
 const { showErrorNotification, showSuccessNotification } = useNotifications();
 const categories = ref([]);
+const isLoading = ref(false);
 const page = ref(1);
 const pageSize = ref(20);
 const showModal = ref(false);
@@ -211,6 +226,7 @@ const updateDocumentTitle = (baseTitle) => {
   document.title = count > 0 ? `(${count}) ${baseTitle}` : baseTitle;
 };
 const loadCategories = async () => {
+  isLoading.value = true;
   try {
     const response = await api.get("/api/menu/admin/all-categories");
     categories.value = response.data.categories || [];
@@ -218,6 +234,8 @@ const loadCategories = async () => {
   } catch (error) {
     devError("Failed to load categories:", error);
     showErrorNotification("Ошибка при загрузке категорий");
+  } finally {
+    isLoading.value = false;
   }
 };
 const onPageSizeChange = (value) => {

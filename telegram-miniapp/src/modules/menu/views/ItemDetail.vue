@@ -7,7 +7,12 @@
         <img :src="displayImageUrl" :alt="item.name" class="item-image" />
       </div>
       <div class="item-header">
-        <h1 class="item-name">{{ item.name }}</h1>
+        <div class="item-title-row">
+          <h1 class="item-name">{{ item.name }}</h1>
+          <button v-if="hasKbjuData" type="button" class="kbju-info-btn" aria-label="Показать КБЖУ" @click="toggleKbjuPopup">
+            !
+          </button>
+        </div>
         <div v-if="item.tags && item.tags.length > 0" class="tag-row">
           <span v-for="tag in item.tags" :key="tag.id" class="tag-pill">
             <span v-if="tag.icon">{{ tag.icon }}</span>
@@ -16,12 +21,6 @@
         </div>
         <p class="item-composition" v-if="item.composition">Состав: {{ item.composition }}</p>
         <p class="item-weight" v-if="displayWeight">{{ displayWeight }}</p>
-        <div class="kbju" v-if="kbjuPer100 || kbjuPerServing">
-          <div class="kbju-title">КБЖУ на 100{{ kbjuUnitLabel }}</div>
-          <div class="kbju-values">{{ kbjuPer100 || "—" }}</div>
-          <div class="kbju-title">КБЖУ на порцию</div>
-          <div class="kbju-values">{{ kbjuPerServing || "—" }}</div>
-        </div>
         <div v-if="item.in_stop_list" class="item-stop">Временно недоступно</div>
       </div>
       <div class="section" v-if="item.variants && item.variants.length > 0">
@@ -158,6 +157,23 @@
         </button>
       </div>
     </div>
+    <div v-if="showKbjuPopup && hasKbjuData" class="kbju-dismiss-layer" @click="closeKbjuPopup"></div>
+    <div v-if="showKbjuPopup && hasKbjuData" class="kbju-float">
+      <div class="kbju-float-title">Пищевая ценность на 100{{ kbjuUnitLabel }}</div>
+      <div class="kbju-float-divider"></div>
+      <div class="kbju-float-row" v-for="row in kbjuPer100Rows" :key="`base-${row.label}`">
+        <span>{{ row.label }}:</span>
+        <span>{{ row.value }} {{ row.unit }}</span>
+      </div>
+      <template v-if="kbjuByWeightRows.length > 0">
+        <div class="kbju-float-subtitle">{{ kbjuByWeightTitle }}</div>
+        <div class="kbju-float-divider"></div>
+        <div class="kbju-float-row" v-for="row in kbjuByWeightRows" :key="`weight-${row.label}`">
+          <span>{{ row.label }}:</span>
+          <span>{{ row.value }} {{ row.unit }}</span>
+        </div>
+      </template>
+    </div>
   </div>
 </template>
 <script setup>
@@ -189,6 +205,7 @@ const selectedVariant = ref(null);
 const selectedModifiers = ref({});
 const quantity = ref(1);
 const isAdded = ref(false);
+const showKbjuPopup = ref(false);
 const pageTitle = computed(() => item.value?.name || "Блюдо");
 const ordersEnabled = computed(() => settingsStore.ordersEnabled);
 const canOrder = computed(() => {
@@ -219,49 +236,79 @@ const displayImageUrl = computed(() => {
   return normalizeImageUrl(fallbackItem?.image_url);
 });
 const kbjuUnitLabel = computed(() => {
-  const unit = selectedVariant.value?.weight_unit || item.value?.weight_unit;
+  const source = kbjuSource.value;
+  const unit = source?.weight_unit;
   return unit === "ml" || unit === "l" ? "мл" : "г";
 });
-const kbjuPer100 = computed(() => {
-  const source = selectedVariant.value || item.value;
-  if (!source) return "";
-  const values = {
-    calories: source.calories_per_100g,
-    proteins: source.proteins_per_100g,
-    fats: source.fats_per_100g,
-    carbs: source.carbs_per_100g,
-  };
-  const hasData = Object.values(values).some((value) => Number.isFinite(Number(value)));
-  if (!hasData) return "";
-  const formatPair = (label, per100) => {
-    if (per100 === null || per100 === undefined) return "";
-    const first = Number.isFinite(Number(per100)) ? formatPrice(per100) : "—";
-    return `${label}: ${first}`;
-  };
-  return [formatPair("К", values.calories), formatPair("Б", values.proteins), formatPair("Ж", values.fats), formatPair("У", values.carbs)]
-    .filter(Boolean)
-    .join(" • ");
+const kbjuSource = computed(() => {
+  if (!item.value) return null;
+  if (Array.isArray(item.value.variants) && item.value.variants.length > 0) {
+    return selectedVariant.value || null;
+  }
+  return item.value;
 });
-const kbjuPerServing = computed(() => {
-  const source = selectedVariant.value || item.value;
-  if (!source) return "";
-  const values = {
-    calories: source.calories_per_serving,
-    proteins: source.proteins_per_serving,
-    fats: source.fats_per_serving,
-    carbs: source.carbs_per_serving,
-  };
-  const hasData = Object.values(values).some((value) => Number.isFinite(Number(value)));
-  if (!hasData) return "";
-  const formatPair = (label, value) => {
-    if (value === null || value === undefined) return "";
-    const first = Number.isFinite(Number(value)) ? formatPrice(value) : "—";
-    return `${label}: ${first}`;
-  };
-  return [formatPair("К", values.calories), formatPair("Б", values.proteins), formatPair("Ж", values.fats), formatPair("У", values.carbs)]
-    .filter(Boolean)
-    .join(" • ");
+const formatKbjuNumber = (value) => {
+  if (value === null || value === undefined || value === "") return null;
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return null;
+  return Number(numeric.toFixed(1)).toString();
+};
+const kbjuPer100Rows = computed(() => {
+  const source = kbjuSource.value;
+  if (!source) return [];
+  return [
+    { label: "Белки", raw: source.proteins_per_100g, unit: "г" },
+    { label: "Жиры", raw: source.fats_per_100g, unit: "г" },
+    { label: "Углеводы", raw: source.carbs_per_100g, unit: "г" },
+    { label: "Энерг. ценность", raw: source.calories_per_100g, unit: "ккал" },
+  ]
+    .map((row) => ({ ...row, value: formatKbjuNumber(row.raw) }))
+    .filter((row) => row.value !== null);
 });
+const kbjuWeightValue = computed(() => {
+  const source = kbjuSource.value;
+  if (!source) return null;
+  const weight = Number(source.weight_value);
+  if (!Number.isFinite(weight) || weight <= 0) return null;
+  return weight;
+});
+const kbjuWeightUnit = computed(() => {
+  const source = kbjuSource.value;
+  return source?.weight_unit || null;
+});
+const kbjuByWeightTitle = computed(() => {
+  const weight = kbjuWeightValue.value;
+  const unit = kbjuWeightUnit.value;
+  if (!Number.isFinite(weight) || !unit) return "На блюдо";
+  return `На ${formatWeightValue(weight, unit)}`;
+});
+const kbjuMultiplier = computed(() => {
+  const weight = kbjuWeightValue.value;
+  const unit = kbjuWeightUnit.value;
+  if (!Number.isFinite(weight) || !unit) return null;
+  if (unit === "g" || unit === "ml") return weight / 100;
+  if (unit === "kg" || unit === "l") return (weight * 1000) / 100;
+  return null;
+});
+const kbjuByWeightRows = computed(() => {
+  const source = kbjuSource.value;
+  const multiplier = kbjuMultiplier.value;
+  if (!source || multiplier === null) return [];
+  return [
+    { label: "Белки", raw: source.proteins_per_100g, unit: "г" },
+    { label: "Жиры", raw: source.fats_per_100g, unit: "г" },
+    { label: "Углеводы", raw: source.carbs_per_100g, unit: "г" },
+    { label: "Энерг. ценность", raw: source.calories_per_100g, unit: "ккал" },
+  ]
+    .map((row) => {
+      if (row.raw === null || row.raw === undefined || row.raw === "") return { ...row, value: null };
+      const numericRaw = Number(row.raw);
+      if (!Number.isFinite(numericRaw)) return { ...row, value: null };
+      return { ...row, value: formatKbjuNumber(numericRaw * multiplier) };
+    })
+    .filter((row) => row.value !== null);
+});
+const hasKbjuData = computed(() => kbjuPer100Rows.value.length > 0 || kbjuByWeightRows.value.length > 0);
 const optionalModifierGroups = computed(() => {
   if (!item.value?.modifier_groups) return [];
   return item.value.modifier_groups.filter((g) => !g.is_required);
@@ -593,6 +640,12 @@ function addToCart() {
   });
   isAdded.value = true;
 }
+function toggleKbjuPopup() {
+  showKbjuPopup.value = !showKbjuPopup.value;
+}
+function closeKbjuPopup() {
+  showKbjuPopup.value = false;
+}
 </script>
 <style scoped>
 .item-detail {
@@ -615,6 +668,7 @@ function addToCart() {
   max-height: 300px;
   overflow: hidden;
   margin: 0 auto;
+  position: relative;
 }
 .item-image {
   width: 100%;
@@ -628,6 +682,11 @@ function addToCart() {
   font-size: var(--font-size-h1);
   font-weight: var(--font-weight-bold);
   color: var(--color-text-primary);
+}
+.item-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 .tag-row {
   display: flex;
@@ -655,23 +714,66 @@ function addToCart() {
 }
 .item-weight {
   font-size: var(--font-size-caption);
-  color: var(--color-text-muted);
-  margin-top: 6px;
-}
-.kbju {
-  margin-top: 10px;
-  background: #f4f7fa;
-  border-radius: var(--border-radius-md);
-  padding: 10px;
-}
-.kbju-title {
-  font-size: 11px;
-  color: var(--color-text-secondary);
-  margin-bottom: 4px;
-}
-.kbju-values {
-  font-size: 12px;
   color: var(--color-text-primary);
+  margin-top: 6px;
+  top: 16px;
+  right: 16px;
+  position: absolute;
+}
+.kbju-info-btn {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid #d8e0e8;
+  background: #f4f7fa;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.kbju-float {
+  position: fixed;
+  left: 50%;
+  top: 42%;
+  transform: translate(-50%, -50%);
+  width: min(360px, calc(100vw - 48px));
+  background: rgba(18, 22, 28, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 18px;
+  backdrop-filter: blur(6px);
+  color: #fff;
+  z-index: 1000;
+  padding: 14px;
+}
+.kbju-dismiss-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+}
+.kbju-float-title {
+  font-size: 14px;
+  font-weight: 700;
+}
+.kbju-float-subtitle {
+  margin-top: 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.kbju-float-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.2);
+  margin: 8px 0;
+}
+.kbju-float-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13px;
+  margin-top: 6px;
 }
 .item-stop {
   margin-top: 8px;

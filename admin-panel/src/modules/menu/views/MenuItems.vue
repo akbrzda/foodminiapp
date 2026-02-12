@@ -56,54 +56,81 @@ import { devError } from "@/shared/utils/logger";
             </TableRow>
           </TableHeader>
           <TableBody>
-            <TableRow v-for="item in paginatedItems" :key="item.id">
-              <TableCell>
-                <div class="flex items-center gap-3">
-                  <img v-if="item.image_url" :src="normalizeImageUrl(item.image_url)" :alt="item.name" class="h-12 w-12 rounded-lg object-cover" />
-                  <div>
-                    <div class="font-medium text-foreground">{{ item.name }}</div>
-                    <div class="text-xs text-muted-foreground">{{ item.description || "—" }}</div>
+            <template v-if="isLoading">
+              <TableRow v-for="index in 6" :key="`loading-${index}`">
+                <TableCell>
+                  <div class="flex items-center gap-3">
+                    <Skeleton class="h-12 w-12 rounded-lg" />
+                    <div class="space-y-2">
+                      <Skeleton class="h-4 w-40" />
+                      <Skeleton class="h-3 w-56" />
+                    </div>
                   </div>
-                </div>
-              </TableCell>
-              <TableCell>
-                <div class="flex flex-wrap gap-1">
-                  <Badge v-for="cat in item.categories" :key="cat.id" variant="secondary" class="text-xs">{{ cat.name }}</Badge>
-                </div>
-              </TableCell>
-              <TableCell>{{ item.base_price !== null && item.base_price !== undefined ? `От ${formatCurrency(item.base_price)}` : "—" }}</TableCell>
-              <TableCell>
-                <Badge
-                  variant="secondary"
-                  :class="item.is_active ? 'bg-emerald-100 text-emerald-700 border-transparent' : 'bg-muted text-muted-foreground border-transparent'"
-                >
-                  {{ item.is_active ? "Активна" : "Скрыта" }}
-                </Badge>
-              </TableCell>
-              <TableCell class="text-right">
-                <div class="flex justify-end gap-2">
-                  <Button variant="ghost" size="icon" @click="editItem(item)">
-                    <Pencil :size="16" />
-                  </Button>
-                  <Button variant="ghost" size="icon" @click="deleteItem(item)">
-                    <Trash2 :size="16" class="text-red-600" />
-                  </Button>
-                </div>
-              </TableCell>
-            </TableRow>
-            <TableRow v-if="filteredItems.length === 0">
+                </TableCell>
+                <TableCell><Skeleton class="h-6 w-32" /></TableCell>
+                <TableCell><Skeleton class="h-4 w-20" /></TableCell>
+                <TableCell><Skeleton class="h-6 w-20" /></TableCell>
+                <TableCell class="text-right"><Skeleton class="ml-auto h-8 w-20" /></TableCell>
+              </TableRow>
+            </template>
+            <template v-else>
+              <TableRow v-for="item in paginatedItems" :key="item.id">
+                <TableCell>
+                  <div class="flex items-center gap-3">
+                    <img v-if="item.image_url" :src="normalizeImageUrl(item.image_url)" :alt="item.name" class="h-12 w-12 rounded-lg object-cover" />
+                    <div>
+                      <div class="font-medium text-foreground">{{ item.name }}</div>
+                      <div class="text-xs text-muted-foreground">{{ item.description || "—" }}</div>
+                    </div>
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <div class="flex flex-wrap gap-1">
+                    <Badge v-for="cat in item.categories" :key="cat.id" variant="secondary" class="text-xs">{{ cat.name }}</Badge>
+                  </div>
+                </TableCell>
+                <TableCell>{{ item.base_price !== null && item.base_price !== undefined ? `от ${formatCurrency(item.base_price)}` : "—" }}</TableCell>
+                <TableCell>
+                  <Badge
+                    variant="secondary"
+                    :class="
+                      item.is_active ? 'bg-emerald-100 text-emerald-700 border-transparent' : 'bg-muted text-muted-foreground border-transparent'
+                    "
+                  >
+                    {{ item.is_active ? "Активна" : "Скрыта" }}
+                  </Badge>
+                </TableCell>
+                <TableCell class="text-right">
+                  <div class="flex justify-end gap-2">
+                    <Button variant="ghost" size="icon" @click="editItem(item)">
+                      <Pencil :size="16" />
+                    </Button>
+                    <Button variant="ghost" size="icon" @click="deleteItem(item)">
+                      <Trash2 :size="16" class="text-red-600" />
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            </template>
+            <TableRow v-if="!isLoading && filteredItems.length === 0">
               <TableCell colspan="5" class="py-8 text-center text-sm text-muted-foreground">По заданным фильтрам ничего не найдено</TableCell>
             </TableRow>
           </TableBody>
         </Table>
       </CardContent>
     </Card>
-    <TablePagination :total="filteredItems.length" :page="page" :page-size="pageSize" @update:page="page = $event" @update:page-size="onPageSizeChange" />
+    <TablePagination
+      :total="filteredItems.length"
+      :page="page"
+      :page-size="pageSize"
+      @update:page="page = $event"
+      @update:page-size="onPageSizeChange"
+    />
   </div>
 </template>
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from "vue";
-import { useRouter } from "vue-router";
+import { onBeforeRouteLeave, useRouter } from "vue-router";
 import { Pencil, Plus, Trash2 } from "lucide-vue-next";
 import api from "@/shared/api/client.js";
 import Badge from "@/shared/components/ui/badge/Badge.vue";
@@ -113,6 +140,7 @@ import CardContent from "@/shared/components/ui/card/CardContent.vue";
 import Input from "@/shared/components/ui/input/Input.vue";
 import PageHeader from "@/shared/components/PageHeader.vue";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/components/ui/select";
+import Skeleton from "@/shared/components/ui/skeleton/Skeleton.vue";
 import Table from "@/shared/components/ui/table/Table.vue";
 import TableBody from "@/shared/components/ui/table/TableBody.vue";
 import TableCell from "@/shared/components/ui/table/TableCell.vue";
@@ -124,6 +152,7 @@ import { useNotifications } from "@/shared/composables/useNotifications.js";
 import { formatCurrency } from "@/shared/utils/format.js";
 const router = useRouter();
 const items = ref([]);
+const isLoading = ref(false);
 const { showErrorNotification } = useNotifications();
 const page = ref(1);
 const pageSize = ref(20);
@@ -188,6 +217,7 @@ const onPageSizeChange = (value) => {
 };
 
 const loadItems = async () => {
+  isLoading.value = true;
   try {
     const response = await api.get("/api/menu/admin/items");
     items.value = response.data.items || [];
@@ -195,6 +225,8 @@ const loadItems = async () => {
   } catch (error) {
     devError("Failed to load items:", error);
     showErrorNotification(`Ошибка при загрузке позиций: ${error.response?.data?.error || error.message}`);
+  } finally {
+    isLoading.value = false;
   }
 };
 const createItem = () => {
@@ -214,6 +246,9 @@ const deleteItem = async (item) => {
   }
 };
 onMounted(loadItems);
+onBeforeRouteLeave(() => {
+  resetFilters();
+});
 
 watch(
   () => [filters.search, filters.status, filters.categoryId],
