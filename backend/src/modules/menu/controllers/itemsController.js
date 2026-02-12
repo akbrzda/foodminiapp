@@ -213,54 +213,37 @@ export const getAdminItems = async (req, res, next) => {
       );
       item.categories = categories;
 
-      // Определение базовой цены товара
-      let basePrice = null;
+      // Показываем минимальную доступную цену позиции среди всех источников.
+      const [minPriceRows] = await db.query(
+        `SELECT MIN(src.price) AS min_price
+         FROM (
+           SELECT mvp.price
+           FROM item_variants iv
+           JOIN menu_variant_prices mvp ON mvp.variant_id = iv.id
+           WHERE iv.item_id = ?
 
-      const [variantPrice] = await db.query(
-        `SELECT mvp.price
-         FROM item_variants iv
-         LEFT JOIN menu_variant_prices mvp
-           ON mvp.variant_id = iv.id
-          AND mvp.city_id IS NULL
-          AND mvp.fulfillment_type = 'delivery'
-         WHERE iv.item_id = ?
-         ORDER BY iv.sort_order, iv.name
-         LIMIT 1`,
-        [item.id],
+           UNION ALL
+
+           SELECT iv.price
+           FROM item_variants iv
+           WHERE iv.item_id = ?
+
+           UNION ALL
+
+           SELECT mip.price
+           FROM menu_item_prices mip
+           WHERE mip.item_id = ?
+
+           UNION ALL
+
+           SELECT mi.price
+           FROM menu_items mi
+           WHERE mi.id = ?
+         ) src`,
+        [item.id, item.id, item.id, item.id],
       );
 
-      if (variantPrice.length > 0) {
-        basePrice = variantPrice[0].price;
-      }
-
-      if (basePrice === null || basePrice === undefined) {
-        const [variantFallback] = await db.query(
-          `SELECT price FROM item_variants
-           WHERE item_id = ?
-           ORDER BY sort_order, name
-           LIMIT 1`,
-          [item.id],
-        );
-        basePrice = variantFallback[0]?.price ?? null;
-      }
-
-      if (basePrice === null || basePrice === undefined) {
-        const [itemPrice] = await db.query(
-          `SELECT price FROM menu_item_prices
-           WHERE item_id = ?
-             AND city_id IS NULL
-             AND fulfillment_type = 'delivery'
-           LIMIT 1`,
-          [item.id],
-        );
-        basePrice = itemPrice[0]?.price ?? null;
-      }
-
-      if (basePrice === null || basePrice === undefined) {
-        basePrice = item.legacy_price ?? null;
-      }
-
-      item.base_price = basePrice;
+      item.base_price = minPriceRows[0]?.min_price ?? item.legacy_price ?? null;
       delete item.legacy_price;
     }
 

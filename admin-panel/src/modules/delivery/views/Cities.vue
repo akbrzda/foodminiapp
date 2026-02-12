@@ -27,7 +27,7 @@ import { devError } from "@/shared/utils/logger";
             </TableRow>
           </TableHeader>
           <TableBody>
-            <TableRow v-for="city in cities" :key="city.id">
+            <TableRow v-for="city in paginatedCities" :key="city.id">
               <TableCell>
                 <div class="font-medium text-foreground">{{ city.name }}</div>
                 <div class="text-xs text-muted-foreground">ID: {{ city.id }}</div>
@@ -66,10 +66,11 @@ import { devError } from "@/shared/utils/logger";
         </Table>
       </CardContent>
     </Card>
+    <TablePagination :total="cities.length" :page="page" :page-size="pageSize" @update:page="page = $event" @update:page-size="onPageSizeChange" />
   </div>
 </template>
 <script setup>
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { MapPin, Pencil, Plus, Trash2 } from "lucide-vue-next";
 import { useRouter } from "vue-router";
 import api from "@/shared/api/client.js";
@@ -84,20 +85,32 @@ import TableCell from "@/shared/components/ui/table/TableCell.vue";
 import TableHead from "@/shared/components/ui/table/TableHead.vue";
 import TableHeader from "@/shared/components/ui/table/TableHeader.vue";
 import TableRow from "@/shared/components/ui/table/TableRow.vue";
+import TablePagination from "@/shared/components/TablePagination.vue";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
 
 const router = useRouter();
 const { showErrorNotification, showSuccessNotification } = useNotifications();
 const cities = ref([]);
+const page = ref(1);
+const pageSize = ref(20);
+const paginatedCities = computed(() => {
+  const start = (page.value - 1) * pageSize.value;
+  return cities.value.slice(start, start + pageSize.value);
+});
 
 const loadCities = async () => {
   try {
     const response = await api.get("/api/cities/admin/all");
     cities.value = response.data.cities || [];
+    page.value = 1;
   } catch (error) {
     devError("Failed to load cities:", error);
     showErrorNotification("Ошибка при загрузке городов");
   }
+};
+const onPageSizeChange = (value) => {
+  pageSize.value = value;
+  page.value = 1;
 };
 
 const goToCreate = () => {

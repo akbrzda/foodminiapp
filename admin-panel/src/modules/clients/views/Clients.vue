@@ -3,37 +3,40 @@ import { devError } from "@/shared/utils/logger";
   <div class="space-y-6">
     <Card>
       <CardContent>
-        <PageHeader title="Клиенты" description="Поиск по клиентам и фильтр по городу">
-          <template #filters>
-            <div class="min-w-[220px] flex-1">
-              <Field>
-                <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Поиск</FieldLabel>
-                <FieldContent>
-                  <div class="relative">
-                    <Search class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" :size="16" />
-                    <Input v-model="filters.search" class="pl-9" placeholder="Имя или телефон" @keyup.enter="loadClients" />
-                  </div>
-                </FieldContent>
-              </Field>
-            </div>
-            <div class="min-w-[180px]">
-              <Field>
-                <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Город</FieldLabel>
-                <FieldContent>
-                  <Select v-model="filters.city_id">
-                    <SelectTrigger class="w-full">
-                      <SelectValue placeholder="Все города" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">Все</SelectItem>
-                      <SelectItem v-for="city in referenceStore.cities" :key="city.id" :value="city.id">{{ city.name }}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </FieldContent>
-              </Field>
-            </div>
-          </template>
-        </PageHeader>
+        <PageHeader title="Клиенты" description="Поиск по клиентам и фильтр по городу" />
+      </CardContent>
+    </Card>
+    <Card>
+      <CardContent>
+        <div class="flex flex-wrap items-end gap-3">
+          <div class="min-w-[220px] flex-1">
+            <Field>
+              <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Поиск</FieldLabel>
+              <FieldContent>
+                <div class="relative">
+                  <Search class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" :size="16" />
+                  <Input v-model="filters.search" class="pl-9" placeholder="Имя или телефон" @keyup.enter="loadClients" />
+                </div>
+              </FieldContent>
+            </Field>
+          </div>
+          <div class="min-w-[180px]">
+            <Field>
+              <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Город</FieldLabel>
+              <FieldContent>
+                <Select v-model="filters.city_id">
+                  <SelectTrigger class="w-full">
+                    <SelectValue placeholder="Все города" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Все</SelectItem>
+                    <SelectItem v-for="city in referenceStore.cities" :key="city.id" :value="city.id">{{ city.name }}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </FieldContent>
+            </Field>
+          </div>
+        </div>
       </CardContent>
     </Card>
     <Card>
@@ -50,7 +53,7 @@ import { devError } from "@/shared/utils/logger";
             </TableRow>
           </TableHeader>
           <TableBody>
-            <TableRow v-for="client in clients" :key="client.id" class="cursor-pointer" @click="openClient(client.id)">
+            <TableRow v-for="client in paginatedClients" :key="client.id" class="cursor-pointer" @click="openClient(client.id)">
               <TableCell>
                 <div class="font-medium text-foreground">{{ client.first_name }} {{ client.last_name }}</div>
                 <div class="text-xs text-muted-foreground">ID: {{ client.id }}</div>
@@ -81,10 +84,11 @@ import { devError } from "@/shared/utils/logger";
         </Table>
       </CardContent>
     </Card>
+    <TablePagination :total="clients.length" :page="page" :page-size="pageSize" @update:page="page = $event" @update:page-size="onPageSizeChange" />
   </div>
 </template>
 <script setup>
-import { onMounted, reactive, ref, watch } from "vue";
+import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { ChevronRight, Search } from "lucide-vue-next";
 import api from "@/shared/api/client.js";
@@ -105,19 +109,27 @@ import TableCell from "@/shared/components/ui/table/TableCell.vue";
 import TableHead from "@/shared/components/ui/table/TableHead.vue";
 import TableHeader from "@/shared/components/ui/table/TableHeader.vue";
 import TableRow from "@/shared/components/ui/table/TableRow.vue";
+import TablePagination from "@/shared/components/TablePagination.vue";
 const referenceStore = useReferenceStore();
 const { showErrorNotification } = useNotifications();
 const router = useRouter();
 const clients = ref([]);
+const page = ref(1);
+const pageSize = ref(20);
 const loadTimer = ref(null);
 const filters = reactive({
   search: "",
   city_id: "",
 });
+const paginatedClients = computed(() => {
+  const start = (page.value - 1) * pageSize.value;
+  return clients.value.slice(start, start + pageSize.value);
+});
 const loadClients = async () => {
   const params = Object.fromEntries(Object.entries(filters).filter(([, value]) => value));
   const response = await api.get("/api/admin/clients", { params });
   clients.value = response.data.clients || [];
+  page.value = 1;
 };
 const scheduleLoad = () => {
   if (loadTimer.value) {
@@ -127,6 +139,10 @@ const scheduleLoad = () => {
 };
 const openClient = (clientId) => {
   router.push(`/clients/${clientId}`);
+};
+const onPageSizeChange = (value) => {
+  pageSize.value = value;
+  page.value = 1;
 };
 onMounted(async () => {
   try {
@@ -140,6 +156,7 @@ onMounted(async () => {
 watch(
   filters,
   () => {
+    page.value = 1;
     scheduleLoad();
   },
   { deep: true },

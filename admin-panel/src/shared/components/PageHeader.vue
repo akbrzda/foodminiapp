@@ -9,7 +9,7 @@
         <slot name="actions" />
       </div>
     </div>
-    <div v-if="$slots.filters" class="rounded-xl border border-border/60 bg-muted/30 p-3">
+    <div v-if="$slots.filters" class="rounded-xl border border-border bg-background p-4">
       <div class="flex flex-wrap items-end gap-3">
         <slot name="filters" />
       </div>

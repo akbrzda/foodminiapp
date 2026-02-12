@@ -25,7 +25,7 @@ import { devError } from "@/shared/utils/logger";
             </TableRow>
           </TableHeader>
           <TableBody>
-            <TableRow v-for="tag in tags" :key="tag.id">
+            <TableRow v-for="tag in paginatedTags" :key="tag.id">
               <TableCell>
                 <div class="font-medium text-foreground">{{ tag.name }}</div>
               </TableCell>
@@ -57,6 +57,7 @@ import { devError } from "@/shared/utils/logger";
         </div>
       </CardContent>
     </Card>
+    <TablePagination :total="tags.length" :page="page" :page-size="pageSize" @update:page="page = $event" @update:page-size="onPageSizeChange" />
     <Dialog v-if="showModal" :open="showModal" @update:open="(value) => (value ? null : closeModal())">
       <DialogContent class="w-full max-w-2xl">
         <DialogHeader>
@@ -113,6 +114,7 @@ import TableCell from "@/shared/components/ui/table/TableCell.vue";
 import TableHead from "@/shared/components/ui/table/TableHead.vue";
 import TableHeader from "@/shared/components/ui/table/TableHeader.vue";
 import TableRow from "@/shared/components/ui/table/TableRow.vue";
+import TablePagination from "@/shared/components/TablePagination.vue";
 import { Field, FieldContent, FieldGroup, FieldLabel } from "@/shared/components/ui/field";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
 import { useOrdersStore } from "@/modules/orders/stores/orders.js";
@@ -120,6 +122,8 @@ import api from "@/shared/api/client.js";
 const { showErrorNotification, showSuccessNotification } = useNotifications();
 const ordersStore = useOrdersStore();
 const tags = ref([]);
+const page = ref(1);
+const pageSize = ref(20);
 const showModal = ref(false);
 const editingTag = ref(null);
 const form = ref({
@@ -129,6 +133,10 @@ const form = ref({
 });
 const modalTitle = computed(() => (editingTag.value ? "Редактировать тег" : "Новый тег"));
 const modalSubtitle = computed(() => (editingTag.value ? "Изменение тега" : "Создание нового тега"));
+const paginatedTags = computed(() => {
+  const start = (page.value - 1) * pageSize.value;
+  return tags.value.slice(start, start + pageSize.value);
+});
 const modalNameTitle = computed(() => {
   if (!showModal.value) return null;
   const name = String(form.value.name || "").trim();
@@ -154,11 +162,16 @@ async function loadTags() {
   try {
     const response = await api.get("/api/menu/admin/tags");
     tags.value = response.data.tags || [];
+    page.value = 1;
   } catch (error) {
     showErrorNotification("Ошибка загрузки тегов");
     devError("Failed to load tags:", error);
   }
 }
+const onPageSizeChange = (value) => {
+  pageSize.value = value;
+  page.value = 1;
+};
 function openModal(tag = null) {
   editingTag.value = tag;
   if (tag) {

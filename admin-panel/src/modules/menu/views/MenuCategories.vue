@@ -26,7 +26,7 @@ import { devError } from "@/shared/utils/logger";
             </TableRow>
           </TableHeader>
           <TableBody>
-            <TableRow v-for="category in categories" :key="category.id">
+            <TableRow v-for="category in paginatedCategories" :key="category.id">
               <TableCell>
                 <div class="font-medium text-foreground">{{ category.name }}</div>
                 <div class="text-xs text-muted-foreground">{{ category.description || "—" }}</div>
@@ -57,6 +57,7 @@ import { devError } from "@/shared/utils/logger";
         </Table>
       </CardContent>
     </Card>
+    <TablePagination :total="categories.length" :page="page" :page-size="pageSize" @update:page="page = $event" @update:page-size="onPageSizeChange" />
     <Dialog v-if="showModal" :open="showModal" @update:open="(value) => (value ? null : closeModal())">
       <DialogContent class="w-full max-w-3xl">
         <DialogHeader>
@@ -165,6 +166,7 @@ import TableCell from "@/shared/components/ui/table/TableCell.vue";
 import TableHead from "@/shared/components/ui/table/TableHead.vue";
 import TableHeader from "@/shared/components/ui/table/TableHeader.vue";
 import TableRow from "@/shared/components/ui/table/TableRow.vue";
+import TablePagination from "@/shared/components/TablePagination.vue";
 import Textarea from "@/shared/components/ui/textarea/Textarea.vue";
 import { Field, FieldContent, FieldGroup, FieldLabel } from "@/shared/components/ui/field";
 import { Label } from "@/shared/components/ui/label";
@@ -176,6 +178,8 @@ const referenceStore = useReferenceStore();
 const ordersStore = useOrdersStore();
 const { showErrorNotification, showSuccessNotification } = useNotifications();
 const categories = ref([]);
+const page = ref(1);
+const pageSize = ref(20);
 const showModal = ref(false);
 const editing = ref(null);
 const saving = ref(false);
@@ -191,6 +195,10 @@ const form = ref({
 });
 const modalTitle = computed(() => (editing.value ? "Редактировать категорию" : "Новая категория"));
 const modalSubtitle = computed(() => (editing.value ? "Измените параметры категории" : "Создайте категорию меню"));
+const paginatedCategories = computed(() => {
+  const start = (page.value - 1) * pageSize.value;
+  return categories.value.slice(start, start + pageSize.value);
+});
 const modalNameTitle = computed(() => {
   if (!showModal.value) return null;
   const name = String(form.value.name || "").trim();
@@ -206,10 +214,15 @@ const loadCategories = async () => {
   try {
     const response = await api.get("/api/menu/admin/all-categories");
     categories.value = response.data.categories || [];
+    page.value = 1;
   } catch (error) {
     devError("Failed to load categories:", error);
     showErrorNotification("Ошибка при загрузке категорий");
   }
+};
+const onPageSizeChange = (value) => {
+  pageSize.value = value;
+  page.value = 1;
 };
 const openModal = async (category = null) => {
   editing.value = category;

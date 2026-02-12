@@ -2,118 +2,121 @@ import { devError } from "@/shared/utils/logger";
 <template>
   <div class="space-y-6">
     <Card>
-      <CardContent class="space-y-4">
-        <PageHeader title="Заказы" description="Фильтры и список заказов">
-          <template #filters>
-            <div class="min-w-[220px] flex-1">
-              <Field>
-                <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Поиск</FieldLabel>
-                <FieldContent>
-                  <div class="relative">
-                    <Search class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" :size="16" />
-                    <Input v-model="filters.search" class="pl-9" placeholder="Номер заказа или телефон" @keyup.enter="loadOrders" />
-                  </div>
-                </FieldContent>
-              </Field>
-            </div>
-            <div class="min-w-[160px]">
-              <Field>
-                <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Город</FieldLabel>
-                <FieldContent>
-                  <Select v-model="filters.city_id">
-                    <SelectTrigger class="w-full">
-                      <SelectValue placeholder="Все города" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">Все</SelectItem>
-                      <SelectItem v-for="city in referenceStore.cities" :key="city.id" :value="city.id">{{ city.name }}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </FieldContent>
-              </Field>
-            </div>
-            <div class="min-w-[160px]">
-              <Field>
-                <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Статус</FieldLabel>
-                <FieldContent>
-                  <Select v-model="filters.status">
-                    <SelectTrigger class="w-full">
-                      <SelectValue placeholder="Все статусы" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">Все</SelectItem>
-                      <SelectItem value="pending">Новый</SelectItem>
-                      <SelectItem value="confirmed">Принят</SelectItem>
-                      <SelectItem value="preparing">Готовится</SelectItem>
-                      <SelectItem value="ready">Готов</SelectItem>
-                      <SelectItem value="delivering">В пути</SelectItem>
-                      <SelectItem value="completed">Завершен</SelectItem>
-                      <SelectItem value="cancelled">Отменен</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </FieldContent>
-              </Field>
-            </div>
-            <div class="min-w-[160px]">
-              <Field>
-                <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Тип</FieldLabel>
-                <FieldContent>
-                  <Select v-model="filters.order_type">
-                    <SelectTrigger class="w-full">
-                      <SelectValue placeholder="Все типы" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">Все</SelectItem>
-                      <SelectItem value="delivery">Доставка</SelectItem>
-                      <SelectItem value="pickup">Самовывоз</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </FieldContent>
-              </Field>
-            </div>
-            <div class="min-w-[220px]">
-              <Field>
-                <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Период</FieldLabel>
-                <FieldContent>
-                  <Popover v-model:open="isRangeOpen">
-                    <PopoverTrigger asChild>
-                      <button
-                        type="button"
-                        class="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-background"
-                      >
-                        <span :class="rangeLabelClass">{{ rangeLabel }}</span>
-                        <CalendarIcon class="text-muted-foreground" :size="16" />
-                      </button>
-                    </PopoverTrigger>
-                    <PopoverContent class="w-auto p-0" align="start">
-                      <div class="space-y-3 p-3">
-                        <Calendar
-                          :model-value="calendarRange"
-                          :number-of-months="2"
-                          :is-date-disabled="isFutureDateDisabled"
-                          locale="ru-RU"
-                          multiple
-                          @update:modelValue="handleRangeUpdate"
-                        />
-                        <div class="flex items-center justify-between text-xs text-muted-foreground">
-                          <span>{{ rangeHelperLabel }}</span>
-                          <button type="button" class="text-primary hover:underline" @click="clearDateRange">Очистить</button>
-                        </div>
+      <CardContent>
+        <PageHeader title="Заказы" description="Фильтры и список заказов" />
+      </CardContent>
+    </Card>
+    <Card>
+      <CardContent>
+        <div class="flex flex-wrap items-end gap-3">
+          <div class="min-w-[220px] flex-1">
+            <Field>
+              <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Поиск</FieldLabel>
+              <FieldContent>
+                <div class="relative">
+                  <Search class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" :size="16" />
+                  <Input v-model="filters.search" class="pl-9" placeholder="Номер заказа или телефон" @keyup.enter="loadOrders" />
+                </div>
+              </FieldContent>
+            </Field>
+          </div>
+          <div class="min-w-[160px]">
+            <Field>
+              <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Город</FieldLabel>
+              <FieldContent>
+                <Select v-model="filters.city_id">
+                  <SelectTrigger class="w-full">
+                    <SelectValue placeholder="Все города" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Все</SelectItem>
+                    <SelectItem v-for="city in referenceStore.cities" :key="city.id" :value="city.id">{{ city.name }}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </FieldContent>
+            </Field>
+          </div>
+          <div class="min-w-[160px]">
+            <Field>
+              <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Статус</FieldLabel>
+              <FieldContent>
+                <Select v-model="filters.status">
+                  <SelectTrigger class="w-full">
+                    <SelectValue placeholder="Все статусы" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Все</SelectItem>
+                    <SelectItem value="pending">Новый</SelectItem>
+                    <SelectItem value="confirmed">Принят</SelectItem>
+                    <SelectItem value="preparing">Готовится</SelectItem>
+                    <SelectItem value="ready">Готов</SelectItem>
+                    <SelectItem value="delivering">В пути</SelectItem>
+                    <SelectItem value="completed">Завершен</SelectItem>
+                    <SelectItem value="cancelled">Отменен</SelectItem>
+                  </SelectContent>
+                </Select>
+              </FieldContent>
+            </Field>
+          </div>
+          <div class="min-w-[160px]">
+            <Field>
+              <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Тип</FieldLabel>
+              <FieldContent>
+                <Select v-model="filters.order_type">
+                  <SelectTrigger class="w-full">
+                    <SelectValue placeholder="Все типы" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Все</SelectItem>
+                    <SelectItem value="delivery">Доставка</SelectItem>
+                    <SelectItem value="pickup">Самовывоз</SelectItem>
+                  </SelectContent>
+                </Select>
+              </FieldContent>
+            </Field>
+          </div>
+          <div class="min-w-[220px]">
+            <Field>
+              <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Период</FieldLabel>
+              <FieldContent>
+                <Popover v-model:open="isRangeOpen">
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      class="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-background"
+                    >
+                      <span :class="rangeLabelClass">{{ rangeLabel }}</span>
+                      <CalendarIcon class="text-muted-foreground" :size="16" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent class="w-auto p-0" align="start">
+                    <div class="space-y-3 p-3">
+                      <Calendar
+                        :model-value="calendarRange"
+                        :number-of-months="2"
+                        :is-date-disabled="isFutureDateDisabled"
+                        locale="ru-RU"
+                        multiple
+                        @update:modelValue="handleRangeUpdate"
+                      />
+                      <div class="flex items-center justify-between text-xs text-muted-foreground">
+                        <span>{{ rangeHelperLabel }}</span>
+                        <button type="button" class="text-primary hover:underline" @click="clearDateRange">Очистить</button>
                       </div>
-                    </PopoverContent>
-                  </Popover>
-                </FieldContent>
-              </Field>
-            </div>
-            <div class="ml-auto flex flex-wrap items-center gap-2">
-              <Button variant="outline" @click="resetFilters">
-                <RotateCcw :size="16" />
-                Сбросить
-              </Button>
-              <Badge variant="secondary">Всего: {{ formatNumber(orders.length) }}</Badge>
-            </div>
-          </template>
-        </PageHeader>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </FieldContent>
+            </Field>
+          </div>
+          <div class="ml-auto flex flex-wrap items-center gap-2">
+            <Button variant="outline" @click="resetFilters">
+              <RotateCcw :size="16" />
+              Сбросить
+            </Button>
+            <Badge variant="secondary">Всего: {{ formatNumber(orders.length) }}</Badge>
+          </div>
+        </div>
       </CardContent>
     </Card>
     <Card>
@@ -130,7 +133,7 @@ import { devError } from "@/shared/utils/logger";
             </TableRow>
           </TableHeader>
           <TableBody>
-            <TableRow v-for="order in orders" :key="order.id" class="cursor-pointer" :class="orderRowClass(order)" @click="selectOrder(order)">
+            <TableRow v-for="order in paginatedOrders" :key="order.id" class="cursor-pointer" :class="orderRowClass(order)" @click="selectOrder(order)">
               <TableCell>
                 <div class="font-medium text-foreground">#{{ order.order_number }}</div>
                 <div class="text-xs text-muted-foreground">{{ formatDateTime(order.created_at) }}</div>
@@ -165,6 +168,7 @@ import { devError } from "@/shared/utils/logger";
         </Table>
       </CardContent>
     </Card>
+    <TablePagination :total="orders.length" :page="page" :page-size="pageSize" @update:page="page = $event" @update:page-size="onPageSizeChange" />
   </div>
 </template>
 <script setup>
@@ -192,12 +196,15 @@ import TableCell from "@/shared/components/ui/table/TableCell.vue";
 import TableHead from "@/shared/components/ui/table/TableHead.vue";
 import TableHeader from "@/shared/components/ui/table/TableHeader.vue";
 import TableRow from "@/shared/components/ui/table/TableRow.vue";
+import TablePagination from "@/shared/components/TablePagination.vue";
 import { Field, FieldContent, FieldLabel } from "@/shared/components/ui/field";
 const router = useRouter();
 const referenceStore = useReferenceStore();
 const ordersStore = useOrdersStore();
 const { showNewOrderNotification, showErrorNotification } = useNotifications();
 const orders = ref([]);
+const page = ref(1);
+const pageSize = ref(20);
 const recentOrderIds = ref(new Set());
 const loadTimer = ref(null);
 const isRangeOpen = ref(false);
@@ -259,10 +266,15 @@ const clearDateRange = () => {
   filters.date_from = "";
   filters.date_to = "";
 };
+const paginatedOrders = computed(() => {
+  const start = (page.value - 1) * pageSize.value;
+  return orders.value.slice(start, start + pageSize.value);
+});
 const loadOrders = async () => {
   const params = Object.fromEntries(Object.entries(filters).filter(([, value]) => value));
   const response = await api.get("/api/orders/admin/all", { params });
   orders.value = response.data.orders || [];
+  page.value = 1;
   ordersStore.trackOrders(orders.value);
 };
 const scheduleLoad = () => {
@@ -281,6 +293,10 @@ const resetFilters = () => {
     search: "",
   });
   scheduleLoad();
+};
+const onPageSizeChange = (value) => {
+  pageSize.value = value;
+  page.value = 1;
 };
 const selectOrder = (order) => {
   router.push(`/orders/${order.id}`);

@@ -11,44 +11,48 @@ import { devError } from "@/shared/utils/logger";
               Добавить пользователя
             </Button>
           </template>
-          <template #filters>
-            <div class="min-w-[180px]">
-              <Field>
-                <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Роль</FieldLabel>
-                <FieldContent>
-                  <Select v-model="filters.role" @update:modelValue="loadUsers">
-                    <SelectTrigger class="w-full">
-                      <SelectValue placeholder="Все роли" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">Все роли</SelectItem>
-                      <SelectItem value="admin">Администратор</SelectItem>
-                      <SelectItem value="manager">Менеджер</SelectItem>
-                      <SelectItem value="ceo">CEO</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </FieldContent>
-              </Field>
-            </div>
-            <div class="min-w-[180px]">
-              <Field>
-                <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Статус</FieldLabel>
-                <FieldContent>
-                  <Select v-model="filters.is_active" @update:modelValue="loadUsers">
-                    <SelectTrigger class="w-full">
-                      <SelectValue placeholder="Все статусы" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">Все статусы</SelectItem>
-                      <SelectItem value="true">Активные</SelectItem>
-                      <SelectItem value="false">Неактивные</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </FieldContent>
-              </Field>
-            </div>
-          </template>
         </PageHeader>
+      </CardContent>
+    </Card>
+    <Card>
+      <CardContent>
+        <div class="flex flex-wrap items-end gap-3">
+          <div class="min-w-[180px]">
+            <Field>
+              <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Роль</FieldLabel>
+              <FieldContent>
+                <Select v-model="filters.role" @update:modelValue="loadUsers">
+                  <SelectTrigger class="w-full">
+                    <SelectValue placeholder="Все роли" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Все роли</SelectItem>
+                    <SelectItem value="admin">Администратор</SelectItem>
+                    <SelectItem value="manager">Менеджер</SelectItem>
+                    <SelectItem value="ceo">CEO</SelectItem>
+                  </SelectContent>
+                </Select>
+              </FieldContent>
+            </Field>
+          </div>
+          <div class="min-w-[180px]">
+            <Field>
+              <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Статус</FieldLabel>
+              <FieldContent>
+                <Select v-model="filters.is_active" @update:modelValue="loadUsers">
+                  <SelectTrigger class="w-full">
+                    <SelectValue placeholder="Все статусы" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Все статусы</SelectItem>
+                    <SelectItem value="true">Активные</SelectItem>
+                    <SelectItem value="false">Неактивные</SelectItem>
+                  </SelectContent>
+                </Select>
+              </FieldContent>
+            </Field>
+          </div>
+        </div>
       </CardContent>
     </Card>
     <Card>
@@ -65,7 +69,7 @@ import { devError } from "@/shared/utils/logger";
             </TableRow>
           </TableHeader>
           <TableBody>
-            <TableRow v-for="user in users" :key="user.id">
+            <TableRow v-for="user in paginatedUsers" :key="user.id">
               <TableCell>
                 <div class="font-medium text-foreground">{{ user.first_name }} {{ user.last_name }}</div>
                 <div class="text-xs text-muted-foreground">{{ user.email }}</div>
@@ -127,6 +131,7 @@ import { devError } from "@/shared/utils/logger";
         </Table>
       </CardContent>
     </Card>
+    <TablePagination :total="users.length" :page="page" :page-size="pageSize" @update:page="page = $event" @update:page-size="onPageSizeChange" />
     <Dialog v-if="showModal" :open="showModal" @update:open="(value) => (value ? null : closeModal())">
       <DialogContent class="w-full max-w-2xl">
         <DialogHeader>
@@ -269,6 +274,7 @@ import TableCell from "@/shared/components/ui/table/TableCell.vue";
 import TableHead from "@/shared/components/ui/table/TableHead.vue";
 import TableHeader from "@/shared/components/ui/table/TableHeader.vue";
 import TableRow from "@/shared/components/ui/table/TableRow.vue";
+import TablePagination from "@/shared/components/TablePagination.vue";
 import { Field, FieldContent, FieldGroup, FieldLabel } from "@/shared/components/ui/field";
 import { Label } from "@/shared/components/ui/label";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
@@ -277,6 +283,8 @@ const referenceStore = useReferenceStore();
 const authStore = useAuthStore();
 const { showErrorNotification } = useNotifications();
 const users = ref([]);
+const page = ref(1);
+const pageSize = ref(20);
 const showModal = ref(false);
 const editing = ref(null);
 const filters = ref({
@@ -297,6 +305,10 @@ const form = ref({
 });
 const modalTitle = computed(() => (editing.value ? "Редактировать пользователя" : "Новый пользователь"));
 const modalSubtitle = computed(() => (editing.value ? "Измените данные пользователя" : "Добавьте нового администратора или менеджера"));
+const paginatedUsers = computed(() => {
+  const start = (page.value - 1) * pageSize.value;
+  return users.value.slice(start, start + pageSize.value);
+});
 const availableBranches = computed(() => {
   const cityIds = form.value.city_ids || [];
   if (cityIds.length === 0) return [];
@@ -332,9 +344,14 @@ const loadUsers = async () => {
     if (filters.value.is_active) params.is_active = filters.value.is_active;
     const response = await api.get("/api/admin/users", { params });
     users.value = response.data.users || [];
+    page.value = 1;
   } catch (error) {
     devError("Ошибка загрузки пользователей:", error);
   }
+};
+const onPageSizeChange = (value) => {
+  pageSize.value = value;
+  page.value = 1;
 };
 const openModal = (user = null) => {
   if (authStore.role === "ceo" && user?.role === "admin") {

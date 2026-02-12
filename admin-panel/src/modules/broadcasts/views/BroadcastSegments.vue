@@ -28,7 +28,7 @@ import { devError } from "@/shared/utils/logger";
             </TableRow>
           </TableHeader>
           <TableBody>
-            <TableRow v-for="segment in segments" :key="segment.id">
+            <TableRow v-for="segment in paginatedSegments" :key="segment.id">
               <TableCell>
                 <div class="font-medium text-foreground">{{ segment.name }}</div>
                 <div class="text-xs text-muted-foreground">ID: {{ segment.id }}</div>
@@ -51,6 +51,7 @@ import { devError } from "@/shared/utils/logger";
         </Table>
       </CardContent>
     </Card>
+    <TablePagination :total="segments.length" :page="page" :page-size="pageSize" @update:page="page = $event" @update:page-size="onPageSizeChange" />
 
     <Dialog v-model:open="showModal">
       <DialogContent class="max-w-4xl">
@@ -103,6 +104,7 @@ import TableCell from "@/shared/components/ui/table/TableCell.vue";
 import TableHead from "@/shared/components/ui/table/TableHead.vue";
 import TableHeader from "@/shared/components/ui/table/TableHeader.vue";
 import TableRow from "@/shared/components/ui/table/TableRow.vue";
+import TablePagination from "@/shared/components/TablePagination.vue";
 import SegmentBuilder from "../components/SegmentBuilder.vue";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/shared/components/ui/dialog/index.js";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
@@ -110,6 +112,8 @@ import { formatDateTime, formatNumber } from "@/shared/utils/format.js";
 
 const { showErrorNotification, showSuccessNotification, showWarningNotification } = useNotifications();
 const segments = ref([]);
+const page = ref(1);
+const pageSize = ref(20);
 const showModal = ref(false);
 const editing = ref(null);
 const estimatedSize = ref(null);
@@ -121,15 +125,24 @@ const form = ref({
 
 const modalTitle = computed(() => (editing.value ? "Редактировать сегмент" : "Новый сегмент"));
 const modalSubtitle = computed(() => (editing.value ? "Обновите параметры сегмента" : "Создайте сегмент аудитории"));
+const paginatedSegments = computed(() => {
+  const start = (page.value - 1) * pageSize.value;
+  return segments.value.slice(start, start + pageSize.value);
+});
 
 const loadSegments = async () => {
   try {
     const response = await api.get("/api/broadcasts/segments");
     segments.value = response.data?.data?.items || [];
+    page.value = 1;
   } catch (error) {
     devError("Ошибка загрузки сегментов:", error);
     showErrorNotification("Не удалось загрузить сегменты");
   }
+};
+const onPageSizeChange = (value) => {
+  pageSize.value = value;
+  page.value = 1;
 };
 
 const openModal = (segment = null) => {

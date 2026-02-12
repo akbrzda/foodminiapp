@@ -5,7 +5,7 @@ import { devError } from "@/shared/utils/logger";
       <CardContent>
         <PageHeader title="Рассылки" description="Управление маркетинговыми рассылками">
           <template #actions>
-            <Badge variant="secondary">Всего: {{ filteredCampaigns.length }}</Badge>
+            <Badge variant="secondary">Показано: {{ paginatedCampaigns.length }} / {{ filteredCampaigns.length }}</Badge>
             <Button @click="createCampaign">
               <Plus :size="16" />
               Создать рассылку
@@ -19,43 +19,47 @@ import { devError } from "@/shared/utils/logger";
               Сегменты
             </Button>
           </template>
-          <template #filters>
-            <div class="min-w-[180px] space-y-1">
-              <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Тип</label>
-              <Select v-model="filters.type">
-                <SelectTrigger class="w-full">
-                  <SelectValue placeholder="Все типы" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">Все</SelectItem>
-                  <SelectItem value="manual">Ручные</SelectItem>
-                  <SelectItem value="trigger">Триггерные</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div class="min-w-[180px] space-y-1">
-              <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Статус</label>
-              <Select v-model="filters.status">
-                <SelectTrigger class="w-full">
-                  <SelectValue placeholder="Все статусы" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">Все</SelectItem>
-                  <SelectItem value="draft">Черновик</SelectItem>
-                  <SelectItem value="scheduled">Запланирована</SelectItem>
-                  <SelectItem value="sending">Отправляется</SelectItem>
-                  <SelectItem value="completed">Завершена</SelectItem>
-                  <SelectItem value="cancelled">Отменена</SelectItem>
-                  <SelectItem value="failed">С ошибкой</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div class="min-w-[220px] space-y-1">
-              <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Поиск</label>
-              <Input v-model="filters.search" placeholder="Название или описание" />
-            </div>
-          </template>
         </PageHeader>
+      </CardContent>
+    </Card>
+    <Card>
+      <CardContent>
+        <div class="flex flex-wrap items-end gap-3">
+          <div class="min-w-[180px] space-y-1">
+            <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Тип</label>
+            <Select v-model="filters.type">
+              <SelectTrigger class="w-full">
+                <SelectValue placeholder="Все типы" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">Все</SelectItem>
+                <SelectItem value="manual">Ручные</SelectItem>
+                <SelectItem value="trigger">Триггерные</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div class="min-w-[180px] space-y-1">
+            <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Статус</label>
+            <Select v-model="filters.status">
+              <SelectTrigger class="w-full">
+                <SelectValue placeholder="Все статусы" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">Все</SelectItem>
+                <SelectItem value="draft">Черновик</SelectItem>
+                <SelectItem value="scheduled">Запланирована</SelectItem>
+                <SelectItem value="sending">Отправляется</SelectItem>
+                <SelectItem value="completed">Завершена</SelectItem>
+                <SelectItem value="cancelled">Отменена</SelectItem>
+                <SelectItem value="failed">С ошибкой</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div class="min-w-[220px] space-y-1">
+            <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Поиск</label>
+            <Input v-model="filters.search" placeholder="Название или описание" />
+          </div>
+        </div>
       </CardContent>
     </Card>
 
@@ -76,7 +80,7 @@ import { devError } from "@/shared/utils/logger";
             </TableRow>
           </TableHeader>
           <TableBody>
-            <TableRow v-for="campaign in filteredCampaigns" :key="campaign.id">
+            <TableRow v-for="campaign in paginatedCampaigns" :key="campaign.id">
               <TableCell>
                 <div class="font-medium text-foreground">{{ campaign.name }}</div>
                 <div class="text-xs text-muted-foreground">{{ campaign.description || "—" }}</div>
@@ -107,6 +111,13 @@ import { devError } from "@/shared/utils/logger";
         </Table>
       </CardContent>
     </Card>
+    <TablePagination
+      :total="filteredCampaigns.length"
+      :page="page"
+      :page-size="pageSize"
+      @update:page="page = $event"
+      @update:page-size="onPageSizeChange"
+    />
   </div>
 </template>
 <script setup>
@@ -129,6 +140,7 @@ import TableCell from "@/shared/components/ui/table/TableCell.vue";
 import TableHead from "@/shared/components/ui/table/TableHead.vue";
 import TableHeader from "@/shared/components/ui/table/TableHeader.vue";
 import TableRow from "@/shared/components/ui/table/TableRow.vue";
+import TablePagination from "@/shared/components/TablePagination.vue";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
 import { useOrdersStore } from "@/modules/orders/stores/orders.js";
 import { formatDateTime, formatNumber } from "@/shared/utils/format.js";
@@ -137,6 +149,8 @@ const router = useRouter();
 const { showErrorNotification } = useNotifications();
 const ordersStore = useOrdersStore();
 const campaigns = ref([]);
+const page = ref(1);
+const pageSize = ref(20);
 const filters = ref({
   type: "",
   status: "",
@@ -147,10 +161,15 @@ const loadCampaigns = async () => {
   try {
     const response = await api.get("/api/broadcasts");
     campaigns.value = response.data?.data?.items || [];
+    page.value = 1;
   } catch (error) {
     devError("Ошибка загрузки рассылок:", error);
     showErrorNotification("Не удалось загрузить рассылки");
   }
+};
+const onPageSizeChange = (value) => {
+  pageSize.value = value;
+  page.value = 1;
 };
 
 const filteredCampaigns = computed(() => {
@@ -168,6 +187,10 @@ const filteredCampaigns = computed(() => {
       : true;
     return matchType && matchStatus && matchSearch;
   });
+});
+const paginatedCampaigns = computed(() => {
+  const start = (page.value - 1) * pageSize.value;
+  return filteredCampaigns.value.slice(start, start + pageSize.value);
 });
 
 const statusLabel = (status) => {
@@ -213,6 +236,12 @@ watch(
   (event) => {
     if (!event) return;
     loadCampaigns();
+  },
+);
+watch(
+  () => [filters.value.type, filters.value.status, filters.value.search],
+  () => {
+    page.value = 1;
   },
 );
 </script>

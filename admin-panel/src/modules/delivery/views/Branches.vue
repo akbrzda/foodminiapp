@@ -11,26 +11,30 @@ import { devError } from "@/shared/utils/logger";
               Добавить филиал
             </Button>
           </template>
-          <template #filters>
-            <div class="min-w-[220px]">
-              <Field>
-                <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Город</FieldLabel>
-                <FieldContent>
-                  <Select v-model="cityId" @update:modelValue="loadBranches">
-                    <SelectTrigger class="w-full">
-                      <SelectValue placeholder="Выберите город" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem v-for="city in referenceStore.cities" :key="city.id" :value="city.id">
-                        {{ city.name }}
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </FieldContent>
-              </Field>
-            </div>
-          </template>
         </PageHeader>
+      </CardContent>
+    </Card>
+    <Card>
+      <CardContent>
+        <div class="flex flex-wrap items-end gap-3">
+          <div class="min-w-[220px]">
+            <Field>
+              <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Город</FieldLabel>
+              <FieldContent>
+                <Select v-model="cityId" @update:modelValue="loadBranches">
+                  <SelectTrigger class="w-full">
+                    <SelectValue placeholder="Выберите город" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem v-for="city in referenceStore.cities" :key="city.id" :value="city.id">
+                      {{ city.name }}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </FieldContent>
+            </Field>
+          </div>
+        </div>
       </CardContent>
     </Card>
     <Card v-if="cityId">
@@ -46,7 +50,7 @@ import { devError } from "@/shared/utils/logger";
             </TableRow>
           </TableHeader>
           <TableBody>
-            <TableRow v-for="branch in branches" :key="branch.id">
+            <TableRow v-for="branch in paginatedBranches" :key="branch.id">
               <TableCell>
                 <div class="font-medium text-foreground">{{ branch.name }}</div>
                 <div class="text-xs text-muted-foreground">{{ branch.address || "—" }}</div>
@@ -98,6 +102,14 @@ import { devError } from "@/shared/utils/logger";
         </Table>
       </CardContent>
     </Card>
+    <TablePagination
+      v-if="cityId"
+      :total="branches.length"
+      :page="page"
+      :page-size="pageSize"
+      @update:page="page = $event"
+      @update:page-size="onPageSizeChange"
+    />
   </div>
 </template>
 <script setup>
@@ -118,6 +130,7 @@ import TableCell from "@/shared/components/ui/table/TableCell.vue";
 import TableHead from "@/shared/components/ui/table/TableHead.vue";
 import TableHeader from "@/shared/components/ui/table/TableHeader.vue";
 import TableRow from "@/shared/components/ui/table/TableRow.vue";
+import TablePagination from "@/shared/components/TablePagination.vue";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
 import { useReferenceStore } from "@/shared/stores/reference.js";
 import { useAuthStore } from "@/shared/stores/auth.js";
@@ -130,7 +143,13 @@ const { showErrorNotification, showSuccessNotification } = useNotifications();
 
 const cityId = ref("");
 const branches = ref([]);
+const page = ref(1);
+const pageSize = ref(20);
 const isManager = computed(() => authStore.role === "manager");
+const paginatedBranches = computed(() => {
+  const start = (page.value - 1) * pageSize.value;
+  return branches.value.slice(start, start + pageSize.value);
+});
 let branchesRequestId = 0;
 
 const loadBranches = async () => {
@@ -143,6 +162,7 @@ const loadBranches = async () => {
     const response = await api.get(`/api/cities/${cityId.value}/branches`);
     if (requestId === branchesRequestId) {
       branches.value = response.data.branches || [];
+      page.value = 1;
     }
   } catch (error) {
     devError("Ошибка загрузки филиалов:", error);
@@ -150,6 +170,10 @@ const loadBranches = async () => {
       branches.value = [];
     }
   }
+};
+const onPageSizeChange = (value) => {
+  pageSize.value = value;
+  page.value = 1;
 };
 
 const formatTimeValue = (value) => {

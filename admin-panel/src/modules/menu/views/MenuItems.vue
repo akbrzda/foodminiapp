@@ -5,7 +5,7 @@ import { devError } from "@/shared/utils/logger";
       <CardContent>
         <PageHeader title="Позиции меню" description="Управление товарами и их параметрами">
           <template #actions>
-            <Badge variant="secondary">Показано: {{ filteredItems.length }} / {{ items.length }}</Badge>
+            <Badge variant="secondary">Показано: {{ paginatedItems.length }} / {{ filteredItems.length }}</Badge>
             <Button @click="createItem">
               <Plus :size="16" />
               Добавить позицию
@@ -56,7 +56,7 @@ import { devError } from "@/shared/utils/logger";
             </TableRow>
           </TableHeader>
           <TableBody>
-            <TableRow v-for="item in filteredItems" :key="item.id">
+            <TableRow v-for="item in paginatedItems" :key="item.id">
               <TableCell>
                 <div class="flex items-center gap-3">
                   <img v-if="item.image_url" :src="normalizeImageUrl(item.image_url)" :alt="item.name" class="h-12 w-12 rounded-lg object-cover" />
@@ -71,7 +71,7 @@ import { devError } from "@/shared/utils/logger";
                   <Badge v-for="cat in item.categories" :key="cat.id" variant="secondary" class="text-xs">{{ cat.name }}</Badge>
                 </div>
               </TableCell>
-              <TableCell>{{ formatCurrency(item.base_price || 0) }}</TableCell>
+              <TableCell>{{ item.base_price !== null && item.base_price !== undefined ? `От ${formatCurrency(item.base_price)}` : "—" }}</TableCell>
               <TableCell>
                 <Badge
                   variant="secondary"
@@ -98,6 +98,7 @@ import { devError } from "@/shared/utils/logger";
         </Table>
       </CardContent>
     </Card>
+    <TablePagination :total="filteredItems.length" :page="page" :page-size="pageSize" @update:page="page = $event" @update:page-size="onPageSizeChange" />
   </div>
 </template>
 <script setup>
@@ -118,12 +119,14 @@ import TableCell from "@/shared/components/ui/table/TableCell.vue";
 import TableHead from "@/shared/components/ui/table/TableHead.vue";
 import TableHeader from "@/shared/components/ui/table/TableHeader.vue";
 import TableRow from "@/shared/components/ui/table/TableRow.vue";
+import TablePagination from "@/shared/components/TablePagination.vue";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
 import { formatCurrency } from "@/shared/utils/format.js";
 const router = useRouter();
 const items = ref([]);
 const { showErrorNotification } = useNotifications();
-const CATEGORY_FILTER_STORAGE_KEY = "menu-items-filter-category-id";
+const page = ref(1);
+const pageSize = ref(20);
 const filters = reactive({
   search: "",
   status: "all",
@@ -160,6 +163,11 @@ const filteredItems = computed(() => {
   });
 });
 
+const paginatedItems = computed(() => {
+  const start = (page.value - 1) * pageSize.value;
+  return filteredItems.value.slice(start, start + pageSize.value);
+});
+
 const normalizeImageUrl = (url) => {
   if (!url) return "";
   if (url.startsWith("http://") || url.startsWith("https://")) return url;
@@ -171,12 +179,19 @@ const resetFilters = () => {
   filters.search = "";
   filters.status = "all";
   filters.categoryId = "all";
+  page.value = 1;
+};
+
+const onPageSizeChange = (value) => {
+  pageSize.value = value;
+  page.value = 1;
 };
 
 const loadItems = async () => {
   try {
     const response = await api.get("/api/menu/admin/items");
     items.value = response.data.items || [];
+    page.value = 1;
   } catch (error) {
     devError("Failed to load items:", error);
     showErrorNotification(`Ошибка при загрузке позиций: ${error.response?.data?.error || error.message}`);
@@ -200,21 +215,10 @@ const deleteItem = async (item) => {
 };
 onMounted(loadItems);
 
-onMounted(() => {
-  const savedCategoryId = sessionStorage.getItem(CATEGORY_FILTER_STORAGE_KEY);
-  if (savedCategoryId) {
-    filters.categoryId = savedCategoryId;
-  }
-});
-
 watch(
-  () => filters.categoryId,
-  (value) => {
-    if (!value || value === "all") {
-      sessionStorage.removeItem(CATEGORY_FILTER_STORAGE_KEY);
-      return;
-    }
-    sessionStorage.setItem(CATEGORY_FILTER_STORAGE_KEY, String(value));
+  () => [filters.search, filters.status, filters.categoryId],
+  () => {
+    page.value = 1;
   },
 );
 </script>

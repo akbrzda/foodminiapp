@@ -28,7 +28,7 @@ import { devError } from "@/shared/utils/logger";
             </TableRow>
           </TableHeader>
           <TableBody>
-            <TableRow v-for="item in stopList" :key="item.id">
+            <TableRow v-for="item in paginatedStopList" :key="item.id">
               <TableCell>
                 <div class="text-sm font-medium">{{ getBranchName(item.branch_id) }}</div>
               </TableCell>
@@ -56,6 +56,7 @@ import { devError } from "@/shared/utils/logger";
         </Table>
       </CardContent>
     </Card>
+    <TablePagination :total="stopList.length" :page="page" :page-size="pageSize" @update:page="page = $event" @update:page-size="onPageSizeChange" />
     <Dialog v-if="showModal" :open="showModal" @update:open="(value) => (value ? null : closeModal())">
       <DialogContent class="w-full max-w-5xl">
         <DialogHeader>
@@ -319,6 +320,7 @@ import TableCell from "@/shared/components/ui/table/TableCell.vue";
 import TableHead from "@/shared/components/ui/table/TableHead.vue";
 import TableHeader from "@/shared/components/ui/table/TableHeader.vue";
 import TableRow from "@/shared/components/ui/table/TableRow.vue";
+import TablePagination from "@/shared/components/TablePagination.vue";
 import { Field, FieldContent, FieldGroup, FieldLabel } from "@/shared/components/ui/field";
 import { Label } from "@/shared/components/ui/label";
 import Skeleton from "@/shared/components/ui/skeleton/Skeleton.vue";
@@ -328,6 +330,8 @@ import { useReferenceStore } from "@/shared/stores/reference.js";
 const referenceStore = useReferenceStore();
 const { showErrorNotification, showSuccessNotification } = useNotifications();
 const stopList = ref([]);
+const page = ref(1);
+const pageSize = ref(20);
 const reasons = ref([]);
 const showModal = ref(false);
 const saving = ref(false);
@@ -363,6 +367,10 @@ const fulfillmentOptions = [
 ];
 const hours = Array.from({ length: 24 }, (_, index) => String(index).padStart(2, "0"));
 const minutes = Array.from({ length: 60 }, (_, index) => String(index).padStart(2, "0"));
+const paginatedStopList = computed(() => {
+  const start = (page.value - 1) * pageSize.value;
+  return stopList.value.slice(start, start + pageSize.value);
+});
 const isModifierType = computed(() => form.value.type === "modifier");
 const isProductType = computed(() => form.value.type === "product");
 const timeStep = computed(() => (isProductType.value ? 3 : 2));
@@ -419,10 +427,15 @@ const loadStopList = async () => {
   try {
     const response = await api.get("/api/menu/admin/stop-list");
     stopList.value = response.data.items || [];
+    page.value = 1;
   } catch (error) {
     devError("Failed to load stop list:", error);
     showErrorNotification("Ошибка при загрузке стоп-листа");
   }
+};
+const onPageSizeChange = (value) => {
+  pageSize.value = value;
+  page.value = 1;
 };
 const loadReasons = async () => {
   try {
