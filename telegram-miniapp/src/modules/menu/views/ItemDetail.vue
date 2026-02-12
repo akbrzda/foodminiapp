@@ -1,6 +1,27 @@
 <template>
   <div class="item-detail">
-    <div v-if="loading" class="loading">Загрузка...</div>
+    <div v-if="loading" class="content page-container">
+      <div class="item-image-wrapper">
+        <div class="skeleton skeleton-image"></div>
+      </div>
+      <div class="item-header">
+        <div class="skeleton skeleton-title"></div>
+        <div class="skeleton skeleton-line skeleton-w-70"></div>
+        <div class="skeleton skeleton-line skeleton-w-38"></div>
+      </div>
+      <div class="section">
+        <div class="skeleton skeleton-subtitle"></div>
+        <div class="variants">
+          <div v-for="index in 3" :key="`variant-skeleton-${index}`" class="variant-btn skeleton skeleton-variant"></div>
+        </div>
+      </div>
+      <div class="section">
+        <div class="skeleton skeleton-subtitle"></div>
+        <div class="modifiers">
+          <div v-for="index in 3" :key="`modifier-skeleton-${index}`" class="modifier-card skeleton skeleton-modifier"></div>
+        </div>
+      </div>
+    </div>
     <div v-else-if="error" class="error">{{ error }}</div>
     <div v-else-if="item" class="content page-container">
       <div class="item-image-wrapper" v-if="displayImageUrl">
@@ -653,7 +674,6 @@ function closeKbjuPopup() {
   background: var(--color-background);
   padding-bottom: 96px;
 }
-.loading,
 .error {
   text-align: center;
   padding: 32px;
@@ -674,6 +694,26 @@ function closeKbjuPopup() {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+.skeleton-image {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+}
+.skeleton-title {
+  height: 32px;
+  width: 52%;
+  margin-bottom: 12px;
+}
+.skeleton-subtitle {
+  height: 22px;
+  width: 42%;
+  margin-bottom: 10px;
+}
+.skeleton-variant {
+  height: 58px;
+}
+.skeleton-modifier {
+  height: 136px;
 }
 .item-header {
   margin-bottom: 16px;

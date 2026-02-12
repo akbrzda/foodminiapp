@@ -1,6 +1,29 @@
 <template>
   <div class="order-detail">
-    <div v-if="loading" class="loading">Загрузка...</div>
+    <div v-if="loading" class="order-content page-container">
+      <div class="status-card skeleton-block">
+        <div class="skeleton skeleton-line skeleton-w-36"></div>
+        <div class="skeleton skeleton-line skeleton-w-28"></div>
+      </div>
+      <div class="section skeleton-block">
+        <div class="skeleton skeleton-title"></div>
+        <div v-for="index in 3" :key="`item-skeleton-${index}`" class="skeleton-row">
+          <div class="skeleton skeleton-line skeleton-w-60"></div>
+          <div class="skeleton skeleton-line skeleton-w-24"></div>
+        </div>
+      </div>
+      <div class="section skeleton-block">
+        <div class="skeleton skeleton-title"></div>
+        <div v-for="index in 4" :key="`info-skeleton-${index}`" class="skeleton skeleton-line skeleton-w-70"></div>
+      </div>
+      <div class="section skeleton-block">
+        <div class="skeleton skeleton-title"></div>
+        <div v-for="index in 3" :key="`total-skeleton-${index}`" class="skeleton-row">
+          <div class="skeleton skeleton-line skeleton-w-36"></div>
+          <div class="skeleton skeleton-line skeleton-w-24"></div>
+        </div>
+      </div>
+    </div>
     <div v-else-if="order" class="order-content page-container">
       <div class="status-card">
         <div :class="['status-badge', `status-${order.status}`]">
@@ -274,11 +297,24 @@ function getChangeAmount(orderData) {
   min-height: 100vh;
   background: var(--color-background);
 }
-.loading {
-  text-align: center;
-  padding: 64px 16px;
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-body);
+.skeleton-block {
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+}
+.skeleton-title {
+  height: 20px;
+  width: 40%;
+  margin-bottom: 14px;
+}
+.skeleton-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 10px;
+}
+.skeleton-row .skeleton-line {
+  margin-bottom: 0;
 }
 .status-card {
   padding: 20px;

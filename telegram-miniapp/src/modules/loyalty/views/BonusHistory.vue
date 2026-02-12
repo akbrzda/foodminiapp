@@ -3,131 +3,181 @@
     <div class="content page-container">
       <div v-if="!bonusesEnabled" class="bonus-disabled">Бонусная система временно отключена</div>
       <template v-else>
-        <div class="loyalty-card">
-          <div class="loyalty-card-header">
-            <div class="loyalty-balance">
-              <div class="loyalty-icon">
-                <Award :size="20" />
+        <template v-if="loading">
+          <div class="loyalty-card loyalty-card--skeleton">
+            <div class="loyalty-card-header">
+              <div class="loyalty-balance">
+                <div class="skeleton skeleton-circle"></div>
+                <div class="skeleton skeleton-line skeleton-w-40 skeleton-h-36"></div>
               </div>
-              <div class="loyalty-amount">{{ formatPrice(bonusBalance) }}</div>
-            </div>
-            <div class="loyalty-status">
-              <div class="loyalty-rate">Ваш статус {{ currentRateLabel }}%</div>
-              <div class="loyalty-tier">
-                <span>{{ currentLevel.name }}</span>
-                <button class="level-info-button" type="button" aria-label="Показать уровни бонусной программы" @click="openLevelsPopup">!</button>
+              <div class="loyalty-status">
+                <div class="skeleton skeleton-line skeleton-w-56"></div>
+                <div class="skeleton skeleton-line skeleton-w-44"></div>
               </div>
             </div>
-          </div>
-          <div class="loyalty-benefits">
-            <div class="benefit-item">
-              <span class="benefit-label">Начисление:</span>
-              <span class="benefit-value">{{ currentRateLabel }}%</span>
-            </div>
-            <div class="benefit-item">
-              <span class="benefit-label">Списание до:</span>
-              <span class="benefit-value">{{ maxRedeemPercentLabel }}%</span>
-            </div>
-          </div>
-        </div>
-
-        <div class="progress-card">
-          <div class="progress-values">
-            <span>{{ formatPrice(totalSpent) }} ₽</span>
-            <span>/</span>
-            <span v-if="nextLevel">{{ formatPrice(nextLevel.min) }} ₽</span>
-            <span v-else>∞</span>
-          </div>
-          <div class="progress-bar">
-            <span class="progress-fill" :style="{ width: `${progressPercent}%` }"></span>
-          </div>
-          <div class="progress-caption" v-if="nextLevel">
-            До обновления статуса — {{ formatPrice(amountToNextLevel) }} ₽ за последние {{ levelCalculationDays }} дней
-          </div>
-          <div class="progress-caption" v-else>У вас максимальный статус</div>
-
-          <div v-if="nextLevel" class="next-level-card">
-            <div class="next-level-icon dimmed">
-              <Trophy :size="18" />
-            </div>
-            <div class="next-level-info">
-              <div class="next-level-name">{{ nextLevel.name }}</div>
-              <div class="next-level-benefits">
-                <span>Начисление: {{ Math.round(nextLevel.rate * 100) }}%</span>
-                <span>•</span>
-                <span>Списание до: {{ Math.round((nextLevel.redeemPercent ?? loyaltyStore.fallbackRedeemPercent) * 100) }}%</span>
+            <div class="loyalty-benefits">
+              <div class="benefit-item">
+                <span class="skeleton skeleton-line skeleton-w-48"></span>
+                <span class="skeleton skeleton-line skeleton-w-36 skeleton-h-24"></span>
+              </div>
+              <div class="benefit-item">
+                <span class="skeleton skeleton-line skeleton-w-48"></span>
+                <span class="skeleton skeleton-line skeleton-w-36 skeleton-h-24"></span>
               </div>
             </div>
           </div>
-        </div>
-
-        <div v-if="levelsPopup.open" class="level-popup">
-          <div class="level-popup__overlay" @click="closeLevelsPopup"></div>
-          <div class="level-popup__content level-popup__content--list">
-            <div class="level-popup__title">Уровни и условия</div>
-            <div class="levels-list">
-              <div v-for="level in formattedLevels" :key="level.id" class="levels-list__item">
-                <div class="levels-list__header">
-                  <span class="levels-list__name">{{ level.name }}</span>
-                  <span v-if="level.id === currentLevel.id" class="levels-list__badge">Текущий</span>
+          <div class="progress-card">
+            <div class="skeleton skeleton-line skeleton-w-52 skeleton-h-22"></div>
+            <div class="skeleton skeleton-line skeleton-w-100 skeleton-h-8 skeleton-rounded-full"></div>
+            <div class="skeleton skeleton-line skeleton-w-80"></div>
+            <div class="next-level-card">
+              <div class="skeleton skeleton-circle skeleton-circle-sm"></div>
+              <div class="next-level-info">
+                <div class="skeleton skeleton-line skeleton-w-48"></div>
+                <div class="skeleton skeleton-line skeleton-w-72"></div>
+              </div>
+            </div>
+          </div>
+          <div class="history-section">
+            <h3>История операций</h3>
+            <div class="transactions">
+              <div v-for="index in 4" :key="`history-skeleton-${index}`" class="transaction-item">
+                <div class="skeleton skeleton-circle"></div>
+                <div class="transaction-info">
+                  <div class="skeleton skeleton-line skeleton-w-72"></div>
+                  <div class="skeleton skeleton-line skeleton-w-44"></div>
                 </div>
-                <div class="levels-list__meta">
-                  <span>Начисление: {{ level.rateLabel }}%</span>
-                  <span>Списание до: {{ level.redeemLabel }}%</span>
+                <div class="skeleton skeleton-line skeleton-w-28"></div>
+              </div>
+            </div>
+          </div>
+        </template>
+        <template v-else>
+          <div class="loyalty-card">
+            <div class="loyalty-card-header">
+              <div class="loyalty-balance">
+                <div class="loyalty-icon">
+                  <Award :size="20" />
                 </div>
-                <div class="levels-list__range">Порог: {{ level.rangeLabel }}</div>
+                <div class="loyalty-amount">{{ formatPrice(bonusBalance) }}</div>
+              </div>
+              <div class="loyalty-status">
+                <div class="loyalty-rate">Ваш статус {{ currentRateLabel }}%</div>
+                <div class="loyalty-tier">
+                  <span>{{ currentLevel.name }}</span>
+                  <button class="level-info-button" type="button" aria-label="Показать уровни бонусной программы" @click="openLevelsPopup">!</button>
+                </div>
               </div>
             </div>
-            <button class="level-popup__button" @click="closeLevelsPopup">Понятно</button>
+            <div class="loyalty-benefits">
+              <div class="benefit-item">
+                <span class="benefit-label">Начисление:</span>
+                <span class="benefit-value">{{ currentRateLabel }}%</span>
+              </div>
+              <div class="benefit-item">
+                <span class="benefit-label">Списание до:</span>
+                <span class="benefit-value">{{ maxRedeemPercentLabel }}%</span>
+              </div>
+            </div>
           </div>
-        </div>
 
-        <div v-if="expiringBonuses.length > 0" class="expiring-section">
-          <div class="expiring-alert">
-            <div class="expiring-icon">
-              <AlertTriangle :size="16" />
+          <div class="progress-card">
+            <div class="progress-values">
+              <span>{{ formatPrice(totalSpent) }} ₽</span>
+              <span>/</span>
+              <span v-if="nextLevel">{{ formatPrice(nextLevel.min) }} ₽</span>
+              <span v-else>∞</span>
             </div>
-            <div class="expiring-text">
-              <strong>{{ formatPrice(totalExpiring) }} бонусов</strong> сгорят в ближайшие {{ expiringDaysThreshold }} дней
+            <div class="progress-bar">
+              <span class="progress-fill" :style="{ width: `${progressPercent}%` }"></span>
             </div>
-          </div>
-          <div class="expiring-list">
-            <div v-for="bonus in expiringBonuses" :key="bonus.id" class="expiring-item">
-              <span class="expiring-amount">{{ formatPrice(bonus.amount) }} ₽</span>
-              <span class="expiring-date">{{ formatDateShort(bonus.expires_at) }}</span>
-              <span class="expiring-days" :class="{ urgent: bonus.days_left <= 3 }">{{ bonus.days_left }} дн.</span>
+            <div class="progress-caption" v-if="nextLevel">
+              До обновления статуса — {{ formatPrice(amountToNextLevel) }} ₽ за последние {{ levelCalculationDays }} дней
             </div>
-          </div>
-        </div>
+            <div class="progress-caption" v-else>У вас максимальный статус</div>
 
-        <div class="history-section">
-          <h3>История операций</h3>
-          <div class="loading" v-if="loading">Загрузка...</div>
-          <div class="empty" v-else-if="!transactions.length">
-            <p>У вас пока нет операций с бонусами</p>
-          </div>
-          <div class="transactions" v-else>
-            <div v-for="transaction in transactions" :key="transaction.id" class="transaction-item">
-              <div class="transaction-icon" :class="getTransactionClass(transaction.type)">
-                <Plus v-if="isEarnType(transaction.type)" :size="20" />
-                <Minus v-else-if="transaction.type === 'spend'" :size="20" />
-                <X v-else :size="20" />
+            <div v-if="nextLevel" class="next-level-card">
+              <div class="next-level-icon dimmed">
+                <Trophy :size="18" />
               </div>
-              <div class="transaction-info">
-                <div class="transaction-title">{{ getTransactionTitle(transaction) }}</div>
-                <div class="transaction-date">{{ formatDate(transaction.created_at) }}</div>
-                <div v-if="isActiveEarn(transaction)" class="transaction-expire">Действует до {{ formatDateShort(transaction.expires_at) }}</div>
-                <div v-else-if="transaction.expires_at && new Date(transaction.expires_at) < new Date()" class="transaction-expired">Истек</div>
-              </div>
-              <div class="transaction-amount" :class="getTransactionClass(transaction.type)">
-                {{ getTransactionSign(transaction.type) }}{{ formatPrice(Math.abs(transaction.amount)) }} ₽
+              <div class="next-level-info">
+                <div class="next-level-name">{{ nextLevel.name }}</div>
+                <div class="next-level-benefits">
+                  <span>Начисление: {{ Math.round(nextLevel.rate * 100) }}%</span>
+                  <span>•</span>
+                  <span>Списание до: {{ Math.round((nextLevel.redeemPercent ?? loyaltyStore.fallbackRedeemPercent) * 100) }}%</span>
+                </div>
               </div>
             </div>
-            <button v-if="historyHasMore" class="history-more" type="button" :disabled="loadingMore" @click="loadMoreHistory">
-              {{ loadingMore ? "Загрузка..." : "Загрузить еще" }}
-            </button>
           </div>
-        </div>
+
+          <div v-if="levelsPopup.open" class="level-popup">
+            <div class="level-popup__overlay" @click="closeLevelsPopup"></div>
+            <div class="level-popup__content level-popup__content--list">
+              <div class="level-popup__title">Уровни и условия</div>
+              <div class="levels-list">
+                <div v-for="level in formattedLevels" :key="level.id" class="levels-list__item">
+                  <div class="levels-list__header">
+                    <span class="levels-list__name">{{ level.name }}</span>
+                    <span v-if="level.id === currentLevel.id" class="levels-list__badge">Текущий</span>
+                  </div>
+                  <div class="levels-list__meta">
+                    <span>Начисление: {{ level.rateLabel }}%</span>
+                    <span>Списание до: {{ level.redeemLabel }}%</span>
+                  </div>
+                  <div class="levels-list__range">Порог: {{ level.rangeLabel }}</div>
+                </div>
+              </div>
+              <button class="level-popup__button" @click="closeLevelsPopup">Понятно</button>
+            </div>
+          </div>
+
+          <div v-if="expiringBonuses.length > 0" class="expiring-section">
+            <div class="expiring-alert">
+              <div class="expiring-icon">
+                <AlertTriangle :size="16" />
+              </div>
+              <div class="expiring-text">
+                <strong>{{ formatPrice(totalExpiring) }} бонусов</strong> сгорят в ближайшие {{ expiringDaysThreshold }} дней
+              </div>
+            </div>
+            <div class="expiring-list">
+              <div v-for="bonus in expiringBonuses" :key="bonus.id" class="expiring-item">
+                <span class="expiring-amount">{{ formatPrice(bonus.amount) }} ₽</span>
+                <span class="expiring-date">{{ formatDateShort(bonus.expires_at) }}</span>
+                <span class="expiring-days" :class="{ urgent: bonus.days_left <= 3 }">{{ bonus.days_left }} дн.</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="history-section">
+            <h3>История операций</h3>
+            <div class="empty" v-if="!transactions.length">
+              <p>У вас пока нет операций с бонусами</p>
+            </div>
+            <div class="transactions" v-else>
+              <div v-for="transaction in transactions" :key="transaction.id" class="transaction-item">
+                <div class="transaction-icon" :class="getTransactionClass(transaction.type)">
+                  <Plus v-if="isEarnType(transaction.type)" :size="20" />
+                  <Minus v-else-if="transaction.type === 'spend'" :size="20" />
+                  <X v-else :size="20" />
+                </div>
+                <div class="transaction-info">
+                  <div class="transaction-title">{{ getTransactionTitle(transaction) }}</div>
+                  <div class="transaction-date">{{ formatDate(transaction.created_at) }}</div>
+                  <div v-if="isActiveEarn(transaction)" class="transaction-expire">Действует до {{ formatDateShort(transaction.expires_at) }}</div>
+                  <div v-else-if="transaction.expires_at && new Date(transaction.expires_at) < new Date()" class="transaction-expired">Истек</div>
+                </div>
+                <div class="transaction-amount" :class="getTransactionClass(transaction.type)">
+                  {{ getTransactionSign(transaction.type) }}{{ formatPrice(Math.abs(transaction.amount)) }} ₽
+                </div>
+              </div>
+              <button v-if="historyHasMore" class="history-more" type="button" :disabled="loadingMore" @click="loadMoreHistory">
+                {{ loadingMore ? "Загрузка..." : "Загрузить еще" }}
+              </button>
+            </div>
+          </div>
+        </template>
       </template>
     </div>
   </div>
@@ -293,6 +343,10 @@ function formatDateShort(dateString) {
   min-height: 100vh;
   background: var(--color-background);
   padding-bottom: 24px;
+}
+.loyalty-card.loyalty-card--skeleton {
+  border: 1px solid var(--color-border);
+  background: var(--color-background);
 }
 .bonus-disabled {
   padding: 20px;

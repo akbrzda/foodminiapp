@@ -289,6 +289,119 @@ body {
   border: none;
   margin: 0;
 }
+
+/* Общие утилиты skeleton */
+.skeleton {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  background: #eef2f7;
+  border-radius: 10px;
+}
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0));
+  animation: skeleton-shimmer 1.2s infinite;
+}
+.skeleton-line {
+  height: 16px;
+  margin-bottom: 10px;
+}
+.skeleton-line:last-child {
+  margin-bottom: 0;
+}
+.skeleton-circle {
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+}
+.skeleton-circle-sm {
+  width: 28px;
+  height: 28px;
+}
+.skeleton-rounded-full {
+  border-radius: 999px;
+}
+.skeleton-h-8 {
+  height: 8px;
+}
+.skeleton-h-22 {
+  height: 22px;
+}
+.skeleton-h-24 {
+  height: 24px;
+}
+.skeleton-h-36 {
+  height: 36px;
+}
+.skeleton-w-24 {
+  width: 24%;
+}
+.skeleton-w-28 {
+  width: 28%;
+}
+.skeleton-w-32 {
+  width: 32%;
+}
+.skeleton-w-36 {
+  width: 36%;
+}
+.skeleton-w-38 {
+  width: 38%;
+}
+.skeleton-w-40 {
+  width: 40%;
+}
+.skeleton-w-44 {
+  width: 44%;
+}
+.skeleton-w-46 {
+  width: 46%;
+}
+.skeleton-w-48 {
+  width: 48%;
+}
+.skeleton-w-52 {
+  width: 52%;
+}
+.skeleton-w-56 {
+  width: 56%;
+}
+.skeleton-w-58 {
+  width: 58%;
+}
+.skeleton-w-60 {
+  width: 60%;
+}
+.skeleton-w-64 {
+  width: 64%;
+}
+.skeleton-w-70 {
+  width: 70%;
+}
+.skeleton-w-72 {
+  width: 72%;
+}
+.skeleton-w-80 {
+  width: 80%;
+}
+.skeleton-w-84 {
+  width: 84%;
+}
+.skeleton-w-90 {
+  width: 90%;
+}
+.skeleton-w-100 {
+  width: 100%;
+}
+@keyframes skeleton-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
 /* Скрываем скроллбар, но оставляем функциональность */
 ::-webkit-scrollbar {
   width: 0px;

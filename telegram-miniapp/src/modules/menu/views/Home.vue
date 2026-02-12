@@ -81,7 +81,27 @@
           {{ tag.name }}
         </button>
       </div>
-      <div class="menu-content" v-if="!menuStore.loading">
+      <div class="menu-content menu-skeleton" v-if="menuStore.loading">
+        <div class="category-section">
+          <div class="skeleton skeleton-title"></div>
+          <div class="items">
+            <div v-for="index in 6" :key="`menu-item-skeleton-${index}`" class="item-card item-card-skeleton">
+              <div class="skeleton skeleton-image"></div>
+              <div class="item-info">
+                <div class="item-text">
+                  <div class="skeleton skeleton-line skeleton-w-64"></div>
+                  <div class="skeleton skeleton-line skeleton-w-90"></div>
+                  <div class="skeleton skeleton-line skeleton-w-46"></div>
+                </div>
+                <div class="item-footer">
+                  <div class="skeleton skeleton-line skeleton-btn"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="menu-content" v-else-if="menuStore.categories.length">
         <div v-for="category in menuStore.categories" :key="category.id" :id="`category-${category.id}`" class="category-section">
           <h2 class="category-title">{{ category.name }}</h2>
           <div class="items">
@@ -131,8 +151,7 @@
           </div>
         </div>
       </div>
-      <div class="loading" v-if="menuStore.loading">Меню загружается...</div>
-      <div class="empty" v-if="!menuStore.loading && menuStore.categories.length === 0">Меню пустое</div>
+      <div class="empty" v-else>Меню пустое</div>
     </div>
     <button
       v-if="ordersEnabled && cartStore.itemsCount > 0"
@@ -893,6 +912,36 @@ function goToCart() {
 .menu-content {
   padding: 0 12px 12px;
 }
+.menu-skeleton .category-section {
+  margin-top: 12px;
+}
+.item-card-skeleton {
+  cursor: default;
+}
+.skeleton-title {
+  height: 30px;
+  width: 40%;
+  margin-bottom: 12px;
+}
+.skeleton-image {
+  width: 128px;
+  height: 128px;
+  border-radius: 16px;
+  flex-shrink: 0;
+}
+.skeleton-line {
+  height: 14px;
+  margin-bottom: 8px;
+}
+.menu-skeleton .item-text .skeleton-line:last-child {
+  margin-bottom: 0;
+}
+.skeleton-btn {
+  width: 96px;
+  height: 32px;
+  margin-bottom: 0;
+  border-radius: var(--border-radius-md);
+}
 .tags-filter {
   display: flex;
   gap: 8px;
@@ -1069,7 +1118,6 @@ function goToCart() {
   min-width: 24px;
   text-align: center;
 }
-.loading,
 .empty {
   text-align: center;
   padding: 32px;

@@ -3,7 +3,12 @@
     <div class="contacts-content page-container page-container--spacious-bottom">
       <p class="page-subtitle" v-if="cityName">Город: {{ cityName }}</p>
 
-      <div v-if="loading" class="state-message">Загрузка филиалов...</div>
+      <div v-if="loading" class="contacts-skeleton">
+        <div v-for="index in 4" :key="`branch-skeleton-${index}`" class="branch-card">
+          <div class="skeleton skeleton-line skeleton-w-48"></div>
+          <div class="skeleton skeleton-line skeleton-w-72"></div>
+        </div>
+      </div>
       <div v-else-if="errorMessage" class="state-message error">{{ errorMessage }}</div>
 
       <div v-else class="branches">
@@ -450,5 +455,15 @@ async function loadLeaflet() {
 }
 .state-message.error {
   color: var(--color-error);
+}
+.contacts-skeleton {
+  display: grid;
+  gap: 12px;
+}
+.contacts-skeleton .branch-card {
+  padding: 12px 14px;
+}
+.contacts-skeleton .skeleton-line:last-child {
+  margin-bottom: 0;
 }
 </style>

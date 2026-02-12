@@ -1,7 +1,14 @@
 <template>
   <div class="orders">
     <div class="page-container">
-      <div v-if="loading" class="loading">Загрузка...</div>
+      <div v-if="loading" class="orders-skeleton">
+        <div v-for="index in 5" :key="`order-skeleton-${index}`" class="order-card skeleton-card">
+          <div class="skeleton skeleton-line skeleton-w-40"></div>
+          <div class="skeleton skeleton-line skeleton-w-28"></div>
+          <div class="skeleton skeleton-line skeleton-w-56"></div>
+          <div class="skeleton skeleton-line skeleton-w-32"></div>
+        </div>
+      </div>
       <div v-else-if="orders.length === 0" class="empty">
         <p>У вас пока нет заказов</p>
         <button class="btn-primary action-btn" @click="$router.push('/menu')">Перейти в меню</button>
@@ -90,11 +97,12 @@ function formatDate(dateString) {
   min-height: 100vh;
   background: var(--color-background);
 }
-.loading {
-  text-align: center;
-  padding: 64px 16px;
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-body);
+.orders-skeleton {
+  display: grid;
+  gap: 8px;
+}
+.skeleton-card {
+  cursor: default;
 }
 .empty {
   text-align: center;

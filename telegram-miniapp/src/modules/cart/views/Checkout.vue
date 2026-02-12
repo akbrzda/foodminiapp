@@ -68,7 +68,13 @@
 
       <div v-if="ordersEnabled && orderType === 'pickup'" class="pickup-form">
         <h2 class="section-title">Выберите филиал</h2>
-        <div v-if="loadingBranches" class="loading">Загрузка филиалов...</div>
+        <div v-if="loadingBranches" class="branches-list branches-list-skeleton">
+          <div v-for="index in 3" :key="`branch-skeleton-${index}`" class="branch-card branch-card-skeleton">
+            <div class="skeleton skeleton-line skeleton-w-58"></div>
+            <div class="skeleton skeleton-line skeleton-w-84"></div>
+            <div class="skeleton skeleton-line skeleton-w-36"></div>
+          </div>
+        </div>
         <div v-else class="branches-list">
           <button
             v-for="branch in branches"
@@ -934,6 +940,9 @@ async function submitOrder() {
   align-items: center;
   gap: 6px;
 }
+.branch-card-skeleton {
+  cursor: default;
+}
 .payment-options {
   display: flex;
   gap: 12px;
@@ -1005,10 +1014,5 @@ async function submitOrder() {
   right: 0;
   padding: 12px;
   z-index: 100;
-}
-.loading {
-  text-align: center;
-  padding: 32px;
-  color: var(--color-text-secondary);
 }
 </style>
