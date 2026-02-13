@@ -40,13 +40,13 @@ export const menuAPI = {
     return api.get(`/menu/categories`, { params: { city_id: cityId } });
   },
   getItems(categoryId) {
-    return api.get(`/menu/categories/${categoryId}/items`);
+    return api.get(`/menu/categories/${categoryId}/products`);
   },
   getItemDetails(itemId, params = {}) {
-    return api.get(`/menu/items/${itemId}`, { params });
+    return api.get(`/menu/products/${itemId}`, { params });
   },
   getModifiers(itemId) {
-    return api.get(`/menu/items/${itemId}/modifiers`);
+    return api.get(`/menu/products/${itemId}/modifiers`);
   },
 };
 export const ordersAPI = {

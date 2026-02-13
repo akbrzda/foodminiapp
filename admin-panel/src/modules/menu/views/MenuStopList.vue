@@ -1,9 +1,8 @@
-import { devError } from "@/shared/utils/logger";
 <template>
   <div class="space-y-6">
     <Card>
       <CardContent>
-        <PageHeader title="Стоп-лист" description="Управление временно недоступными позициями по филиалам">
+        <PageHeader title="Стоп-лист" description="Управление временно недоступными блюдами по филиалам">
           <template #actions>
             <Button @click="openModal()">
               <Plus :size="16" />
@@ -44,7 +43,7 @@ import { devError } from "@/shared/utils/logger";
                 </TableCell>
                 <TableCell>
                   <Badge :variant="item.entity_type === 'item' ? 'default' : item.entity_type === 'variant' ? 'secondary' : 'outline'">
-                    {{ item.entity_type === "item" ? "Позиция" : item.entity_type === "variant" ? "Вариант" : "Модификатор" }}
+                    {{ item.entity_type === "item" ? "Блюдо" : item.entity_type === "variant" ? "Вариант" : "Модификатор" }}
                   </Badge>
                 </TableCell>
                 <TableCell>
@@ -73,7 +72,7 @@ import { devError } from "@/shared/utils/logger";
       <DialogContent class="w-full max-w-5xl">
         <DialogHeader>
           <DialogTitle>Добавить в стоп-лист</DialogTitle>
-          <DialogDescription>Временно сделать позицию недоступной</DialogDescription>
+          <DialogDescription>Временно сделать блюдо недоступным</DialogDescription>
         </DialogHeader>
         <form class="space-y-6" @submit.prevent="submitStopList">
           <div v-if="step === 1" class="space-y-5">
@@ -105,7 +104,7 @@ import { devError } from "@/shared/utils/logger";
                         <SelectValue placeholder="Выберите тип" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="modifier">Товар</SelectItem>
+                        <SelectItem value="modifier">Модификатор</SelectItem>
                         <SelectItem value="product">Продукция</SelectItem>
                       </SelectContent>
                     </Select>
@@ -113,7 +112,7 @@ import { devError } from "@/shared/utils/logger";
                 </Field>
               </FieldGroup>
               <Field v-if="isModifierType">
-                <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Товар *</FieldLabel>
+                <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Модификатор *</FieldLabel>
                 <FieldContent>
                   <div ref="modifierContainer" class="relative">
                     <Input
@@ -243,7 +242,7 @@ import { devError } from "@/shared/utils/logger";
                 </div>
               </div>
             </div>
-            <p class="text-xs text-muted-foreground">Выбрано позиций: {{ selectedProductIds.length }}</p>
+            <p class="text-xs text-muted-foreground">Выбрано блюд: {{ selectedProductIds.length }}</p>
           </div>
           <div v-else-if="step === timeStep" class="space-y-4">
             <div class="rounded-lg border border-border bg-muted/20 p-4 text-sm text-muted-foreground">
@@ -315,6 +314,7 @@ import { devError } from "@/shared/utils/logger";
   </div>
 </template>
 <script setup>
+import { devError } from "@/shared/utils/logger";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { Plus, Save, Trash2 } from "lucide-vue-next";
 import api from "@/shared/api/client.js";
@@ -337,10 +337,12 @@ import { Field, FieldContent, FieldGroup, FieldLabel } from "@/shared/components
 import { Label } from "@/shared/components/ui/label";
 import Skeleton from "@/shared/components/ui/skeleton/Skeleton.vue";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
+import { useListContext } from "@/shared/composables/useListContext.js";
 import { formatDate } from "@/shared/utils/date.js";
 import { useReferenceStore } from "@/shared/stores/reference.js";
 const referenceStore = useReferenceStore();
 const { showErrorNotification, showSuccessNotification } = useNotifications();
+const { shouldRestore, saveContext, restoreContext, restoreScroll } = useListContext("menu-stop-list");
 const stopList = ref([]);
 const page = ref(1);
 const pageSize = ref(20);
@@ -436,12 +438,14 @@ const allProductsSelected = computed(() => {
 const getBranchName = (branchId) => {
   return referenceStore.branches.find((b) => b.id === branchId)?.name || "Неизвестно";
 };
-const loadStopList = async () => {
+const loadStopList = async ({ preservePage = false } = {}) => {
   isLoading.value = true;
   try {
     const response = await api.get("/api/menu/admin/stop-list");
     stopList.value = response.data.items || [];
-    page.value = 1;
+    if (!preservePage) {
+      page.value = 1;
+    }
   } catch (error) {
     devError("Failed to load stop list:", error);
     showErrorNotification("Ошибка при загрузке стоп-листа");
@@ -482,7 +486,7 @@ const loadCategoriesAndItems = async () => {
   try {
     const categoriesResponse = await api.get(`/api/menu/admin/categories?city_id=${branch.city_id}`);
     const baseCategories = categoriesResponse.data.categories || [];
-    const itemsResponses = await Promise.all(baseCategories.map((category) => api.get(`/api/menu/admin/categories/${category.id}/items`)));
+    const itemsResponses = await Promise.all(baseCategories.map((category) => api.get(`/api/menu/admin/categories/${category.id}/products`)));
     categories.value = baseCategories.map((category, index) => ({
       ...category,
       items: itemsResponses[index]?.data?.items || [],
@@ -672,7 +676,19 @@ onMounted(async () => {
   try {
     await referenceStore.fetchCitiesAndBranches();
     await loadReasons();
-    await loadStopList();
+    if (shouldRestore.value) {
+      const context = restoreContext();
+      if (context) {
+        if (context.page) page.value = context.page;
+        if (context.pageSize) pageSize.value = context.pageSize;
+        await loadStopList({ preservePage: true });
+        restoreScroll(context.scroll);
+      } else {
+        await loadStopList();
+      }
+    } else {
+      await loadStopList();
+    }
     nowInterval = setInterval(() => {
       now.value = new Date();
     }, 60000);
@@ -740,6 +756,12 @@ watch(
     if (selectedModifier.value && value !== selectedModifier.value.name) {
       selectedModifier.value = null;
     }
+  },
+);
+watch(
+  () => [page.value, pageSize.value],
+  () => {
+    saveContext({}, { page: page.value, pageSize: pageSize.value });
   },
 );
 </script>

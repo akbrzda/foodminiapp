@@ -1,4 +1,3 @@
-import { devError } from "@/shared/utils/logger";
 <template>
   <div class="space-y-6">
     <Card>
@@ -105,6 +104,7 @@ import { devError } from "@/shared/utils/logger";
   </div>
 </template>
 <script setup>
+import { devError } from "@/shared/utils/logger";
 import { computed, onMounted, ref, watch } from "vue";
 import { Calendar as CalendarIcon } from "lucide-vue-next";
 import { DateFormatter, getLocalTimeZone, parseDate, today } from "@internationalized/date";

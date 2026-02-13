@@ -1,5 +1,6 @@
 import { defineStore } from "pinia";
 import api from "@/shared/api/client.js";
+import { devError } from "@/shared/utils/logger";
 export const useReferenceStore = defineStore("reference", {
   state: () => ({
     cities: [],
@@ -26,7 +27,7 @@ export const useReferenceStore = defineStore("reference", {
           return this.cities;
         })
         .catch((error) => {
-          console.error("Ошибка загрузки городов:", error);
+          devError("Ошибка загрузки городов:", error);
           return [];
         })
         .finally(() => {
@@ -48,7 +49,7 @@ export const useReferenceStore = defineStore("reference", {
           return branches;
         })
         .catch((error) => {
-          console.error("Ошибка загрузки филиалов:", error);
+          devError("Ошибка загрузки филиалов:", error);
           return [];
         })
         .finally(() => {

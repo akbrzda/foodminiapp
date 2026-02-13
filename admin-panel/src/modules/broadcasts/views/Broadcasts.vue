@@ -1,4 +1,3 @@
-import { devError } from "@/shared/utils/logger";
 <template>
   <div class="space-y-6">
     <Card>
@@ -139,16 +138,19 @@ import { devError } from "@/shared/utils/logger";
   </div>
 </template>
 <script setup>
+import { devError } from "@/shared/utils/logger";
 import { computed, onMounted, ref, watch } from "vue";
 import { ChartLine, Eye, Pencil, Plus, Users } from "lucide-vue-next";
 import { useRouter } from "vue-router";
 import api from "@/shared/api/client.js";
+import { useNotifications } from "@/shared/composables/useNotifications.js";
+import { useListContext } from "@/shared/composables/useListContext.js";
+import { useOrdersStore } from "@/modules/orders/stores/orders.js";
+import { formatDateTime, formatNumber } from "@/shared/utils/format.js";
 import Badge from "@/shared/components/ui/badge/Badge.vue";
 import Button from "@/shared/components/ui/button/Button.vue";
 import Card from "@/shared/components/ui/card/Card.vue";
 import CardContent from "@/shared/components/ui/card/CardContent.vue";
-import CardHeader from "@/shared/components/ui/card/CardHeader.vue";
-import CardTitle from "@/shared/components/ui/card/CardTitle.vue";
 import Input from "@/shared/components/ui/input/Input.vue";
 import PageHeader from "@/shared/components/PageHeader.vue";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/components/ui/select";
@@ -160,13 +162,14 @@ import TableHeader from "@/shared/components/ui/table/TableHeader.vue";
 import TableRow from "@/shared/components/ui/table/TableRow.vue";
 import TablePagination from "@/shared/components/TablePagination.vue";
 import Skeleton from "@/shared/components/ui/skeleton/Skeleton.vue";
-import { useNotifications } from "@/shared/composables/useNotifications.js";
-import { useOrdersStore } from "@/modules/orders/stores/orders.js";
-import { formatDateTime, formatNumber } from "@/shared/utils/format.js";
 
 const router = useRouter();
 const { showErrorNotification } = useNotifications();
 const ordersStore = useOrdersStore();
+
+// Навигационный контекст
+const { shouldRestore, saveContext, restoreContext, restoreScroll } = useListContext("broadcasts");
+
 const campaigns = ref([]);
 const isLoading = ref(false);
 const page = ref(1);
@@ -177,12 +180,14 @@ const filters = ref({
   search: "",
 });
 
-const loadCampaigns = async () => {
+const loadCampaigns = async ({ preservePage = false } = {}) => {
   isLoading.value = true;
   try {
     const response = await api.get("/api/broadcasts");
     campaigns.value = response.data?.data?.items || [];
-    page.value = 1;
+    if (!preservePage) {
+      page.value = 1;
+    }
   } catch (error) {
     devError("Ошибка загрузки рассылок:", error);
     showErrorNotification("Не удалось загрузить рассылки");
@@ -237,12 +242,17 @@ const statusClass = (status) => {
 };
 
 const createCampaign = () => {
+  saveContext(filters.value, { page: page.value, pageSize: pageSize.value });
   router.push({ name: "broadcast-new" });
 };
+
 const editCampaign = (campaign) => {
+  saveContext(filters.value, { page: page.value, pageSize: pageSize.value });
   router.push({ name: "broadcast-edit", params: { id: campaign.id } });
 };
+
 const openDetail = (campaign) => {
+  saveContext(filters.value, { page: page.value, pageSize: pageSize.value });
   router.push({ name: "broadcast-detail", params: { id: campaign.id } });
 };
 const openSegments = () => {
@@ -252,7 +262,22 @@ const openDashboard = () => {
   router.push({ name: "broadcast-dashboard" });
 };
 
-onMounted(loadCampaigns);
+onMounted(async () => {
+  if (shouldRestore.value) {
+    const context = restoreContext();
+    
+    if (context) {
+      filters.value = { ...filters.value, ...context.filters };
+      if (context.page) page.value = context.page;
+      if (context.pageSize) pageSize.value = context.pageSize;
+      
+      await loadCampaigns({ preservePage: true });
+      restoreScroll(context.scroll);
+    }
+  } else {
+    await loadCampaigns();
+  }
+});
 
 watch(
   () => ordersStore.lastBroadcastEvent,

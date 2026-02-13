@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from "vue-router";
 import { useAuthStore } from "@/shared/stores/auth.js";
 import { useOrdersStore } from "@/modules/orders/stores/orders.js";
+import { useNavigationContextStore } from "@/shared/stores/navigationContext.js";
 import AdminLayout from "@/shared/layouts/AdminLayout.vue";
 import ShiftLayout from "@/shared/layouts/ShiftLayout.vue";
 import Login from "@/modules/auth/views/Login.vue";
@@ -16,8 +17,8 @@ import BranchForm from "@/modules/delivery/views/BranchForm.vue";
 import DeliveryZones from "@/modules/delivery/views/DeliveryZones.vue";
 import DeliveryZoneEditor from "@/modules/delivery/views/DeliveryZoneEditor.vue";
 import MenuCategories from "@/modules/menu/views/MenuCategories.vue";
-import MenuItems from "@/modules/menu/views/MenuItems.vue";
-import MenuItemForm from "@/modules/menu/views/MenuItemForm.vue";
+import MenuProducts from "@/modules/menu/views/MenuProducts.vue";
+import MenuProductForm from "@/modules/menu/views/MenuProductForm.vue";
 import MenuModifiers from "@/modules/menu/views/MenuModifiers.vue";
 import MenuTags from "@/modules/menu/views/MenuTags.vue";
 import MenuStopList from "@/modules/menu/views/MenuStopList.vue";
@@ -34,6 +35,14 @@ import NotFound from "@/shared/components/NotFound.vue";
 const router = createRouter({
   history: createWebHistory(),
   scrollBehavior(to, from, savedPosition) {
+    // Если возвращаемся на список с сохраненным контекстом - не трогаем скролл
+    if (to.meta.isList && to.meta.listName) {
+      const navigationStore = useNavigationContextStore();
+      if (navigationStore.shouldRestore(to.meta.listName)) {
+        return false; // Компонент восстановит скролл сам
+      }
+    }
+    
     if (savedPosition) {
       return savedPosition;
     }
@@ -70,7 +79,13 @@ const router = createRouter({
           path: "orders",
           name: "orders",
           component: Orders,
-          meta: { title: "Заказы", subtitle: "Реальные заявки и статусы", roles: ["admin", "ceo", "manager"] },
+          meta: { 
+            title: "Заказы", 
+            subtitle: "Реальные заявки и статусы", 
+            roles: ["admin", "ceo", "manager"],
+            isList: true,
+            listName: "orders"
+          },
         },
         {
           path: "orders/:id",
@@ -81,13 +96,21 @@ const router = createRouter({
             subtitle: "Подробная информация",
             roles: ["admin", "ceo", "manager"],
             breadcrumbs: [{ label: "Заказы", to: "/orders" }, { label: "Детали заказа" }],
+            isDetail: true,
+            parentList: "orders"
           },
         },
         {
           path: "clients",
           name: "clients",
           component: Clients,
-          meta: { title: "Клиенты", subtitle: "Контакты и лояльность", roles: ["admin", "ceo", "manager"] },
+          meta: { 
+            title: "Клиенты", 
+            subtitle: "Контакты и лояльность", 
+            roles: ["admin", "ceo", "manager"],
+            isList: true,
+            listName: "clients"
+          },
         },
         {
           path: "clients/:id",
@@ -98,13 +121,21 @@ const router = createRouter({
             subtitle: "Данные и история",
             roles: ["admin", "ceo", "manager"],
             breadcrumbs: [{ label: "Клиенты", to: "/clients" }, { label: "Клиент" }],
+            isDetail: true,
+            parentList: "clients"
           },
         },
         {
           path: "cities",
           name: "cities",
           component: Cities,
-          meta: { title: "Города", subtitle: "Управление городами доставки", roles: ["admin", "ceo"] },
+          meta: { 
+            title: "Города", 
+            subtitle: "Управление городами доставки", 
+            roles: ["admin", "ceo"],
+            isList: true,
+            listName: "cities"
+          },
         },
         {
           path: "cities/new",
@@ -115,6 +146,8 @@ const router = createRouter({
             subtitle: "Создание города",
             roles: ["admin", "ceo"],
             breadcrumbs: [{ label: "Города", to: "/cities" }, { label: "Новый город" }],
+            isEdit: true,
+            parentList: "cities"
           },
         },
         {
@@ -126,13 +159,21 @@ const router = createRouter({
             subtitle: "Изменение города",
             roles: ["admin", "ceo"],
             breadcrumbs: [{ label: "Города", to: "/cities" }, { label: "Редактирование" }],
+            isEdit: true,
+            parentList: "cities"
           },
         },
         {
           path: "branches",
           name: "branches",
           component: Branches,
-          meta: { title: "Филиалы", subtitle: "Рестораны и точки самовывоза", roles: ["admin", "ceo", "manager"] },
+          meta: { 
+            title: "Филиалы", 
+            subtitle: "Рестораны и точки самовывоза", 
+            roles: ["admin", "ceo", "manager"],
+            isList: true,
+            listName: "branches"
+          },
         },
         {
           path: "branches/new",
@@ -143,6 +184,8 @@ const router = createRouter({
             subtitle: "Создание филиала",
             roles: ["admin", "ceo"],
             breadcrumbs: [{ label: "Филиалы", to: "/branches" }, { label: "Новый филиал" }],
+            isEdit: true,
+            parentList: "branches"
           },
         },
         {
@@ -154,6 +197,8 @@ const router = createRouter({
             subtitle: "Изменение филиала",
             roles: ["admin", "ceo"],
             breadcrumbs: [{ label: "Филиалы", to: "/branches" }, { label: "Редактирование" }],
+            isEdit: true,
+            parentList: "branches"
           },
         },
         {
@@ -166,6 +211,8 @@ const router = createRouter({
             sidebarCollapsed: true,
             fullBleed: true,
             roles: ["admin", "ceo", "manager"],
+            isList: true,
+            listName: "delivery-zones"
           },
         },
         {
@@ -178,43 +225,82 @@ const router = createRouter({
             sidebarCollapsed: true,
             fullBleed: true,
             roles: ["admin", "ceo"],
+            isEdit: true,
+            parentList: "delivery-zones"
           },
         },
         {
           path: "menu/categories",
           name: "menu-categories",
           component: MenuCategories,
-          meta: { title: "Категории", subtitle: "Структура меню по городам", roles: ["admin", "ceo"] },
+          meta: { 
+            title: "Категории", 
+            subtitle: "Структура меню по городам", 
+            roles: ["admin", "ceo"],
+            isList: true,
+            listName: "menu-categories"
+          },
         },
         {
-          path: "menu/items",
-          name: "menu-items",
-          component: MenuItems,
-          meta: { title: "Позиции", subtitle: "Карточки блюд и варианты", roles: ["admin", "ceo"] },
+          path: "menu/products",
+          name: "menu-products",
+          component: MenuProducts,
+          meta: { 
+            title: "Блюда", 
+            subtitle: "Карточки блюд и варианты", 
+            roles: ["admin", "ceo"],
+            isList: true,
+            listName: "menu-products"
+          },
         },
         {
-          path: "menu/items/:id",
-          name: "menu-item-form",
-          component: MenuItemForm,
+          path: "menu/products/:id",
+          name: "menu-product-form",
+          component: MenuProductForm,
           meta: {
-            title: "Позиция меню",
+            title: "Блюдо меню",
             subtitle: "Создание и редактирование",
             roles: ["admin", "ceo"],
-            breadcrumbs: [{ label: "Позиции", to: "/menu/items" }, { label: "Позиция меню" }],
+            breadcrumbs: [{ label: "Блюда", to: "/menu/products" }, { label: "Блюдо меню" }],
+            isEdit: true,
+            parentList: "menu-products"
           },
         },
         {
           path: "menu/modifiers",
           name: "menu-modifiers",
           component: MenuModifiers,
-          meta: { title: "Модификаторы", subtitle: "Группы и допы", roles: ["admin", "ceo"] },
+          meta: { 
+            title: "Модификаторы", 
+            subtitle: "Группы и допы", 
+            roles: ["admin", "ceo"],
+            isList: true,
+            listName: "menu-modifiers"
+          },
         },
-        { path: "menu/tags", name: "menu-tags", component: MenuTags, meta: { title: "Теги", subtitle: "Метки для фильтрации блюд", roles: ["admin", "ceo"] } },
+        { 
+          path: "menu/tags", 
+          name: "menu-tags", 
+          component: MenuTags, 
+          meta: { 
+            title: "Теги", 
+            subtitle: "Метки для фильтрации блюд", 
+            roles: ["admin", "ceo"],
+            isList: true,
+            listName: "menu-tags"
+          } 
+        },
         {
           path: "menu/stop-list",
           name: "menu-stop-list",
           component: MenuStopList,
-          meta: { title: "Стоп-лист", subtitle: "Недоступные позиции", roles: ["admin", "ceo", "manager"] },
+          meta: { 
+            title: "Стоп-лист", 
+            subtitle: "Недоступные блюда", 
+            roles: ["admin", "ceo", "manager"],
+            isList: true,
+            listName: "menu-stop-list"
+          },
         },
         {
           path: "broadcasts",
@@ -225,6 +311,8 @@ const router = createRouter({
             subtitle: "Маркетинговые кампании",
             roles: ["admin", "ceo"],
             breadcrumbs: [{ label: "Рассылки", to: "/broadcasts" }],
+            isList: true,
+            listName: "broadcasts"
           },
         },
         {
@@ -236,6 +324,8 @@ const router = createRouter({
             subtitle: "Создание кампании",
             roles: ["admin", "ceo"],
             breadcrumbs: [{ label: "Рассылки", to: "/broadcasts" }, { label: "Новая рассылка" }],
+            isEdit: true,
+            parentList: "broadcasts"
           },
         },
         {
@@ -247,6 +337,8 @@ const router = createRouter({
             subtitle: "Настройка кампании",
             roles: ["admin", "ceo"],
             breadcrumbs: [{ label: "Рассылки", to: "/broadcasts" }, { label: "Редактирование" }],
+            isEdit: true,
+            parentList: "broadcasts"
           },
         },
         {
@@ -258,6 +350,8 @@ const router = createRouter({
             subtitle: "Детальный отчет",
             roles: ["admin", "ceo"],
             breadcrumbs: [{ label: "Рассылки", to: "/broadcasts" }, { label: "Статистика" }],
+            isDetail: true,
+            parentList: "broadcasts"
           },
         },
         {
@@ -269,6 +363,8 @@ const router = createRouter({
             subtitle: "Сохраненные аудитории",
             roles: ["admin", "ceo"],
             breadcrumbs: [{ label: "Рассылки", to: "/broadcasts" }, { label: "Сегменты" }],
+            isList: true,
+            listName: "broadcast-segments"
           },
         },
         {
@@ -292,22 +388,36 @@ const router = createRouter({
           path: "admin-users",
           name: "admin-users",
           component: AdminUsers,
-          meta: { title: "Администраторы", subtitle: "Управление пользователями админ-панели", roles: ["admin", "ceo"] },
+          meta: { 
+            title: "Администраторы", 
+            subtitle: "Управление пользователями админ-панели", 
+            roles: ["admin", "ceo"],
+            isList: true,
+            listName: "admin-users"
+          },
         },
         {
           path: "logs",
           name: "admin-logs",
           component: AdminLogs,
-          meta: { title: "Логи", subtitle: "Журнал действий администраторов", roles: ["admin", "ceo"] },
+          meta: { 
+            title: "Логи", 
+            subtitle: "Журнал действий администраторов", 
+            roles: ["admin", "ceo"],
+            isList: true,
+            listName: "admin-logs"
+          },
         },
       ],
     },
     { path: "/:pathMatch(.*)*", name: "not-found", component: NotFound },
   ],
 });
-router.beforeEach((to) => {
+router.beforeEach((to, from) => {
   const authStore = useAuthStore();
   const tokenValid = authStore.validateToken();
+  
+  // Проверка авторизации
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
     return { name: "login", query: { redirect: to.fullPath } };
   }
@@ -317,6 +427,33 @@ router.beforeEach((to) => {
   if (to.meta.roles && authStore.role && !to.meta.roles.includes(authStore.role)) {
     return { name: "not-found" };
   }
+  
+  // Управление навигационным контекстом
+  const navigationStore = useNavigationContextStore();
+  
+  // Сценарий A: Уходим со списка на его детальную/редактирующую страницу
+  if (from.meta.isList && from.meta.listName && 
+      (to.meta.isDetail || to.meta.isEdit) && 
+      to.meta.parentList === from.meta.listName) {
+    // Устанавливаем флаг ожидания возврата
+    navigationStore.setReturning(from.meta.listName, true);
+  }
+  // Сценарий B: Возвращаемся с детальной страницы на список
+  // (флаг isReturning уже установлен, компонент сам восстановит контекст)
+  
+  // Сценарий C: Любая другая навигация
+  else {
+    // Если уходим со списка не на его детальную страницу
+    if (from.meta.isList && from.meta.listName && to.meta.parentList !== from.meta.listName) {
+      navigationStore.clearContext(from.meta.listName);
+    }
+    
+    // Если приходим на список не с его детальной страницы
+    if (to.meta.isList && to.meta.listName && from.meta.parentList !== to.meta.listName) {
+      navigationStore.clearContext(to.meta.listName);
+    }
+  }
+  
   return true;
 });
 router.afterEach((to) => {
@@ -324,5 +461,14 @@ router.afterEach((to) => {
   const baseTitle = to.meta?.title || "Админ-панель";
   const count = ordersStore?.newOrdersCount || 0;
   document.title = count > 0 ? `(${count}) ${baseTitle}` : baseTitle;
+  
+  // Сброс флага isReturning после восстановления контекста
+  if (to.meta.isList && to.meta.listName) {
+    const navigationStore = useNavigationContextStore();
+    // Даем время компоненту восстановиться
+    setTimeout(() => {
+      navigationStore.setReturning(to.meta.listName, false);
+    }, 100);
+  }
 });
 export default router;

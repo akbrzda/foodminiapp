@@ -1,4 +1,3 @@
-import { devError } from "@/shared/utils/logger";
 <template>
   <div class="space-y-6">
     <Card>
@@ -187,6 +186,7 @@ import { devError } from "@/shared/utils/logger";
   </div>
 </template>
 <script setup>
+import { devError } from "@/shared/utils/logger";
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { Calendar as CalendarIcon, RotateCcw, Search } from "lucide-vue-next";
@@ -194,6 +194,7 @@ import { DateFormatter, getLocalTimeZone, parseDate, today } from "@internationa
 import api from "@/shared/api/client.js";
 import { useReferenceStore } from "@/shared/stores/reference.js";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
+import { useListContext } from "@/shared/composables/useListContext.js";
 import { useOrdersStore } from "@/modules/orders/stores/orders.js";
 import { formatCurrency, formatDateTime, formatNumber, formatPhone, normalizePhone } from "@/shared/utils/format.js";
 import Badge from "@/shared/components/ui/badge/Badge.vue";
@@ -218,6 +219,9 @@ const router = useRouter();
 const referenceStore = useReferenceStore();
 const ordersStore = useOrdersStore();
 const { showNewOrderNotification, showErrorNotification } = useNotifications();
+
+// Навигационный контекст для восстановления фильтров и скролла
+const { shouldRestore, saveContext, restoreContext, restoreScroll } = useListContext("orders");
 const orders = ref([]);
 const isLoading = ref(false);
 const page = ref(1);
@@ -287,13 +291,15 @@ const paginatedOrders = computed(() => {
   const start = (page.value - 1) * pageSize.value;
   return orders.value.slice(start, start + pageSize.value);
 });
-const loadOrders = async () => {
+const loadOrders = async ({ preservePage = false } = {}) => {
   isLoading.value = true;
   try {
     const params = Object.fromEntries(Object.entries(filters).filter(([, value]) => value));
     const response = await api.get("/api/orders/admin/all", { params });
     orders.value = response.data.orders || [];
-    page.value = 1;
+    if (!preservePage) {
+      page.value = 1;
+    }
     ordersStore.trackOrders(orders.value);
   } catch (error) {
     devError("Ошибка загрузки заказов:", error);
@@ -324,6 +330,8 @@ const onPageSizeChange = (value) => {
   page.value = 1;
 };
 const selectOrder = (order) => {
+  // Сохраняем контекст перед переходом на детали заказа
+  saveContext(filters, { page: page.value, pageSize: pageSize.value });
   router.push(`/orders/${order.id}`);
 };
 const orderRowClass = (order) => {
@@ -358,7 +366,29 @@ const getStatusBadge = (status) => {
 onMounted(async () => {
   try {
     await referenceStore.loadCities();
-    await loadOrders();
+    
+    // Проверяем, нужно ли восстанавливать контекст
+    if (shouldRestore.value) {
+      const context = restoreContext();
+      
+      if (context) {
+        // Восстанавливаем фильтры
+        Object.assign(filters, context.filters);
+        
+        // Восстанавливаем пагинацию
+        if (context.page) page.value = context.page;
+        if (context.pageSize) pageSize.value = context.pageSize;
+        
+        // Загружаем данные с восстановленными фильтрами
+        await loadOrders({ preservePage: true });
+        
+        // Восстанавливаем скролл после загрузки данных
+        restoreScroll(context.scroll);
+      }
+    } else {
+      // Обычная загрузка
+      await loadOrders();
+    }
   } catch (error) {
     devError("Ошибка загрузки заказов:", error);
     showErrorNotification("Ошибка загрузки заказов");

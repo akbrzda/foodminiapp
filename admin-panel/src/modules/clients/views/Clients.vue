@@ -1,4 +1,3 @@
-import { devError } from "@/shared/utils/logger";
 <template>
   <div class="space-y-6">
     <Card>
@@ -103,12 +102,14 @@ import { devError } from "@/shared/utils/logger";
   </div>
 </template>
 <script setup>
+import { devError } from "@/shared/utils/logger";
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { ChevronRight, Search } from "lucide-vue-next";
 import api from "@/shared/api/client.js";
 import { useReferenceStore } from "@/shared/stores/reference.js";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
+import { useListContext } from "@/shared/composables/useListContext.js";
 import { formatNumber, formatPhone, normalizePhone } from "@/shared/utils/format.js";
 import Badge from "@/shared/components/ui/badge/Badge.vue";
 import Button from "@/shared/components/ui/button/Button.vue";
@@ -129,6 +130,9 @@ import Skeleton from "@/shared/components/ui/skeleton/Skeleton.vue";
 const referenceStore = useReferenceStore();
 const { showErrorNotification } = useNotifications();
 const router = useRouter();
+
+// Навигационный контекст
+const { shouldRestore, saveContext, restoreContext, restoreScroll } = useListContext("clients");
 const clients = ref([]);
 const isLoading = ref(false);
 const page = ref(1);
@@ -142,13 +146,15 @@ const paginatedClients = computed(() => {
   const start = (page.value - 1) * pageSize.value;
   return clients.value.slice(start, start + pageSize.value);
 });
-const loadClients = async () => {
+const loadClients = async ({ preservePage = false } = {}) => {
   isLoading.value = true;
   try {
     const params = Object.fromEntries(Object.entries(filters).filter(([, value]) => value));
     const response = await api.get("/api/admin/clients", { params });
     clients.value = response.data.clients || [];
-    page.value = 1;
+    if (!preservePage) {
+      page.value = 1;
+    }
   } catch (error) {
     devError("Ошибка загрузки клиентов:", error);
     showErrorNotification("Ошибка загрузки клиентов");
@@ -163,6 +169,8 @@ const scheduleLoad = () => {
   loadTimer.value = setTimeout(loadClients, 300);
 };
 const openClient = (clientId) => {
+  // Сохраняем контекст перед переходом
+  saveContext(filters, { page: page.value, pageSize: pageSize.value });
   router.push(`/clients/${clientId}`);
 };
 const onPageSizeChange = (value) => {
@@ -172,7 +180,23 @@ const onPageSizeChange = (value) => {
 onMounted(async () => {
   try {
     await referenceStore.loadCities();
-    await loadClients();
+    
+    // Проверяем, нужно ли восстанавливать контекст
+    if (shouldRestore.value) {
+      const context = restoreContext();
+      
+      if (context) {
+        // Восстанавливаем фильтры и пагинацию
+        Object.assign(filters, context.filters);
+        if (context.page) page.value = context.page;
+        if (context.pageSize) pageSize.value = context.pageSize;
+        
+        await loadClients({ preservePage: true });
+        restoreScroll(context.scroll);
+      }
+    } else {
+      await loadClients();
+    }
   } catch (error) {
     devError("Ошибка загрузки клиентов:", error);
     showErrorNotification("Ошибка загрузки клиентов");

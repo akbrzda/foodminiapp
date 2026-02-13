@@ -1,4 +1,3 @@
-import { devError } from "@/shared/utils/logger";
 <template>
   <div class="space-y-6">
     <Card>
@@ -84,6 +83,7 @@ import { devError } from "@/shared/utils/logger";
   </div>
 </template>
 <script setup>
+import { devError } from "@/shared/utils/logger";
 import { computed, onMounted, ref } from "vue";
 import { MapPin, Pencil, Plus, Trash2 } from "lucide-vue-next";
 import { useRouter } from "vue-router";
@@ -102,9 +102,14 @@ import TableRow from "@/shared/components/ui/table/TableRow.vue";
 import TablePagination from "@/shared/components/TablePagination.vue";
 import Skeleton from "@/shared/components/ui/skeleton/Skeleton.vue";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
+import { useListContext } from "@/shared/composables/useListContext.js";
 
 const router = useRouter();
 const { showErrorNotification, showSuccessNotification } = useNotifications();
+
+// Навигационный контекст
+const { shouldRestore, saveContext, restoreContext, restoreScroll } = useListContext("cities");
+
 const cities = ref([]);
 const isLoading = ref(false);
 const page = ref(1);
@@ -114,12 +119,14 @@ const paginatedCities = computed(() => {
   return cities.value.slice(start, start + pageSize.value);
 });
 
-const loadCities = async () => {
+const loadCities = async ({ preservePage = false } = {}) => {
   isLoading.value = true;
   try {
     const response = await api.get("/api/cities/admin/all");
     cities.value = response.data.cities || [];
-    page.value = 1;
+    if (!preservePage) {
+      page.value = 1;
+    }
   } catch (error) {
     devError("Failed to load cities:", error);
     showErrorNotification("Ошибка при загрузке городов");
@@ -133,10 +140,12 @@ const onPageSizeChange = (value) => {
 };
 
 const goToCreate = () => {
+  saveContext({}, { page: page.value, pageSize: pageSize.value });
   router.push({ name: "city-new" });
 };
 
 const goToEdit = (city) => {
+  saveContext({}, { page: page.value, pageSize: pageSize.value });
   router.push({ name: "city-edit", params: { id: city.id } });
 };
 
@@ -152,7 +161,17 @@ const deleteCity = async (city) => {
   }
 };
 
-onMounted(() => {
-  loadCities();
+onMounted(async () => {
+  if (shouldRestore.value) {
+    const context = restoreContext();
+    if (context) {
+      if (context.page) page.value = context.page;
+      if (context.pageSize) pageSize.value = context.pageSize;
+      await loadCities({ preservePage: true });
+      restoreScroll(context.scroll);
+      return;
+    }
+  }
+  await loadCities();
 });
 </script>

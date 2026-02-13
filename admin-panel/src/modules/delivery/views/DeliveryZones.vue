@@ -1,4 +1,3 @@
-import { devError } from "@/shared/utils/logger";
 <template>
   <div class="relative h-full min-h-[calc(100vh-80px)] bg-background">
     <div id="map" class="absolute inset-0 z-0"></div>
@@ -231,6 +230,7 @@ import { devError } from "@/shared/utils/logger";
   </div>
 </template>
 <script setup>
+import { devError } from "@/shared/utils/logger";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { Lock, Plus, Save } from "lucide-vue-next";
 import { parseDate as parseCalendarDate } from "@internationalized/date";
@@ -249,6 +249,7 @@ import { Calendar as CalendarView } from "@/shared/components/ui/calendar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/components/ui/select";
 import PageHeader from "@/shared/components/PageHeader.vue";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
+import { useListContext } from "@/shared/composables/useListContext.js";
 import { createMarkerIcon, getMapColor, getTileLayer } from "@/shared/utils/leaflet.js";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -290,6 +291,7 @@ const authStore = useAuthStore();
 const route = useRoute();
 const router = useRouter();
 const { showErrorNotification, showSuccessNotification, showWarningNotification } = useNotifications();
+const { shouldRestore, saveContext, restoreContext, restoreScroll } = useListContext("delivery-zones");
 const isManager = computed(() => authStore.role === "manager");
 const cityId = ref("");
 const branchId = ref("");
@@ -612,9 +614,23 @@ const renderPolygonsOnMap = () => {
     polygonLayers.set(polygon.id, layer);
   });
 };
+const saveDeliveryZonesContext = () => {
+  const additionalData = {
+    branchId: branchId.value,
+    statusFilter: statusFilter.value,
+    leftTab: leftTab.value,
+  };
+  if (map) {
+    const center = map.getCenter();
+    additionalData.mapCenter = { lat: center.lat, lng: center.lng };
+    additionalData.mapZoom = map.getZoom();
+  }
+  saveContext({ cityId: cityId.value }, additionalData);
+};
 const startDrawing = () => {
   if (!branchId.value) return;
   if (!ensureEditAccess("Недостаточно прав для создания полигона")) return;
+  saveDeliveryZonesContext();
   router.push({
     name: "delivery-zone-editor",
     params: { branchId: branchId.value, polygonId: "new" },
@@ -623,6 +639,7 @@ const startDrawing = () => {
 };
 const editPolygon = (polygon) => {
   if (!ensureEditAccess("Недостаточно прав для редактирования полигона")) return;
+  saveDeliveryZonesContext();
   router.push({
     name: "delivery-zone-editor",
     params: { branchId: branchId.value, polygonId: polygon.id },
@@ -1008,23 +1025,38 @@ watch(
   },
   { deep: true },
 );
-onMounted(() => {
-  referenceStore.loadCities();
-  loadAllPolygons();
-  const initialCity = route.query.cityId;
-  const initialBranch = route.query.branchId;
-  if (initialCity) {
-    cityId.value = String(initialCity);
-    loadBranches().then(() => {
-      if (initialBranch) {
-        branchId.value = String(initialBranch);
-        loadPolygons().then(() => nextTick(() => initMap()));
-      }
-    });
+onMounted(async () => {
+  await referenceStore.loadCities();
+  await loadAllPolygons();
+
+  const context = shouldRestore.value ? restoreContext() : null;
+  const initialCity = route.query.cityId ? String(route.query.cityId) : "";
+  const initialBranch = route.query.branchId ? String(route.query.branchId) : "";
+
+  if (context) {
+    cityId.value = context.filters?.cityId ? String(context.filters.cityId) : "";
+    branchId.value = context.branchId ? String(context.branchId) : "";
+    statusFilter.value = context.statusFilter || "all";
+    leftTab.value = context.leftTab || "zones";
+  } else {
+    cityId.value = initialCity;
+    branchId.value = initialBranch;
   }
-  nextTick(() => {
-    initMap();
-  });
+
+  if (cityId.value) {
+    await loadBranches();
+  }
+  if (branchId.value) {
+    await loadPolygons();
+  }
+
+  await nextTick();
+  initMap();
+
+  if (context?.mapCenter && Number.isFinite(Number(context.mapZoom)) && map) {
+    map.setView([context.mapCenter.lat, context.mapCenter.lng], Number(context.mapZoom));
+    restoreScroll(context.scroll);
+  }
 });
 onUnmounted(() => {
   if (map) {

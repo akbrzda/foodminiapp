@@ -1,4 +1,3 @@
-import { devError } from "@/shared/utils/logger";
 <template>
   <div class="space-y-6">
     <Card>
@@ -142,6 +141,7 @@ import { devError } from "@/shared/utils/logger";
 </template>
 
 <script setup>
+import { devError } from "@/shared/utils/logger";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch, shallowRef } from "vue";
 import { MapPin, MapPinned, Plus, Save, Trash2 } from "lucide-vue-next";
 import { useRoute, useRouter } from "vue-router";

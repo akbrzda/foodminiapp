@@ -54,7 +54,7 @@ router.use(
   }),
 );
 
-router.post("/menu-items/:id", upload.single("image"), uploadImage(IMAGE_CATEGORIES.MENU_ITEMS));
+router.post("/menu-products/:id", upload.single("image"), uploadImage(IMAGE_CATEGORIES.MENU_ITEMS));
 router.post("/menu-categories/:id", upload.single("image"), uploadImage(IMAGE_CATEGORIES.MENU_CATEGORIES));
 router.post("/modifiers/:id", upload.single("image"), uploadImage(IMAGE_CATEGORIES.MODIFIERS));
 router.post("/modifier-groups/:id", upload.single("image"), uploadImage(IMAGE_CATEGORIES.MODIFIER_GROUPS, { allowTemp: false }));

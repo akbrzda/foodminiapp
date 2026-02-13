@@ -1,4 +1,3 @@
-import { devError } from "@/shared/utils/logger";
 <template>
   <div class="space-y-6">
     <Card>
@@ -270,6 +269,7 @@ import { devError } from "@/shared/utils/logger";
   </div>
 </template>
 <script setup>
+import { devError } from "@/shared/utils/logger";
 import { computed, onMounted, ref, watch } from "vue";
 import { Pencil, Plus, Save, Trash2 } from "lucide-vue-next";
 import api from "@/shared/api/client.js";
@@ -294,10 +294,12 @@ import Skeleton from "@/shared/components/ui/skeleton/Skeleton.vue";
 import { Field, FieldContent, FieldGroup, FieldLabel } from "@/shared/components/ui/field";
 import { Label } from "@/shared/components/ui/label";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
+import { useListContext } from "@/shared/composables/useListContext.js";
 import { normalizeBoolean } from "@/shared/utils/format.js";
 const referenceStore = useReferenceStore();
 const authStore = useAuthStore();
 const { showErrorNotification } = useNotifications();
+const { shouldRestore, saveContext, restoreContext, restoreScroll } = useListContext("admin-users");
 const users = ref([]);
 const isLoading = ref(false);
 const page = ref(1);
@@ -354,7 +356,7 @@ const roleClass = (role) => {
   if (role === "admin") return "bg-amber-100 text-amber-700 border-transparent";
   return "";
 };
-const loadUsers = async () => {
+const loadUsers = async ({ preservePage = false } = {}) => {
   isLoading.value = true;
   try {
     const params = {};
@@ -362,7 +364,9 @@ const loadUsers = async () => {
     if (filters.value.is_active) params.is_active = filters.value.is_active;
     const response = await api.get("/api/admin/users", { params });
     users.value = response.data.users || [];
-    page.value = 1;
+    if (!preservePage) {
+      page.value = 1;
+    }
   } catch (error) {
     devError("Ошибка загрузки пользователей:", error);
   } finally {
@@ -455,6 +459,17 @@ const deleteUser = async (user) => {
 onMounted(async () => {
   try {
     await referenceStore.loadCities();
+    if (shouldRestore.value) {
+      const context = restoreContext();
+      if (context) {
+        filters.value = { ...filters.value, ...(context.filters || {}) };
+        if (context.page) page.value = context.page;
+        if (context.pageSize) pageSize.value = context.pageSize;
+        await loadUsers({ preservePage: true });
+        restoreScroll(context.scroll);
+        return;
+      }
+    }
     await loadUsers();
   } catch (error) {
     devError("Ошибка загрузки пользователей:", error);
@@ -486,6 +501,12 @@ watch(
     if (!telegramId) {
       form.value.eruda_enabled = false;
     }
+  },
+);
+watch(
+  () => [filters.value.role, filters.value.is_active, page.value, pageSize.value],
+  () => {
+    saveContext(filters.value, { page: page.value, pageSize: pageSize.value });
   },
 );
 </script>

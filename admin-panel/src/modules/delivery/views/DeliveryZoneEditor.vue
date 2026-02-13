@@ -1,4 +1,3 @@
-import { devError } from "@/shared/utils/logger";
 <template>
   <div class="relative h-full min-h-[calc(100vh-80px)] bg-background">
     <div id="editor-map" class="absolute inset-0 z-0"></div>
@@ -113,6 +112,7 @@ import { devError } from "@/shared/utils/logger";
   />
 </template>
 <script setup>
+import { devError } from "@/shared/utils/logger";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { Copy, Edit, Save } from "lucide-vue-next";
 import { useRoute, useRouter } from "vue-router";

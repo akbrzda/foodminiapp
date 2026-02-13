@@ -1,4 +1,3 @@
-import { devError } from "@/shared/utils/logger";
 <template>
   <div class="space-y-6">
     <Card>
@@ -100,7 +99,8 @@ import { devError } from "@/shared/utils/logger";
   </div>
 </template>
 <script setup>
-import { computed, onMounted, ref } from "vue";
+import { devError } from "@/shared/utils/logger";
+import { computed, onMounted, ref, watch } from "vue";
 import { Pencil, Plus, Save, Trash2 } from "lucide-vue-next";
 import api from "@/shared/api/client.js";
 import Badge from "@/shared/components/ui/badge/Badge.vue";
@@ -123,9 +123,11 @@ import Skeleton from "@/shared/components/ui/skeleton/Skeleton.vue";
 import SegmentBuilder from "../components/SegmentBuilder.vue";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/shared/components/ui/dialog/index.js";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
+import { useListContext } from "@/shared/composables/useListContext.js";
 import { formatDateTime, formatNumber } from "@/shared/utils/format.js";
 
 const { showErrorNotification, showSuccessNotification, showWarningNotification } = useNotifications();
+const { shouldRestore, saveContext, restoreContext, restoreScroll } = useListContext("broadcast-segments");
 const segments = ref([]);
 const isLoading = ref(false);
 const page = ref(1);
@@ -146,12 +148,14 @@ const paginatedSegments = computed(() => {
   return segments.value.slice(start, start + pageSize.value);
 });
 
-const loadSegments = async () => {
+const loadSegments = async ({ preservePage = false } = {}) => {
   isLoading.value = true;
   try {
     const response = await api.get("/api/broadcasts/segments");
     segments.value = response.data?.data?.items || [];
-    page.value = 1;
+    if (!preservePage) {
+      page.value = 1;
+    }
   } catch (error) {
     devError("Ошибка загрузки сегментов:", error);
     showErrorNotification("Не удалось загрузить сегменты");
@@ -243,5 +247,23 @@ const deleteSegment = async (segment) => {
   }
 };
 
-onMounted(loadSegments);
+onMounted(async () => {
+  if (shouldRestore.value) {
+    const context = restoreContext();
+    if (context) {
+      if (context.page) page.value = context.page;
+      if (context.pageSize) pageSize.value = context.pageSize;
+      await loadSegments({ preservePage: true });
+      restoreScroll(context.scroll);
+      return;
+    }
+  }
+  await loadSegments();
+});
+watch(
+  () => [page.value, pageSize.value],
+  () => {
+    saveContext({}, { page: page.value, pageSize: pageSize.value });
+  },
+);
 </script>

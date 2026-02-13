@@ -1,6 +1,6 @@
 import { ref } from "vue";
 import { toast } from "vue-sonner";
-import { devWarn } from "@/shared/utils/logger";
+import { devError, devWarn } from "@/shared/utils/logger";
 export function useNotifications() {
   const isSupported = typeof window !== "undefined" && "Notification" in window;
   const permission = ref(isSupported ? Notification.permission : "denied");
@@ -42,7 +42,7 @@ export function useNotifications() {
       permission.value = result;
       return result === "granted";
     } catch (error) {
-      console.error("Ошибка запроса разрешения на уведомления:", error);
+      devError("Ошибка запроса разрешения на уведомления:", error);
       return false;
     }
   };
@@ -68,7 +68,7 @@ export function useNotifications() {
       setTimeout(() => notification.close(), 5000);
       return notification;
     } catch (error) {
-      console.error("Ошибка отображения уведомления:", error);
+      devError("Ошибка отображения уведомления:", error);
       toast.message(title, { description: options.body || "" });
     }
   };

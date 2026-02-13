@@ -1,4 +1,3 @@
-import { devError } from "@/shared/utils/logger";
 <template>
   <div class="space-y-6">
     <Card>
@@ -127,6 +126,7 @@ import { devError } from "@/shared/utils/logger";
   </div>
 </template>
 <script setup>
+import { devError } from "@/shared/utils/logger";
 import { computed, onMounted, ref } from "vue";
 import { MapPin, Pencil, Phone, Plus, Trash2 } from "lucide-vue-next";
 import { useRouter } from "vue-router";
@@ -147,6 +147,7 @@ import TableRow from "@/shared/components/ui/table/TableRow.vue";
 import TablePagination from "@/shared/components/TablePagination.vue";
 import Skeleton from "@/shared/components/ui/skeleton/Skeleton.vue";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
+import { useListContext } from "@/shared/composables/useListContext.js";
 import { useReferenceStore } from "@/shared/stores/reference.js";
 import { useAuthStore } from "@/shared/stores/auth.js";
 import { formatPhone, normalizePhone } from "@/shared/utils/format.js";
@@ -155,6 +156,9 @@ const router = useRouter();
 const referenceStore = useReferenceStore();
 const authStore = useAuthStore();
 const { showErrorNotification, showSuccessNotification } = useNotifications();
+
+// Навигационный контекст
+const { shouldRestore, saveContext, restoreContext, restoreScroll } = useListContext("branches");
 
 const cityId = ref("");
 const branches = ref([]);
@@ -168,7 +172,7 @@ const paginatedBranches = computed(() => {
 });
 let branchesRequestId = 0;
 
-const loadBranches = async () => {
+const loadBranches = async ({ preservePage = false } = {}) => {
   if (!cityId.value) {
     isLoading.value = false;
     branches.value = [];
@@ -180,7 +184,9 @@ const loadBranches = async () => {
     const response = await api.get(`/api/cities/${cityId.value}/branches`);
     if (requestId === branchesRequestId) {
       branches.value = response.data.branches || [];
-      page.value = 1;
+      if (!preservePage) {
+        page.value = 1;
+      }
     }
   } catch (error) {
     devError("Ошибка загрузки филиалов:", error);
@@ -206,11 +212,13 @@ const formatTimeValue = (value) => {
 
 const goToCreate = () => {
   if (!cityId.value) return;
+  saveContext({ cityId: cityId.value }, { page: page.value, pageSize: pageSize.value });
   router.push({ name: "branch-new", query: { cityId: String(cityId.value) } });
 };
 
 const goToEdit = (branch) => {
   if (!cityId.value) return;
+  saveContext({ cityId: cityId.value }, { page: page.value, pageSize: pageSize.value });
   router.push({ name: "branch-edit", params: { id: branch.id }, query: { cityId: String(cityId.value) } });
 };
 
@@ -226,7 +234,28 @@ const deleteBranch = async (branch) => {
   }
 };
 
-onMounted(() => {
-  referenceStore.loadCities();
+onMounted(async () => {
+  await referenceStore.loadCities();
+  
+  if (shouldRestore.value) {
+    const context = restoreContext();
+    
+    if (context) {
+      if (context.filters?.cityId) cityId.value = context.filters.cityId;
+      if (context.page) page.value = context.page;
+      if (context.pageSize) pageSize.value = context.pageSize;
+      
+      // loadBranches будет вызван автоматически через watch(cityId)
+      if (cityId.value) {
+        await loadBranches({ preservePage: true });
+        restoreScroll(context.scroll);
+      }
+      return;
+    }
+  }
+
+  if (cityId.value) {
+    await loadBranches();
+  }
 });
 </script>

@@ -1,4 +1,3 @@
-import { devError } from "@/shared/utils/logger";
 <template>
   <div class="space-y-6">
     <Card>
@@ -207,6 +206,7 @@ import { devError } from "@/shared/utils/logger";
   </div>
 </template>
 <script setup>
+import { devError } from "@/shared/utils/logger";
 import { computed, onMounted, ref } from "vue";
 import { Pencil, Plus, RefreshCcw, Save, Trash2 } from "lucide-vue-next";
 import api from "@/shared/api/client.js";

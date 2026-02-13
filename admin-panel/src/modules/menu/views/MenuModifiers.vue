@@ -346,6 +346,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import Input from "@/shared/components/ui/input/Input.vue";
 import PageHeader from "@/shared/components/PageHeader.vue";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/components/ui/select";
+import { useListContext } from "@/shared/composables/useListContext.js";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
 import { formatCurrency, normalizeBoolean } from "@/shared/utils/format.js";
 import { devError } from "@/shared/utils/logger";
@@ -358,6 +359,7 @@ const groups = ref([]);
 const { showErrorNotification, showSuccessNotification } = useNotifications();
 const ordersStore = useOrdersStore();
 const referenceStore = useReferenceStore();
+const { shouldRestore, saveContext, restoreContext, restoreScroll } = useListContext("menu-modifiers");
 const showModal = ref(false);
 const showModifierModal = ref(false);
 const showCityPricesModal = ref(false);
@@ -818,5 +820,18 @@ watch(
     getOrCreateModifierCityPrice(next);
   },
 );
-onMounted(loadGroups);
+onMounted(async () => {
+  await loadGroups();
+  if (!shouldRestore.value) return;
+  const context = restoreContext();
+  if (context) {
+    restoreScroll(context.scroll);
+  }
+});
+watch(
+  () => groups.value.length,
+  () => {
+    saveContext({});
+  },
+);
 </script>

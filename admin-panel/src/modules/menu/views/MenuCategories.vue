@@ -1,4 +1,3 @@
-import { devError } from "@/shared/utils/logger";
 <template>
   <div class="space-y-6">
     <Card>
@@ -162,9 +161,11 @@ import { devError } from "@/shared/utils/logger";
   </div>
 </template>
 <script setup>
+import { devError } from "@/shared/utils/logger";
 import { computed, onMounted, ref, watch } from "vue";
 import { Pencil, Plus, Save, Trash2, UploadCloud } from "lucide-vue-next";
 import api from "@/shared/api/client.js";
+import { useListContext } from "@/shared/composables/useListContext.js";
 import Badge from "@/shared/components/ui/badge/Badge.vue";
 import Button from "@/shared/components/ui/button/Button.vue";
 import Card from "@/shared/components/ui/card/Card.vue";
@@ -191,6 +192,7 @@ import { useOrdersStore } from "@/modules/orders/stores/orders.js";
 const referenceStore = useReferenceStore();
 const ordersStore = useOrdersStore();
 const { showErrorNotification, showSuccessNotification } = useNotifications();
+const { shouldRestore, saveContext, restoreContext, restoreScroll } = useListContext("menu-categories");
 const categories = ref([]);
 const isLoading = ref(false);
 const page = ref(1);
@@ -225,12 +227,14 @@ const updateDocumentTitle = (baseTitle) => {
   const count = ordersStore.newOrdersCount || 0;
   document.title = count > 0 ? `(${count}) ${baseTitle}` : baseTitle;
 };
-const loadCategories = async () => {
+const loadCategories = async ({ preservePage = false } = {}) => {
   isLoading.value = true;
   try {
     const response = await api.get("/api/menu/admin/all-categories");
     categories.value = response.data.categories || [];
-    page.value = 1;
+    if (!preservePage) {
+      page.value = 1;
+    }
   } catch (error) {
     devError("Failed to load categories:", error);
     showErrorNotification("Ошибка при загрузке категорий");
@@ -353,6 +357,16 @@ const deleteCategory = async (category) => {
 onMounted(async () => {
   try {
     await referenceStore.loadCities();
+    if (shouldRestore.value) {
+      const context = restoreContext();
+      if (context) {
+        if (context.page) page.value = context.page;
+        if (context.pageSize) pageSize.value = context.pageSize;
+        await loadCategories({ preservePage: true });
+        restoreScroll(context.scroll);
+        return;
+      }
+    }
     await loadCategories();
   } catch (error) {
     devError("Ошибка загрузки категорий:", error);
@@ -365,5 +379,11 @@ watch(
     updateDocumentTitle(modalNameTitle.value || "Категории");
   },
   { immediate: true },
+);
+watch(
+  () => [page.value, pageSize.value],
+  () => {
+    saveContext({}, { page: page.value, pageSize: pageSize.value });
+  },
 );
 </script>

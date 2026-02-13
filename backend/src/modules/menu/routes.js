@@ -19,12 +19,12 @@ router.get("/", publicMenuController.getMenu);
 // Получение категорий
 router.get("/categories", publicMenuController.getCategories);
 router.get("/categories/:id", publicMenuController.getCategoryById);
-router.get("/categories/:categoryId/items", publicMenuController.getCategoryItems);
+router.get("/categories/:categoryId/products", publicMenuController.getCategoryItems);
 
-// Получение товаров
-router.get("/items/:id", publicMenuController.getItemById);
-router.get("/items/:itemId/modifiers", publicMenuController.getItemModifiers);
-router.get("/items/:itemId/variants", publicMenuController.getItemVariants);
+// Получение товаров/блюд
+router.get("/products/:id", publicMenuController.getItemById);
+router.get("/products/:itemId/modifiers", publicMenuController.getItemModifiers);
+router.get("/products/:itemId/variants", publicMenuController.getItemVariants);
 
 // Получение групп модификаторов
 router.get("/modifier-groups", publicMenuController.getModifierGroups);
@@ -38,35 +38,80 @@ router.get("/admin/categories", authenticateToken, requireRole("admin", "manager
 router.post("/admin/categories", authenticateToken, requireRole("admin", "manager", "ceo"), categoriesController.createCategory);
 router.put("/admin/categories/:id", authenticateToken, requireRole("admin", "manager", "ceo"), categoriesController.updateCategory);
 router.delete("/admin/categories/:id", authenticateToken, requireRole("admin", "manager", "ceo"), categoriesController.deleteCategory);
-router.get("/admin/categories/:categoryId/items", authenticateToken, requireRole("admin", "manager", "ceo"), categoriesController.getCategoryAdminItems);
+router.get("/admin/categories/:categoryId/products", authenticateToken, requireRole("admin", "manager", "ceo"), categoriesController.getCategoryAdminItems);
 
 // Управление городами категорий
 router.post("/admin/categories/:categoryId/cities", authenticateToken, requireRole("admin", "ceo"), categoriesController.addCategoryCity);
 router.put("/admin/categories/:categoryId/cities/:cityId", authenticateToken, requireRole("admin", "ceo"), categoriesController.updateCategoryCity);
 router.get("/admin/categories/:categoryId/cities", authenticateToken, requireRole("admin", "manager", "ceo"), categoriesController.getCategoryCities);
 
-// ==================== АДМИН: ТОВАРЫ ====================
+// ==================== АДМИН: ТОВАРЫ/БЛЮДА ====================
 
-router.post("/admin/items", authenticateToken, requireRole("admin", "manager", "ceo"), itemsController.createItem);
-router.get("/admin/items", authenticateToken, requireRole("admin", "manager", "ceo"), itemsController.getAdminItems);
-router.get("/admin/items/:id", authenticateToken, requireRole("admin", "manager", "ceo"), itemsController.getAdminItemById);
-router.put("/admin/items/:id", authenticateToken, requireRole("admin", "manager", "ceo"), itemsController.updateItem);
-router.delete("/admin/items/:id", authenticateToken, requireRole("admin", "manager", "ceo"), itemsController.deleteItem);
+router.post("/admin/products", authenticateToken, requireRole("admin", "manager", "ceo"), itemsController.createItem);
+router.get("/admin/products", authenticateToken, requireRole("admin", "manager", "ceo"), itemsController.getAdminItems);
+router.get("/admin/products/:id", authenticateToken, requireRole("admin", "manager", "ceo"), itemsController.getAdminItemById);
+router.put("/admin/products/:id", authenticateToken, requireRole("admin", "manager", "ceo"), itemsController.updateItem);
+router.delete("/admin/products/:id", authenticateToken, requireRole("admin", "manager", "ceo"), itemsController.deleteItem);
 
 // Управление модификаторами товаров
-router.get("/admin/items/:itemId/modifiers", authenticateToken, requireRole("admin", "manager", "ceo"), itemsController.getItemModifierGroups);
-router.put("/admin/items/:itemId/modifiers", authenticateToken, requireRole("admin", "manager", "ceo"), itemsController.updateItemModifierGroups);
+router.get(
+  "/admin/products/:itemId/modifiers",
+  authenticateToken,
+  requireRole("admin", "manager", "ceo"),
+  itemsController.getItemModifierGroups,
+);
+router.put(
+  "/admin/products/:itemId/modifiers",
+  authenticateToken,
+  requireRole("admin", "manager", "ceo"),
+  itemsController.updateItemModifierGroups,
+);
 
 // Управление вариантами товаров
-router.get("/admin/items/:itemId/variants", authenticateToken, requireRole("admin", "manager", "ceo"), itemsController.getAdminItemVariants);
-router.post("/admin/items/:itemId/variants", authenticateToken, requireRole("admin", "manager", "ceo"), itemsController.createItemVariant);
-router.put("/admin/items/:itemId/variants", authenticateToken, requireRole("admin", "manager", "ceo"), itemsController.updateItemVariants);
+router.get(
+  "/admin/products/:itemId/variants",
+  authenticateToken,
+  requireRole("admin", "manager", "ceo"),
+  itemsController.getAdminItemVariants,
+);
+router.post(
+  "/admin/products/:itemId/variants",
+  authenticateToken,
+  requireRole("admin", "manager", "ceo"),
+  itemsController.createItemVariant,
+);
+router.put(
+  "/admin/products/:itemId/variants",
+  authenticateToken,
+  requireRole("admin", "manager", "ceo"),
+  itemsController.updateItemVariants,
+);
 
 // Управление городами товаров
-router.post("/admin/items/:itemId/cities", authenticateToken, requireRole("admin", "manager", "ceo"), itemsController.addItemCity);
-router.put("/admin/items/:itemId/cities/:cityId", authenticateToken, requireRole("admin", "manager", "ceo"), itemsController.updateItemCity);
-router.get("/admin/items/:itemId/cities", authenticateToken, requireRole("admin", "manager", "ceo"), itemsController.getItemCities);
-router.put("/admin/items/:itemId/cities", authenticateToken, requireRole("admin", "manager", "ceo"), itemsController.updateItemCities);
+router.post(
+  "/admin/products/:itemId/cities",
+  authenticateToken,
+  requireRole("admin", "manager", "ceo"),
+  itemsController.addItemCity,
+);
+router.put(
+  "/admin/products/:itemId/cities/:cityId",
+  authenticateToken,
+  requireRole("admin", "manager", "ceo"),
+  itemsController.updateItemCity,
+);
+router.get(
+  "/admin/products/:itemId/cities",
+  authenticateToken,
+  requireRole("admin", "manager", "ceo"),
+  itemsController.getItemCities,
+);
+router.put(
+  "/admin/products/:itemId/cities",
+  authenticateToken,
+  requireRole("admin", "manager", "ceo"),
+  itemsController.updateItemCities,
+);
 
 // ==================== АДМИН: МОДИФИКАТОРЫ ====================
 
@@ -77,10 +122,10 @@ router.put("/admin/modifier-groups/:id", authenticateToken, requireRole("admin",
 router.delete("/admin/modifier-groups/:id", authenticateToken, requireRole("admin", "manager", "ceo"), modifiersController.deleteModifierGroup);
 
 // Привязка групп модификаторов к товарам
-router.post("/admin/items/:itemId/modifier-groups", authenticateToken, requireRole("admin", "manager", "ceo"), modifiersController.addModifierGroupToItem);
-router.get("/admin/items/:itemId/modifier-groups", authenticateToken, requireRole("admin", "manager", "ceo"), modifiersController.getItemAdminModifierGroups);
+router.post("/admin/products/:itemId/modifier-groups", authenticateToken, requireRole("admin", "manager", "ceo"), modifiersController.addModifierGroupToItem);
+router.get("/admin/products/:itemId/modifier-groups", authenticateToken, requireRole("admin", "manager", "ceo"), modifiersController.getItemAdminModifierGroups);
 router.delete(
-  "/admin/items/:itemId/modifier-groups/:groupId",
+  "/admin/products/:itemId/modifier-groups/:groupId",
   authenticateToken,
   requireRole("admin", "manager", "ceo"),
   modifiersController.removeModifierGroupFromItem,
@@ -117,9 +162,24 @@ router.delete("/admin/variants/:id", authenticateToken, requireRole("admin", "ma
 router.get("/admin/variants", authenticateToken, requireRole("admin", "manager", "ceo"), variantsAndPricesController.getAdminVariants);
 
 // Управление ценами товаров
-router.get("/admin/items/:itemId/prices", authenticateToken, requireRole("admin", "manager", "ceo"), variantsAndPricesController.getItemPrices);
-router.post("/admin/items/:itemId/prices", authenticateToken, requireRole("admin", "manager", "ceo"), variantsAndPricesController.createItemPrice);
-router.delete("/admin/items/:itemId/prices/:priceId", authenticateToken, requireRole("admin", "ceo"), variantsAndPricesController.deleteItemPrice);
+router.get(
+  "/admin/products/:itemId/prices",
+  authenticateToken,
+  requireRole("admin", "manager", "ceo"),
+  variantsAndPricesController.getItemPrices,
+);
+router.post(
+  "/admin/products/:itemId/prices",
+  authenticateToken,
+  requireRole("admin", "manager", "ceo"),
+  variantsAndPricesController.createItemPrice,
+);
+router.delete(
+  "/admin/products/:itemId/prices/:priceId",
+  authenticateToken,
+  requireRole("admin", "ceo"),
+  variantsAndPricesController.deleteItemPrice,
+);
 
 // Управление ценами вариантов
 router.get("/admin/variants/:variantId/prices", authenticateToken, requireRole("admin", "manager", "ceo"), variantsAndPricesController.getVariantPrices);
@@ -135,21 +195,56 @@ router.put("/admin/tags/:id", authenticateToken, requireRole("admin", "ceo"), ta
 router.delete("/admin/tags/:id", authenticateToken, requireRole("admin", "ceo"), tagsAndStopListController.deleteTag);
 
 // Привязка тегов к товарам
-router.post("/admin/items/:itemId/tags", authenticateToken, requireRole("admin", "manager", "ceo"), tagsAndStopListController.addTagToItem);
-router.delete("/admin/items/:itemId/tags/:tagId", authenticateToken, requireRole("admin", "manager", "ceo"), tagsAndStopListController.removeTagFromItem);
-router.get("/admin/items/:itemId/tags", authenticateToken, requireRole("admin", "manager", "ceo"), tagsAndStopListController.getItemTags);
-router.put("/admin/items/:itemId/tags", authenticateToken, requireRole("admin", "manager", "ceo"), tagsAndStopListController.updateItemTags);
+router.post(
+  "/admin/products/:itemId/tags",
+  authenticateToken,
+  requireRole("admin", "manager", "ceo"),
+  tagsAndStopListController.addTagToItem,
+);
+router.delete(
+  "/admin/products/:itemId/tags/:tagId",
+  authenticateToken,
+  requireRole("admin", "manager", "ceo"),
+  tagsAndStopListController.removeTagFromItem,
+);
+router.get(
+  "/admin/products/:itemId/tags",
+  authenticateToken,
+  requireRole("admin", "manager", "ceo"),
+  tagsAndStopListController.getItemTags,
+);
+router.put(
+  "/admin/products/:itemId/tags",
+  authenticateToken,
+  requireRole("admin", "manager", "ceo"),
+  tagsAndStopListController.updateItemTags,
+);
 
 // Привязка товаров к категориям
-router.post("/admin/items/:itemId/categories", authenticateToken, requireRole("admin", "manager", "ceo"), tagsAndStopListController.addItemToCategory);
+router.post(
+  "/admin/products/:itemId/categories",
+  authenticateToken,
+  requireRole("admin", "manager", "ceo"),
+  tagsAndStopListController.addItemToCategory,
+);
 router.delete(
-  "/admin/items/:itemId/categories/:categoryId",
+  "/admin/products/:itemId/categories/:categoryId",
   authenticateToken,
   requireRole("admin", "manager", "ceo"),
   tagsAndStopListController.removeItemFromCategory,
 );
-router.get("/admin/items/:itemId/categories", authenticateToken, requireRole("admin", "manager", "ceo"), tagsAndStopListController.getItemCategories);
-router.put("/admin/items/:itemId/categories", authenticateToken, requireRole("admin", "manager", "ceo"), tagsAndStopListController.updateItemCategories);
+router.get(
+  "/admin/products/:itemId/categories",
+  authenticateToken,
+  requireRole("admin", "manager", "ceo"),
+  tagsAndStopListController.getItemCategories,
+);
+router.put(
+  "/admin/products/:itemId/categories",
+  authenticateToken,
+  requireRole("admin", "manager", "ceo"),
+  tagsAndStopListController.updateItemCategories,
+);
 
 // Управление стоп-листом
 router.get("/admin/stop-list", authenticateToken, requireRole("admin", "manager", "ceo"), tagsAndStopListController.getStopList);
@@ -162,19 +257,19 @@ router.delete("/admin/stop-list/:id", authenticateToken, requireRole("admin", "m
 
 // Управление отключенными модификаторами для товаров
 router.post(
-  "/admin/items/:itemId/disabled-modifiers",
+  "/admin/products/:itemId/disabled-modifiers",
   authenticateToken,
   requireRole("admin", "manager", "ceo"),
   tagsAndStopListController.disableModifierForItem,
 );
 router.delete(
-  "/admin/items/:itemId/disabled-modifiers/:modifierId",
+  "/admin/products/:itemId/disabled-modifiers/:modifierId",
   authenticateToken,
   requireRole("admin", "manager", "ceo"),
   tagsAndStopListController.enableModifierForItem,
 );
 router.get(
-  "/admin/items/:itemId/disabled-modifiers",
+  "/admin/products/:itemId/disabled-modifiers",
   authenticateToken,
   requireRole("admin", "manager", "ceo"),
   tagsAndStopListController.getItemDisabledModifiers,

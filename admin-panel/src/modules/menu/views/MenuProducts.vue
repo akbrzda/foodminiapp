@@ -1,14 +1,13 @@
-import { devError } from "@/shared/utils/logger";
 <template>
   <div class="space-y-6">
     <Card>
       <CardContent>
-        <PageHeader title="Позиции меню" description="Управление товарами и их параметрами">
+        <PageHeader title="Блюда меню" description="Управление блюдами и их параметрами">
           <template #actions>
             <Badge variant="secondary">Показано: {{ paginatedItems.length }} / {{ filteredItems.length }}</Badge>
             <Button @click="createItem">
               <Plus :size="16" />
-              Добавить позицию
+              Добавить блюдо
             </Button>
           </template>
         </PageHeader>
@@ -48,7 +47,7 @@ import { devError } from "@/shared/utils/logger";
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Позиция</TableHead>
+              <TableHead>Блюдо</TableHead>
               <TableHead>Категории</TableHead>
               <TableHead>Цена</TableHead>
               <TableHead>Статус</TableHead>
@@ -129,10 +128,14 @@ import { devError } from "@/shared/utils/logger";
   </div>
 </template>
 <script setup>
+import { devError } from "@/shared/utils/logger";
 import { computed, onMounted, reactive, ref, watch } from "vue";
-import { onBeforeRouteLeave, useRouter } from "vue-router";
+import { useRouter } from "vue-router";
 import { Pencil, Plus, Trash2 } from "lucide-vue-next";
 import api from "@/shared/api/client.js";
+import { useNotifications } from "@/shared/composables/useNotifications.js";
+import { useListContext } from "@/shared/composables/useListContext.js";
+import { formatCurrency } from "@/shared/utils/format.js";
 import Badge from "@/shared/components/ui/badge/Badge.vue";
 import Button from "@/shared/components/ui/button/Button.vue";
 import Card from "@/shared/components/ui/card/Card.vue";
@@ -148,12 +151,15 @@ import TableHead from "@/shared/components/ui/table/TableHead.vue";
 import TableHeader from "@/shared/components/ui/table/TableHeader.vue";
 import TableRow from "@/shared/components/ui/table/TableRow.vue";
 import TablePagination from "@/shared/components/TablePagination.vue";
-import { useNotifications } from "@/shared/composables/useNotifications.js";
-import { formatCurrency } from "@/shared/utils/format.js";
+
 const router = useRouter();
+const { showErrorNotification } = useNotifications();
+
+// Навигационный контекст
+const { shouldRestore, saveContext, restoreContext, restoreScroll } = useListContext("menu-products");
+
 const items = ref([]);
 const isLoading = ref(false);
-const { showErrorNotification } = useNotifications();
 const page = ref(1);
 const pageSize = ref(20);
 const filters = reactive({
@@ -216,38 +222,56 @@ const onPageSizeChange = (value) => {
   page.value = 1;
 };
 
-const loadItems = async () => {
+const loadItems = async ({ preservePage = false } = {}) => {
   isLoading.value = true;
   try {
-    const response = await api.get("/api/menu/admin/items");
+    const response = await api.get("/api/menu/admin/products");
     items.value = response.data.items || [];
-    page.value = 1;
+    if (!preservePage) {
+      page.value = 1;
+    }
   } catch (error) {
     devError("Failed to load items:", error);
-    showErrorNotification(`Ошибка при загрузке позиций: ${error.response?.data?.error || error.message}`);
+    showErrorNotification(`Ошибка при загрузке блюд: ${error.response?.data?.error || error.message}`);
   } finally {
     isLoading.value = false;
   }
 };
 const createItem = () => {
-  router.push({ name: "menu-item-form", params: { id: "new" } });
+  saveContext(filters, { page: page.value, pageSize: pageSize.value });
+  router.push({ name: "menu-product-form", params: { id: "new" } });
 };
+
 const editItem = (item) => {
-  router.push({ name: "menu-item-form", params: { id: item.id } });
+  saveContext(filters, { page: page.value, pageSize: pageSize.value });
+  router.push({ name: "menu-product-form", params: { id: item.id } });
 };
 const deleteItem = async (item) => {
-  if (!confirm(`Удалить позицию "${item.name}"?`)) return;
+  if (!confirm(`Удалить блюдо "${item.name}"?`)) return;
   try {
-    await api.delete(`/api/menu/admin/items/${item.id}`);
+    await api.delete(`/api/menu/admin/products/${item.id}`);
     await loadItems();
   } catch (error) {
     devError("Failed to delete item:", error);
     showErrorNotification(`Ошибка: ${error.response?.data?.error || error.message}`);
   }
 };
-onMounted(loadItems);
-onBeforeRouteLeave(() => {
-  resetFilters();
+
+onMounted(async () => {
+  if (shouldRestore.value) {
+    const context = restoreContext();
+    
+    if (context) {
+      Object.assign(filters, context.filters);
+      if (context.page) page.value = context.page;
+      if (context.pageSize) pageSize.value = context.pageSize;
+      
+      await loadItems({ preservePage: true });
+      restoreScroll(context.scroll);
+    }
+  } else {
+    await loadItems();
+  }
 });
 
 watch(

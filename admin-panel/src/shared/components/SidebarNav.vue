@@ -168,7 +168,7 @@ const navSections = computed(() => {
       title: "Меню",
       items: [
         { label: "Категории", to: "/menu/categories", icon: ListTree, visible: !isManager.value },
-        { label: "Позиции", to: "/menu/items", icon: UtensilsCrossed, visible: !isManager.value },
+        { label: "Блюда", to: "/menu/products", icon: UtensilsCrossed, visible: !isManager.value },
         { label: "Модификаторы", to: "/menu/modifiers", icon: Layers, visible: !isManager.value },
         { label: "Теги", to: "/menu/tags", icon: Tag, visible: !isManager.value },
         { label: "Стоп-лист", to: "/menu/stop-list", icon: Ban },

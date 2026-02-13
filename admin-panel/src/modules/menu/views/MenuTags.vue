@@ -1,4 +1,3 @@
-import { devError } from "@/shared/utils/logger";
 <template>
   <div class="space-y-6">
     <Card>
@@ -110,8 +109,13 @@ import { devError } from "@/shared/utils/logger";
   </div>
 </template>
 <script setup>
+import { devError } from "@/shared/utils/logger";
 import { computed, onMounted, ref, watch } from "vue";
 import { Plus, Pencil, Trash2, Save } from "lucide-vue-next";
+import api from "@/shared/api/client.js";
+import { useNotifications } from "@/shared/composables/useNotifications.js";
+import { useListContext } from "@/shared/composables/useListContext.js";
+import { useOrdersStore } from "@/modules/orders/stores/orders.js";
 import Button from "@/shared/components/ui/button/Button.vue";
 import Card from "@/shared/components/ui/card/Card.vue";
 import CardContent from "@/shared/components/ui/card/CardContent.vue";
@@ -127,11 +131,13 @@ import TableRow from "@/shared/components/ui/table/TableRow.vue";
 import TablePagination from "@/shared/components/TablePagination.vue";
 import Skeleton from "@/shared/components/ui/skeleton/Skeleton.vue";
 import { Field, FieldContent, FieldGroup, FieldLabel } from "@/shared/components/ui/field";
-import { useNotifications } from "@/shared/composables/useNotifications.js";
-import { useOrdersStore } from "@/modules/orders/stores/orders.js";
-import api from "@/shared/api/client.js";
+
 const { showErrorNotification, showSuccessNotification } = useNotifications();
 const ordersStore = useOrdersStore();
+
+// Навигационный контекст
+const { shouldRestore, saveContext, restoreContext, restoreScroll } = useListContext("menu-tags");
+
 const tags = ref([]);
 const isLoading = ref(false);
 const page = ref(1);
@@ -160,8 +166,18 @@ const updateDocumentTitle = (baseTitle) => {
   const count = ordersStore.newOrdersCount || 0;
   document.title = count > 0 ? `(${count}) ${baseTitle}` : baseTitle;
 };
-onMounted(() => {
-  loadTags();
+onMounted(async () => {
+  if (shouldRestore.value) {
+    const context = restoreContext();
+    if (context) {
+      if (context.page) page.value = context.page;
+      if (context.pageSize) pageSize.value = context.pageSize;
+      await loadTags({ preservePage: true });
+      restoreScroll(context.scroll);
+      return;
+    }
+  }
+  await loadTags();
 });
 watch(
   () => [modalNameTitle.value, ordersStore.newOrdersCount],
@@ -170,12 +186,20 @@ watch(
   },
   { immediate: true },
 );
-async function loadTags() {
+watch(
+  () => [page.value, pageSize.value],
+  () => {
+    saveContext({}, { page: page.value, pageSize: pageSize.value });
+  },
+);
+async function loadTags({ preservePage = false } = {}) {
   isLoading.value = true;
   try {
     const response = await api.get("/api/menu/admin/tags");
     tags.value = response.data.tags || [];
-    page.value = 1;
+    if (!preservePage) {
+      page.value = 1;
+    }
   } catch (error) {
     showErrorNotification("Ошибка загрузки тегов");
     devError("Failed to load tags:", error);

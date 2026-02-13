@@ -1,4 +1,3 @@
-import { devError } from "@/shared/utils/logger";
 <template>
   <div class="space-y-6">
     <Card>
@@ -54,7 +53,7 @@ import { devError } from "@/shared/utils/logger";
                   <SelectContent>
                     <SelectItem value="">Все</SelectItem>
                     <SelectItem value="category">Категория</SelectItem>
-                    <SelectItem value="item">Товар</SelectItem>
+                    <SelectItem value="item">Блюдо</SelectItem>
                     <SelectItem value="modifier">Модификатор</SelectItem>
                     <SelectItem value="order">Заказ</SelectItem>
                     <SelectItem value="polygon">Полигон</SelectItem>
@@ -217,8 +216,10 @@ import { devError } from "@/shared/utils/logger";
   </div>
 </template>
 <script setup>
+import { devError } from "@/shared/utils/logger";
 import api from "@/shared/api/client.js";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
+import { useListContext } from "@/shared/composables/useListContext.js";
 import { formatDateTime, formatNumber } from "@/shared/utils/format.js";
 import Badge from "@/shared/components/ui/badge/Badge.vue";
 import Button from "@/shared/components/ui/button/Button.vue";
@@ -246,7 +247,9 @@ const admins = ref([]);
 const loading = ref(false);
 const isRangeOpen = ref(false);
 const { showErrorNotification } = useNotifications();
+const { shouldRestore, saveContext, restoreContext, restoreScroll } = useListContext("admin-logs");
 const loadTimer = ref(null);
+const isRestoringContext = ref(false);
 const filters = reactive({
   admin_id: "",
   action_type: "",
@@ -396,7 +399,7 @@ const getActionClass = (action) => {
 const getObjectLabel = (objectType) => {
   const labels = {
     category: "Категория",
-    item: "Товар",
+    item: "Блюдо",
     modifier: "Модификатор",
     order: "Заказ",
     polygon: "Полигон",
@@ -419,18 +422,50 @@ const formatJSON = (json) => {
 };
 onMounted(async () => {
   try {
+    if (shouldRestore.value) {
+      const context = restoreContext();
+      if (context) {
+        isRestoringContext.value = true;
+        Object.assign(filters, context.filters || {});
+        if (context.page) pagination.page = context.page;
+        if (context.limit) pagination.limit = context.limit;
+      }
+    }
     await Promise.all([loadAdmins(), loadLogs()]);
+    if (shouldRestore.value) {
+      const context = restoreContext();
+      if (context) {
+        restoreScroll(context.scroll);
+      }
+    }
   } catch (error) {
     devError("Ошибка загрузки логов:", error);
     showErrorNotification("Ошибка загрузки логов");
+  } finally {
+    isRestoringContext.value = false;
   }
 });
 watch(
   filters,
   () => {
+    if (isRestoringContext.value) return;
     pagination.page = 1;
     scheduleLoad();
   },
   { deep: true },
+);
+watch(
+  () => [
+    filters.admin_id,
+    filters.action_type,
+    filters.object_type,
+    filters.date_from,
+    filters.date_to,
+    pagination.page,
+    pagination.limit,
+  ],
+  () => {
+    saveContext({ ...filters }, { page: pagination.page, limit: pagination.limit });
+  },
 );
 </script>

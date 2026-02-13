@@ -1,5 +1,6 @@
 import { defineStore } from "pinia";
 import api from "@/shared/api/client.js";
+import { useNavigationContextStore } from "./navigationContext.js";
 
 const STORAGE_TOKEN = "admin_token";
 const STORAGE_USER = "admin_user";
@@ -142,6 +143,11 @@ export const useAuthStore = defineStore("auth", {
         });
       }
       this.applySession("", null);
+      
+      // Очищаем все сохраненные контексты навигации при logout
+      const navigationStore = useNavigationContextStore();
+      navigationStore.clearAllContexts();
+      
       if (sync) {
         this.syncAuthEvent({ type: "logout" });
       }

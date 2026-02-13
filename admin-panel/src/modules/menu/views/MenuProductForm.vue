@@ -4,11 +4,11 @@
       <CardContent>
         <PageHeader :title="modalTitle" :description="modalSubtitle">
           <template #actions>
-            <Button variant="outline" @click="goBack">
+            <Button type="button" variant="outline" @click="goBack">
               <ArrowLeft :size="16" />
-              Назад к списку
+              Назад к списку блюд
             </Button>
-            <Button @click="saveAll" :disabled="saving">
+            <Button type="button" @click="saveAll" :disabled="saving">
               <Save :size="16" />
               {{ saving ? "Сохранение..." : "Сохранить" }}
             </Button>
@@ -309,7 +309,7 @@
                 </div>
                 <div v-if="getVariantImagePreview(variant, index)" class="mt-3 flex items-center gap-3">
                   <img :src="normalizeImageUrl(getVariantImagePreview(variant, index))" class="h-16 w-16 rounded-xl object-cover" alt="variant-preview" />
-                  <span class="text-xs text-muted-foreground">При отсутствии фото варианта будет использовано базовое фото позиции.</span>
+                  <span class="text-xs text-muted-foreground">При отсутствии фото варианта будет использовано базовое фото блюда.</span>
                 </div>
               </FieldContent>
             </Field>
@@ -342,7 +342,7 @@
         <Card>
           <CardHeader>
             <CardTitle class="text-base">Модификаторы</CardTitle>
-            <CardDescription>Привязка групп модификаторов к позиции</CardDescription>
+            <CardDescription>Привязка групп модификаторов к блюду</CardDescription>
           </CardHeader>
           <CardContent>
             <div class="grid gap-2 md:grid-cols-2">
@@ -385,7 +385,7 @@
         <Card>
           <CardHeader>
             <CardTitle class="text-base">Доступность по городам</CardTitle>
-            <CardDescription>В каких городах отображается позиция</CardDescription>
+            <CardDescription>В каких городах отображается блюдо</CardDescription>
           </CardHeader>
           <CardContent>
             <div class="grid gap-2 md:grid-cols-2">
@@ -405,7 +405,7 @@
           <CardHeader>
             <CardTitle class="text-base">{{ hasVariants ? "Цены вариаций" : "Цены" }}</CardTitle>
             <CardDescription>
-              {{ hasVariants ? "Редактируйте цены для выбранного города" : "Редактируйте цены позиции для выбранного города" }}
+              {{ hasVariants ? "Редактируйте цены для выбранного города" : "Редактируйте цены блюда для выбранного города" }}
             </CardDescription>
           </CardHeader>
           <CardContent class="space-y-4">
@@ -445,7 +445,7 @@
               </div>
               <div v-else class="space-y-3 rounded-lg border p-3">
                 <div class="flex flex-wrap items-center justify-between gap-2">
-                  <div class="text-sm font-semibold text-foreground">Цена позиции</div>
+                  <div class="text-sm font-semibold text-foreground">Цена блюда</div>
                   <div class="text-xs text-muted-foreground">Базовая цена: {{ formatPrice(getBaseItemPrice()) }}</div>
                 </div>
                 <div class="grid gap-3 md:grid-cols-3">
@@ -470,7 +470,7 @@
         <Card>
           <CardHeader>
             <CardTitle class="text-base">Теги</CardTitle>
-            <CardDescription>Добавление тегов к позиции (острое, новинка и т.д.)</CardDescription>
+            <CardDescription>Добавление тегов к блюду (острое, новинка и т.д.)</CardDescription>
           </CardHeader>
           <CardContent>
             <div class="grid gap-2 md:grid-cols-2">
@@ -570,27 +570,27 @@ const form = ref({
   tag_ids: [],
   prices: [],
 });
-const modalTitle = computed(() => (isEditing.value ? "Редактировать позицию" : "Новая позиция"));
-const modalSubtitle = computed(() => (isEditing.value ? "Измените параметры позиции" : "Создайте позицию меню"));
+const modalTitle = computed(() => (isEditing.value ? "Редактировать блюдо" : "Новое блюдо"));
+const modalSubtitle = computed(() => (isEditing.value ? "Измените параметры блюда" : "Создайте блюдо меню"));
 const hasVariants = computed(() => form.value.variants.length > 0);
 const activeCityIds = computed(() => (Array.isArray(form.value.city_ids) ? form.value.city_ids.map((id) => Number(id)).filter(Number.isFinite) : []));
 const activeCities = computed(() => referenceStore.cities.filter((city) => activeCityIds.value.includes(city.id)));
 const formTitle = computed(() => {
-  if (!isEditing.value) return "Новая позиция";
+  if (!isEditing.value) return "Новое блюдо";
   const name = String(form.value.name || "").trim();
-  return name ? `Позиция: ${name}` : "Позиция меню";
+  return name ? `Блюдо: ${name}` : "Блюдо меню";
 });
 const breadcrumbTitle = computed(() => {
   const name = String(form.value.name || "").trim();
-  if (!isEditing.value && !name) return "Новая позиция";
-  return name || "Позиция меню";
+  if (!isEditing.value && !name) return "Новое блюдо";
+  return name || "Блюдо меню";
 });
 const updateDocumentTitle = (baseTitle) => {
   const count = ordersStore.newOrdersCount || 0;
   document.title = count > 0 ? `(${count}) ${baseTitle}` : baseTitle;
 };
 const updateBreadcrumbs = () => {
-  ordersStore.setBreadcrumbs([{ label: "Позиции", to: "/menu/items" }, { label: breadcrumbTitle.value }], route.name);
+  ordersStore.setBreadcrumbs([{ label: "Блюда", to: "/menu/products" }, { label: breadcrumbTitle.value }], route.name);
 };
 const normalizeIsActive = (value, fallback = true) => {
   if (value === null || value === undefined) return fallback;
@@ -698,7 +698,7 @@ const goBack = () => {
     router.back();
     return;
   }
-  router.push({ name: "menu-items" });
+  router.push({ name: "menu-products" });
 };
 const loadCategories = async () => {
   try {
@@ -734,14 +734,14 @@ const loadItem = async () => {
   if (!isEditing.value) return;
   try {
     const [itemRes, categoriesRes, variantsRes, modifiersRes, citiesRes, tagsRes, pricesRes, disabledModsRes] = await Promise.all([
-      api.get(`/api/menu/admin/items/${itemId.value}`),
-      api.get(`/api/menu/admin/items/${itemId.value}/categories`),
-      api.get(`/api/menu/admin/items/${itemId.value}/variants`),
-      api.get(`/api/menu/admin/items/${itemId.value}/modifiers`),
-      api.get(`/api/menu/admin/items/${itemId.value}/cities`),
-      api.get(`/api/menu/admin/items/${itemId.value}/tags`),
-      api.get(`/api/menu/admin/items/${itemId.value}/prices`),
-      api.get(`/api/menu/admin/items/${itemId.value}/disabled-modifiers`),
+      api.get(`/api/menu/admin/products/${itemId.value}`),
+      api.get(`/api/menu/admin/products/${itemId.value}/categories`),
+      api.get(`/api/menu/admin/products/${itemId.value}/variants`),
+      api.get(`/api/menu/admin/products/${itemId.value}/modifiers`),
+      api.get(`/api/menu/admin/products/${itemId.value}/cities`),
+      api.get(`/api/menu/admin/products/${itemId.value}/tags`),
+      api.get(`/api/menu/admin/products/${itemId.value}/prices`),
+      api.get(`/api/menu/admin/products/${itemId.value}/disabled-modifiers`),
     ]);
     const item = itemRes.data.item;
     const variants = variantsRes.data.variants || [];
@@ -791,7 +791,7 @@ const loadItem = async () => {
     initialDisabledModifierIds.value = [...form.value.disabled_modifier_ids];
   } catch (error) {
     devError("Failed to load item:", error);
-    showErrorNotification("Ошибка при загрузке позиции");
+    showErrorNotification("Ошибка при загрузке блюда");
     goBack();
   }
 };
@@ -818,14 +818,13 @@ const saveItem = async () => {
     };
     let savedItemId;
     if (isEditing.value) {
-      await api.put(`/api/menu/admin/items/${itemId.value}`, payload);
+      await api.put(`/api/menu/admin/products/${itemId.value}`, payload);
       savedItemId = itemId.value;
     } else {
-      const res = await api.post("/api/menu/admin/items", payload);
+      const res = await api.post("/api/menu/admin/products", payload);
       savedItemId = res.data.item.id;
-      router.replace({ name: "menu-item-form", params: { id: savedItemId } });
     }
-    await api.put(`/api/menu/admin/items/${savedItemId}/categories`, { category_ids: form.value.category_ids });
+    await api.put(`/api/menu/admin/products/${savedItemId}/categories`, { category_ids: form.value.category_ids });
     return savedItemId;
   } catch (error) {
     devError("Failed to save item:", error);
@@ -835,10 +834,10 @@ const saveItem = async () => {
 };
 const saveVariants = async (savedItemId) => {
   normalizeVariantSortOrder();
-  await api.put(`/api/menu/admin/items/${savedItemId}/variants`, { variants: form.value.variants });
+  await api.put(`/api/menu/admin/products/${savedItemId}/variants`, { variants: form.value.variants });
 };
 const saveModifiers = async (savedItemId) => {
-  await api.put(`/api/menu/admin/items/${savedItemId}/modifiers`, { modifier_group_ids: form.value.modifier_group_ids });
+  await api.put(`/api/menu/admin/products/${savedItemId}/modifiers`, { modifier_group_ids: form.value.modifier_group_ids });
   await saveDisabledModifiers(savedItemId);
 };
 const saveDisabledModifiers = async (savedItemId) => {
@@ -848,15 +847,15 @@ const saveDisabledModifiers = async (savedItemId) => {
   const initialDisabledIds = new Set(initialDisabledModifierIds.value || []);
   const toDisable = allModifierIds.filter((id) => desiredDisabledIds.has(id) && !initialDisabledIds.has(id));
   const toEnable = allModifierIds.filter((id) => !desiredDisabledIds.has(id) && initialDisabledIds.has(id));
-  await Promise.all(toDisable.map((modifierId) => api.post(`/api/menu/admin/items/${savedItemId}/disabled-modifiers`, { modifier_id: modifierId })));
-  await Promise.all(toEnable.map((modifierId) => api.delete(`/api/menu/admin/items/${savedItemId}/disabled-modifiers/${modifierId}`)));
+  await Promise.all(toDisable.map((modifierId) => api.post(`/api/menu/admin/products/${savedItemId}/disabled-modifiers`, { modifier_id: modifierId })));
+  await Promise.all(toEnable.map((modifierId) => api.delete(`/api/menu/admin/products/${savedItemId}/disabled-modifiers/${modifierId}`)));
   initialDisabledModifierIds.value = [...form.value.disabled_modifier_ids];
 };
 const saveCities = async (savedItemId) => {
-  await api.put(`/api/menu/admin/items/${savedItemId}/cities`, { city_ids: form.value.city_ids });
+  await api.put(`/api/menu/admin/products/${savedItemId}/cities`, { city_ids: form.value.city_ids });
 };
 const saveTags = async (savedItemId) => {
-  await api.put(`/api/menu/admin/items/${savedItemId}/tags`, { tag_ids: form.value.tag_ids });
+  await api.put(`/api/menu/admin/products/${savedItemId}/tags`, { tag_ids: form.value.tag_ids });
 };
 const savePrices = async (savedItemId) => {
   const requests = [];
@@ -865,7 +864,7 @@ const savePrices = async (savedItemId) => {
     if (priceItem.price === null || priceItem.price === undefined || priceItem.price === "") continue;
     if (!allowedFulfillmentValues.includes(priceItem.fulfillment_type)) continue;
     requests.push(
-      api.post(`/api/menu/admin/items/${savedItemId}/prices`, {
+      api.post(`/api/menu/admin/products/${savedItemId}/prices`, {
         city_id: priceItem.city_id,
         fulfillment_type: priceItem.fulfillment_type,
         price: priceItem.price,
@@ -892,7 +891,8 @@ const saveAll = async () => {
     if (!savedItemId) return;
     await saveVariants(savedItemId);
     await Promise.all([saveModifiers(savedItemId), saveCities(savedItemId), savePrices(savedItemId), saveVariantPrices(), saveTags(savedItemId)]);
-    showSuccessNotification("Позиция сохранена");
+    showSuccessNotification("Блюдо сохранено");
+    await router.push({ name: "menu-products" });
   } catch (error) {
     devError("Failed to save all item data:", error);
     showErrorNotification(`Ошибка: ${error.response?.data?.error || error.message}`);
@@ -998,7 +998,7 @@ const handleFile = async (file) => {
     const formData = new FormData();
     formData.append("image", file);
     const itemId = route.params.id || "temp";
-    const res = await api.post(`/api/uploads/menu-items/${itemId}`, formData, {
+    const res = await api.post(`/api/uploads/menu-products/${itemId}`, formData, {
       headers: { "Content-Type": "multipart/form-data" },
     });
     const uploadedUrl = res.data?.data?.url || "";
@@ -1040,7 +1040,7 @@ const handleVariantFile = async (variant, index, file) => {
     const formData = new FormData();
     formData.append("image", file);
     const currentItemId = route.params.id || "temp";
-    const res = await api.post(`/api/uploads/menu-items/${currentItemId}`, formData, {
+    const res = await api.post(`/api/uploads/menu-products/${currentItemId}`, formData, {
       headers: { "Content-Type": "multipart/form-data" },
     });
     const uploadedUrl = res.data?.data?.url || "";
@@ -1059,7 +1059,7 @@ onMounted(async () => {
     await loadItem();
     updateBreadcrumbs();
   } catch (error) {
-    devError("Ошибка инициализации формы позиции:", error);
+    devError("Ошибка инициализации формы блюда:", error);
     showErrorNotification("Ошибка загрузки данных формы");
   }
 });
