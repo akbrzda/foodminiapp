@@ -225,12 +225,28 @@
             <div v-if="form.variants.length === 0" class="py-8 text-center text-sm text-muted-foreground">Вариации не добавлены</div>
           </CardContent>
         </Card>
-        <Card v-for="(variant, index) in form.variants" :key="variant.id || variant.__local_key || index">
+        <Card
+          v-for="(variant, index) in form.variants"
+          :key="variant.id || variant.__local_key || index"
+          :draggable="true"
+          :class="{ 'variant-dragging': draggedVariantIndex === index, 'variant-drop-target': dragOverVariantIndex === index }"
+          @dragstart="onVariantDragStart(index, $event)"
+          @dragover.prevent="onVariantDragOver(index)"
+          @dragleave="onVariantDragLeave(index)"
+          @drop.prevent="onVariantDropCard(index)"
+          @dragend="onVariantDragEnd"
+        >
           <CardHeader class="flex flex-row items-center justify-between">
-            <CardTitle class="text-base">{{ variant.name || `Вариация ${index + 1}` }}</CardTitle>
-            <Button type="button" variant="ghost" size="icon" @click="removeVariant(index)">
-              <Trash2 :size="16" class="text-red-600" />
-            </Button>
+            <div class="flex items-center gap-2">
+              <GripVertical :size="16" class="cursor-grab text-muted-foreground" />
+              <CardTitle class="text-base">{{ variant.name || `Вариация ${index + 1}` }}</CardTitle>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-xs text-muted-foreground">Порядок: {{ variant.sort_order || (index + 1) * 10 }}</span>
+              <Button type="button" variant="ghost" size="icon" @click="removeVariant(index)">
+                <Trash2 :size="16" class="text-red-600" />
+              </Button>
+            </div>
           </CardHeader>
           <CardContent class="space-y-4">
             <FieldGroup class="grid gap-4 md:grid-cols-2">
@@ -477,7 +493,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from "vue";
 import { useRouter, useRoute } from "vue-router";
-import { ArrowLeft, Plus, Save, Trash2, UploadCloud } from "lucide-vue-next";
+import { ArrowLeft, GripVertical, Plus, Save, Trash2, UploadCloud } from "lucide-vue-next";
 import { devError } from "@/shared/utils/logger";
 import api from "@/shared/api/client.js";
 import Badge from "@/shared/components/ui/badge/Badge.vue";
@@ -516,6 +532,8 @@ const activeTab = ref(0);
 const fileInput = ref(null);
 const uploadState = ref({ loading: false, error: null, preview: null });
 const variantUploadStates = ref({});
+const draggedVariantIndex = ref(null);
+const dragOverVariantIndex = ref(null);
 const tabLabels = ["Основное", "Вариации", "Модификаторы", "Доступность и цены", "Теги"];
 const allowedFulfillmentValues = ["pickup", "delivery"];
 const fulfillmentTypes = [
@@ -816,6 +834,7 @@ const saveItem = async () => {
   }
 };
 const saveVariants = async (savedItemId) => {
+  normalizeVariantSortOrder();
   await api.put(`/api/menu/admin/items/${savedItemId}/variants`, { variants: form.value.variants });
 };
 const saveModifiers = async (savedItemId) => {
@@ -882,6 +901,11 @@ const saveAll = async () => {
   }
 };
 const selectedModifierGroups = computed(() => modifierGroups.value.filter((group) => form.value.modifier_group_ids.includes(group.id)));
+const normalizeVariantSortOrder = () => {
+  form.value.variants.forEach((variant, index) => {
+    variant.sort_order = (index + 1) * 10;
+  });
+};
 const addVariant = () => {
   const newVariant = {
     __local_key: `new-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
@@ -898,6 +922,7 @@ const addVariant = () => {
     proteins_per_serving: null,
     fats_per_serving: null,
     carbs_per_serving: null,
+    sort_order: (form.value.variants.length + 1) * 10,
     prices: [],
   };
   form.value.variants.push(newVariant);
@@ -909,6 +934,37 @@ const removeVariant = (index) => {
   const key = getVariantUploadKey(variant, index);
   delete variantUploadStates.value[key];
   form.value.variants.splice(index, 1);
+  normalizeVariantSortOrder();
+};
+const onVariantDragStart = (index, event) => {
+  draggedVariantIndex.value = index;
+  dragOverVariantIndex.value = index;
+  if (event?.dataTransfer) {
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", String(index));
+  }
+};
+const onVariantDragOver = (index) => {
+  if (draggedVariantIndex.value === null) return;
+  dragOverVariantIndex.value = index;
+};
+const onVariantDragLeave = (index) => {
+  if (dragOverVariantIndex.value === index) {
+    dragOverVariantIndex.value = null;
+  }
+};
+const onVariantDropCard = (index) => {
+  const from = draggedVariantIndex.value;
+  if (from === null || from === index) return;
+  const variants = [...form.value.variants];
+  const [movedVariant] = variants.splice(from, 1);
+  variants.splice(index, 0, movedVariant);
+  form.value.variants = variants;
+  normalizeVariantSortOrder();
+};
+const onVariantDragEnd = () => {
+  draggedVariantIndex.value = null;
+  dragOverVariantIndex.value = null;
 };
 const triggerFile = () => {
   fileInput.value?.click();
@@ -1054,3 +1110,12 @@ watch(
   { immediate: true },
 );
 </script>
+<style scoped>
+.variant-dragging {
+  opacity: 0.65;
+}
+
+.variant-drop-target {
+  border: 1px dashed hsl(var(--primary));
+}
+</style>
