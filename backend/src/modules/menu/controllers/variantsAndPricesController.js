@@ -43,6 +43,7 @@ export const updateVariant = async (req, res, next) => {
       proteins_per_serving,
       fats_per_serving,
       carbs_per_serving,
+      image_url,
       sort_order,
       is_active,
       prices,
@@ -116,6 +117,10 @@ export const updateVariant = async (req, res, next) => {
       updates.push("carbs_per_serving = ?");
       values.push(carbs_per_serving);
     }
+    if (image_url !== undefined) {
+      updates.push("image_url = ?");
+      values.push(image_url);
+    }
     if (sort_order !== undefined) {
       updates.push("sort_order = ?");
       values.push(sort_order);
@@ -149,7 +154,7 @@ export const updateVariant = async (req, res, next) => {
       `SELECT id, item_id, name, price, weight_value, weight_unit,
               calories_per_100g, proteins_per_100g, fats_per_100g, carbs_per_100g,
               calories_per_serving, proteins_per_serving, fats_per_serving, carbs_per_serving,
-              sort_order, is_active, created_at, updated_at
+              image_url, sort_order, is_active, created_at, updated_at
        FROM item_variants WHERE id = ?`,
       [variantId],
     );

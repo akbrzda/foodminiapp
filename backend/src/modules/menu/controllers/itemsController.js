@@ -593,7 +593,7 @@ export const getAdminItemVariants = async (req, res, next) => {
       `SELECT id, item_id, name, price, weight_value, weight_unit,
               calories_per_100g, proteins_per_100g, fats_per_100g, carbs_per_100g,
               calories_per_serving, proteins_per_serving, fats_per_serving, carbs_per_serving,
-              sort_order, is_active, created_at, updated_at
+              image_url, sort_order, is_active, created_at, updated_at
        FROM item_variants
        WHERE item_id = ?
        ORDER BY sort_order, name`,
@@ -623,6 +623,7 @@ export const createItemVariant = async (req, res, next) => {
       proteins_per_serving,
       fats_per_serving,
       carbs_per_serving,
+      image_url,
       sort_order,
       prices,
     } = req.body;
@@ -652,9 +653,9 @@ export const createItemVariant = async (req, res, next) => {
            item_id, name, price, weight_value, weight_unit,
            calories_per_100g, proteins_per_100g, fats_per_100g, carbs_per_100g,
            calories_per_serving, proteins_per_serving, fats_per_serving, carbs_per_serving,
-           sort_order
+           image_url, sort_order
          )
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           itemId,
           name,
@@ -669,6 +670,7 @@ export const createItemVariant = async (req, res, next) => {
           proteins_per_serving || null,
           fats_per_serving || null,
           carbs_per_serving || null,
+          image_url || null,
           sort_order || 0,
         ],
       );
@@ -700,7 +702,7 @@ export const createItemVariant = async (req, res, next) => {
         `SELECT id, item_id, name, price, weight_value, weight_unit,
                 calories_per_100g, proteins_per_100g, fats_per_100g, carbs_per_100g,
                 calories_per_serving, proteins_per_serving, fats_per_serving, carbs_per_serving,
-                sort_order, is_active, created_at, updated_at
+                image_url, sort_order, is_active, created_at, updated_at
          FROM item_variants WHERE id = ?`,
         [result.insertId],
       );
@@ -762,6 +764,7 @@ export const updateItemVariants = async (req, res, next) => {
           proteins_per_serving: variant.proteins_per_serving || null,
           fats_per_serving: variant.fats_per_serving || null,
           carbs_per_serving: variant.carbs_per_serving || null,
+          image_url: variant.image_url || null,
           sort_order: variant.sort_order || 0,
           is_active: variant.is_active !== undefined ? variant.is_active : true,
         };
@@ -773,7 +776,7 @@ export const updateItemVariants = async (req, res, next) => {
              SET name = ?, price = ?, weight_value = ?, weight_unit = ?,
                  calories_per_100g = ?, proteins_per_100g = ?, fats_per_100g = ?, carbs_per_100g = ?,
                  calories_per_serving = ?, proteins_per_serving = ?, fats_per_serving = ?, carbs_per_serving = ?,
-                 sort_order = ?, is_active = ?
+                 image_url = ?, sort_order = ?, is_active = ?
              WHERE id = ? AND item_id = ?`,
             [
               payload.name,
@@ -788,6 +791,7 @@ export const updateItemVariants = async (req, res, next) => {
               payload.proteins_per_serving,
               payload.fats_per_serving,
               payload.carbs_per_serving,
+              payload.image_url,
               payload.sort_order,
               payload.is_active,
               variant.id,
@@ -801,9 +805,9 @@ export const updateItemVariants = async (req, res, next) => {
                item_id, name, price, weight_value, weight_unit,
                calories_per_100g, proteins_per_100g, fats_per_100g, carbs_per_100g,
                calories_per_serving, proteins_per_serving, fats_per_serving, carbs_per_serving,
-               sort_order, is_active
+               image_url, sort_order, is_active
              )
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
               itemId,
               payload.name,
@@ -818,6 +822,7 @@ export const updateItemVariants = async (req, res, next) => {
               payload.proteins_per_serving,
               payload.fats_per_serving,
               payload.carbs_per_serving,
+              payload.image_url,
               payload.sort_order,
               payload.is_active,
             ],

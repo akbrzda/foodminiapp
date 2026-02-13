@@ -252,8 +252,13 @@ const getGroupMin = (group) => {
   return min !== null && min > 0 ? min : 0;
 };
 const displayImageUrl = computed(() => {
+  if (selectedVariant.value?.image_url) return normalizeImageUrl(selectedVariant.value.image_url);
   if (item.value?.image_url) return normalizeImageUrl(item.value.image_url);
   const fallbackItem = menuStore.getItemById?.(parseInt(route.params.id, 10));
+  const fallbackVariant =
+    fallbackItem?.variants?.find?.((variant) => Number(variant?.id) === Number(selectedVariant.value?.id)) ||
+    fallbackItem?.variants?.find?.((variant) => variant?.image_url);
+  if (fallbackVariant?.image_url) return normalizeImageUrl(fallbackVariant.image_url);
   return normalizeImageUrl(fallbackItem?.image_url);
 });
 const kbjuUnitLabel = computed(() => {
@@ -545,7 +550,7 @@ function increaseQuantity() {
     variant_name: selectedVariant.value?.name || null,
     quantity: 1,
     modifiers: modifiers,
-    image_url: item.value.image_url,
+    image_url: selectedVariant.value?.image_url || item.value.image_url,
   });
 }
 function getMatchingCartItems() {
@@ -664,7 +669,7 @@ function addToCart() {
     variant_name: selectedVariant.value?.name || null,
     quantity: 1,
     modifiers: modifiers,
-    image_url: item.value.image_url,
+    image_url: selectedVariant.value?.image_url || item.value.image_url,
   });
   isAdded.value = true;
 }

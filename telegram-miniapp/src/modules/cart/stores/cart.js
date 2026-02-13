@@ -54,7 +54,7 @@ export const useCartStore = defineStore("cart", {
           ...cartItem,
           price: updatedPrice,
           modifiers: updatedModifiers,
-          image_url: menuItem.image_url || cartItem.image_url || null,
+          image_url: variant?.image_url || menuItem.image_url || cartItem.image_url || null,
         };
       });
       this.saveToLocalStorage();

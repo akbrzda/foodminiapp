@@ -179,7 +179,7 @@ export const getMenu = async (req, res, next) => {
 
         // Получение вариантов товара
         const [variants] = await db.query(
-          `SELECT iv.id, iv.item_id, iv.name, iv.weight_value, iv.weight_unit, 
+          `SELECT iv.id, iv.item_id, iv.name, iv.image_url, iv.weight_value, iv.weight_unit, 
                   iv.sort_order, iv.is_active,
                   iv.calories_per_100g, iv.proteins_per_100g, iv.fats_per_100g, iv.carbs_per_100g,
                   iv.calories_per_serving, iv.proteins_per_serving, iv.fats_per_serving, iv.carbs_per_serving
@@ -422,7 +422,7 @@ export const getCategoryItems = async (req, res, next) => {
     for (const item of items) {
       // Получение вариантов
       const [variants] = await db.query(
-        `SELECT id, item_id, name, price, weight_value, weight_unit, sort_order, is_active
+        `SELECT id, item_id, name, price, image_url, weight_value, weight_unit, sort_order, is_active
          FROM item_variants
          WHERE item_id = ? AND is_active = TRUE
          ORDER BY sort_order, name`,
@@ -521,7 +521,7 @@ export const getItemById = async (req, res, next) => {
 
     // Получение вариантов
     const [variants] = await db.query(
-      `SELECT id, item_id, name, price, weight_value, weight_unit, sort_order, is_active
+      `SELECT id, item_id, name, price, image_url, weight_value, weight_unit, sort_order, is_active
        FROM item_variants
        WHERE item_id = ? AND is_active = TRUE
        ORDER BY sort_order, name`,
@@ -634,7 +634,7 @@ export const getItemVariants = async (req, res, next) => {
     const itemId = req.params.itemId;
 
     const [variants] = await db.query(
-      `SELECT id, item_id, name, price, weight_value, weight_unit, sort_order, is_active, created_at, updated_at
+      `SELECT id, item_id, name, price, image_url, weight_value, weight_unit, sort_order, is_active, created_at, updated_at
        FROM item_variants
        WHERE item_id = ? AND is_active = TRUE
        ORDER BY sort_order, name`,

@@ -526,6 +526,7 @@ CREATE TABLE `item_variants` (
   `proteins_per_serving` decimal(10,2) DEFAULT NULL COMMENT 'Белки на порцию',
   `fats_per_serving` decimal(10,2) DEFAULT NULL COMMENT 'Жиры на порцию',
   `carbs_per_serving` decimal(10,2) DEFAULT NULL COMMENT 'Углеводы на порцию',
+  `image_url` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'Фото конкретной вариации',
   `sort_order` int DEFAULT '0',
   `is_active` tinyint(1) DEFAULT '1',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,

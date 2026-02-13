@@ -225,7 +225,7 @@
             <div v-if="form.variants.length === 0" class="py-8 text-center text-sm text-muted-foreground">Вариации не добавлены</div>
           </CardContent>
         </Card>
-        <Card v-for="(variant, index) in form.variants" :key="index">
+        <Card v-for="(variant, index) in form.variants" :key="variant.id || variant.__local_key || index">
           <CardHeader class="flex flex-row items-center justify-between">
             <CardTitle class="text-base">{{ variant.name || `Вариация ${index + 1}` }}</CardTitle>
             <Button type="button" variant="ghost" size="icon" @click="removeVariant(index)">
@@ -272,6 +272,31 @@
                 </FieldContent>
               </Field>
             </FieldGroup>
+            <Field>
+              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Изображение варианта</FieldLabel>
+              <FieldContent>
+                <div
+                  class="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border bg-muted/40 px-4 py-6 text-center text-xs text-muted-foreground"
+                  @dragover.prevent
+                  @drop.prevent="onVariantDrop(variant, index, $event)"
+                >
+                  <input :id="`variant-file-${getVariantUploadKey(variant, index)}`" type="file" accept="image/*" class="hidden" @change="onVariantFileChange(variant, index, $event)" />
+                  <Button type="button" variant="outline" size="sm" @click="triggerVariantFile(variant, index)">
+                    <UploadCloud :size="16" />
+                    Загрузить (до 10МБ)
+                  </Button>
+                  <span>или перетащите файл сюда</span>
+                  <span v-if="getVariantUploadState(variant, index).error" class="text-xs text-red-600">
+                    {{ getVariantUploadState(variant, index).error }}
+                  </span>
+                  <span v-if="getVariantUploadState(variant, index).loading" class="text-xs text-muted-foreground">Загрузка...</span>
+                </div>
+                <div v-if="getVariantImagePreview(variant, index)" class="mt-3 flex items-center gap-3">
+                  <img :src="normalizeImageUrl(getVariantImagePreview(variant, index))" class="h-16 w-16 rounded-xl object-cover" alt="variant-preview" />
+                  <span class="text-xs text-muted-foreground">При отсутствии фото варианта будет использовано базовое фото позиции.</span>
+                </div>
+              </FieldContent>
+            </Field>
             <Field>
               <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">КБЖУ на 100г</FieldLabel>
               <FieldContent>
@@ -490,6 +515,7 @@ const saving = ref(false);
 const activeTab = ref(0);
 const fileInput = ref(null);
 const uploadState = ref({ loading: false, error: null, preview: null });
+const variantUploadStates = ref({});
 const tabLabels = ["Основное", "Вариации", "Модификаторы", "Доступность и цены", "Теги"];
 const allowedFulfillmentValues = ["pickup", "delivery"];
 const fulfillmentTypes = [
@@ -569,6 +595,24 @@ const normalizeCityId = (value) => {
   if (value === null || value === undefined || value === "") return null;
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : null;
+};
+const getVariantUploadKey = (variant, index) => {
+  if (variant?.id) return `id-${variant.id}`;
+  if (!variant?.__local_key) {
+    variant.__local_key = `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  }
+  return variant.__local_key || `idx-${index}`;
+};
+const getVariantUploadState = (variant, index) => {
+  const key = getVariantUploadKey(variant, index);
+  if (!variantUploadStates.value[key]) {
+    variantUploadStates.value[key] = { loading: false, error: null, preview: null };
+  }
+  return variantUploadStates.value[key];
+};
+const getVariantImagePreview = (variant, index) => {
+  const state = getVariantUploadState(variant, index);
+  return state.preview || variant?.image_url || "";
 };
 const formatPrice = (value) => {
   const numeric = Number(value);
@@ -696,6 +740,7 @@ const loadItem = async () => {
     );
     const variantsWithPrices = variants.map((variant, index) => ({
       ...variant,
+      __local_key: `loaded-${variant.id || index}`,
       prices: (variantPricesResponses[index] || []).filter((price) => allowedFulfillmentValues.includes(price.fulfillment_type)),
     }));
     form.value = {
@@ -839,8 +884,10 @@ const saveAll = async () => {
 const selectedModifierGroups = computed(() => modifierGroups.value.filter((group) => form.value.modifier_group_ids.includes(group.id)));
 const addVariant = () => {
   const newVariant = {
+    __local_key: `new-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
     name: "",
     price: 0,
+    image_url: "",
     weight_value: null,
     weight_unit: "g",
     calories_per_100g: null,
@@ -858,6 +905,9 @@ const addVariant = () => {
   cityIds.forEach((cityId) => ensureVariantPricesForCity(newVariant, cityId));
 };
 const removeVariant = (index) => {
+  const variant = form.value.variants[index];
+  const key = getVariantUploadKey(variant, index);
+  delete variantUploadStates.value[key];
   form.value.variants.splice(index, 1);
 };
 const triggerFile = () => {
@@ -901,6 +951,50 @@ const handleFile = async (file) => {
   } catch (error) {
     devError("Failed to upload:", error);
     uploadState.value = { loading: false, error: "Ошибка загрузки", preview: null };
+  }
+};
+const triggerVariantFile = (variant, index) => {
+  const key = getVariantUploadKey(variant, index);
+  const input = document.getElementById(`variant-file-${key}`);
+  if (input) input.click();
+};
+const onVariantFileChange = (variant, index, event) => {
+  const file = event.target.files?.[0];
+  if (file) handleVariantFile(variant, index, file);
+};
+const onVariantDrop = (variant, index, event) => {
+  const file = event.dataTransfer?.files?.[0];
+  if (file) handleVariantFile(variant, index, file);
+};
+const handleVariantFile = async (variant, index, file) => {
+  const state = getVariantUploadState(variant, index);
+  if (file.size > 10 * 1024 * 1024) {
+    state.error = "Файл больше 10MB";
+    return;
+  }
+  if (!file.type.startsWith("image/")) {
+    state.error = "Только изображения";
+    return;
+  }
+
+  state.loading = true;
+  state.error = null;
+  state.preview = URL.createObjectURL(file);
+  try {
+    const formData = new FormData();
+    formData.append("image", file);
+    const currentItemId = route.params.id || "temp";
+    const res = await api.post(`/api/uploads/menu-items/${currentItemId}`, formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+    const uploadedUrl = res.data?.data?.url || "";
+    variant.image_url = uploadedUrl;
+    state.preview = uploadedUrl;
+  } catch (error) {
+    devError("Failed to upload variant image:", error);
+    state.error = "Ошибка загрузки";
+  } finally {
+    state.loading = false;
   }
 };
 onMounted(async () => {
