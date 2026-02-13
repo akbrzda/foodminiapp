@@ -18,7 +18,7 @@ const navigationStore = useNavigationContextStore();
 onMounted(() => {
   // Очищаем старые контексты при запуске приложения
   navigationStore.cleanupOldContexts();
-  
+
   // Периодическая очистка каждые 10 минут
   setInterval(() => {
     navigationStore.cleanupOldContexts();

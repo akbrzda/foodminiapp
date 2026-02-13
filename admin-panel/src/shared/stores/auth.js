@@ -143,11 +143,11 @@ export const useAuthStore = defineStore("auth", {
         });
       }
       this.applySession("", null);
-      
+
       // Очищаем все сохраненные контексты навигации при logout
       const navigationStore = useNavigationContextStore();
       navigationStore.clearAllContexts();
-      
+
       if (sync) {
         this.syncAuthEvent({ type: "logout" });
       }

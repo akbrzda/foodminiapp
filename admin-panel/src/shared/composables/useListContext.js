@@ -37,7 +37,6 @@ export function useListContext(listName) {
       scroll: scrollY,
       ...additionalData,
     });
-
   };
 
   /**
@@ -67,7 +66,6 @@ export function useListContext(listName) {
           left: 0,
           behavior: "instant",
         });
-
       }, 50);
     });
   };
@@ -79,7 +77,6 @@ export function useListContext(listName) {
     if (!listName) return;
 
     navigationStore.clearContext(listName);
-
   };
 
   /**

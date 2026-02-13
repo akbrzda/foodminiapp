@@ -265,12 +265,12 @@ const openDashboard = () => {
 onMounted(async () => {
   if (shouldRestore.value) {
     const context = restoreContext();
-    
+
     if (context) {
       filters.value = { ...filters.value, ...context.filters };
       if (context.page) page.value = context.page;
       if (context.pageSize) pageSize.value = context.pageSize;
-      
+
       await loadCampaigns({ preservePage: true });
       restoreScroll(context.scroll);
     }

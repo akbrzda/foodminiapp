@@ -44,7 +44,6 @@ export const useNavigationContextStore = defineStore("navigationContext", {
         timestamp: Date.now(),
         isReturning: false,
       };
-
     },
 
     /**

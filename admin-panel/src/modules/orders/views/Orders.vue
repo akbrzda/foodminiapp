@@ -143,7 +143,13 @@
               </TableRow>
             </template>
             <template v-else>
-              <TableRow v-for="order in paginatedOrders" :key="order.id" class="cursor-pointer" :class="orderRowClass(order)" @click="selectOrder(order)">
+              <TableRow
+                v-for="order in paginatedOrders"
+                :key="order.id"
+                class="cursor-pointer"
+                :class="orderRowClass(order)"
+                @click="selectOrder(order)"
+              >
                 <TableCell>
                   <div class="font-medium text-foreground">#{{ order.order_number }}</div>
                   <div class="text-xs text-muted-foreground">{{ formatDateTime(order.created_at) }}</div>
@@ -366,22 +372,22 @@ const getStatusBadge = (status) => {
 onMounted(async () => {
   try {
     await referenceStore.loadCities();
-    
+
     // Проверяем, нужно ли восстанавливать контекст
     if (shouldRestore.value) {
       const context = restoreContext();
-      
+
       if (context) {
         // Восстанавливаем фильтры
         Object.assign(filters, context.filters);
-        
+
         // Восстанавливаем пагинацию
         if (context.page) page.value = context.page;
         if (context.pageSize) pageSize.value = context.pageSize;
-        
+
         // Загружаем данные с восстановленными фильтрами
         await loadOrders({ preservePage: true });
-        
+
         // Восстанавливаем скролл после загрузки данных
         restoreScroll(context.scroll);
       }

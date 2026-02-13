@@ -69,7 +69,13 @@
         </Table>
       </CardContent>
     </Card>
-    <TablePagination :total="categories.length" :page="page" :page-size="pageSize" @update:page="page = $event" @update:page-size="onPageSizeChange" />
+    <TablePagination
+      :total="categories.length"
+      :page="page"
+      :page-size="pageSize"
+      @update:page="page = $event"
+      @update:page-size="onPageSizeChange"
+    />
     <Dialog v-if="showModal" :open="showModal" @update:open="(value) => (value ? null : closeModal())">
       <DialogContent class="w-full max-w-3xl">
         <DialogHeader>

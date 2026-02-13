@@ -55,7 +55,9 @@
                 <TableCell>
                   <Badge
                     variant="secondary"
-                    :class="city.is_active ? 'bg-emerald-100 text-emerald-700 border-transparent' : 'bg-muted text-muted-foreground border-transparent'"
+                    :class="
+                      city.is_active ? 'bg-emerald-100 text-emerald-700 border-transparent' : 'bg-muted text-muted-foreground border-transparent'
+                    "
                   >
                     {{ city.is_active ? "Активен" : "Неактивен" }}
                   </Badge>

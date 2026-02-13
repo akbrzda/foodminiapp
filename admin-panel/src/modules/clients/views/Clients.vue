@@ -180,17 +180,17 @@ const onPageSizeChange = (value) => {
 onMounted(async () => {
   try {
     await referenceStore.loadCities();
-    
+
     // Проверяем, нужно ли восстанавливать контекст
     if (shouldRestore.value) {
       const context = restoreContext();
-      
+
       if (context) {
         // Восстанавливаем фильтры и пагинацию
         Object.assign(filters, context.filters);
         if (context.page) page.value = context.page;
         if (context.pageSize) pageSize.value = context.pageSize;
-        
+
         await loadClients({ preservePage: true });
         restoreScroll(context.scroll);
       }

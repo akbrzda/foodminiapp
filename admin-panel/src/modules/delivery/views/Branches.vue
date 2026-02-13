@@ -67,11 +67,7 @@
                 <TableCell>
                   <div class="flex items-center gap-2 text-sm text-muted-foreground">
                     <Phone :size="14" />
-                    <a
-                      v-if="normalizePhone(branch.phone)"
-                      class="text-foreground hover:underline"
-                      :href="`tel:${normalizePhone(branch.phone)}`"
-                    >
+                    <a v-if="normalizePhone(branch.phone)" class="text-foreground hover:underline" :href="`tel:${normalizePhone(branch.phone)}`">
                       {{ formatPhone(branch.phone) }}
                     </a>
                     <span v-else>—</span>
@@ -236,15 +232,15 @@ const deleteBranch = async (branch) => {
 
 onMounted(async () => {
   await referenceStore.loadCities();
-  
+
   if (shouldRestore.value) {
     const context = restoreContext();
-    
+
     if (context) {
       if (context.filters?.cityId) cityId.value = context.filters.cityId;
       if (context.page) page.value = context.page;
       if (context.pageSize) pageSize.value = context.pageSize;
-      
+
       // loadBranches будет вызван автоматически через watch(cityId)
       if (cityId.value) {
         await loadBranches({ preservePage: true });

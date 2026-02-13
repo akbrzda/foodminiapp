@@ -42,7 +42,7 @@ const router = createRouter({
         return false; // Компонент восстановит скролл сам
       }
     }
-    
+
     if (savedPosition) {
       return savedPosition;
     }
@@ -79,12 +79,12 @@ const router = createRouter({
           path: "orders",
           name: "orders",
           component: Orders,
-          meta: { 
-            title: "Заказы", 
-            subtitle: "Реальные заявки и статусы", 
+          meta: {
+            title: "Заказы",
+            subtitle: "Реальные заявки и статусы",
             roles: ["admin", "ceo", "manager"],
             isList: true,
-            listName: "orders"
+            listName: "orders",
           },
         },
         {
@@ -97,19 +97,19 @@ const router = createRouter({
             roles: ["admin", "ceo", "manager"],
             breadcrumbs: [{ label: "Заказы", to: "/orders" }, { label: "Детали заказа" }],
             isDetail: true,
-            parentList: "orders"
+            parentList: "orders",
           },
         },
         {
           path: "clients",
           name: "clients",
           component: Clients,
-          meta: { 
-            title: "Клиенты", 
-            subtitle: "Контакты и лояльность", 
+          meta: {
+            title: "Клиенты",
+            subtitle: "Контакты и лояльность",
             roles: ["admin", "ceo", "manager"],
             isList: true,
-            listName: "clients"
+            listName: "clients",
           },
         },
         {
@@ -122,19 +122,19 @@ const router = createRouter({
             roles: ["admin", "ceo", "manager"],
             breadcrumbs: [{ label: "Клиенты", to: "/clients" }, { label: "Клиент" }],
             isDetail: true,
-            parentList: "clients"
+            parentList: "clients",
           },
         },
         {
           path: "cities",
           name: "cities",
           component: Cities,
-          meta: { 
-            title: "Города", 
-            subtitle: "Управление городами доставки", 
+          meta: {
+            title: "Города",
+            subtitle: "Управление городами доставки",
             roles: ["admin", "ceo"],
             isList: true,
-            listName: "cities"
+            listName: "cities",
           },
         },
         {
@@ -147,7 +147,7 @@ const router = createRouter({
             roles: ["admin", "ceo"],
             breadcrumbs: [{ label: "Города", to: "/cities" }, { label: "Новый город" }],
             isEdit: true,
-            parentList: "cities"
+            parentList: "cities",
           },
         },
         {
@@ -160,19 +160,19 @@ const router = createRouter({
             roles: ["admin", "ceo"],
             breadcrumbs: [{ label: "Города", to: "/cities" }, { label: "Редактирование" }],
             isEdit: true,
-            parentList: "cities"
+            parentList: "cities",
           },
         },
         {
           path: "branches",
           name: "branches",
           component: Branches,
-          meta: { 
-            title: "Филиалы", 
-            subtitle: "Рестораны и точки самовывоза", 
+          meta: {
+            title: "Филиалы",
+            subtitle: "Рестораны и точки самовывоза",
             roles: ["admin", "ceo", "manager"],
             isList: true,
-            listName: "branches"
+            listName: "branches",
           },
         },
         {
@@ -185,7 +185,7 @@ const router = createRouter({
             roles: ["admin", "ceo"],
             breadcrumbs: [{ label: "Филиалы", to: "/branches" }, { label: "Новый филиал" }],
             isEdit: true,
-            parentList: "branches"
+            parentList: "branches",
           },
         },
         {
@@ -198,7 +198,7 @@ const router = createRouter({
             roles: ["admin", "ceo"],
             breadcrumbs: [{ label: "Филиалы", to: "/branches" }, { label: "Редактирование" }],
             isEdit: true,
-            parentList: "branches"
+            parentList: "branches",
           },
         },
         {
@@ -212,7 +212,7 @@ const router = createRouter({
             fullBleed: true,
             roles: ["admin", "ceo", "manager"],
             isList: true,
-            listName: "delivery-zones"
+            listName: "delivery-zones",
           },
         },
         {
@@ -226,31 +226,31 @@ const router = createRouter({
             fullBleed: true,
             roles: ["admin", "ceo"],
             isEdit: true,
-            parentList: "delivery-zones"
+            parentList: "delivery-zones",
           },
         },
         {
           path: "menu/categories",
           name: "menu-categories",
           component: MenuCategories,
-          meta: { 
-            title: "Категории", 
-            subtitle: "Структура меню по городам", 
+          meta: {
+            title: "Категории",
+            subtitle: "Структура меню по городам",
             roles: ["admin", "ceo"],
             isList: true,
-            listName: "menu-categories"
+            listName: "menu-categories",
           },
         },
         {
           path: "menu/products",
           name: "menu-products",
           component: MenuProducts,
-          meta: { 
-            title: "Блюда", 
-            subtitle: "Карточки блюд и варианты", 
+          meta: {
+            title: "Блюда",
+            subtitle: "Карточки блюд и варианты",
             roles: ["admin", "ceo"],
             isList: true,
-            listName: "menu-products"
+            listName: "menu-products",
           },
         },
         {
@@ -263,43 +263,43 @@ const router = createRouter({
             roles: ["admin", "ceo"],
             breadcrumbs: [{ label: "Блюда", to: "/menu/products" }, { label: "Блюдо меню" }],
             isEdit: true,
-            parentList: "menu-products"
+            parentList: "menu-products",
           },
         },
         {
           path: "menu/modifiers",
           name: "menu-modifiers",
           component: MenuModifiers,
-          meta: { 
-            title: "Модификаторы", 
-            subtitle: "Группы и допы", 
+          meta: {
+            title: "Модификаторы",
+            subtitle: "Группы и допы",
             roles: ["admin", "ceo"],
             isList: true,
-            listName: "menu-modifiers"
+            listName: "menu-modifiers",
           },
         },
-        { 
-          path: "menu/tags", 
-          name: "menu-tags", 
-          component: MenuTags, 
-          meta: { 
-            title: "Теги", 
-            subtitle: "Метки для фильтрации блюд", 
+        {
+          path: "menu/tags",
+          name: "menu-tags",
+          component: MenuTags,
+          meta: {
+            title: "Теги",
+            subtitle: "Метки для фильтрации блюд",
             roles: ["admin", "ceo"],
             isList: true,
-            listName: "menu-tags"
-          } 
+            listName: "menu-tags",
+          },
         },
         {
           path: "menu/stop-list",
           name: "menu-stop-list",
           component: MenuStopList,
-          meta: { 
-            title: "Стоп-лист", 
-            subtitle: "Недоступные блюда", 
+          meta: {
+            title: "Стоп-лист",
+            subtitle: "Недоступные блюда",
             roles: ["admin", "ceo", "manager"],
             isList: true,
-            listName: "menu-stop-list"
+            listName: "menu-stop-list",
           },
         },
         {
@@ -312,7 +312,7 @@ const router = createRouter({
             roles: ["admin", "ceo"],
             breadcrumbs: [{ label: "Рассылки", to: "/broadcasts" }],
             isList: true,
-            listName: "broadcasts"
+            listName: "broadcasts",
           },
         },
         {
@@ -325,7 +325,7 @@ const router = createRouter({
             roles: ["admin", "ceo"],
             breadcrumbs: [{ label: "Рассылки", to: "/broadcasts" }, { label: "Новая рассылка" }],
             isEdit: true,
-            parentList: "broadcasts"
+            parentList: "broadcasts",
           },
         },
         {
@@ -338,7 +338,7 @@ const router = createRouter({
             roles: ["admin", "ceo"],
             breadcrumbs: [{ label: "Рассылки", to: "/broadcasts" }, { label: "Редактирование" }],
             isEdit: true,
-            parentList: "broadcasts"
+            parentList: "broadcasts",
           },
         },
         {
@@ -351,7 +351,7 @@ const router = createRouter({
             roles: ["admin", "ceo"],
             breadcrumbs: [{ label: "Рассылки", to: "/broadcasts" }, { label: "Статистика" }],
             isDetail: true,
-            parentList: "broadcasts"
+            parentList: "broadcasts",
           },
         },
         {
@@ -364,7 +364,7 @@ const router = createRouter({
             roles: ["admin", "ceo"],
             breadcrumbs: [{ label: "Рассылки", to: "/broadcasts" }, { label: "Сегменты" }],
             isList: true,
-            listName: "broadcast-segments"
+            listName: "broadcast-segments",
           },
         },
         {
@@ -388,24 +388,24 @@ const router = createRouter({
           path: "admin-users",
           name: "admin-users",
           component: AdminUsers,
-          meta: { 
-            title: "Администраторы", 
-            subtitle: "Управление пользователями админ-панели", 
+          meta: {
+            title: "Администраторы",
+            subtitle: "Управление пользователями админ-панели",
             roles: ["admin", "ceo"],
             isList: true,
-            listName: "admin-users"
+            listName: "admin-users",
           },
         },
         {
           path: "logs",
           name: "admin-logs",
           component: AdminLogs,
-          meta: { 
-            title: "Логи", 
-            subtitle: "Журнал действий администраторов", 
+          meta: {
+            title: "Логи",
+            subtitle: "Журнал действий администраторов",
             roles: ["admin", "ceo"],
             isList: true,
-            listName: "admin-logs"
+            listName: "admin-logs",
           },
         },
       ],
@@ -416,7 +416,7 @@ const router = createRouter({
 router.beforeEach((to, from) => {
   const authStore = useAuthStore();
   const tokenValid = authStore.validateToken();
-  
+
   // Проверка авторизации
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
     return { name: "login", query: { redirect: to.fullPath } };
@@ -427,33 +427,31 @@ router.beforeEach((to, from) => {
   if (to.meta.roles && authStore.role && !to.meta.roles.includes(authStore.role)) {
     return { name: "not-found" };
   }
-  
+
   // Управление навигационным контекстом
   const navigationStore = useNavigationContextStore();
-  
+
   // Сценарий A: Уходим со списка на его детальную/редактирующую страницу
-  if (from.meta.isList && from.meta.listName && 
-      (to.meta.isDetail || to.meta.isEdit) && 
-      to.meta.parentList === from.meta.listName) {
+  if (from.meta.isList && from.meta.listName && (to.meta.isDetail || to.meta.isEdit) && to.meta.parentList === from.meta.listName) {
     // Устанавливаем флаг ожидания возврата
     navigationStore.setReturning(from.meta.listName, true);
   }
   // Сценарий B: Возвращаемся с детальной страницы на список
   // (флаг isReturning уже установлен, компонент сам восстановит контекст)
-  
+
   // Сценарий C: Любая другая навигация
   else {
     // Если уходим со списка не на его детальную страницу
     if (from.meta.isList && from.meta.listName && to.meta.parentList !== from.meta.listName) {
       navigationStore.clearContext(from.meta.listName);
     }
-    
+
     // Если приходим на список не с его детальной страницы
     if (to.meta.isList && to.meta.listName && from.meta.parentList !== to.meta.listName) {
       navigationStore.clearContext(to.meta.listName);
     }
   }
-  
+
   return true;
 });
 router.afterEach((to) => {
@@ -461,7 +459,7 @@ router.afterEach((to) => {
   const baseTitle = to.meta?.title || "Админ-панель";
   const count = ordersStore?.newOrdersCount || 0;
   document.title = count > 0 ? `(${count}) ${baseTitle}` : baseTitle;
-  
+
   // Сброс флага isReturning после восстановления контекста
   if (to.meta.isList && to.meta.listName) {
     const navigationStore = useNavigationContextStore();
