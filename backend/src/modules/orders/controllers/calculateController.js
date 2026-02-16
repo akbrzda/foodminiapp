@@ -92,17 +92,6 @@ export const calculateOrder = async (req, res, next) => {
 
         if (cityPrices.length > 0) {
           itemBasePrice = parseFloat(cityPrices[0].price);
-        } else {
-          const [fallbackPrices] = await db.query(
-            `SELECT price
-             FROM menu_item_prices
-             WHERE item_id = ? AND city_id IS NULL AND fulfillment_type = 'delivery'
-             LIMIT 1`,
-            [item_id],
-          );
-          if (fallbackPrices.length > 0) {
-            itemBasePrice = parseFloat(fallbackPrices[0].price);
-          }
         }
       }
 
@@ -129,17 +118,6 @@ export const calculateOrder = async (req, res, next) => {
 
           if (cityVariantPrices.length > 0) {
             itemBasePrice = parseFloat(cityVariantPrices[0].price);
-          } else {
-            const [fallbackVariantPrices] = await db.query(
-              `SELECT price
-               FROM menu_variant_prices
-               WHERE variant_id = ? AND city_id IS NULL AND fulfillment_type = 'delivery'
-               LIMIT 1`,
-              [variant_id],
-            );
-            if (fallbackVariantPrices.length > 0) {
-              itemBasePrice = parseFloat(fallbackVariantPrices[0].price);
-            }
           }
         }
       }

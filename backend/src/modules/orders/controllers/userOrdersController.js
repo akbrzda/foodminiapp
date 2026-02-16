@@ -129,9 +129,9 @@ export const repeatOrder = async (req, res, next) => {
     const orderItems = [];
 
     for (const item of items) {
-      const [modifiers] = await db.query(`SELECT modifier_id, old_modifier_id FROM order_item_modifiers WHERE order_item_id = ?`, [item.id]);
+      const [modifiers] = await db.query(`SELECT modifier_id FROM order_item_modifiers WHERE order_item_id = ?`, [item.id]);
 
-      const modifierIds = modifiers.map((m) => m.modifier_id || m.old_modifier_id).filter((id) => id !== null);
+      const modifierIds = modifiers.map((m) => m.modifier_id).filter((id) => id !== null);
 
       orderItems.push({
         item_id: item.item_id,

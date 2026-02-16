@@ -587,7 +587,7 @@ CREATE TABLE `menu_item_disabled_modifiers` (
 CREATE TABLE `menu_item_prices` (
   `id` int NOT NULL AUTO_INCREMENT,
   `item_id` int NOT NULL,
-  `city_id` int DEFAULT NULL COMMENT 'NULL = цена для всех городов',
+  `city_id` int NOT NULL COMMENT 'ID города',
   `fulfillment_type` enum('delivery','pickup','dine_in') COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'Способ получения: доставка, самовывоз, зал',
   `price` decimal(10,2) NOT NULL,
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
@@ -614,21 +614,6 @@ CREATE TABLE `menu_item_tags` (
   CONSTRAINT `menu_item_tags_ibfk_1` FOREIGN KEY (`item_id`) REFERENCES `menu_items` (`id`) ON DELETE CASCADE,
   CONSTRAINT `menu_item_tags_ibfk_2` FOREIGN KEY (`tag_id`) REFERENCES `tags` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Связь блюд с тегами';
-
-
-CREATE TABLE `menu_modifiers` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `item_id` int NOT NULL,
-  `name` varchar(200) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `price` decimal(10,2) DEFAULT '0.00',
-  `is_required` tinyint(1) DEFAULT '0',
-  `is_active` tinyint(1) DEFAULT '1',
-  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  KEY `idx_item_active` (`item_id`,`is_active`),
-  CONSTRAINT `menu_modifiers_ibfk_1` FOREIGN KEY (`item_id`) REFERENCES `menu_items` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 
 CREATE TABLE `loyalty_logs` (
@@ -754,7 +739,7 @@ CREATE TABLE `menu_modifier_variant_prices` (
 CREATE TABLE `menu_variant_prices` (
   `id` int NOT NULL AUTO_INCREMENT,
   `variant_id` int NOT NULL,
-  `city_id` int DEFAULT NULL COMMENT 'NULL = цена для всех городов',
+  `city_id` int NOT NULL COMMENT 'ID города',
   `fulfillment_type` enum('delivery','pickup','dine_in') COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'Способ получения: доставка, самовывоз, зал',
   `price` decimal(10,2) NOT NULL,
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
@@ -853,7 +838,6 @@ CREATE TABLE `order_item_modifiers` (
   `id` int NOT NULL AUTO_INCREMENT,
   `order_item_id` int NOT NULL,
   `modifier_id` int DEFAULT NULL COMMENT 'ID модификатора из таблицы modifiers (новая система)',
-  `old_modifier_id` int DEFAULT NULL COMMENT 'ID модификатора из таблицы menu_modifiers (старая система, для обратной совместимости)',
   `modifier_group_id` int DEFAULT NULL COMMENT 'ID группы модификаторов',
   `modifier_name` varchar(200) COLLATE utf8mb4_unicode_ci NOT NULL,
   `modifier_price` decimal(10,2) NOT NULL,
@@ -861,7 +845,6 @@ CREATE TABLE `order_item_modifiers` (
   `modifier_weight_unit` enum('g','kg','ml','l','pcs') COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  KEY `old_modifier_id` (`old_modifier_id`),
   KEY `idx_order_item_id` (`order_item_id`),
   KEY `idx_modifier_id` (`modifier_id`),
   KEY `fk_order_item_modifiers_group` (`modifier_group_id`),
@@ -869,7 +852,6 @@ CREATE TABLE `order_item_modifiers` (
   CONSTRAINT `fk_order_item_modifiers_modifier` FOREIGN KEY (`modifier_id`) REFERENCES `modifiers` (`id`) ON DELETE SET NULL,
   CONSTRAINT `order_item_modifiers_ibfk_1` FOREIGN KEY (`order_item_id`) REFERENCES `order_items` (`id`) ON DELETE CASCADE,
   CONSTRAINT `order_item_modifiers_ibfk_2` FOREIGN KEY (`modifier_id`) REFERENCES `modifiers` (`id`) ON DELETE SET NULL,
-  CONSTRAINT `order_item_modifiers_ibfk_3` FOREIGN KEY (`old_modifier_id`) REFERENCES `menu_modifiers` (`id`) ON DELETE SET NULL,
   CONSTRAINT `order_item_modifiers_ibfk_4` FOREIGN KEY (`modifier_group_id`) REFERENCES `modifier_groups` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB AUTO_INCREMENT=17 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

@@ -82,19 +82,40 @@ const ensureBranchIsOpen = async (connection, branchId, cityId) => {
   return { ok: true };
 };
 
+const ACTIVE_ORDER_STATUSES = ["pending", "confirmed", "preparing", "ready", "delivering"];
+
 const generateOrderNumber = async (connection) => {
-  const [result] = await connection.query(
-    `SELECT LPAD(
-       CASE
-         WHEN COALESCE(MAX(CAST(order_number AS UNSIGNED)), 0) >= 9999 THEN 1
-         ELSE COALESCE(MAX(CAST(order_number AS UNSIGNED)), 0) + 1
-       END,
-       4,
-       '0'
-     ) as next_number
-     FROM orders`,
+  await connection.query(
+    `INSERT INTO order_number_sequence (id, last_number)
+     VALUES (1, 0)
+     ON DUPLICATE KEY UPDATE last_number = last_number`,
   );
-  return result[0]?.next_number || "0001";
+
+  const [sequenceRows] = await connection.query("SELECT last_number FROM order_number_sequence WHERE id = 1 FOR UPDATE");
+  let currentNumber = Number(sequenceRows[0]?.last_number) || 0;
+
+  for (let i = 0; i < 9999; i += 1) {
+    const candidate = (currentNumber % 9999) + 1;
+    const candidateStr = String(candidate).padStart(4, "0");
+
+    const [busyRows] = await connection.query(
+      `SELECT id
+       FROM orders
+       WHERE order_number = ?
+         AND status IN (${ACTIVE_ORDER_STATUSES.map(() => "?").join(", ")})
+       LIMIT 1`,
+      [candidateStr, ...ACTIVE_ORDER_STATUSES],
+    );
+
+    if (busyRows.length === 0) {
+      await connection.query("UPDATE order_number_sequence SET last_number = ? WHERE id = 1", [candidate]);
+      return candidateStr;
+    }
+
+    currentNumber = candidate;
+  }
+
+  throw new Error("Нет свободного номера заказа в диапазоне 0001-9999 среди активных заказов");
 };
 
 const resolveInternalApiBaseUrl = (req) => {
@@ -155,17 +176,6 @@ const calculateOrderCost = async (items, { cityId, fulfillmentType, bonusToUse }
 
       if (cityPrices.length > 0) {
         itemBasePrice = parseFloat(cityPrices[0].price);
-      } else {
-        const [fallbackPrices] = await db.query(
-          `SELECT price
-           FROM menu_item_prices
-           WHERE item_id = ? AND city_id IS NULL AND fulfillment_type = ?
-           LIMIT 1`,
-          [item_id, fulfillmentType],
-        );
-        if (fallbackPrices.length > 0) {
-          itemBasePrice = parseFloat(fallbackPrices[0].price);
-        }
       }
     }
 
@@ -192,17 +202,6 @@ const calculateOrderCost = async (items, { cityId, fulfillmentType, bonusToUse }
 
         if (cityVariantPrices.length > 0) {
           itemBasePrice = parseFloat(cityVariantPrices[0].price);
-        } else {
-          const [fallbackVariantPrices] = await db.query(
-            `SELECT price
-             FROM menu_variant_prices
-             WHERE variant_id = ? AND city_id IS NULL AND fulfillment_type = ?
-             LIMIT 1`,
-            [variant_id, fulfillmentType],
-          );
-          if (fallbackVariantPrices.length > 0) {
-            itemBasePrice = parseFloat(fallbackVariantPrices[0].price);
-          }
         }
       }
     }
@@ -525,7 +524,13 @@ export const createOrder = async (req, res, next) => {
       earnedBonuses = calculateEarnedBonuses(Math.max(0, baseAmount), loyaltyLevel, loyaltyLevels);
     }
 
-    const orderNumber = await generateOrderNumber(connection);
+    let orderNumber;
+    try {
+      orderNumber = await generateOrderNumber(connection);
+    } catch (numberError) {
+      await connection.rollback();
+      return res.status(409).json({ error: numberError.message || "Не удалось выдать номер заказа" });
+    }
     const timezoneOffset = Number.isFinite(Number(timezone_offset)) ? Number(timezone_offset) : 0;
     const normalizedTimezoneOffset = Math.max(-840, Math.min(840, Math.trunc(timezoneOffset)));
     const resolvedBranchId = order_type === "delivery" ? deliveryPolygon?.branch_id || null : branch_id || null;

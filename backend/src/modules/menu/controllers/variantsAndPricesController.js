@@ -140,12 +140,12 @@ export const updateVariant = async (req, res, next) => {
     // Обновление цен варианта
     if (Array.isArray(prices) && prices.length > 0) {
       for (const priceItem of prices) {
-        if (!priceItem.fulfillment_type || priceItem.price === undefined) continue;
+        if (!priceItem.fulfillment_type || priceItem.price === undefined || priceItem.city_id === undefined || priceItem.city_id === null) continue;
         await db.query(
           `INSERT INTO menu_variant_prices (variant_id, city_id, fulfillment_type, price)
            VALUES (?, ?, ?, ?)
            ON DUPLICATE KEY UPDATE price = VALUES(price)`,
-          [variantId, priceItem.city_id || null, priceItem.fulfillment_type, priceItem.price],
+          [variantId, priceItem.city_id, priceItem.fulfillment_type, priceItem.price],
         );
       }
     }
@@ -251,8 +251,8 @@ export const createItemPrice = async (req, res, next) => {
     const itemId = req.params.itemId;
     const { city_id, fulfillment_type, price } = req.body;
 
-    if (!fulfillment_type || price === undefined) {
-      return res.status(400).json({ error: "fulfillment_type and price are required" });
+    if (!fulfillment_type || price === undefined || city_id === undefined || city_id === null) {
+      return res.status(400).json({ error: "city_id, fulfillment_type and price are required" });
     }
 
     if (!["delivery", "pickup"].includes(fulfillment_type)) {
@@ -264,18 +264,16 @@ export const createItemPrice = async (req, res, next) => {
       return res.status(404).json({ error: "Item not found" });
     }
 
-    if (city_id) {
-      const [cities] = await db.query("SELECT id FROM cities WHERE id = ?", [city_id]);
-      if (cities.length === 0) {
-        return res.status(404).json({ error: "City not found" });
-      }
+    const [cities] = await db.query("SELECT id FROM cities WHERE id = ?", [city_id]);
+    if (cities.length === 0) {
+      return res.status(404).json({ error: "City not found" });
     }
 
     await db.query(
       `INSERT INTO menu_item_prices (item_id, city_id, fulfillment_type, price)
        VALUES (?, ?, ?, ?)
        ON DUPLICATE KEY UPDATE price = VALUES(price)`,
-      [itemId, city_id || null, fulfillment_type, price],
+      [itemId, city_id, fulfillment_type, price],
     );
 
     await invalidateAllMenuCache();
@@ -326,8 +324,8 @@ export const createVariantPrice = async (req, res, next) => {
     const variantId = req.params.variantId;
     const { city_id, fulfillment_type, price } = req.body;
 
-    if (!fulfillment_type || price === undefined) {
-      return res.status(400).json({ error: "fulfillment_type and price are required" });
+    if (!fulfillment_type || price === undefined || city_id === undefined || city_id === null) {
+      return res.status(400).json({ error: "city_id, fulfillment_type and price are required" });
     }
 
     if (!["delivery", "pickup"].includes(fulfillment_type)) {
@@ -339,11 +337,16 @@ export const createVariantPrice = async (req, res, next) => {
       return res.status(404).json({ error: "Variant not found" });
     }
 
+    const [cities] = await db.query("SELECT id FROM cities WHERE id = ?", [city_id]);
+    if (cities.length === 0) {
+      return res.status(404).json({ error: "City not found" });
+    }
+
     await db.query(
       `INSERT INTO menu_variant_prices (variant_id, city_id, fulfillment_type, price)
        VALUES (?, ?, ?, ?)
        ON DUPLICATE KEY UPDATE price = VALUES(price)`,
-      [variantId, city_id || null, fulfillment_type, price],
+      [variantId, city_id, fulfillment_type, price],
     );
 
     await invalidateAllMenuCache();
@@ -385,11 +388,15 @@ export const updateVariantPrices = async (req, res, next) => {
         await connection.rollback();
         return res.status(400).json({ error: "Invalid fulfillment_type" });
       }
+      if (city_id === undefined || city_id === null) {
+        await connection.rollback();
+        return res.status(400).json({ error: "city_id is required for each price" });
+      }
 
       await connection.query(
         `INSERT INTO menu_variant_prices (variant_id, city_id, fulfillment_type, price)
          VALUES (?, ?, ?, ?)`,
-        [variantId, city_id || null, fulfillment_type, price],
+        [variantId, city_id, fulfillment_type, price],
       );
     }
 

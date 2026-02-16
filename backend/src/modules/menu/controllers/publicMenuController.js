@@ -136,9 +136,8 @@ export const getMenu = async (req, res, next) => {
           const [prices] = await db.query(
             `SELECT price FROM menu_item_prices
              WHERE item_id = ?
-               AND (city_id = ? OR city_id IS NULL)
+               AND city_id = ?
                AND fulfillment_type = ?
-             ORDER BY city_id DESC
              LIMIT 1`,
             [item.id, city_id, fulfillment_type],
           );
@@ -147,9 +146,8 @@ export const getMenu = async (req, res, next) => {
           const [prices] = await db.query(
             `SELECT price FROM menu_item_prices
              WHERE item_id = ?
-               AND (city_id = ? OR city_id IS NULL)
+               AND city_id = ?
                AND fulfillment_type = 'delivery'
-             ORDER BY city_id DESC
              LIMIT 1`,
             [item.id, city_id],
           );
@@ -195,9 +193,8 @@ export const getMenu = async (req, res, next) => {
             const [variantPrices] = await db.query(
               `SELECT price FROM menu_variant_prices
                WHERE variant_id = ?
-                 AND (city_id = ? OR city_id IS NULL)
+                 AND city_id = ?
                  AND fulfillment_type = ?
-               ORDER BY city_id DESC
                LIMIT 1`,
               [variant.id, city_id, fulfillment_type],
             );
@@ -206,9 +203,8 @@ export const getMenu = async (req, res, next) => {
             const [variantPrices] = await db.query(
               `SELECT price FROM menu_variant_prices
                WHERE variant_id = ?
-                 AND (city_id = ? OR city_id IS NULL)
+                 AND city_id = ?
                  AND fulfillment_type = 'delivery'
-               ORDER BY city_id DESC
                LIMIT 1`,
               [variant.id, city_id],
             );
@@ -510,9 +506,8 @@ export const getItemById = async (req, res, next) => {
       const [prices] = await db.query(
         `SELECT price FROM menu_item_prices
          WHERE item_id = ?
-           AND (city_id = ? OR city_id IS NULL)
+           AND city_id = ?
            AND fulfillment_type = ?
-         ORDER BY city_id DESC
          LIMIT 1`,
         [itemId, city_id, fulfillmentType],
       );
@@ -533,9 +528,8 @@ export const getItemById = async (req, res, next) => {
         const [variantPrices] = await db.query(
           `SELECT price FROM menu_variant_prices
            WHERE variant_id = ?
-             AND (city_id = ? OR city_id IS NULL)
+             AND city_id = ?
              AND fulfillment_type = ?
-           ORDER BY city_id DESC
            LIMIT 1`,
           [variant.id, city_id, fulfillmentType],
         );

@@ -193,12 +193,12 @@ export const createItem = async (req, res, next) => {
       // Добавление цен
       if (Array.isArray(prices)) {
         for (const priceItem of prices) {
-          if (!priceItem.fulfillment_type || priceItem.price === undefined) continue;
+          if (!priceItem.fulfillment_type || priceItem.price === undefined || priceItem.city_id === undefined || priceItem.city_id === null) continue;
           await connection.query(
             `INSERT INTO menu_item_prices (item_id, city_id, fulfillment_type, price)
              VALUES (?, ?, ?, ?)
              ON DUPLICATE KEY UPDATE price = VALUES(price)`,
-            [itemId, priceItem.city_id || null, priceItem.fulfillment_type, priceItem.price],
+            [itemId, priceItem.city_id, priceItem.fulfillment_type, priceItem.price],
           );
         }
       }
@@ -503,12 +503,12 @@ export const updateItem = async (req, res, next) => {
       // Обновление цен
       if (Array.isArray(prices)) {
         for (const priceItem of prices) {
-          if (!priceItem.fulfillment_type || priceItem.price === undefined) continue;
+          if (!priceItem.fulfillment_type || priceItem.price === undefined || priceItem.city_id === undefined || priceItem.city_id === null) continue;
           await connection.query(
             `INSERT INTO menu_item_prices (item_id, city_id, fulfillment_type, price)
              VALUES (?, ?, ?, ?)
              ON DUPLICATE KEY UPDATE price = VALUES(price)`,
-            [itemId, priceItem.city_id || null, priceItem.fulfillment_type, priceItem.price],
+            [itemId, priceItem.city_id, priceItem.fulfillment_type, priceItem.price],
           );
         }
       }
@@ -751,22 +751,12 @@ export const createItemVariant = async (req, res, next) => {
       // Добавление цен варианта
       if (Array.isArray(prices) && prices.length > 0) {
         for (const priceItem of prices) {
-          if (!priceItem.fulfillment_type || priceItem.price === undefined) continue;
+          if (!priceItem.fulfillment_type || priceItem.price === undefined || priceItem.city_id === undefined || priceItem.city_id === null) continue;
           await connection.query(
             `INSERT INTO menu_variant_prices (variant_id, city_id, fulfillment_type, price)
              VALUES (?, ?, ?, ?)
              ON DUPLICATE KEY UPDATE price = VALUES(price)`,
-            [result.insertId, priceItem.city_id || null, priceItem.fulfillment_type, priceItem.price],
-          );
-        }
-      } else if (price !== undefined && price !== null) {
-        const fulfillmentTypes = ["delivery", "pickup"];
-        for (const fulfillmentType of fulfillmentTypes) {
-          await connection.query(
-            `INSERT INTO menu_variant_prices (variant_id, city_id, fulfillment_type, price)
-             VALUES (?, NULL, ?, ?)
-             ON DUPLICATE KEY UPDATE price = VALUES(price)`,
-            [result.insertId, fulfillmentType, price],
+            [result.insertId, priceItem.city_id, priceItem.fulfillment_type, priceItem.price],
           );
         }
       }
@@ -907,25 +897,13 @@ export const updateItemVariants = async (req, res, next) => {
         // Обновление цен варианта
         if (Array.isArray(variant.prices) && variant.prices.length > 0) {
           for (const priceItem of variant.prices) {
-            if (!priceItem.fulfillment_type || priceItem.price === undefined) continue;
+            if (!priceItem.fulfillment_type || priceItem.price === undefined || priceItem.city_id === undefined || priceItem.city_id === null) continue;
             await connection.query(
               `INSERT INTO menu_variant_prices (variant_id, city_id, fulfillment_type, price)
                VALUES (?, ?, ?, ?)
                ON DUPLICATE KEY UPDATE price = VALUES(price)`,
-              [variant.id, priceItem.city_id || null, priceItem.fulfillment_type, priceItem.price],
+              [variant.id, priceItem.city_id, priceItem.fulfillment_type, priceItem.price],
             );
-          }
-        } else if (!variant.id || !existingIds.has(variant.id)) {
-          if (payload.price !== undefined && payload.price !== null) {
-            const fulfillmentTypes = ["delivery", "pickup"];
-            for (const fulfillmentType of fulfillmentTypes) {
-              await connection.query(
-                `INSERT INTO menu_variant_prices (variant_id, city_id, fulfillment_type, price)
-                 VALUES (?, NULL, ?, ?)
-                 ON DUPLICATE KEY UPDATE price = VALUES(price)`,
-                [variant.id, fulfillmentType, payload.price],
-              );
-            }
           }
         }
       }
