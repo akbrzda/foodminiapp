@@ -510,6 +510,7 @@ export const updateOrderStatus = async (req, res, next, forcedStatus = null) => 
     }
 
     const settings = await getSystemSettings();
+    const useLocalBonuses = settings.bonuses_enabled && !settings.premiumbonus_enabled;
     const loyaltyLevels = await getLoyaltyLevelsFromDb();
 
     const orderData = {
@@ -608,7 +609,7 @@ export const updateOrderStatus = async (req, res, next, forcedStatus = null) => 
     }
 
     // Обработка бонусов
-    if (settings.bonuses_enabled) {
+    if (useLocalBonuses) {
       setImmediate(async () => {
         try {
           if (oldStatus === "completed" && status !== "completed" && status !== "cancelled") {
@@ -634,6 +635,13 @@ export const updateOrderStatus = async (req, res, next, forcedStatus = null) => 
           logger.bonus.error(`Failed to process bonus side effects for order ${orderId}`, { error: bonusError.message });
         }
       });
+    }
+
+    if (
+      (settings.iiko_enabled && settings?.integration_mode?.orders === "external") ||
+      settings.premiumbonus_enabled
+    ) {
+      logger.info("Авто-синхронизация интеграций по изменению статуса заказа отключена", { orderId, status });
     }
 
     res.json({ order: updatedOrders[0] });

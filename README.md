@@ -29,6 +29,40 @@ FoodMiniApp закрывает полный цикл заказа еды в Tele
 - **Инфраструктура:** Docker Compose (локально), Linux, Apache, pm2.
 - **Интеграции:** Telegram Bot API, Telegram Mini App SDK, Nominatim (OpenStreetMap).
 
+## 🔌 Интеграции iiko + PremiumBonus (MVP)
+
+Реализована базовая платформа интеграций с режимом `local-first`:
+
+- Настройки интеграций через `system_settings`:
+  - `iiko_enabled`, `iiko_api_url`, `iiko_api_token`, `iiko_sync_category_ids`
+  - `iiko_external_menu_id`, `iiko_webhook_secret`
+  - `premiumbonus_enabled`, `premiumbonus_api_url`, `premiumbonus_api_token`, `premiumbonus_sale_point_id`
+  - `integration_mode` (`menu/orders/loyalty`)
+  - для меню используются все организации, доступные по API iiko (без ручного выбора организации)
+- Локальная буферизация в БД:
+  - `orders`: `iiko_*` и `pb_*` статусы синхронизации
+  - `users`: `pb_*` статусы синхронизации, `loyalty_mode`
+  - `menu_*`: внешние `iiko_*_id`
+- Очереди BullMQ:
+  - `sync:iiko:menu`, `sync:iiko:stoplist`, `sync:iiko:orders`
+  - `sync:premiumbonus:clients`, `sync:premiumbonus:purchases`
+- Webhooks:
+  - `POST /api/webhooks/iiko/order-status`
+  - `POST /api/webhooks/iiko/stoplist`
+- Админ API интеграций:
+  - `GET/PUT /api/admin/integrations/settings`
+  - `POST /api/admin/integrations/iiko/test-connection`
+  - `POST /api/admin/integrations/premiumbonus/test-connection`
+  - `POST /api/admin/integrations/iiko/sync-menu`
+  - `POST /api/admin/integrations/iiko/sync-stoplist`
+  - `GET /api/admin/integrations/iiko/sync-status`
+  - `GET /api/admin/integrations/sync-logs`
+  - `POST /api/admin/integrations/retry-failed`
+  - `POST /api/admin/integrations/retry-entity`
+
+Ограничения read-only при активной интеграции iiko:
+- Блокируются изменяющие admin-эндпоинты меню и полигонов доставки (возвращается `403`).
+
 Системные особенности:
 
 - Номер заказа циклический `0001–9999`.

@@ -7,6 +7,16 @@ const api = axios.create({
   },
 });
 let refreshPromise = null;
+const AUTH_ERRORS = new Set(["Authentication required", "Token has been revoked", "Invalid or expired token", "Refresh token required"]);
+
+const isAuthErrorResponse = (error) => {
+  const status = error?.response?.status;
+  const message = String(error?.response?.data?.error || "").trim();
+  if (status === 401 && AUTH_ERRORS.has(message)) return true;
+  if (status === 403 && message === "Invalid or expired token") return true;
+  return false;
+};
+
 const refreshToken = async () => {
   if (refreshPromise) return refreshPromise;
   refreshPromise = axios
@@ -38,7 +48,7 @@ api.interceptors.response.use(
     const status = error.response?.status;
     const originalRequest = error.config;
     const isRefreshRequest = originalRequest?.url?.includes("/api/auth/refresh");
-    if ((status === 401 || status === 403) && !isRefreshRequest && !originalRequest?._retry) {
+    if (status === 401 && !isRefreshRequest && !originalRequest?._retry) {
       originalRequest._retry = true;
       try {
         const data = await refreshToken();
@@ -49,9 +59,11 @@ api.interceptors.response.use(
           return api(originalRequest);
         }
       } catch (refreshError) {
-        authStore.logout({ redirect: true });
+        if (isAuthErrorResponse(refreshError)) {
+          authStore.logout({ redirect: true });
+        }
       }
-    } else if (status === 401) {
+    } else if ((status === 401 || status === 403) && isAuthErrorResponse(error)) {
       authStore.logout({ redirect: true });
     }
     return Promise.reject(error);

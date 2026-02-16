@@ -5,6 +5,10 @@ import { createBonusExpiryWorker } from "./bonusExpiry.worker.js";
 import { createBirthdayBonusWorker } from "./birthdayBonus.worker.js";
 import { createBroadcastWorker } from "./broadcast.worker.js";
 import { createTriggerWorker } from "./trigger.worker.js";
+import { createIikoMenuSyncWorker } from "./iikoMenuSync.worker.js";
+import { createIikoDeliveryZonesWorker } from "./iikoDeliveryZones.worker.js";
+import { createIntegrationSchedulerWorker } from "./integrationScheduler.worker.js";
+import { createIntegrationRetryWorker } from "./integrationRetry.worker.js";
 import IORedis from "ioredis";
 import dotenv from "dotenv";
 import { logger } from "../utils/logger.js";
@@ -22,6 +26,13 @@ let bonusExpiryWorker;
 let birthdayBonusWorker;
 let broadcastWorker;
 let triggerWorker;
+let iikoMenuSyncWorker;
+let iikoOrderSyncWorker;
+let pbClientSyncWorker;
+let pbPurchaseSyncWorker;
+let iikoDeliveryZonesWorker;
+let integrationSchedulerWorker;
+let integrationRetryWorker;
 export async function startWorkers() {
   try {
     telegramWorker = createTelegramWorker(redisConnection);
@@ -31,15 +42,30 @@ export async function startWorkers() {
     birthdayBonusWorker = createBirthdayBonusWorker();
     broadcastWorker = createBroadcastWorker();
     triggerWorker = createTriggerWorker();
+    iikoMenuSyncWorker = createIikoMenuSyncWorker(redisConnection);
+    // Временно отключен stoplist sync: доработки режима меню.
+    // Временно отключены воркеры синхронизации заказов/клиентов интеграций.
+    // iikoOrderSyncWorker = createIikoOrderSyncWorker(redisConnection);
+    // pbClientSyncWorker = createPbClientSyncWorker(redisConnection);
+    // pbPurchaseSyncWorker = createPbPurchaseSyncWorker(redisConnection);
+    iikoDeliveryZonesWorker = createIikoDeliveryZonesWorker();
+    integrationSchedulerWorker = createIntegrationSchedulerWorker();
+    integrationRetryWorker = createIntegrationRetryWorker();
     orderAutoStatusWorker.start();
     bonusExpiryWorker.start();
     birthdayBonusWorker.start();
     broadcastWorker.start();
     triggerWorker.start();
+    // Временно отключаем автоматические интеграционные синхронизации.
+    // Ручная синхронизация меню через очередь остается доступной.
     logger.system.info("Background workers started");
     return {
       telegramWorker,
       imageWorker,
+      iikoMenuSyncWorker,
+      iikoOrderSyncWorker,
+      pbClientSyncWorker,
+      pbPurchaseSyncWorker,
     };
   } catch (error) {
     logger.system.dbError(`Failed to start workers: ${error.message}`);
@@ -69,6 +95,27 @@ export async function stopWorkers() {
     }
     if (triggerWorker) {
       triggerWorker.stop();
+    }
+    if (iikoOrderSyncWorker) {
+      promises.push(iikoOrderSyncWorker.close());
+    }
+    if (pbClientSyncWorker) {
+      promises.push(pbClientSyncWorker.close());
+    }
+    if (pbPurchaseSyncWorker) {
+      promises.push(pbPurchaseSyncWorker.close());
+    }
+    if (iikoMenuSyncWorker) {
+      promises.push(iikoMenuSyncWorker.close());
+    }
+    if (iikoDeliveryZonesWorker) {
+      iikoDeliveryZonesWorker.stop();
+    }
+    if (integrationSchedulerWorker) {
+      integrationSchedulerWorker.stop();
+    }
+    if (integrationRetryWorker) {
+      integrationRetryWorker.stop();
     }
     await Promise.all(promises);
     logger.system.shutdown("Background workers stopped");

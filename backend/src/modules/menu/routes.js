@@ -8,8 +8,12 @@ import * as itemsController from "./controllers/itemsController.js";
 import * as modifiersController from "./controllers/modifiersController.js";
 import * as variantsAndPricesController from "./controllers/variantsAndPricesController.js";
 import * as tagsAndStopListController from "./controllers/tagsAndStopListController.js";
+import { checkIikoIntegration } from "../integrations/middleware/checkIikoIntegration.js";
 
 const router = express.Router();
+
+// При активной интеграции iiko все изменяющие admin-операции меню переводятся в read-only.
+router.use("/admin", checkIikoIntegration);
 
 // ==================== ПУБЛИЧНЫЕ ЭНДПОИНТЫ ====================
 

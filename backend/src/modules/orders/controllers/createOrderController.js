@@ -343,10 +343,11 @@ export const createOrder = async (req, res, next) => {
     }
 
     const settings = await getSystemSettings();
+    const useLocalBonuses = settings.bonuses_enabled && !settings.premiumbonus_enabled;
     const loyaltyLevels = await getLoyaltyLevelsFromDb();
     let loyaltyLevel = 1;
 
-    if (settings.bonuses_enabled) {
+    if (useLocalBonuses) {
       const [userData] = await db.query("SELECT current_loyalty_level_id FROM users WHERE id = ?", [req.user.id]);
       loyaltyLevel = userData[0]?.current_loyalty_level_id || 1;
     }
@@ -491,6 +492,9 @@ export const createOrder = async (req, res, next) => {
 
     const fulfillmentType = order_type === "pickup" ? "pickup" : "delivery";
     const effectiveBonusToUse = settings.bonuses_enabled ? bonus_to_use : 0;
+    const iikoOrdersExternal = settings.iiko_enabled && settings?.integration_mode?.orders === "external";
+    const iikoSyncStatus = iikoOrdersExternal ? "pending" : "synced";
+    const pbSyncStatus = settings.premiumbonus_enabled ? "pending" : "synced";
 
     // Расчет стоимости заказа
     let { subtotal, bonusUsed, total, validatedItems } = await calculateOrderCost(items, {
@@ -500,7 +504,7 @@ export const createOrder = async (req, res, next) => {
     });
 
     // Валидация бонусов
-    if (settings.bonuses_enabled && effectiveBonusToUse > 0) {
+    if (useLocalBonuses && effectiveBonusToUse > 0) {
       const bonusValidation = await validateBonusUsage(req.user.id, effectiveBonusToUse, subtotal, maxUsePercent);
       if (!bonusValidation.valid) {
         await connection.rollback();
@@ -519,7 +523,7 @@ export const createOrder = async (req, res, next) => {
 
     // Расчет начисленных бонусов
     let earnedBonuses = 0;
-    if (settings.bonuses_enabled) {
+    if (useLocalBonuses) {
       const baseAmount = subtotal - bonusUsed;
       earnedBonuses = calculateEarnedBonuses(Math.max(0, baseAmount), loyaltyLevel, loyaltyLevels);
     }
@@ -568,17 +572,20 @@ export const createOrder = async (req, res, next) => {
     const [orderResult] = await connection.query(
       `INSERT INTO orders 
        (order_number, user_id, city_id, branch_id, order_type, status, 
+        iiko_sync_status, pb_sync_status,
         delivery_address_id, delivery_latitude, delivery_longitude, delivery_street, delivery_house, delivery_entrance, delivery_floor,
         delivery_apartment, delivery_intercom, delivery_comment, 
         payment_method, change_from, subtotal, delivery_cost, bonus_spent, total, 
         comment, desired_time, user_timezone_offset)
-       VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         orderNumber,
         req.user.id,
         city_id,
         resolvedBranchId,
         order_type,
+        iikoSyncStatus,
+        pbSyncStatus,
         resolvedDeliveryAddressId,
         deliveryLatitude,
         deliveryLongitude,
@@ -634,7 +641,7 @@ export const createOrder = async (req, res, next) => {
     }
 
     // Обработка бонусов
-    if (settings.bonuses_enabled) {
+    if (useLocalBonuses) {
       try {
         await spendBonuses(
           {
@@ -736,6 +743,11 @@ export const createOrder = async (req, res, next) => {
       });
     } catch (queueError) {
       logger.error("Failed to queue Telegram notification", { error: queueError });
+    }
+
+    // Временно отключено: авто-синхронизация внешних интеграций (кроме ручного sync меню).
+    if (iikoOrdersExternal || settings.premiumbonus_enabled) {
+      logger.info("Авто-синхронизация интеграций по созданию заказа отключена", { orderId });
     }
 
     res.status(201).json({

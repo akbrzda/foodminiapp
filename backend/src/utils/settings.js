@@ -33,6 +33,97 @@ export const SETTINGS_SCHEMA = {
     group: "Заказы",
     type: "boolean",
   },
+  integration_mode: {
+    default: { menu: "local", orders: "local", loyalty: "local" },
+    label: "Режимы интеграции",
+    description: "Режим работы модулей: local/external",
+    group: "Интеграции",
+    type: "json",
+  },
+  iiko_enabled: {
+    default: false,
+    label: "Интеграция iiko",
+    description: "Включает синхронизацию меню, стоп-листа и заказов",
+    group: "Интеграции",
+    type: "boolean",
+  },
+  iiko_api_url: {
+    default: "",
+    label: "iiko API URL",
+    description: "Базовый URL API iiko",
+    group: "Интеграции",
+    type: "string",
+  },
+  iiko_api_token: {
+    default: "",
+    label: "iiko API Token",
+    description: "Токен доступа к API iiko",
+    group: "Интеграции",
+    type: "string",
+  },
+  iiko_organization_id: {
+    default: "",
+    label: "iiko Organization ID",
+    description: "ID организации в iiko",
+    group: "Интеграции",
+    type: "string",
+  },
+  iiko_sync_category_ids: {
+    default: [],
+    label: "Категории синхронизации iiko",
+    description: "Список внешних ID категорий iiko для синхронизации меню",
+    group: "Интеграции",
+    type: "json_array",
+  },
+  iiko_external_menu_id: {
+    default: "",
+    label: "iiko External Menu ID",
+    description: "ID внешнего меню iiko для синхронизации",
+    group: "Интеграции",
+    type: "string",
+  },
+  iiko_price_category_id: {
+    default: "",
+    label: "iiko Price Category ID",
+    description: "ID категории цен iiko для внешнего меню (опционально)",
+    group: "Интеграции",
+    type: "string",
+  },
+  iiko_webhook_secret: {
+    default: "",
+    label: "iiko Webhook Secret",
+    description: "Секрет проверки подписи webhook iiko",
+    group: "Интеграции",
+    type: "string",
+  },
+  premiumbonus_enabled: {
+    default: false,
+    label: "Интеграция PremiumBonus",
+    description: "Включает синхронизацию клиентов и лояльности",
+    group: "Интеграции",
+    type: "boolean",
+  },
+  premiumbonus_api_url: {
+    default: "",
+    label: "PremiumBonus API URL",
+    description: "Базовый URL API PremiumBonus",
+    group: "Интеграции",
+    type: "string",
+  },
+  premiumbonus_api_token: {
+    default: "",
+    label: "PremiumBonus API Token",
+    description: "Токен доступа к API PremiumBonus",
+    group: "Интеграции",
+    type: "string",
+  },
+  premiumbonus_sale_point_id: {
+    default: "",
+    label: "PremiumBonus Sale Point ID",
+    description: "Идентификатор точки продаж PremiumBonus",
+    group: "Интеграции",
+    type: "string",
+  },
 };
 
 const normalizeSettingValue = (rawValue, fallback) => {
@@ -140,12 +231,28 @@ export const updateSystemSettings = async (patch) => {
       }
       updates[key] = normalized;
     } else if (meta.type === "string") {
-      const normalized = normalizeString(value);
-      if (normalized === null) {
-        errors[key] = "Ожидалась непустая строка";
+      if (value === "") {
+        updates[key] = "";
+      } else {
+        const normalized = normalizeString(value);
+        if (normalized === null) {
+          errors[key] = "Ожидалась строка";
+          continue;
+        }
+        updates[key] = normalized;
+      }
+    } else if (meta.type === "json") {
+      if (!value || typeof value !== "object" || Array.isArray(value)) {
+        errors[key] = "Ожидался JSON-объект";
         continue;
       }
-      updates[key] = normalized;
+      updates[key] = value;
+    } else if (meta.type === "json_array") {
+      if (!Array.isArray(value)) {
+        errors[key] = "Ожидался JSON-массив";
+        continue;
+      }
+      updates[key] = value;
     } else {
       updates[key] = value;
     }

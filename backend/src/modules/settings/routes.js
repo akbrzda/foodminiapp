@@ -5,10 +5,30 @@ import { logger } from "../../utils/logger.js";
 
 const router = express.Router();
 
+const PUBLIC_SETTINGS_ALLOWLIST = new Set([
+  "bonuses_enabled",
+  "orders_enabled",
+  "delivery_enabled",
+  "pickup_enabled",
+  "iiko_enabled",
+  "premiumbonus_enabled",
+  "integration_mode",
+]);
+
+const filterPublicSettings = (settings) => {
+  const result = {};
+  for (const [key, value] of Object.entries(settings || {})) {
+    if (PUBLIC_SETTINGS_ALLOWLIST.has(key)) {
+      result[key] = value;
+    }
+  }
+  return result;
+};
+
 router.get("/", async (req, res, next) => {
   try {
     const settings = await getSystemSettings();
-    res.json({ settings });
+    res.json({ settings: filterPublicSettings(settings) });
   } catch (error) {
     next(error);
   }

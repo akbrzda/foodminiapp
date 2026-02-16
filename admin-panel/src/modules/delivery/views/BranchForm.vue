@@ -32,7 +32,26 @@
             <Field>
               <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Название филиала</FieldLabel>
               <FieldContent>
-                <Input v-model="form.name" placeholder="Пиццерия на Ленина" required />
+                <Input v-model="form.name" placeholder="Пиццерия на Ленина" :required="!form.iiko_terminal_group_id" />
+              </FieldContent>
+            </Field>
+            <Field>
+              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Филиал iiko (непривязанный)</FieldLabel>
+              <FieldContent>
+                <Select v-model="form.iiko_terminal_group_id" :disabled="iikoLoading">
+                  <SelectTrigger class="w-full">
+                    <SelectValue placeholder="Локальный филиал (без iiko)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Локальный филиал (без iiko)</SelectItem>
+                    <SelectItem v-for="item in iikoBranches" :key="item.id" :value="item.id">
+                      {{ item.name }}<span v-if="item.organization_name"> ({{ item.organization_name }})</span>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                <p class="text-xs text-muted-foreground">
+                  После сохранения филиала с привязкой iiko адрес, контакт и график подтянутся автоматически.
+                </p>
               </FieldContent>
             </Field>
             <Field>
@@ -171,6 +190,10 @@ const pageTitle = computed(() => (isEditing.value ? "Редактировать 
 const pageSubtitle = computed(() => (isEditing.value ? "Изменение данных филиала" : "Создание филиала"));
 
 const saving = ref(false);
+const iikoLoading = ref(false);
+const iikoBranches = ref([]);
+const currentBranchName = ref("");
+const iikoOrganizationByTerminalGroupId = ref({});
 const phoneError = ref("");
 const cityId = ref(route.query.cityId ? Number(route.query.cityId) : null);
 const form = ref({
@@ -183,6 +206,8 @@ const form = ref({
   prep_time: 0,
   assembly_time: 0,
   is_active: true,
+  iiko_terminal_group_id: "",
+  iiko_organization_id: "",
 });
 
 const branchMap = shallowRef(null);
@@ -351,6 +376,7 @@ const loadBranch = async () => {
       goBack();
       return;
     }
+    currentBranchName.value = String(branch.name || "").trim();
     const workingHours = [];
     if (branch.working_hours && typeof branch.working_hours === "object") {
       for (const [day, hours] of Object.entries(branch.working_hours)) {
@@ -370,6 +396,8 @@ const loadBranch = async () => {
       prep_time: Number(branch.prep_time || 0),
       assembly_time: Number(branch.assembly_time || 0),
       is_active: normalizeBoolean(branch.is_active, true),
+      iiko_terminal_group_id: String(branch.iiko_terminal_group_id || ""),
+      iiko_organization_id: String(branch.iiko_organization_id || ""),
     };
     sortWorkingHours();
     await nextTick();
@@ -378,6 +406,23 @@ const loadBranch = async () => {
     devError("Ошибка загрузки филиала:", error);
     showErrorNotification("Ошибка загрузки филиала");
     goBack();
+  }
+};
+
+const loadIikoBranches = async () => {
+  iikoLoading.value = true;
+  try {
+    const response = await api.get("/api/cities/admin/iiko/unmapped-branches");
+    const list = Array.isArray(response.data?.branches) ? response.data.branches : [];
+    iikoBranches.value = list;
+    iikoOrganizationByTerminalGroupId.value = list.reduce((acc, item) => {
+      acc[String(item.id)] = String(item.organization_id || "");
+      return acc;
+    }, {});
+  } catch (error) {
+    iikoBranches.value = [];
+  } finally {
+    iikoLoading.value = false;
   }
 };
 
@@ -410,6 +455,8 @@ const submitBranch = async () => {
       prep_time: form.value.prep_time || 0,
       assembly_time: form.value.assembly_time || 0,
       is_active: form.value.is_active,
+      iiko_terminal_group_id: form.value.iiko_terminal_group_id ? String(form.value.iiko_terminal_group_id) : "",
+      iiko_organization_id: form.value.iiko_organization_id ? String(form.value.iiko_organization_id) : "",
     };
     if (isEditing.value) {
       await api.put(`/api/cities/admin/${cityId.value}/branches/${branchId.value}`, payload);
@@ -443,6 +490,18 @@ watch(
 );
 
 watch(
+  () => form.value.iiko_terminal_group_id,
+  (value) => {
+    const key = String(value || "");
+    if (!key) {
+      form.value.iiko_organization_id = "";
+      return;
+    }
+    form.value.iiko_organization_id = iikoOrganizationByTerminalGroupId.value[key] || form.value.iiko_organization_id || "";
+  },
+);
+
+watch(
   () => form.value.working_hours.map((schedule) => schedule.day || "").join("|"),
   () => {
     sortWorkingHours();
@@ -451,6 +510,7 @@ watch(
 
 onMounted(async () => {
   await referenceStore.loadCities();
+  await loadIikoBranches();
   if (!cityId.value) {
     if (isEditing.value) {
       showErrorNotification("Не указан город филиала");
@@ -462,6 +522,17 @@ onMounted(async () => {
     }
   }
   await loadBranch();
+
+  if (form.value.iiko_terminal_group_id) {
+    const exists = iikoBranches.value.some((item) => String(item.id) === String(form.value.iiko_terminal_group_id));
+    if (!exists) {
+      iikoBranches.value.unshift({
+        id: String(form.value.iiko_terminal_group_id),
+        name: currentBranchName.value || "Текущий филиал",
+        organization_name: "",
+      });
+    }
+  }
 });
 
 onUnmounted(() => {

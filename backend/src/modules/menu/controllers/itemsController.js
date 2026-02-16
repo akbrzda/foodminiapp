@@ -1,5 +1,6 @@
 import db from "../../../config/database.js";
 import logger from "../../../utils/logger.js";
+import { getIntegrationSettings } from "../../integrations/services/integrationConfigService.js";
 
 // Вспомогательные функции
 async function getItemCityIds(itemId) {
@@ -233,6 +234,9 @@ export const createItem = async (req, res, next) => {
 // GET /admin/items - Получение всех товаров
 export const getAdminItems = async (req, res, next) => {
   try {
+    const integration = await getIntegrationSettings();
+    const onlyIiko = integration.iikoEnabled;
+
     let query = `
       SELECT 
         mi.id, 
@@ -256,6 +260,7 @@ export const getAdminItems = async (req, res, next) => {
         mi.created_at, 
         mi.updated_at
       FROM menu_items mi
+      ${onlyIiko ? "WHERE mi.iiko_item_id IS NOT NULL" : ""}
       ORDER BY mi.sort_order, mi.name
     `;
 

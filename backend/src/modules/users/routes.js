@@ -34,6 +34,10 @@ router.post("/register", async (req, res, next) => {
       return res.status(400).json({ error: "Invalid phone format" });
     }
 
+    const systemSettings = await getSystemSettings();
+    const pbSyncStatus = systemSettings.premiumbonus_enabled ? "pending" : "synced";
+    const loyaltyMode = systemSettings.premiumbonus_enabled ? "premiumbonus" : "local";
+
     const [existingUsers] = await db.query("SELECT * FROM users WHERE phone = ?", [normalizedPhone]);
 
     if (existingUsers.length > 0) {
@@ -51,6 +55,10 @@ router.post("/register", async (req, res, next) => {
         updates.push("last_name = ?");
         values.push(last_name);
       }
+      if (systemSettings.premiumbonus_enabled) {
+        updates.push("pb_sync_status = 'pending'");
+        updates.push("loyalty_mode = 'premiumbonus'");
+      }
 
       if (updates.length > 0) {
         values.push(user.id);
@@ -67,15 +75,16 @@ router.post("/register", async (req, res, next) => {
 
       // Дешифрование перед отправкой клиенту
       const decryptedUser = decryptUserData(updatedUsers[0]);
+      if (systemSettings.premiumbonus_enabled) {
+        logger.info("Авто-синхронизация клиента PremiumBonus при регистрации отключена", { userId: user.id, source: "register-existing" });
+      }
       return res.json({ user: decryptedUser });
     }
 
-    const [result] = await db.query("INSERT INTO users (phone, telegram_id, first_name, last_name) VALUES (?, ?, ?, ?)", [
-      normalizedPhone,
-      null,
-      first_name || null,
-      last_name || null,
-    ]);
+    const [result] = await db.query(
+      "INSERT INTO users (phone, telegram_id, first_name, last_name, loyalty_mode, pb_sync_status) VALUES (?, ?, ?, ?, ?, ?)",
+      [normalizedPhone, null, first_name || null, last_name || null, loyaltyMode, pbSyncStatus],
+    );
 
     await db.query("UPDATE users SET current_loyalty_level_id = 1, loyalty_joined_at = NOW() WHERE id = ?", [result.insertId]);
 
@@ -88,9 +97,14 @@ router.post("/register", async (req, res, next) => {
     );
 
     try {
-      const systemSettings = await getSystemSettings();
-      if (systemSettings.bonuses_enabled) {
+      if (systemSettings.bonuses_enabled && !systemSettings.premiumbonus_enabled) {
         await grantRegistrationBonus(result.insertId, null);
+      }
+      if (systemSettings.premiumbonus_enabled) {
+        logger.info("Авто-синхронизация клиента PremiumBonus при регистрации отключена", {
+          userId: result.insertId,
+          source: "register-new",
+        });
       }
     } catch (bonusError) {
       logger.error("Failed to grant registration bonus", { error: bonusError });
@@ -270,6 +284,12 @@ router.put("/profile", authenticateToken, async (req, res, next) => {
 
     values.push(userId);
     await db.query(`UPDATE users SET ${updates.join(", ")} WHERE id = ?`, values);
+
+    const systemSettings = await getSystemSettings();
+    if (systemSettings.premiumbonus_enabled) {
+      await db.query("UPDATE users SET pb_sync_status = 'pending', loyalty_mode = 'premiumbonus' WHERE id = ?", [userId]);
+      logger.info("Авто-синхронизация клиента PremiumBonus при обновлении профиля отключена", { userId, source: "profile-update" });
+    }
 
     const [updatedUsers] = await db.query(
       `SELECT u.id, u.telegram_id, u.phone, u.first_name, u.last_name, u.email, u.date_of_birth,

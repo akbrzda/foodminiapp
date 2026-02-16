@@ -4,7 +4,10 @@ import { authenticateToken, requireRole, checkCityAccess } from "../../middlewar
 import redis from "../../config/redis.js";
 import axios from "axios";
 import { findTariffForAmount, getNextThreshold, validateTariffs } from "./utils/deliveryTariffs.js";
+import { checkIikoIntegration } from "../integrations/middleware/checkIikoIntegration.js";
 const router = express.Router();
+
+router.use("/admin", checkIikoIntegration);
 const parseGeoJson = (value) => {
   if (!value) return null;
   if (typeof value === "string") {

@@ -1,6 +1,7 @@
 import db from "../../../config/database.js";
 import redis from "../../../config/redis.js";
 import logger from "../../../utils/logger.js";
+import { getIntegrationSettings } from "../../integrations/services/integrationConfigService.js";
 
 const MENU_CACHE_TTL = 300;
 
@@ -71,7 +72,9 @@ export const getMenu = async (req, res, next) => {
     }
 
     const cityId = Number(city_id);
-    const cacheKeyParts = [`menu:city:${city_id}`];
+    const integration = await getIntegrationSettings();
+    const onlyIiko = integration.iikoEnabled;
+    const cacheKeyParts = [`menu:city:${city_id}`, `mode:${onlyIiko ? "iiko" : "local"}`];
     if (branch_id) cacheKeyParts.push(`branch:${branch_id}`);
     if (fulfillment_type) cacheKeyParts.push(`fulfillment:${fulfillment_type}`);
     const cacheKey = cacheKeyParts.join(":");
@@ -91,6 +94,7 @@ export const getMenu = async (req, res, next) => {
        WHERE mcc.city_id = ? 
          AND mc.is_active = TRUE 
          AND mcc.is_active = TRUE
+         ${onlyIiko ? "AND mc.iiko_category_id IS NOT NULL" : ""}
        ORDER BY mc.sort_order, mc.name`,
       [city_id],
     );
@@ -113,6 +117,7 @@ export const getMenu = async (req, res, next) => {
            AND mi.is_active = TRUE
            AND micities.city_id = ?
            AND micities.is_active = TRUE
+           ${onlyIiko ? "AND mi.iiko_item_id IS NOT NULL" : ""}
          ORDER BY mic.sort_order, mi.sort_order, mi.name`,
         [category.id, city_id],
       );
@@ -358,6 +363,9 @@ export const getCategories = async (req, res, next) => {
       return res.status(400).json({ error: "city_id is required" });
     }
 
+    const integration = await getIntegrationSettings();
+    const onlyIiko = integration.iikoEnabled;
+
     const [categories] = await db.query(
       `SELECT mc.id, mc.name, mc.description, mc.image_url, mc.sort_order,
               (mc.is_active AND mcc.is_active) AS is_active,
@@ -367,6 +375,7 @@ export const getCategories = async (req, res, next) => {
        WHERE mcc.city_id = ?
          AND mc.is_active = TRUE
          AND mcc.is_active = TRUE
+         ${onlyIiko ? "AND mc.iiko_category_id IS NOT NULL" : ""}
        ORDER BY mc.sort_order, mc.name`,
       [city_id],
     );
@@ -404,6 +413,8 @@ export const getCategoryById = async (req, res, next) => {
 export const getCategoryItems = async (req, res, next) => {
   try {
     const categoryId = req.params.categoryId;
+    const integration = await getIntegrationSettings();
+    const onlyIiko = integration.iikoEnabled;
 
     const [items] = await db.query(
       `SELECT mi.id, mi.name, mi.description, mi.price, mi.image_url, 
@@ -411,6 +422,7 @@ export const getCategoryItems = async (req, res, next) => {
        FROM menu_items mi
        JOIN menu_item_categories mic ON mic.item_id = mi.id
        WHERE mic.category_id = ? AND mi.is_active = TRUE
+         ${onlyIiko ? "AND mi.iiko_item_id IS NOT NULL" : ""}
        ORDER BY mic.sort_order, mi.sort_order, mi.name`,
       [categoryId],
     );

@@ -53,6 +53,8 @@ CREATE TABLE `migrations` (
 CREATE TABLE `modifier_groups` (
   `id` int NOT NULL AUTO_INCREMENT,
   `name` varchar(200) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'Название группы (например: "Уровень прожарки")',
+  `iiko_modifier_group_id` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `iiko_synced_at` timestamp NULL DEFAULT NULL,
   `type` enum('single','multiple') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'single' COMMENT 'Одиночный или множественный выбор',
   `is_required` tinyint(1) DEFAULT '0' COMMENT 'Обязательность выбора модификатора из группы',
   `is_global` tinyint(1) DEFAULT '0' COMMENT 'Глобальная группа (переиспользуемая)',
@@ -63,7 +65,8 @@ CREATE TABLE `modifier_groups` (
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  KEY `idx_active_sort` (`is_active`,`sort_order`)
+  KEY `idx_active_sort` (`is_active`,`sort_order`),
+  KEY `idx_iiko_modifier_group_id` (`iiko_modifier_group_id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=29 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 
@@ -109,6 +112,13 @@ CREATE TABLE `users` (
   `email` varchar(100) DEFAULT NULL,
   `date_of_birth` date DEFAULT NULL,
   `timezone` varchar(64) DEFAULT NULL,
+  `pb_client_id` varchar(255) DEFAULT NULL,
+  `pb_external_id` varchar(255) DEFAULT NULL,
+  `loyalty_mode` enum('local','premiumbonus') NOT NULL DEFAULT 'local',
+  `pb_sync_status` enum('pending','synced','error','failed') NOT NULL DEFAULT 'pending',
+  `pb_sync_error` text,
+  `pb_sync_attempts` int NOT NULL DEFAULT '0',
+  `pb_last_sync_at` timestamp NULL DEFAULT NULL,
   `loyalty_balance` decimal(10,2) DEFAULT '0.00',
   `current_loyalty_level_id` int DEFAULT NULL,
   `loyalty_joined_at` timestamp NULL DEFAULT NULL,
@@ -120,6 +130,9 @@ CREATE TABLE `users` (
   KEY `idx_phone` (`phone`),
   KEY `idx_telegram_id` (`telegram_id`),
   KEY `idx_birth_date` (`date_of_birth`),
+  KEY `idx_pb_client_id` (`pb_client_id`),
+  KEY `idx_pb_sync_status` (`pb_sync_status`),
+  KEY `idx_loyalty_mode` (`loyalty_mode`),
   KEY `idx_users_timezone` (`timezone`),
   KEY `idx_current_loyalty_level` (`current_loyalty_level_id`),
   KEY `idx_loyalty_joined_at` (`loyalty_joined_at`),
@@ -135,6 +148,9 @@ CREATE TABLE `branches` (
   `latitude` decimal(10,8) DEFAULT NULL,
   `longitude` decimal(11,8) DEFAULT NULL,
   `phone` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `iiko_organization_id` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `iiko_terminal_group_id` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `iiko_synced_at` timestamp NULL DEFAULT NULL,
   `working_hours` json DEFAULT NULL,
   `prep_time` int DEFAULT '0',
   `assembly_time` int DEFAULT '0',
@@ -143,6 +159,8 @@ CREATE TABLE `branches` (
   `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `idx_city_active` (`city_id`,`is_active`),
+  UNIQUE KEY `uq_branches_iiko_terminal_group_id` (`iiko_terminal_group_id`),
+  KEY `idx_branches_iiko_organization_id` (`iiko_organization_id`),
   CONSTRAINT `branches_ibfk_1` FOREIGN KEY (`city_id`) REFERENCES `cities` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=16 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -152,12 +170,15 @@ CREATE TABLE `menu_categories` (
   `name` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
   `description` text COLLATE utf8mb4_unicode_ci,
   `image_url` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `iiko_category_id` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `iiko_synced_at` timestamp NULL DEFAULT NULL,
   `sort_order` int DEFAULT '0',
   `is_active` tinyint(1) DEFAULT '1',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  KEY `idx_active_sort` (`is_active`,`sort_order`)
+  KEY `idx_active_sort` (`is_active`,`sort_order`),
+  KEY `idx_iiko_category_id` (`iiko_category_id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=25 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 
@@ -169,12 +190,15 @@ CREATE TABLE `modifiers` (
   `weight` decimal(10,2) DEFAULT NULL COMMENT 'Вес модификатора',
   `weight_unit` enum('g','kg','ml','l','pcs') COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'Единица измерения веса',
   `image_url` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'URL изображения модификатора',
+  `iiko_modifier_id` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `iiko_synced_at` timestamp NULL DEFAULT NULL,
   `sort_order` int DEFAULT '0',
   `is_active` tinyint(1) DEFAULT '1',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `idx_group_active_sort` (`group_id`,`is_active`,`sort_order`),
+  KEY `idx_iiko_modifier_id` (`iiko_modifier_id`),
   CONSTRAINT `modifiers_ibfk_1` FOREIGN KEY (`group_id`) REFERENCES `modifier_groups` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=82 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -312,6 +336,8 @@ CREATE TABLE `menu_items` (
   `composition` text COLLATE utf8mb4_unicode_ci,
   `price` decimal(10,2) DEFAULT '0.00' COMMENT 'Базовая цена (используется если нет вариантов)',
   `image_url` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `iiko_item_id` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `iiko_synced_at` timestamp NULL DEFAULT NULL,
   `weight` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `weight_value` decimal(10,2) DEFAULT NULL,
   `weight_unit` enum('g','kg','ml','l','pcs') COLLATE utf8mb4_unicode_ci DEFAULT NULL,
@@ -329,7 +355,8 @@ CREATE TABLE `menu_items` (
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  KEY `idx_active_sort` (`is_active`,`sort_order`)
+  KEY `idx_active_sort` (`is_active`,`sort_order`),
+  KEY `idx_iiko_item_id` (`iiko_item_id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=55 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 
@@ -357,6 +384,16 @@ CREATE TABLE `orders` (
   `branch_id` int DEFAULT NULL,
   `order_type` enum('delivery','pickup') COLLATE utf8mb4_unicode_ci NOT NULL,
   `status` enum('pending','confirmed','preparing','ready','delivering','completed','cancelled') COLLATE utf8mb4_unicode_ci DEFAULT 'pending',
+  `iiko_order_id` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `iiko_sync_status` enum('pending','synced','error','failed') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'pending',
+  `iiko_sync_error` text COLLATE utf8mb4_unicode_ci,
+  `iiko_sync_attempts` int NOT NULL DEFAULT '0',
+  `iiko_last_sync_at` timestamp NULL DEFAULT NULL,
+  `pb_purchase_id` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `pb_sync_status` enum('pending','synced','error','failed') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'pending',
+  `pb_sync_error` text COLLATE utf8mb4_unicode_ci,
+  `pb_sync_attempts` int NOT NULL DEFAULT '0',
+  `pb_last_sync_at` timestamp NULL DEFAULT NULL,
   `delivery_address_id` int DEFAULT NULL,
   `delivery_latitude` decimal(10,8) DEFAULT NULL,
   `delivery_longitude` decimal(11,8) DEFAULT NULL,
@@ -388,6 +425,10 @@ CREATE TABLE `orders` (
   KEY `delivery_address_id` (`delivery_address_id`),
   KEY `idx_user_id` (`user_id`),
   KEY `idx_order_number` (`order_number`),
+  KEY `idx_iiko_order_id` (`iiko_order_id`),
+  KEY `idx_iiko_sync_status` (`iiko_sync_status`),
+  KEY `idx_pb_purchase_id` (`pb_purchase_id`),
+  KEY `idx_pb_sync_status` (`pb_sync_status`),
   KEY `idx_status` (`status`),
   KEY `idx_created_at` (`created_at`),
   KEY `idx_bonus_earn_locked` (`bonus_earn_locked`),
@@ -527,14 +568,39 @@ CREATE TABLE `item_variants` (
   `fats_per_serving` decimal(10,2) DEFAULT NULL COMMENT 'Жиры на порцию',
   `carbs_per_serving` decimal(10,2) DEFAULT NULL COMMENT 'Углеводы на порцию',
   `image_url` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'Фото конкретной вариации',
+  `iiko_variant_id` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `iiko_synced_at` timestamp NULL DEFAULT NULL,
   `sort_order` int DEFAULT '0',
   `is_active` tinyint(1) DEFAULT '1',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `idx_item_active_sort` (`item_id`,`is_active`,`sort_order`),
+  KEY `idx_iiko_variant_id` (`iiko_variant_id`),
   CONSTRAINT `item_variants_ibfk_1` FOREIGN KEY (`item_id`) REFERENCES `menu_items` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=67 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+CREATE TABLE `integration_sync_logs` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `integration_type` enum('iiko','premiumbonus') COLLATE utf8mb4_unicode_ci NOT NULL,
+  `module` enum('menu','orders','stoplist','delivery_zones','clients','purchases','loyalty','promocode') COLLATE utf8mb4_unicode_ci NOT NULL,
+  `action` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `status` enum('success','error') COLLATE utf8mb4_unicode_ci NOT NULL,
+  `entity_type` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `entity_id` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `error_message` text COLLATE utf8mb4_unicode_ci,
+  `request_data` json DEFAULT NULL,
+  `response_data` json DEFAULT NULL,
+  `attempts` int NOT NULL DEFAULT '0',
+  `duration_ms` int DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_integration_module` (`integration_type`,`module`),
+  KEY `idx_status` (`status`),
+  KEY `idx_created_at` (`created_at`),
+  KEY `idx_entity` (`entity_type`,`entity_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 
 CREATE TABLE `menu_item_categories` (

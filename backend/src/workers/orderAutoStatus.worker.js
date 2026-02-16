@@ -63,7 +63,7 @@ async function updateOrderStatus(order, localDate) {
     const orderTotal = parseFloat(order.total) || 0;
     const settings = await getSystemSettings();
     const loyaltyLevels = await getLoyaltyLevelsFromDb();
-    if (settings.bonuses_enabled && orderTotal > 0) {
+    if (settings.bonuses_enabled && !settings.premiumbonus_enabled && orderTotal > 0) {
       try {
         await db.query("UPDATE loyalty_transactions SET status = 'completed' WHERE order_id = ? AND type = 'spend' AND status = 'pending'", [
           order.id,
@@ -76,8 +76,10 @@ async function updateOrderStatus(order, localDate) {
   } else if (newStatus === "cancelled") {
     try {
       const settings = await getSystemSettings();
-      const loyaltyLevels = await getLoyaltyLevelsFromDb();
-      await rollbackBonuses(order, loyaltyLevels);
+      if (!settings.premiumbonus_enabled) {
+        const loyaltyLevels = await getLoyaltyLevelsFromDb();
+        await rollbackBonuses(order, loyaltyLevels);
+      }
     } catch (bonusError) {
       logger.bonus.error(`Failed to rollback bonuses for order ${order.id}`, { error: bonusError.message });
     }

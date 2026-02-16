@@ -42,6 +42,46 @@ export const imageQueue = new Queue("image-processing", {
     },
   },
 });
+
+const integrationDefaultOptions = {
+  attempts: 5,
+  backoff: {
+    type: "exponential",
+    delay: 1000,
+  },
+  removeOnComplete: {
+    age: 86400,
+    count: 1000,
+  },
+  removeOnFail: {
+    age: 604800,
+  },
+};
+
+export const iikoMenuSyncQueue = new Queue("sync-iiko-menu", {
+  connection: redisConnection,
+  defaultJobOptions: integrationDefaultOptions,
+});
+
+export const iikoStopListSyncQueue = new Queue("sync-iiko-stoplist", {
+  connection: redisConnection,
+  defaultJobOptions: integrationDefaultOptions,
+});
+
+export const iikoOrdersSyncQueue = new Queue("sync-iiko-orders", {
+  connection: redisConnection,
+  defaultJobOptions: integrationDefaultOptions,
+});
+
+export const premiumBonusClientsSyncQueue = new Queue("sync-premiumbonus-clients", {
+  connection: redisConnection,
+  defaultJobOptions: integrationDefaultOptions,
+});
+
+export const premiumBonusPurchasesSyncQueue = new Queue("sync-premiumbonus-purchases", {
+  connection: redisConnection,
+  defaultJobOptions: integrationDefaultOptions,
+});
 export async function addTelegramNotification(data) {
   try {
     const job = await telegramQueue.add("send-notification", data, {
@@ -61,6 +101,39 @@ export async function addImageProcessing(data) {
   } catch (error) {
     throw error;
   }
+}
+
+export async function enqueueIikoMenuSync(data) {
+  return iikoMenuSyncQueue.add("sync-menu", data, {
+    priority: data.priority || 3,
+  });
+}
+
+export async function enqueueIikoStopListSync(data) {
+  return iikoStopListSyncQueue.add("sync-stoplist", data, {
+    priority: data.priority || 2,
+  });
+}
+
+export async function enqueueIikoOrderSync(data) {
+  return iikoOrdersSyncQueue.add("sync-order", data, {
+    priority: data.priority || 1,
+    jobId: data?.orderId ? `iiko-order-${data.orderId}-${Date.now()}` : undefined,
+  });
+}
+
+export async function enqueuePremiumBonusClientSync(data) {
+  return premiumBonusClientsSyncQueue.add("sync-client", data, {
+    priority: data.priority || 1,
+    jobId: data?.userId ? `pb-client-${data.userId}-${Date.now()}` : undefined,
+  });
+}
+
+export async function enqueuePremiumBonusPurchaseSync(data) {
+  return premiumBonusPurchasesSyncQueue.add("sync-purchase", data, {
+    priority: data.priority || 1,
+    jobId: data?.orderId ? `pb-purchase-${data.orderId}-${Date.now()}` : undefined,
+  });
 }
 export async function getQueueStats(queue) {
   try {
@@ -124,8 +197,18 @@ export async function cleanQueue(queue, grace = 86400000) {
 export default {
   telegramQueue,
   imageQueue,
+  iikoMenuSyncQueue,
+  iikoStopListSyncQueue,
+  iikoOrdersSyncQueue,
+  premiumBonusClientsSyncQueue,
+  premiumBonusPurchasesSyncQueue,
   addTelegramNotification,
   addImageProcessing,
+  enqueueIikoMenuSync,
+  enqueueIikoStopListSync,
+  enqueueIikoOrderSync,
+  enqueuePremiumBonusClientSync,
+  enqueuePremiumBonusPurchaseSync,
   getQueueStats,
   getFailedJobs,
   retryFailedJobs,

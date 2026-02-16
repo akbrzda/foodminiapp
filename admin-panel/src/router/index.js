@@ -23,6 +23,7 @@ import MenuModifiers from "@/modules/menu/views/MenuModifiers.vue";
 import MenuTags from "@/modules/menu/views/MenuTags.vue";
 import MenuStopList from "@/modules/menu/views/MenuStopList.vue";
 import SystemSettings from "@/modules/system/views/SystemSettings.vue";
+import IntegrationsSettings from "@/modules/system/views/IntegrationsSettings.vue";
 import AdminUsers from "@/modules/admin/views/AdminUsers.vue";
 import AdminLogs from "@/modules/admin/views/AdminLogs.vue";
 import OrderDetail from "@/modules/orders/views/OrderDetail.vue";
@@ -383,6 +384,12 @@ const router = createRouter({
           name: "system-settings",
           component: SystemSettings,
           meta: { title: "Настройки системы", subtitle: "Модули и функциональные блоки", roles: ["admin", "ceo"] },
+        },
+        {
+          path: "integrations",
+          name: "integrations",
+          component: IntegrationsSettings,
+          meta: { title: "Интеграции", subtitle: "iiko и PremiumBonus", roles: ["admin", "ceo"] },
         },
         {
           path: "admin-users",

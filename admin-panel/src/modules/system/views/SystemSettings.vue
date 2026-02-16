@@ -156,6 +156,7 @@
           </CardContent>
         </Card>
       </TabsContent>
+
     </Tabs>
 
     <Dialog v-if="showModal" :open="showModal" @update:open="(value) => (value ? null : closeModal())">
@@ -295,7 +296,7 @@ const loadModuleSettings = async () => {
   moduleLoading.value = true;
   try {
     const response = await api.get("/api/settings/admin");
-    moduleItems.value = response.data.items || [];
+    moduleItems.value = (response.data.items || []).filter((item) => item.group !== "Интеграции");
     hydrateForm(moduleItems.value, moduleForm);
   } catch (error) {
     devError("Failed to load settings:", error);
@@ -317,7 +318,7 @@ const saveModuleSettings = async () => {
       }
     }
     const response = await api.put("/api/settings/admin", { settings: payload });
-    moduleItems.value = response.data.items || [];
+    moduleItems.value = (response.data.items || []).filter((item) => item.group !== "Интеграции");
     hydrateForm(moduleItems.value, moduleForm);
     showSuccessNotification("Настройки сохранены");
   } catch (error) {

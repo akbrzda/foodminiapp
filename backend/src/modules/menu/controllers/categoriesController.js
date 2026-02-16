@@ -1,5 +1,6 @@
 import db from "../../../config/database.js";
 import logger from "../../../utils/logger.js";
+import { getIntegrationSettings } from "../../integrations/services/integrationConfigService.js";
 
 // Функции для получения городов доступа
 async function getCategoryCityIds(categoryId) {
@@ -42,10 +43,14 @@ async function invalidateMenuCacheByCity(cityId) {
 // GET /admin/all-categories - Получение всех категорий без фильтрации
 export const getAllCategories = async (req, res, next) => {
   try {
+    const integration = await getIntegrationSettings();
+    const onlyIiko = integration.iikoEnabled;
+
     const [categories] = await db.query(
       `SELECT id, name, description, image_url, sort_order, 
               is_active, created_at, updated_at
        FROM menu_categories
+       ${onlyIiko ? "WHERE iiko_category_id IS NOT NULL" : ""}
        ORDER BY sort_order, name`,
     );
 

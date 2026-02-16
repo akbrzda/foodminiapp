@@ -79,7 +79,7 @@
                     <img v-if="item.image_url" :src="normalizeImageUrl(item.image_url)" :alt="item.name" class="h-12 w-12 rounded-lg object-cover" />
                     <div>
                       <div class="font-medium text-foreground">{{ item.name }}</div>
-                      <div class="text-xs text-muted-foreground">{{ item.description || "—" }}</div>
+                      <div class="text-xs text-muted-foreground w-120">{{ item.description || "—" }}</div>
                     </div>
                   </div>
                 </TableCell>

@@ -59,7 +59,7 @@ api.interceptors.response.use(
       const originalRequest = error.config;
       const isRefreshRequest = originalRequest?.url?.includes("/auth/refresh");
       const isAuthRequest = originalRequest?.url?.includes("/auth/telegram");
-      if ((status === 401 || status === 403) && !isAuthRequest && !isRefreshRequest && !originalRequest?._retry) {
+      if (status === 401 && !isAuthRequest && !isRefreshRequest && !originalRequest?._retry) {
         originalRequest._retry = true;
         try {
           const data = await refreshToken();
