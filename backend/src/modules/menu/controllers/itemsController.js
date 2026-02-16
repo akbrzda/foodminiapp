@@ -39,6 +39,63 @@ async function invalidateMenuCacheByCity(cityId) {
   }
 }
 
+async function seedModifierVariantPricesForNewVariant(connection, itemId, variantId, variantName) {
+  if (!itemId || !variantId || !variantName) return;
+
+  const [modifiers] = await connection.query(
+    `SELECT DISTINCT m.id
+     FROM item_modifier_groups img
+     JOIN modifier_groups mg ON mg.id = img.modifier_group_id
+     JOIN modifiers m ON m.group_id = mg.id
+     WHERE img.item_id = ?
+       AND mg.is_active = TRUE
+       AND m.is_active = TRUE`,
+    [itemId],
+  );
+  if (!Array.isArray(modifiers) || modifiers.length === 0) return;
+
+  for (const modifier of modifiers) {
+    const modifierId = Number(modifier?.id);
+    if (!Number.isFinite(modifierId)) continue;
+
+    const [templateRows] = await connection.query(
+      `SELECT mvp.price, mvp.weight, mvp.weight_unit
+       FROM menu_modifier_variant_prices mvp
+       JOIN item_variants iv ON iv.id = mvp.variant_id
+       WHERE mvp.modifier_id = ?
+         AND LOWER(TRIM(iv.name)) = LOWER(TRIM(?))
+       ORDER BY mvp.updated_at DESC, mvp.id DESC
+       LIMIT 1`,
+      [modifierId, variantName],
+    );
+    if (!Array.isArray(templateRows) || templateRows.length === 0) continue;
+
+    const template = templateRows[0];
+    await connection.query(
+      `INSERT INTO menu_modifier_variant_prices (modifier_id, variant_id, price, weight, weight_unit)
+       VALUES (?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE price = VALUES(price), weight = VALUES(weight), weight_unit = VALUES(weight_unit)`,
+      [modifierId, variantId, template.price, template.weight ?? null, template.weight_unit ?? null],
+    );
+  }
+}
+
+async function seedModifierVariantPricesForItem(connection, itemId) {
+  if (!itemId) return;
+
+  const [itemVariants] = await connection.query(
+    `SELECT id, name
+     FROM item_variants
+     WHERE item_id = ?`,
+    [itemId],
+  );
+  if (!Array.isArray(itemVariants) || itemVariants.length === 0) return;
+
+  for (const variant of itemVariants) {
+    await seedModifierVariantPricesForNewVariant(connection, itemId, variant.id, variant.name);
+  }
+}
+
 // POST /admin/items - Создание товара
 export const createItem = async (req, res, next) => {
   try {
@@ -569,6 +626,10 @@ export const updateItemModifierGroups = async (req, res, next) => {
         await connection.query("INSERT IGNORE INTO item_modifier_groups (item_id, modifier_group_id) VALUES (?, ?)", [itemId, groupId]);
       }
 
+      // Восстанавливаем недостающие цены модификаторов по вариантам
+      // по шаблону одинаковых имен вариантов из уже настроенных блюд.
+      await seedModifierVariantPricesForItem(connection, itemId);
+
       await connection.commit();
       await invalidateAllMenuCache();
 
@@ -684,6 +745,8 @@ export const createItemVariant = async (req, res, next) => {
           sort_order || 0,
         ],
       );
+
+      await seedModifierVariantPricesForNewVariant(connection, itemId, result.insertId, name);
 
       // Добавление цен варианта
       if (Array.isArray(prices) && prices.length > 0) {
@@ -838,6 +901,7 @@ export const updateItemVariants = async (req, res, next) => {
             ],
           );
           variant.id = insertResult.insertId;
+          await seedModifierVariantPricesForNewVariant(connection, itemId, variant.id, payload.name);
         }
 
         // Обновление цен варианта

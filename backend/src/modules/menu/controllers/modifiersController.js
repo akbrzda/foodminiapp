@@ -661,7 +661,7 @@ export const getModifierVariantPrices = async (req, res, next) => {
   }
 };
 
-// PUT /admin/modifiers/:modifierId/variant-prices - Полная замена цен модификатора по конкретным вариантам
+// PUT /admin/modifiers/:modifierId/variant-prices - Сохранение цен модификатора по конкретным вариантам
 export const replaceModifierVariantPrices = async (req, res, next) => {
   const connection = await db.getConnection();
   try {
@@ -681,7 +681,6 @@ export const replaceModifierVariantPrices = async (req, res, next) => {
     const availableVariantIds = new Set(availableVariants.map((row) => Number(row.variant_id)));
 
     await connection.beginTransaction();
-    await connection.query("DELETE FROM menu_modifier_variant_prices WHERE modifier_id = ?", [modifierId]);
 
     for (const row of prices) {
       const variantId = Number(row?.variant_id);
@@ -706,7 +705,7 @@ export const replaceModifierVariantPrices = async (req, res, next) => {
     await connection.commit();
     await invalidateAllMenuCache();
 
-    res.json({ message: "Modifier variant prices replaced successfully" });
+    res.json({ message: "Modifier variant prices saved successfully" });
   } catch (error) {
     await connection.rollback();
     next(error);
