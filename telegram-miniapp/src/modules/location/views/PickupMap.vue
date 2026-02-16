@@ -2,7 +2,7 @@
   <div class="pickup-map">
     <div ref="mapContainerRef" class="map"></div>
     <div class="search-bar">
-      <input v-model="searchQuery" class="search-input" placeholder="Найти пиццерию" />
+      <input v-model="searchQuery" class="search-input mini-field" placeholder="Найти пиццерию" />
     </div>
     <div v-if="filteredBranches.length" class="branch-list">
       <button v-for="branch in filteredBranches" :key="branch.id" class="branch-card" @click="selectBranch(branch)">
@@ -232,22 +232,7 @@ async function loadLeaflet() {
   z-index: 20;
 }
 .search-input {
-  width: 100%;
-  padding: 12px 16px;
-  border-radius: var(--border-radius-md);
-  border: none;
-  background: var(--color-background);
-  font-size: var(--font-size-body);
-  color: var(--color-text-primary);
-  box-shadow: var(--shadow-sm);
-  transition: box-shadow var(--transition-duration) var(--transition-easing);
-}
-.search-input:focus {
-  outline: none;
-  box-shadow: 0px 4px 12px rgba(0, 0, 0, 0.12);
-}
-.search-input::placeholder {
-  color: var(--color-text-muted);
+  margin: 0;
 }
 .branch-list {
   position: fixed;

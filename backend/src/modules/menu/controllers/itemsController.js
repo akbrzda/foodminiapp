@@ -46,6 +46,7 @@ export const createItem = async (req, res, next) => {
       name,
       description,
       composition,
+      price,
       image_url,
       weight_value,
       weight_unit,
@@ -78,15 +79,16 @@ export const createItem = async (req, res, next) => {
       // Создание товара
       const [result] = await connection.query(
         `INSERT INTO menu_items 
-         (name, description, composition, image_url, weight_value, weight_unit, 
+         (name, description, composition, price, image_url, weight_value, weight_unit, 
           calories_per_100g, proteins_per_100g, fats_per_100g, carbs_per_100g,
           calories_per_serving, proteins_per_serving, fats_per_serving, carbs_per_serving,
           sort_order, is_active)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           name,
           description || null,
           composition || null,
+          price !== undefined ? price : 0,
           image_url || null,
           weight_value || null,
           weight_unit || "g",
@@ -146,6 +148,7 @@ export const createItem = async (req, res, next) => {
 
       const [newItem] = await connection.query(
         `SELECT id, name, description, composition, image_url, 
+                price,
                 weight_value, weight_unit, 
                 calories_per_100g, proteins_per_100g, fats_per_100g, carbs_per_100g,
                 calories_per_serving, proteins_per_serving, fats_per_serving, carbs_per_serving,
@@ -264,6 +267,7 @@ export const getAdminItemById = async (req, res, next) => {
         mi.name, 
         mi.description, 
         mi.composition,
+        mi.price,
         mi.image_url, 
         mi.weight_value, 
         mi.weight_unit,
@@ -302,6 +306,7 @@ export const updateItem = async (req, res, next) => {
       name,
       description,
       composition,
+      price,
       image_url,
       weight_value,
       weight_unit,
@@ -340,6 +345,10 @@ export const updateItem = async (req, res, next) => {
     if (composition !== undefined) {
       updates.push("composition = ?");
       values.push(composition);
+    }
+    if (price !== undefined) {
+      updates.push("price = ?");
+      values.push(price);
     }
     if (image_url !== undefined) {
       updates.push("image_url = ?");
@@ -449,6 +458,7 @@ export const updateItem = async (req, res, next) => {
 
       const [updatedItem] = await connection.query(
         `SELECT id, name, description, composition, image_url, 
+                price,
                 weight_value, weight_unit, 
                 calories_per_100g, proteins_per_100g, fats_per_100g, carbs_per_100g,
                 calories_per_serving, proteins_per_serving, fats_per_serving, carbs_per_serving,

@@ -33,7 +33,7 @@
         <input
           ref="addressInputRef"
           v-model="deliveryAddress"
-          class="address-input"
+          class="address-input mini-field"
           placeholder="улица, дом"
           @input="onAddressInput"
           @focus="onAddressFocus"
@@ -74,13 +74,13 @@
       </div>
 
       <div class="details-grid">
-        <input v-model="deliveryDetails.apartment" class="detail-input" placeholder="Квартира" />
-        <input v-model="deliveryDetails.entrance" class="detail-input" placeholder="Подъезд" />
-        <input v-model="deliveryDetails.floor" class="detail-input" placeholder="Этаж" />
-        <input v-model="deliveryDetails.doorCode" class="detail-input" placeholder="Домофон" />
+        <input v-model="deliveryDetails.apartment" class="detail-input mini-field" placeholder="Квартира" />
+        <input v-model="deliveryDetails.entrance" class="detail-input mini-field" placeholder="Подъезд" />
+        <input v-model="deliveryDetails.floor" class="detail-input mini-field" placeholder="Этаж" />
+        <input v-model="deliveryDetails.doorCode" class="detail-input mini-field" placeholder="Домофон" />
       </div>
 
-      <textarea v-model="deliveryDetails.comment" class="detail-textarea" placeholder="Комментарий курьеру"></textarea>
+      <textarea v-model="deliveryDetails.comment" class="detail-textarea mini-textarea" placeholder="Комментарий курьеру"></textarea>
       <button class="primary-btn" @click="confirmAddress">Сохранить адрес</button>
     </div>
   </div>
@@ -914,26 +914,13 @@ watch(
 }
 
 .address-input {
-  width: 100%;
   min-height: 46px;
-  padding: 12px 48px 12px 16px;
-  border-radius: var(--border-radius-md);
-  border: none;
-  font-size: var(--font-size-body);
+  padding: 12px 48px 12px 14px;
   line-height: 1.35;
-  background: var(--color-background-secondary);
-  color: var(--color-text-primary);
-  transition: background-color var(--transition-duration) var(--transition-easing);
 }
 
 .address-input:focus {
-  outline: none;
-  background: var(--color-background);
-  border: 1px solid var(--color-primary);
-}
-
-.address-input::placeholder {
-  color: var(--color-text-muted);
+  line-height: 1.35;
 }
 
 .clear-btn {
@@ -1030,39 +1017,12 @@ watch(
 }
 
 .detail-input {
-  width: 100%;
-  padding: 12px 14px;
-  border-radius: var(--border-radius-md);
-  border: none;
-  background: var(--color-background-secondary);
-  font-size: var(--font-size-body);
-  color: var(--color-text-primary);
-}
-
-.detail-input:focus {
-  outline: none;
-  border: 1px solid var(--color-primary);
-  background: var(--color-background);
+  margin: 0;
 }
 
 .detail-textarea {
-  width: 100%;
-  min-height: 90px;
-  padding: 12px 14px;
-  border-radius: var(--border-radius-md);
-  border: none;
-  background: var(--color-background-secondary);
-  font-size: var(--font-size-body);
-  color: var(--color-text-primary);
-  resize: none;
   margin-bottom: 10px;
-  font-family: inherit;
-}
-
-.detail-textarea:focus {
-  outline: none;
-  border: 1px solid var(--color-primary);
-  background: var(--color-background);
+  resize: none;
 }
 
 .primary-btn:hover {

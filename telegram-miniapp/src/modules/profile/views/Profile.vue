@@ -10,19 +10,19 @@
       </div>
       <div class="form-card">
         <label class="field-label" for="first-name">Имя</label>
-        <input id="first-name" v-model="profileForm.first_name" class="field-input" type="text" placeholder="Введите имя" />
+        <input id="first-name" v-model="profileForm.first_name" class="field-input mini-field" type="text" placeholder="Введите имя" />
       </div>
       <div class="form-card">
         <label class="field-label" for="last-name">Фамилия</label>
-        <input id="last-name" v-model="profileForm.last_name" class="field-input" type="text" placeholder="Введите фамилию" />
+        <input id="last-name" v-model="profileForm.last_name" class="field-input mini-field" type="text" placeholder="Введите фамилию" />
       </div>
       <div class="form-card">
         <label class="field-label" for="email">Email</label>
-        <input id="email" v-model="profileForm.email" class="field-input" type="email" placeholder="Введите email" />
+        <input id="email" v-model="profileForm.email" class="field-input mini-field" type="email" placeholder="Введите email" />
       </div>
       <div class="form-card">
         <label class="field-label" for="birthdate">День рождения</label>
-        <input id="birthdate" v-model="profileForm.date_of_birth" class="field-input" type="date" />
+        <input id="birthdate" v-model="profileForm.date_of_birth" class="field-input mini-field" type="date" />
       </div>
       <button class="save-btn action-btn btn-primary" @click="saveProfile" :disabled="saving">
         {{ saving ? "Сохранение..." : "Сохранить" }}
@@ -171,13 +171,7 @@ function normalizeDateForInput(value) {
   color: var(--color-text-secondary);
 }
 .field-input {
-  width: 100%;
-  border: none;
-  outline: none;
-  background: transparent;
-  font-size: var(--font-size-h3);
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-text-primary);
+  margin: 0;
 }
 .logout-btn {
   margin-top: 12px;

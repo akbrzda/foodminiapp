@@ -204,6 +204,7 @@ const isScrolling = ref(false);
 const activeOrders = ref([]);
 const selectedTagId = ref(null);
 let observer = null;
+let activeCategoryScrollHandler = null;
 let orderStatusHandler = null;
 const cityName = computed(() => locationStore.selectedCity?.name || "Когалым");
 const ordersEnabled = computed(() => settingsStore.ordersEnabled);
@@ -280,6 +281,10 @@ watch(
 onUnmounted(() => {
   if (observer) {
     observer.disconnect();
+  }
+  if (activeCategoryScrollHandler) {
+    window.removeEventListener("scroll", activeCategoryScrollHandler);
+    activeCategoryScrollHandler = null;
   }
   if (orderStatusHandler) {
     wsService.off("order-status-updated", orderStatusHandler);
@@ -508,29 +513,40 @@ function decreaseItemQuantity(item) {
 function setupIntersectionObserver() {
   if (observer) {
     observer.disconnect();
+    observer = null;
   }
-  const options = {
-    root: null,
-    rootMargin: "-100px 0px -50% 0px",
-    threshold: 0,
-  };
-  observer = new IntersectionObserver((entries) => {
-    if (isScrolling.value) return;
-    for (const entry of entries) {
-      if (entry.isIntersecting) {
-        const categoryId = parseInt(entry.target.id.replace("category-", ""));
-        activeCategory.value = categoryId;
-        scrollCategoryIntoView(categoryId);
+  if (activeCategoryScrollHandler) {
+    window.removeEventListener("scroll", activeCategoryScrollHandler);
+    activeCategoryScrollHandler = null;
+  }
+
+  const updateActiveCategoryByScroll = () => {
+    if (isScrolling.value || menuStore.categories.length === 0) return;
+
+    const stickyEl = document.querySelector(".categories-sticky");
+    const stickyBottom = stickyEl ? stickyEl.getBoundingClientRect().bottom : 0;
+    const activationLine = stickyBottom + 16;
+
+    let nextActiveCategory = menuStore.categories[0]?.id || null;
+    for (const category of menuStore.categories) {
+      const sectionEl = document.getElementById(`category-${category.id}`);
+      if (!sectionEl) continue;
+      const sectionTop = sectionEl.getBoundingClientRect().top;
+      if (sectionTop <= activationLine) {
+        nextActiveCategory = category.id;
+      } else {
         break;
       }
     }
-  }, options);
-  menuStore.categories.forEach((category) => {
-    const element = document.getElementById(`category-${category.id}`);
-    if (element) {
-      observer.observe(element);
+
+    if (nextActiveCategory && nextActiveCategory !== activeCategory.value) {
+      activeCategory.value = nextActiveCategory;
     }
-  });
+  };
+
+  activeCategoryScrollHandler = updateActiveCategoryByScroll;
+  window.addEventListener("scroll", activeCategoryScrollHandler, { passive: true });
+  updateActiveCategoryByScroll();
 }
 function scrollToCategory(categoryId) {
   hapticFeedback("light");

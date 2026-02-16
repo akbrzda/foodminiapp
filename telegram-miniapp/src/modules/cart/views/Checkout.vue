@@ -38,26 +38,26 @@
           <div class="form-row">
             <div class="form-group">
               <label class="label">Подъезд</label>
-              <input v-model="deliveryDetails.entrance" class="input" placeholder="Номер подъезда" />
+              <input v-model="deliveryDetails.entrance" class="mini-field" placeholder="Номер подъезда" />
             </div>
             <div class="form-group">
               <label class="label">Этаж</label>
-              <input v-model="deliveryDetails.floor" class="input" placeholder="Этаж" />
+              <input v-model="deliveryDetails.floor" class="mini-field" placeholder="Этаж" />
             </div>
           </div>
           <div class="form-row">
             <div class="form-group">
               <label class="label">Квартира</label>
-              <input v-model="deliveryDetails.apartment" class="input" placeholder="Номер квартиры" />
+              <input v-model="deliveryDetails.apartment" class="mini-field" placeholder="Номер квартиры" />
             </div>
             <div class="form-group">
               <label class="label">Код на двери</label>
-              <input v-model="deliveryDetails.doorCode" class="input" placeholder="Код" />
+              <input v-model="deliveryDetails.doorCode" class="mini-field" placeholder="Код" />
             </div>
           </div>
           <div class="form-group">
             <label class="label">Комментарий к адресу</label>
-            <textarea v-model="deliveryDetails.comment" class="textarea" placeholder="Дополнительная информация для курьера" resize="none"></textarea>
+            <textarea v-model="deliveryDetails.comment" class="mini-textarea" placeholder="Дополнительная информация для курьера"></textarea>
           </div>
         </div>
         <div v-if="addressValidated && !inDeliveryZone" class="error-message">
@@ -113,12 +113,12 @@
           </div>
           <div class="form-group" v-if="paymentMethod === 'cash'">
             <label class="label">Сдача с</label>
-            <input v-model.number="changeFrom" type="number" class="input" placeholder="Сумма" min="0" step="100" />
+            <input v-model.number="changeFrom" type="number" class="mini-field" placeholder="Сумма" min="0" step="100" />
             <div v-if="paymentError" class="mt-2 text-xs text-red-500">{{ paymentError }}</div>
           </div>
           <div class="form-group">
             <label class="label">Комментарий к заказу</label>
-            <textarea v-model="orderComment" class="textarea" placeholder="Дополнительные пожелания"></textarea>
+            <textarea v-model="orderComment" class="mini-textarea" placeholder="Дополнительные пожелания"></textarea>
           </div>
         </div>
         <div class="order-summary">
@@ -841,26 +841,6 @@ async function submitOrder() {
 }
 .edit-address-btn:hover {
   background: var(--color-border);
-}
-.input,
-.textarea {
-  width: 100%;
-  padding: 8px 12px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-md);
-  background: var(--color-background);
-  font-size: var(--font-size-body);
-  color: var(--color-text-primary);
-  font-family: inherit;
-}
-.input:focus,
-.textarea:focus {
-  outline: none;
-  border-color: var(--color-primary);
-}
-.textarea {
-  min-height: 80px;
-  resize: vertical;
 }
 .suggestions {
   margin-top: 8px;

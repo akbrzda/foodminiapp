@@ -60,7 +60,7 @@
               <X :size="18" />
             </button>
           </div>
-          <input v-model="cityQuery" class="city-search" placeholder="Город" />
+          <input v-model="cityQuery" class="city-search mini-field" placeholder="Город" />
           <div class="city-list">
             <button v-for="city in filteredCities" :key="city.id" class="city-item" @click="selectCity(city)">
               {{ city.name }}
@@ -378,22 +378,7 @@ onBeforeUnmount(() => {
   background: var(--color-border);
 }
 .city-search {
-  width: 100%;
-  padding: 12px 16px;
-  border-radius: var(--border-radius-md);
-  border: 1px solid var(--color-border);
   margin-bottom: 12px;
-  font-size: var(--font-size-body);
-  background: var(--color-background);
-  color: var(--color-text-primary);
-  transition: border-color var(--transition-duration) var(--transition-easing);
-}
-.city-search:focus {
-  outline: none;
-  border-color: var(--color-primary);
-}
-.city-search::placeholder {
-  color: var(--color-text-muted);
 }
 .city-list {
   display: flex;

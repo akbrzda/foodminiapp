@@ -98,7 +98,7 @@
           </button>
         </div>
         <div class="bonus-modal-subtitle">Доступно к списанию до {{ maxRedeemPercentLabel }}% от {{ formatPrice(cartStore.totalPrice) }} ₽.</div>
-        <input v-model="partialBonusInput" type="number" min="0" :max="maxBonusToUse" class="bonus-modal-input" placeholder="Введите сумму" />
+        <input v-model="partialBonusInput" type="number" min="0" :max="maxBonusToUse" class="bonus-modal-input mini-field" placeholder="Введите сумму" />
         <div class="bonus-modal-actions">
           <button class="bonus-preset" type="button" @click="applyPreset(0.25)">25%</button>
           <button class="bonus-preset" type="button" @click="applyPreset(0.5)">50%</button>
@@ -802,13 +802,7 @@ watch(
   color: var(--color-text-secondary);
 }
 .bonus-modal-input {
-  width: 100%;
-  padding: 16px;
-  border-radius: var(--border-radius-md);
-  border: 1px solid var(--color-border);
-  font-size: var(--font-size-h3);
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-text-primary);
+  margin: 0;
 }
 .bonus-modal-actions {
   display: grid;

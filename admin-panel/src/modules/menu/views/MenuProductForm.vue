@@ -6,9 +6,9 @@
           <template #actions>
             <Button type="button" variant="outline" @click="goBack">
               <ArrowLeft :size="16" />
-              Назад к списку блюд
+              Назад к списку
             </Button>
-            <Button type="button" @click="saveAll" :disabled="saving">
+            <Button type="button" @click="saveAll" :disabled="saving || isInitialLoading">
               <Save :size="16" />
               {{ saving ? "Сохранение..." : "Сохранить" }}
             </Button>
@@ -16,7 +16,34 @@
         </PageHeader>
       </CardContent>
     </Card>
-    <Tabs v-model="activeTab">
+    <div v-if="isInitialLoading" class="space-y-4">
+      <Card>
+        <CardHeader class="space-y-2">
+          <Skeleton class="h-6 w-56" />
+          <Skeleton class="h-4 w-72" />
+        </CardHeader>
+        <CardContent class="space-y-4">
+          <Skeleton class="h-10 w-full" />
+          <Skeleton class="h-24 w-full" />
+          <div class="grid gap-4 md:grid-cols-3">
+            <Skeleton class="h-10 w-full" />
+            <Skeleton class="h-10 w-full" />
+            <Skeleton class="h-10 w-full" />
+          </div>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <Skeleton class="h-6 w-64" />
+        </CardHeader>
+        <CardContent class="space-y-3">
+          <Skeleton class="h-10 w-full" />
+          <Skeleton class="h-10 w-full" />
+          <Skeleton class="h-10 w-full" />
+        </CardContent>
+      </Card>
+    </div>
+    <Tabs v-else v-model="activeTab">
       <TabsList>
         <TabsTrigger v-for="(tab, index) in tabLabels" :key="tab" :value="index">{{ tab }}</TabsTrigger>
       </TabsList>
@@ -508,6 +535,7 @@ import Input from "@/shared/components/ui/input/Input.vue";
 import Label from "@/shared/components/ui/label/Label.vue";
 import PageHeader from "@/shared/components/PageHeader.vue";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/components/ui/select";
+import Skeleton from "@/shared/components/ui/skeleton/Skeleton.vue";
 import Table from "@/shared/components/ui/table/Table.vue";
 import TableBody from "@/shared/components/ui/table/TableBody.vue";
 import TableCell from "@/shared/components/ui/table/TableCell.vue";
@@ -528,6 +556,7 @@ const allCategories = ref([]);
 const modifierGroups = ref([]);
 const tags = ref([]);
 const saving = ref(false);
+const isInitialLoading = ref(false);
 const activeTab = ref(0);
 const fileInput = ref(null);
 const uploadState = ref({ loading: false, error: null, preview: null });
@@ -542,6 +571,7 @@ const fulfillmentTypes = [
 ];
 const itemId = computed(() => route.params.id);
 const isEditing = computed(() => !!itemId.value && itemId.value !== "new");
+isInitialLoading.value = isEditing.value;
 const selectedCityId = ref(null);
 const initialDisabledModifierIds = ref([]);
 const form = ref({
@@ -1061,6 +1091,8 @@ onMounted(async () => {
   } catch (error) {
     devError("Ошибка инициализации формы блюда:", error);
     showErrorNotification("Ошибка загрузки данных формы");
+  } finally {
+    isInitialLoading.value = false;
   }
 });
 watch(
