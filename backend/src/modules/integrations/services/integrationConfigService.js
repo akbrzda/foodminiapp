@@ -14,11 +14,12 @@ export async function getIntegrationSettings() {
   return {
     iikoEnabled: Boolean(settings.iiko_enabled),
     iikoApiUrl: settings.iiko_api_url || "",
-    iikoApiToken: settings.iiko_api_token || "",
+    iikoApiKey: settings.iiko_api_key || "",
     iikoOrganizationId: settings.iiko_organization_id || "",
     iikoSyncCategoryIds: normalizeStringArray(settings.iiko_sync_category_ids),
     iikoExternalMenuId: settings.iiko_external_menu_id || "",
     iikoPriceCategoryId: settings.iiko_price_category_id || "",
+    iikoPreserveLocalNames: settings.iiko_preserve_local_names !== false,
     iikoWebhookSecret: settings.iiko_webhook_secret || "",
     premiumbonusEnabled: Boolean(settings.premiumbonus_enabled),
     premiumbonusApiUrl: settings.premiumbonus_api_url || "",
@@ -31,11 +32,13 @@ export async function getIntegrationSettings() {
 export async function getIikoClientOrNull() {
   const settings = await getIntegrationSettings();
   if (!settings.iikoEnabled) return null;
-  if (!settings.iikoApiUrl || !settings.iikoApiToken) return null;
+  const normalizedApiKey = String(settings.iikoApiKey || "").trim();
+  if (!settings.iikoApiUrl || !normalizedApiKey) return null;
 
   return createIikoClient({
     apiUrl: settings.iikoApiUrl,
-    apiToken: settings.iikoApiToken,
+    apiLogin: normalizedApiKey,
+    apiKey: normalizedApiKey,
     organizationId: settings.iikoOrganizationId,
   });
 }

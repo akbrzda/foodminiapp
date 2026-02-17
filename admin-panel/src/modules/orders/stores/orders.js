@@ -56,8 +56,9 @@ export const useOrdersStore = defineStore("orders", {
       if (payload.type === "new-order") {
         const order = payload.data || {};
         const status = order.status || "pending";
-        if (order.id) {
-          this.statusById[order.id] = status;
+        const orderKey = order.id != null ? String(order.id) : "";
+        if (orderKey) {
+          this.statusById[orderKey] = status;
         }
         if (status === "pending") {
           this.setNewOrdersCount(this.newOrdersCount + 1);
@@ -66,9 +67,10 @@ export const useOrdersStore = defineStore("orders", {
       }
       if (payload.type === "order-status-updated") {
         const { orderId, newStatus } = payload.data || {};
-        if (!orderId) return;
-        const previousStatus = this.statusById[orderId];
-        this.statusById[orderId] = newStatus;
+        const orderKey = orderId != null ? String(orderId) : "";
+        if (!orderKey) return;
+        const previousStatus = this.statusById[orderKey];
+        this.statusById[orderKey] = newStatus;
         if (!previousStatus) {
           this.refreshNewOrdersCount();
           return;
@@ -85,8 +87,9 @@ export const useOrdersStore = defineStore("orders", {
     trackOrders(orders = []) {
       if (!Array.isArray(orders)) return;
       orders.forEach((order) => {
-        if (order?.id) {
-          this.statusById[order.id] = order.status || this.statusById[order.id];
+        const orderKey = order?.id != null ? String(order.id) : "";
+        if (orderKey) {
+          this.statusById[orderKey] = order.status || this.statusById[orderKey];
         }
       });
     },

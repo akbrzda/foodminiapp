@@ -25,7 +25,7 @@ export async function createSyncLog(payload) {
     durationMs = null,
   } = payload;
 
-  await db.query(
+  const [result] = await db.query(
     `INSERT INTO integration_sync_logs
       (integration_type, module, action, status, entity_type, entity_id, error_message, request_data, response_data, attempts, duration_ms)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -43,6 +43,50 @@ export async function createSyncLog(payload) {
       durationMs,
     ],
   );
+  return result?.insertId || null;
+}
+
+export async function updateSyncLog(logId, patch = {}) {
+  const id = Number(logId);
+  if (!Number.isFinite(id) || id <= 0) return false;
+
+  const fields = [];
+  const params = [];
+
+  if (patch.status !== undefined) {
+    fields.push("status = ?");
+    params.push(patch.status);
+  }
+  if (patch.errorMessage !== undefined) {
+    fields.push("error_message = ?");
+    params.push(patch.errorMessage);
+  }
+  if (patch.requestData !== undefined) {
+    fields.push("request_data = ?");
+    params.push(safeJson(patch.requestData));
+  }
+  if (patch.responseData !== undefined) {
+    fields.push("response_data = ?");
+    params.push(safeJson(patch.responseData));
+  }
+  if (patch.attempts !== undefined) {
+    fields.push("attempts = ?");
+    params.push(Number(patch.attempts) || 0);
+  }
+  if (patch.durationMs !== undefined) {
+    fields.push("duration_ms = ?");
+    params.push(patch.durationMs);
+  }
+
+  if (fields.length === 0) return false;
+
+  await db.query(
+    `UPDATE integration_sync_logs
+     SET ${fields.join(", ")}
+     WHERE id = ?`,
+    [...params, id],
+  );
+  return true;
 }
 
 export async function getSyncLogs({ page = 1, limit = 50, integrationType, module, status, dateFrom, dateTo }) {

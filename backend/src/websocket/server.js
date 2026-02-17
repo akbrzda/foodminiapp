@@ -1,4 +1,4 @@
-import { WebSocketServer } from "ws";
+import { WebSocket, WebSocketServer } from "ws";
 import redis from "../config/redis.js";
 
 const WS_TICKET_PREFIX = "ws_ticket";
@@ -240,7 +240,7 @@ class WSServer {
     }
   }
   send(ws, message) {
-    if (ws.readyState === ws.OPEN) {
+    if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify(message));
     }
   }

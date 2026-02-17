@@ -586,7 +586,7 @@ CREATE TABLE `integration_sync_logs` (
   `integration_type` enum('iiko','premiumbonus') COLLATE utf8mb4_unicode_ci NOT NULL,
   `module` enum('menu','orders','stoplist','delivery_zones','clients','purchases','loyalty','promocode') COLLATE utf8mb4_unicode_ci NOT NULL,
   `action` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `status` enum('success','error') COLLATE utf8mb4_unicode_ci NOT NULL,
+  `status` enum('active','success','failed') COLLATE utf8mb4_unicode_ci NOT NULL,
   `entity_type` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `entity_id` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `error_message` text COLLATE utf8mb4_unicode_ci,

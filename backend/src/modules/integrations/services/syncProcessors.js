@@ -2,8 +2,9 @@ import db from "../../../config/database.js";
 import redis from "../../../config/redis.js";
 import { getIikoClientOrNull, getIntegrationSettings, getPremiumBonusClientOrNull } from "./integrationConfigService.js";
 import { INTEGRATION_MODULE, INTEGRATION_TYPE, MAX_SYNC_ATTEMPTS, SYNC_STATUS } from "../constants.js";
-import { logIntegrationEvent } from "./integrationLoggerService.js";
+import { finishIntegrationEvent, logIntegrationEvent, startIntegrationEvent } from "./integrationLoggerService.js";
 import { getSystemSettings, updateSystemSettings } from "../../../utils/settings.js";
+import { notifyMenuUpdated } from "../../../websocket/runtime.js";
 
 const nowIso = () => new Date().toISOString();
 
@@ -199,7 +200,7 @@ export async function processIikoOrderSync(orderId, source = "queue") {
       integrationType: INTEGRATION_TYPE.IIKO,
       module: INTEGRATION_MODULE.ORDERS,
       action: "create_order",
-      status: "error",
+      status: "failed",
       entityType: "order",
       entityId: orderId,
       errorMessage: error.message,
@@ -278,7 +279,7 @@ export async function processPremiumBonusClientSync(userId, source = "queue") {
       integrationType: INTEGRATION_TYPE.PREMIUMBONUS,
       module: INTEGRATION_MODULE.CLIENTS,
       action: "sync_client",
-      status: "error",
+      status: "failed",
       entityType: "user",
       entityId: userId,
       errorMessage: error.message,
@@ -369,7 +370,7 @@ export async function processPremiumBonusPurchaseSync(orderId, action = "create"
       integrationType: INTEGRATION_TYPE.PREMIUMBONUS,
       module: INTEGRATION_MODULE.PURCHASES,
       action: `purchase_${action}`,
-      status: "error",
+      status: "failed",
       entityType: "order",
       entityId: orderId,
       errorMessage: error.message,
@@ -409,13 +410,51 @@ function normalizeWeightUnit(value) {
     .toLowerCase();
   if (!raw) return null;
 
-  if (raw === "g" || raw === "гр" || raw === "г") return "g";
-  if (raw === "kg" || raw === "кг") return "kg";
-  if (raw === "ml" || raw === "мл") return "ml";
-  if (raw === "l" || raw === "л") return "l";
-  if (raw === "pcs" || raw === "шт" || raw === "шт.") return "pcs";
+  if (["g", "гр", "г", "gram", "grams", "грамм", "граммы", "measureunittype.gram"].includes(raw)) return "g";
+  if (["kg", "кг", "kilogram", "kilograms", "measureunittype.kilogram"].includes(raw)) return "kg";
+  if (["ml", "мл", "milliliter", "milliliters", "measureunittype.milliliter"].includes(raw)) return "ml";
+  if (["l", "л", "liter", "liters", "measureunittype.liter"].includes(raw)) return "l";
+  if (["pcs", "шт", "шт.", "piece", "pieces", "measureunittype.piece"].includes(raw)) return "pcs";
 
   return null;
+}
+
+function normalizeWeightValue(value, unit = null) {
+  const numeric = toNumberOrNull(value);
+  if (numeric === null) return null;
+  if (unit === "g" || unit === "ml") return Math.round(numeric);
+  return Number(numeric.toFixed(3));
+}
+
+function calcServingNutrition(per100Value, weightGrams) {
+  const p100 = toNumberOrNull(per100Value);
+  const weight = toNumberOrNull(weightGrams);
+  if (p100 === null || weight === null) return null;
+  return Number(((p100 * weight) / 100).toFixed(2));
+}
+
+function normalizeModifierGroupType(restrictions = {}) {
+  const minQuantity = Number(restrictions?.minQuantity ?? 0);
+  const maxQuantity = Number(restrictions?.maxQuantity ?? 1);
+  if (Number.isFinite(maxQuantity) && maxQuantity > 1) return "multiple";
+  if (Number.isFinite(minQuantity) && minQuantity > 1) return "multiple";
+  return "single";
+}
+
+function normalizeModifierGroupSelections(restrictions = {}) {
+  const minRaw = Number(restrictions?.minQuantity ?? 0);
+  const maxRaw = Number(restrictions?.maxQuantity ?? 1);
+  const minSelections = Number.isFinite(minRaw) && minRaw >= 0 ? minRaw : 0;
+  const maxSelections = Number.isFinite(maxRaw) && maxRaw >= minSelections ? maxRaw : Math.max(1, minSelections);
+  return { minSelections, maxSelections };
+}
+
+function extractModifierPrice(value = {}) {
+  const direct = toNumberOrNull(value?.price);
+  if (direct !== null) return direct;
+  const prices = Array.isArray(value?.prices) ? value.prices : [];
+  if (prices.length === 0) return 0;
+  return toNumberOrNull(prices[0]?.price) ?? 0;
 }
 
 function resolveImageUrl(value) {
@@ -485,6 +524,10 @@ function extractIikoItemCategoryIds(item = {}) {
   add(item.group_id);
   add(item.categoryId);
   add(item.category_id);
+  add(item.productCategoryId);
+  add(item.product_category_id);
+  add(item.iikoGroupId);
+  add(item.iiko_group_id);
   add(item.productGroupId);
   add(item.product_group_id);
 
@@ -522,22 +565,36 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
   const selectedCategoryIds = new Set((integrationSettings.iikoSyncCategoryIds || []).map((id) => String(id).trim()).filter(Boolean));
   const useCategoryFilter = selectedCategoryIds.size > 0;
   const externalMenuId = String(integrationSettings.iikoExternalMenuId || "").trim();
+  const priceCategoryId = String(integrationSettings.iikoPriceCategoryId || "").trim();
+  const preserveLocalNames = integrationSettings.iikoPreserveLocalNames !== false;
   const useExternalMenuFilter = Boolean(externalMenuId);
+  if (!useExternalMenuFilter) {
+    throw new Error("Не выбран iiko_external_menu_id. Синхронизация меню выполняется через /api/2/menu/by_id.");
+  }
 
   // Загружаем последние revision из настроек
   const systemSettings = await getSystemSettings();
   const lastRevisions = systemSettings.iiko_last_revisions || {};
 
   const startedAt = Date.now();
-  const data = await client.getNomenclature({ useConfiguredOrganization: false, lastRevisions });
-  let externalMenuPayload = null;
-  let externalMenuItemIds = new Set();
-  const externalMenuCategoryIdsByItemId = new Map();
-  let externalCategoriesRaw = [];
+  const logId = await startIntegrationEvent({
+    integrationType: INTEGRATION_TYPE.IIKO,
+    module: INTEGRATION_MODULE.MENU,
+    action: "sync_menu",
+    requestData: { reason, cityId },
+  });
 
-  if (useExternalMenuFilter) {
+  try {
+    const data = await client.getNomenclature({ useConfiguredOrganization: false, lastRevisions });
+    let externalMenuPayload = null;
+    let externalMenuItemIds = new Set();
+    const externalMenuCategoryIdsByItemId = new Map();
+    let externalCategoriesRaw = [];
+    let externalItemsRaw = [];
+
     externalMenuPayload = await client.getMenuById({
       externalMenuId,
+      priceCategoryId: priceCategoryId || undefined,
       useConfiguredOrganization: false,
     });
 
@@ -550,71 +607,106 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
       image_url: category?.buttonImageUrl || category?.headerImageUrl || null,
     }));
 
+    const pickSizePrice = (size = {}) => {
+      const prices = Array.isArray(size?.prices) ? size.prices : [];
+      if (prices.length === 0) return 0;
+      const firstPrice = toNumberOrNull(prices[0]?.price);
+      return firstPrice ?? 0;
+    };
+
+    const normalizedItemsById = new Map();
     const scopedItemIds = new Set();
     for (const category of menuCategories) {
-      const externalCategoryId = normalizeIikoId(category?.id || category?.itemCategoryId || category?.iikoGroupId);
-      const categoryItems = Array.isArray(category?.items) ? category.items : [];
-      for (const menuItem of categoryItems) {
-        const itemId = normalizeIikoId(menuItem?.itemId || menuItem?.id || menuItem?.productId);
-        if (!itemId) continue;
-        if (useCategoryFilter && externalCategoryId && !selectedCategoryIds.has(externalCategoryId)) {
-          continue;
-        }
-        scopedItemIds.add(itemId);
-        if (externalCategoryId) {
-          if (!externalMenuCategoryIdsByItemId.has(itemId)) {
-            externalMenuCategoryIdsByItemId.set(itemId, new Set());
-          }
-          externalMenuCategoryIdsByItemId.get(itemId).add(externalCategoryId);
-        }
+    const externalCategoryId = normalizeIikoId(category?.id || category?.itemCategoryId || category?.iikoGroupId);
+    const categoryItems = Array.isArray(category?.items) ? category.items : [];
+    for (const menuItem of categoryItems) {
+      const itemId = normalizeIikoId(menuItem?.itemId || menuItem?.id || menuItem?.productId);
+      if (!itemId) continue;
+      if (useCategoryFilter && externalCategoryId && !selectedCategoryIds.has(externalCategoryId)) {
+        continue;
       }
+      scopedItemIds.add(itemId);
+      if (externalCategoryId) {
+        if (!externalMenuCategoryIdsByItemId.has(itemId)) {
+          externalMenuCategoryIdsByItemId.set(itemId, new Set());
+        }
+        externalMenuCategoryIdsByItemId.get(itemId).add(externalCategoryId);
+      }
+
+      if (normalizedItemsById.has(itemId)) continue;
+
+      const itemSizes = Array.isArray(menuItem?.itemSizes) ? menuItem.itemSizes : [];
+      const sizePrices = itemSizes.map((size, index) => {
+        const sizeId = normalizeIikoId(size?.sizeId || size?.id || `size_${index + 1}`);
+        const resolvedPrice = pickSizePrice(size);
+        return {
+          id: sizeId,
+          sizeId,
+          sizeName: firstNonEmptyString(size?.sizeName, size?.name, size?.code),
+          price: resolvedPrice,
+          priceValue: resolvedPrice,
+          is_active: size?.isHidden ? 0 : 1,
+          image_url: size?.buttonImageUrl || null,
+          portionWeight: toNumberOrNull(size?.portionWeightGrams),
+          measureUnitType: size?.measureUnitType || null,
+          nutritionalValues: size?.nutritionPerHundredGrams || null,
+          itemModifierGroups: Array.isArray(size?.itemModifierGroups) ? size.itemModifierGroups : [],
+          isDefault: Boolean(size?.isDefault),
+        };
+      });
+
+      const primarySize = itemSizes[0] || null;
+
+      normalizedItemsById.set(itemId, {
+        id: itemId,
+        itemId,
+        name: menuItem?.name,
+        description: menuItem?.description || null,
+        composition: menuItem?.description || null,
+        image_url: menuItem?.buttonImageUrl || itemSizes[0]?.buttonImageUrl || null,
+        is_active: menuItem?.isHidden ? 0 : 1,
+        orderItemType: menuItem?.orderItemType || menuItem?.type || "Product",
+        type: menuItem?.type || menuItem?.orderItemType || "Product",
+        measureUnit: menuItem?.measureUnit || primarySize?.measureUnitType || null,
+        weight_unit: primarySize?.measureUnitType || menuItem?.measureUnit || null,
+        productCategoryId: menuItem?.productCategoryId || externalCategoryId || null,
+        groupIds: externalCategoryId ? [externalCategoryId] : [],
+        sizePrices,
+        weight: toNumberOrNull(itemSizes[0]?.portionWeightGrams),
+        nutritionalValues: primarySize?.nutritionPerHundredGrams || null,
+      });
+    }
     }
     externalMenuItemIds = scopedItemIds;
+    externalItemsRaw = [...normalizedItemsById.values()].filter((item) => externalMenuItemIds.has(normalizeIikoId(item?.id)));
 
-    if (externalMenuItemIds.size === 0) {
+    if (externalMenuItemIds.size === 0 || externalItemsRaw.length === 0) {
       throw new Error("Во внешнем меню iiko не найдено позиций для синхронизации");
     }
-  }
 
-  const categoriesRaw = useExternalMenuFilter
-    ? externalCategoriesRaw
-    : Array.isArray(data?.groups) && data.groups.length > 0
-      ? data.groups
-      : Array.isArray(data?.categories) && data.categories.length > 0
-        ? data.categories
-        : Array.isArray(data?.productCategories)
-          ? data.productCategories
-          : [];
-  const itemsRaw = Array.isArray(data?.items) ? data.items : Array.isArray(data?.products) ? data.products : [];
-  const items = useExternalMenuFilter
-    ? itemsRaw.filter((item) => {
-        const iikoItemId = normalizeIikoId(item?.id || item?.item_id || item?.productId || item?.product_id);
-        return iikoItemId && externalMenuItemIds.has(iikoItemId);
-      })
-    : itemsRaw;
-  const allowedCategoryIds = new Set();
-  for (const item of items) {
+    const categoriesRaw = externalCategoriesRaw;
+    const items = externalItemsRaw;
+    const allowedCategoryIds = new Set();
+    for (const item of items) {
     const itemCategoryIds = extractIikoItemCategoryIds(item);
     for (const itemCategoryId of itemCategoryIds) {
       const normalizedCategoryId = normalizeIikoId(itemCategoryId);
       if (normalizedCategoryId) allowedCategoryIds.add(normalizedCategoryId);
     }
-  }
-  const categories = categoriesRaw.filter((category) => {
+    }
+    const categories = categoriesRaw.filter((category) => {
     const iikoCategoryId = normalizeIikoId(category?.id || category?.category_id || category?.groupId || category?.group_id);
     if (!iikoCategoryId) return false;
     if (useExternalMenuFilter && !allowedCategoryIds.has(iikoCategoryId)) return false;
     return true;
-  });
-  const sizes = Array.isArray(data?.sizes) ? data.sizes : [];
-  const modifierGroups = Array.isArray(data?.modifier_groups) ? data.modifier_groups : [];
-  const modifiers = Array.isArray(data?.modifiers) ? data.modifiers : [];
+    });
+    const sizes = Array.isArray(data?.sizes) ? data.sizes : [];
 
-  const connection = await db.getConnection();
-  let stats = { categories: 0, items: 0, variants: 0, modifierGroups: 0, modifiers: 0 };
+    const connection = await db.getConnection();
+    let stats = { categories: 0, items: 0, variants: 0, modifierGroups: 0, modifiers: 0 };
 
-  try {
-    await connection.beginTransaction();
+    try {
+      await connection.beginTransaction();
 
     const [citiesRows] = await connection.query("SELECT id FROM cities ORDER BY id");
     const allCityIds = citiesRows.map((row) => Number(row.id)).filter(Number.isFinite);
@@ -632,8 +724,6 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
 
     const localCategoryIdByIikoId = new Map();
     const processedCategoryIds = new Set();
-    const syncedCategoryExternalIds = new Set();
-    const syncedItemExternalIds = new Set();
 
     for (const category of categories) {
       const iikoId = normalizeIikoId(category.id || category.category_id || category.groupId || category.group_id);
@@ -647,15 +737,17 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
       const isActive = category.is_active === false || category.isDeleted === true ? 0 : 1;
       const imageUrl = category.image_url || category.image || category.imageLinks?.[0]?.href || null;
 
-      const [existing] = await connection.query("SELECT id FROM menu_categories WHERE iiko_category_id = ? LIMIT 1", [iikoId]);
+      const [existing] = await connection.query("SELECT id, name, is_active FROM menu_categories WHERE iiko_category_id = ? LIMIT 1", [iikoId]);
       let localCategoryId = null;
       if (existing.length > 0) {
         localCategoryId = existing[0].id;
+        const resolvedName = preserveLocalNames ? existing[0].name : name;
+        const resolvedIsActive = preserveLocalNames ? Number(existing[0].is_active) : isActive;
         await connection.query(
           `UPDATE menu_categories
            SET name = ?, image_url = COALESCE(?, image_url), sort_order = ?, is_active = ?, iiko_synced_at = NOW()
            WHERE id = ?`,
-          [name, imageUrl, sortOrder, isActive, localCategoryId],
+          [resolvedName, imageUrl, sortOrder, resolvedIsActive, localCategoryId],
         );
       } else {
         const [inserted] = await connection.query(
@@ -667,15 +759,23 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
       }
 
       localCategoryIdByIikoId.set(iikoId, localCategoryId);
-      syncedCategoryExternalIds.add(iikoId);
 
       for (const targetCityId of targetCityIds) {
-        await connection.query(
-          `INSERT INTO menu_category_cities (category_id, city_id, is_active)
-           VALUES (?, ?, ?)
-           ON DUPLICATE KEY UPDATE is_active = VALUES(is_active)`,
-          [localCategoryId, targetCityId, isActive ? 1 : 0],
-        );
+        if (preserveLocalNames) {
+          await connection.query(
+            `INSERT INTO menu_category_cities (category_id, city_id, is_active)
+             VALUES (?, ?, ?)
+             ON DUPLICATE KEY UPDATE is_active = is_active`,
+            [localCategoryId, targetCityId, isActive ? 1 : 0],
+          );
+        } else {
+          await connection.query(
+            `INSERT INTO menu_category_cities (category_id, city_id, is_active)
+             VALUES (?, ?, ?)
+             ON DUPLICATE KEY UPDATE is_active = VALUES(is_active)`,
+            [localCategoryId, targetCityId, isActive ? 1 : 0],
+          );
+        }
       }
 
       stats.categories += 1;
@@ -715,25 +815,42 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
       const basePrice = directPrice ?? fallbackSizePrice ?? 0;
       const sortOrder = Number(item.sort_order || item.order || 0);
       const nutrition = item.nutritionalValues || item.nutritional_values || item.nutrition || {};
-      const nutritionPer100 = nutrition.per100g || nutrition.per100 || nutrition.valuesPer100g || {};
+      const nutritionPer100 =
+        nutrition.per100g ||
+        nutrition.per100 ||
+        nutrition.valuesPer100g ||
+        (toNumberOrNull(nutrition.energy ?? nutrition.calories) !== null ||
+        toNumberOrNull(nutrition.proteins) !== null ||
+        toNumberOrNull(nutrition.fats ?? nutrition.fat) !== null ||
+        toNumberOrNull(nutrition.carbs ?? nutrition.carbohydrates) !== null
+          ? nutrition
+          : {});
       const nutritionPerServing = nutrition.perServing || nutrition.serving || nutrition.full || {};
-      const weightValue = toNumberOrNull(
+      const weightValueRaw = toNumberOrNull(
         item.weight ?? item.amount ?? item.measureUnitWeight ?? item.measure_unit_weight ?? item.portionWeight ?? nutrition.weight,
       );
       const weightUnit = normalizeWeightUnit(item.weight_unit || item.measureUnit || item.weightUnit || item.unit) || "pcs";
+      const weightValue = normalizeWeightValue(weightValueRaw, weightUnit);
       const caloriesPer100g = toNumberOrNull(item.energyAmount ?? nutritionPer100.energy ?? nutritionPer100.calories);
       const proteinsPer100g = toNumberOrNull(item.proteinsAmount ?? nutritionPer100.proteins);
       const fatsPer100g = toNumberOrNull(item.fatAmount ?? nutritionPer100.fats ?? nutritionPer100.fat);
       const carbsPer100g = toNumberOrNull(item.carbohydratesAmount ?? nutritionPer100.carbohydrates ?? nutritionPer100.carbs);
-      const caloriesPerServing = toNumberOrNull(item.energyFullAmount ?? nutritionPerServing.energy ?? nutritionPerServing.calories);
-      const proteinsPerServing = toNumberOrNull(item.proteinsFullAmount ?? nutritionPerServing.proteins);
-      const fatsPerServing = toNumberOrNull(item.fatFullAmount ?? nutritionPerServing.fats ?? nutritionPerServing.fat);
-      const carbsPerServing = toNumberOrNull(item.carbohydratesFullAmount ?? nutritionPerServing.carbohydrates ?? nutritionPerServing.carbs);
+      const caloriesPerServing =
+        toNumberOrNull(item.energyFullAmount ?? nutritionPerServing.energy ?? nutritionPerServing.calories) ??
+        calcServingNutrition(caloriesPer100g, weightValue);
+      const proteinsPerServing =
+        toNumberOrNull(item.proteinsFullAmount ?? nutritionPerServing.proteins) ?? calcServingNutrition(proteinsPer100g, weightValue);
+      const fatsPerServing = toNumberOrNull(item.fatFullAmount ?? nutritionPerServing.fats ?? nutritionPerServing.fat) ?? calcServingNutrition(fatsPer100g, weightValue);
+      const carbsPerServing =
+        toNumberOrNull(item.carbohydratesFullAmount ?? nutritionPerServing.carbohydrates ?? nutritionPerServing.carbs) ??
+        calcServingNutrition(carbsPer100g, weightValue);
 
-      const [existing] = await connection.query("SELECT id FROM menu_items WHERE iiko_item_id = ? LIMIT 1", [iikoItemId]);
+      const [existing] = await connection.query("SELECT id, name, is_active FROM menu_items WHERE iiko_item_id = ? LIMIT 1", [iikoItemId]);
       let localItemId = null;
       if (existing.length > 0) {
         localItemId = existing[0].id;
+        const resolvedName = preserveLocalNames ? existing[0].name : name;
+        const resolvedIsActive = preserveLocalNames ? Number(existing[0].is_active) : isActive;
         await connection.query(
           `UPDATE menu_items
            SET name = ?, description = ?, composition = ?, image_url = COALESCE(?, image_url), price = ?, sort_order = ?, is_active = ?,
@@ -741,13 +858,13 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
                calories_per_serving = ?, proteins_per_serving = ?, fats_per_serving = ?, carbs_per_serving = ?, iiko_synced_at = NOW()
            WHERE id = ?`,
           [
-            name,
+            resolvedName,
             description,
             composition,
             imageUrl,
             basePrice,
             sortOrder,
-            isActive,
+            resolvedIsActive,
             weightValue,
             weightUnit,
             caloriesPer100g,
@@ -808,19 +925,47 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
       }
 
       for (const targetCityId of targetCityIds) {
-        await connection.query(
-          `INSERT INTO menu_item_cities (item_id, city_id, is_active)
-           VALUES (?, ?, ?)
-           ON DUPLICATE KEY UPDATE is_active = VALUES(is_active)`,
-          [localItemId, targetCityId, isActive ? 1 : 0],
-        );
+        if (preserveLocalNames) {
+          await connection.query(
+            `INSERT INTO menu_item_cities (item_id, city_id, is_active)
+             VALUES (?, ?, ?)
+             ON DUPLICATE KEY UPDATE is_active = is_active`,
+            [localItemId, targetCityId, isActive ? 1 : 0],
+          );
+        } else {
+          await connection.query(
+            `INSERT INTO menu_item_cities (item_id, city_id, is_active)
+             VALUES (?, ?, ?)
+             ON DUPLICATE KEY UPDATE is_active = VALUES(is_active)`,
+            [localItemId, targetCityId, isActive ? 1 : 0],
+          );
+        }
       }
-      syncedItemExternalIds.add(iikoItemId);
+      for (const targetCityId of targetCityIds) {
+        for (const fulfillmentType of ["delivery", "pickup"]) {
+          await connection.query(
+            `INSERT INTO menu_item_prices (item_id, city_id, fulfillment_type, price)
+             VALUES (?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE price = VALUES(price)`,
+            [localItemId, targetCityId, fulfillmentType, basePrice],
+          );
+        }
+      }
 
       stats.items += 1;
 
+      const hasSingleImplicitSize =
+        sizePricesRaw.length === 1 &&
+        !firstNonEmptyString(
+          sizePricesRaw[0]?.sizeName,
+          sizePricesRaw[0]?.name,
+          sizePricesRaw[0]?.caption,
+          sizePricesRaw[0]?.productSizeName,
+          sizePricesRaw[0]?.size?.name,
+          sizePricesRaw[0]?.size?.fullName,
+        );
       const itemVariants =
-        sizePricesRaw.length > 0
+        sizePricesRaw.length > 0 && !hasSingleImplicitSize
           ? sizePricesRaw.map((sizePrice, index) => {
               const sizeObject = sizePrice.size || sizePrice.productSize || sizePrice.price?.size || null;
               const sizeId = normalizeIikoId(
@@ -839,13 +984,34 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
                 (sizePricesRaw.length > 1 ? `Вариант ${index + 1}` : "Стандарт");
               const variantPrice = toNumberOrNull(sizePrice.price ?? sizePrice.priceValue);
               const variantIncluded = sizePrice?.price?.isIncludedInMenu !== false;
+              const variantNutritionPer100 = sizePrice?.nutritionalValues || {};
+              const variantWeightUnit = normalizeWeightUnit(sizePrice?.measureUnitType || item.weight_unit || item.measureUnit || item.unit) || weightUnit;
+              const variantWeightValue = normalizeWeightValue(sizePrice?.portionWeight, variantWeightUnit);
+              const variantCaloriesPer100g = toNumberOrNull(variantNutritionPer100.energy ?? variantNutritionPer100.calories);
+              const variantProteinsPer100g = toNumberOrNull(variantNutritionPer100.proteins);
+              const variantFatsPer100g = toNumberOrNull(variantNutritionPer100.fats ?? variantNutritionPer100.fat);
+              const variantCarbsPer100g = toNumberOrNull(variantNutritionPer100.carbs ?? variantNutritionPer100.carbohydrates);
               return {
                 id: sizeId ? `${iikoItemId}_${sizeId}` : `${iikoItemId}_size_${index + 1}`,
                 name: variantName,
                 price: variantPrice ?? basePrice,
                 sort_order: index,
                 is_active: isActive === 1 && variantIncluded,
-                image_url: imageUrl,
+                image_url:
+                  resolveImageUrl(sizePrice?.image_url) ||
+                  resolveImageUrl(sizePrice?.image) ||
+                  resolveImageUrl(sizeObject?.buttonImageUrl) ||
+                  imageUrl,
+                weight_value: variantWeightValue,
+                weight_unit: variantWeightUnit,
+                calories_per_100g: variantCaloriesPer100g,
+                proteins_per_100g: variantProteinsPer100g,
+                fats_per_100g: variantFatsPer100g,
+                carbs_per_100g: variantCarbsPer100g,
+                calories_per_serving: calcServingNutrition(variantCaloriesPer100g, variantWeightValue),
+                proteins_per_serving: calcServingNutrition(variantProteinsPer100g, variantWeightValue),
+                fats_per_serving: calcServingNutrition(variantFatsPer100g, variantWeightValue),
+                carbs_per_serving: calcServingNutrition(variantCarbsPer100g, variantWeightValue),
               };
             })
           : Array.isArray(item.variants)
@@ -853,6 +1019,8 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
             : [];
 
       const syncedVariantIds = [];
+      const syncedVariantRows = [];
+      const localVariantIdByIikoVariantId = new Map();
       for (const variant of itemVariants) {
         const iikoVariantId = normalizeIikoId(variant.id || variant.variant_id || variant.sizeId || variant.size_id);
         if (!iikoVariantId) continue;
@@ -863,21 +1031,84 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
         const variantImage = variant.image_url || variant.image || null;
         const variantSortOrder = Number(variant.sort_order || 0);
         const variantActive = variant.is_active === false ? 0 : 1;
+        const variantWeightValue = normalizeWeightValue(variant.weight_value, normalizeWeightUnit(variant.weight_unit) || weightUnit);
+        const variantWeightUnit = normalizeWeightUnit(variant.weight_unit) || weightUnit;
+        const variantCaloriesPer100g = toNumberOrNull(variant.calories_per_100g);
+        const variantProteinsPer100g = toNumberOrNull(variant.proteins_per_100g);
+        const variantFatsPer100g = toNumberOrNull(variant.fats_per_100g);
+        const variantCarbsPer100g = toNumberOrNull(variant.carbs_per_100g);
+        const variantCaloriesPerServing = toNumberOrNull(variant.calories_per_serving) ?? calcServingNutrition(variantCaloriesPer100g, variantWeightValue);
+        const variantProteinsPerServing = toNumberOrNull(variant.proteins_per_serving) ?? calcServingNutrition(variantProteinsPer100g, variantWeightValue);
+        const variantFatsPerServing = toNumberOrNull(variant.fats_per_serving) ?? calcServingNutrition(variantFatsPer100g, variantWeightValue);
+        const variantCarbsPerServing = toNumberOrNull(variant.carbs_per_serving) ?? calcServingNutrition(variantCarbsPer100g, variantWeightValue);
 
-        const [existingVariant] = await connection.query("SELECT id FROM item_variants WHERE iiko_variant_id = ? LIMIT 1", [iikoVariantId]);
+        const [existingVariant] = await connection.query("SELECT id, name FROM item_variants WHERE iiko_variant_id = ? LIMIT 1", [iikoVariantId]);
+        let localVariantId = null;
         if (existingVariant.length > 0) {
+          localVariantId = existingVariant[0].id;
+          const resolvedVariantName = preserveLocalNames ? existingVariant[0].name : variantName;
           await connection.query(
             `UPDATE item_variants
-             SET item_id = ?, name = ?, price = ?, image_url = COALESCE(?, image_url), sort_order = ?, is_active = ?, iiko_synced_at = NOW()
+             SET item_id = ?, name = ?, price = ?, image_url = COALESCE(?, image_url),
+                 weight_value = ?, weight_unit = ?, calories_per_100g = ?, proteins_per_100g = ?, fats_per_100g = ?, carbs_per_100g = ?,
+                 calories_per_serving = ?, proteins_per_serving = ?, fats_per_serving = ?, carbs_per_serving = ?,
+                 sort_order = ?, is_active = ?, iiko_synced_at = NOW()
              WHERE id = ?`,
-            [localItemId, variantName, variantPrice, variantImage, variantSortOrder, variantActive, existingVariant[0].id],
+            [
+              localItemId,
+              resolvedVariantName,
+              variantPrice,
+              variantImage,
+              variantWeightValue,
+              variantWeightUnit,
+              variantCaloriesPer100g,
+              variantProteinsPer100g,
+              variantFatsPer100g,
+              variantCarbsPer100g,
+              variantCaloriesPerServing,
+              variantProteinsPerServing,
+              variantFatsPerServing,
+              variantCarbsPerServing,
+              variantSortOrder,
+              variantActive,
+              localVariantId,
+            ],
           );
         } else {
-          await connection.query(
-            `INSERT INTO item_variants (item_id, name, price, image_url, sort_order, is_active, iiko_variant_id, iiko_synced_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
-            [localItemId, variantName, variantPrice, variantImage, variantSortOrder, variantActive, iikoVariantId],
+          const [insertedVariant] = await connection.query(
+            `INSERT INTO item_variants
+             (item_id, name, price, image_url, weight_value, weight_unit, calories_per_100g, proteins_per_100g, fats_per_100g, carbs_per_100g,
+              calories_per_serving, proteins_per_serving, fats_per_serving, carbs_per_serving, sort_order, is_active, iiko_variant_id, iiko_synced_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+            [
+              localItemId,
+              variantName,
+              variantPrice,
+              variantImage,
+              variantWeightValue,
+              variantWeightUnit,
+              variantCaloriesPer100g,
+              variantProteinsPer100g,
+              variantFatsPer100g,
+              variantCarbsPer100g,
+              variantCaloriesPerServing,
+              variantProteinsPerServing,
+              variantFatsPerServing,
+              variantCarbsPerServing,
+              variantSortOrder,
+              variantActive,
+              iikoVariantId,
+            ],
           );
+          localVariantId = insertedVariant.insertId;
+        }
+        if (Number.isFinite(Number(localVariantId))) {
+          localVariantIdByIikoVariantId.set(iikoVariantId, Number(localVariantId));
+          syncedVariantRows.push({
+            id: Number(localVariantId),
+            price: variantPrice,
+            isActive: variantActive,
+          });
         }
         stats.variants += 1;
       }
@@ -892,129 +1123,221 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
              AND iiko_variant_id NOT IN (${syncedVariantIds.map(() => "?").join(",")})`,
           [localItemId, ...syncedVariantIds],
         );
-      }
-    }
-
-    for (const group of modifierGroups) {
-      const iikoGroupId = String(group.id || group.group_id || "");
-      if (!iikoGroupId) continue;
-      const name = normalizeDisplayName(group.name, `Группа ${iikoGroupId}`);
-      const type = group.type === "multiple" ? "multiple" : "single";
-      const isRequired = group.is_required ? 1 : 0;
-      const [existingGroup] = await connection.query("SELECT id FROM modifier_groups WHERE iiko_modifier_group_id = ? LIMIT 1", [iikoGroupId]);
-
-      if (existingGroup.length > 0) {
-        await connection.query(
-          `UPDATE modifier_groups
-           SET name = ?, type = ?, is_required = ?, iiko_synced_at = NOW()
-           WHERE id = ?`,
-          [name, type, isRequired, existingGroup[0].id],
-        );
       } else {
         await connection.query(
-          `INSERT INTO modifier_groups (name, type, is_required, iiko_modifier_group_id, iiko_synced_at)
-           VALUES (?, ?, ?, ?, NOW())`,
-          [name, type, isRequired, iikoGroupId],
+          `UPDATE item_variants
+           SET is_active = 0, iiko_synced_at = NOW()
+           WHERE item_id = ?
+             AND iiko_variant_id IS NOT NULL`,
+          [localItemId],
         );
       }
-      stats.modifierGroups += 1;
-    }
 
-    for (const modifier of modifiers) {
-      const iikoModifierId = String(modifier.id || modifier.modifier_id || "");
-      if (!iikoModifierId) continue;
-      const groupIikoId = String(modifier.group_id || modifier.modifier_group_id || "");
-      if (!groupIikoId) continue;
-
-      const [groupRows] = await connection.query("SELECT id FROM modifier_groups WHERE iiko_modifier_group_id = ? LIMIT 1", [groupIikoId]);
-      if (groupRows.length === 0) continue;
-
-      const groupId = groupRows[0].id;
-      const name = normalizeDisplayName(modifier.name, `Модификатор ${iikoModifierId}`);
-      const price = Number(modifier.price || 0);
-      const imageUrl = modifier.image_url || modifier.image || null;
-      const isActive = modifier.is_active === false ? 0 : 1;
-      const sortOrder = Number(modifier.sort_order || 0);
-
-      const [existingModifier] = await connection.query("SELECT id FROM modifiers WHERE iiko_modifier_id = ? LIMIT 1", [iikoModifierId]);
-      if (existingModifier.length > 0) {
-        await connection.query(
-          `UPDATE modifiers
-           SET group_id = ?, name = ?, price = ?, image_url = COALESCE(?, image_url), is_active = ?, sort_order = ?, iiko_synced_at = NOW()
-           WHERE id = ?`,
-          [groupId, name, price, imageUrl, isActive, sortOrder, existingModifier[0].id],
-        );
-      } else {
-        await connection.query(
-          `INSERT INTO modifiers (group_id, name, price, image_url, is_active, sort_order, iiko_modifier_id, iiko_synced_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
-          [groupId, name, price, imageUrl, isActive, sortOrder, iikoModifierId],
-        );
-      }
-      stats.modifiers += 1;
-    }
-
-    // Удаляем iiko-данные, которые больше не входят в текущий scope синхронизации:
-    // - блюдо удалено в iiko;
-    // - категория исключена из выбранных категорий синхронизации.
-    if (syncedItemExternalIds.size > 0) {
-      const syncedIds = [...syncedItemExternalIds];
-      await connection.query(
-        `DELETE FROM menu_items
-         WHERE iiko_item_id IS NOT NULL
-           AND iiko_item_id NOT IN (${syncedIds.map(() => "?").join(",")})`,
-        syncedIds,
-      );
-    } else {
-      await connection.query("DELETE FROM menu_items WHERE iiko_item_id IS NOT NULL");
-    }
-
-    if (syncedCategoryExternalIds.size > 0) {
-      const syncedCategoryIds = [...syncedCategoryExternalIds];
-      await connection.query(
-        `DELETE FROM menu_categories
-         WHERE iiko_category_id IS NOT NULL
-           AND iiko_category_id NOT IN (${syncedCategoryIds.map(() => "?").join(",")})`,
-        syncedCategoryIds,
-      );
-    } else {
-      await connection.query("DELETE FROM menu_categories WHERE iiko_category_id IS NOT NULL");
-    }
-
-    await connection.commit();
-
-    // Сохраняем новые revision для инкрементальных обновлений
-    if (data?.organizationStats && Array.isArray(data.organizationStats)) {
-      const newRevisions = { ...lastRevisions };
-      for (const orgStat of data.organizationStats) {
-        if (orgStat.organizationId && orgStat.revision !== null && orgStat.revision !== undefined) {
-          newRevisions[orgStat.organizationId] = orgStat.revision;
+      for (const variantRow of syncedVariantRows) {
+        for (const targetCityId of targetCityIds) {
+          for (const fulfillmentType of ["delivery", "pickup"]) {
+            await connection.query(
+              `INSERT INTO menu_variant_prices (variant_id, city_id, fulfillment_type, price)
+               VALUES (?, ?, ?, ?)
+               ON DUPLICATE KEY UPDATE price = VALUES(price)`,
+              [variantRow.id, targetCityId, fulfillmentType, variantRow.price],
+            );
+          }
         }
       }
-      // Обновляем настройку в БД
-      await updateSystemSettings({ iiko_last_revisions: newRevisions });
+
+      const modifierGroupIdsForItem = new Set();
+      const seenModifierGroupExternalIds = new Set();
+      const seenModifierExternalIds = new Set();
+
+      for (const sizePrice of sizePricesRaw) {
+        const sizeIdRaw = normalizeIikoId(
+          sizePrice?.sizeId ||
+            sizePrice?.size_id ||
+            sizePrice?.productSizeId ||
+            sizePrice?.product_size_id ||
+            sizePrice?.id ||
+            sizePrice?.size?.id,
+        );
+        const iikoVariantIdForSize = sizeIdRaw ? `${iikoItemId}_${sizeIdRaw}` : "";
+        const localVariantId = iikoVariantIdForSize ? localVariantIdByIikoVariantId.get(iikoVariantIdForSize) : null;
+        const itemModifierGroups = Array.isArray(sizePrice?.itemModifierGroups) ? sizePrice.itemModifierGroups : [];
+
+        for (let groupIndex = 0; groupIndex < itemModifierGroups.length; groupIndex += 1) {
+          const rawGroup = itemModifierGroups[groupIndex] || {};
+          const groupName = normalizeDisplayName(rawGroup?.name, `Группа ${groupIndex + 1}`);
+          const groupExternalId =
+            normalizeIikoId(rawGroup?.itemGroupId) || `${iikoItemId}::${toLookupKey(groupName)}::${String(groupIndex + 1)}`;
+          const groupRestrictions = rawGroup?.restrictions || {};
+          const groupType = normalizeModifierGroupType(groupRestrictions);
+          const { minSelections, maxSelections } = normalizeModifierGroupSelections(groupRestrictions);
+          const groupIsRequired = minSelections > 0 ? 1 : 0;
+          const groupIsActive = rawGroup?.isHidden ? 0 : 1;
+
+          let localGroupId = null;
+          if (!seenModifierGroupExternalIds.has(groupExternalId)) {
+            const [existingGroup] = await connection.query("SELECT id, name FROM modifier_groups WHERE iiko_modifier_group_id = ? LIMIT 1", [
+              groupExternalId,
+            ]);
+            if (existingGroup.length > 0) {
+              localGroupId = existingGroup[0].id;
+              const resolvedGroupName = preserveLocalNames ? existingGroup[0].name : groupName;
+              await connection.query(
+                `UPDATE modifier_groups
+                 SET name = ?, type = ?, is_required = ?, min_selections = ?, max_selections = ?, sort_order = ?, is_active = ?, iiko_synced_at = NOW()
+                 WHERE id = ?`,
+                [resolvedGroupName, groupType, groupIsRequired, minSelections, maxSelections, groupIndex, groupIsActive, localGroupId],
+              );
+            } else {
+              const [insertedGroup] = await connection.query(
+                `INSERT INTO modifier_groups
+                 (name, iiko_modifier_group_id, type, is_required, is_global, min_selections, max_selections, sort_order, is_active, iiko_synced_at)
+                 VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, NOW())`,
+                [groupName, groupExternalId, groupType, groupIsRequired, minSelections, maxSelections, groupIndex, groupIsActive],
+              );
+              localGroupId = insertedGroup.insertId;
+            }
+            seenModifierGroupExternalIds.add(groupExternalId);
+            stats.modifierGroups += 1;
+          } else {
+            const [groupRows] = await connection.query("SELECT id FROM modifier_groups WHERE iiko_modifier_group_id = ? LIMIT 1", [groupExternalId]);
+            if (groupRows.length > 0) {
+              localGroupId = groupRows[0].id;
+            }
+          }
+          if (!Number.isFinite(Number(localGroupId))) continue;
+          modifierGroupIdsForItem.add(Number(localGroupId));
+
+          const groupItems = Array.isArray(rawGroup?.items) ? rawGroup.items : [];
+          for (let modIndex = 0; modIndex < groupItems.length; modIndex += 1) {
+            const rawModifier = groupItems[modIndex] || {};
+            const modifierExternalId = normalizeIikoId(rawModifier?.itemId || rawModifier?.id);
+            if (!modifierExternalId) continue;
+            const modifierName = normalizeDisplayName(rawModifier?.name, `Модификатор ${modIndex + 1}`);
+            const modifierPrice = extractModifierPrice(rawModifier);
+            const modifierImageUrl = resolveImageUrl(rawModifier?.buttonImageUrl || rawModifier?.image_url || rawModifier?.image);
+            const modifierWeightUnit = normalizeWeightUnit(rawModifier?.measureUnitType);
+            const modifierWeightValue = normalizeWeightValue(rawModifier?.portionWeightGrams, modifierWeightUnit || "g");
+            const modifierIsActive = rawModifier?.isHidden ? 0 : 1;
+            const modifierSortOrder = Number(rawModifier?.position ?? modIndex);
+
+            let localModifierId = null;
+            if (!seenModifierExternalIds.has(modifierExternalId)) {
+              const [existingModifier] = await connection.query("SELECT id, name FROM modifiers WHERE iiko_modifier_id = ? LIMIT 1", [modifierExternalId]);
+              if (existingModifier.length > 0) {
+                localModifierId = existingModifier[0].id;
+                const resolvedModifierName = preserveLocalNames ? existingModifier[0].name : modifierName;
+                await connection.query(
+                  `UPDATE modifiers
+                   SET group_id = ?, name = ?, price = ?, weight = ?, weight_unit = ?, image_url = COALESCE(?, image_url),
+                       sort_order = ?, is_active = ?, iiko_synced_at = NOW()
+                   WHERE id = ?`,
+                  [
+                    localGroupId,
+                    resolvedModifierName,
+                    modifierPrice,
+                    modifierWeightValue,
+                    modifierWeightUnit,
+                    modifierImageUrl,
+                    modifierSortOrder,
+                    modifierIsActive,
+                    localModifierId,
+                  ],
+                );
+              } else {
+                const [insertedModifier] = await connection.query(
+                  `INSERT INTO modifiers
+                   (group_id, name, price, weight, weight_unit, image_url, iiko_modifier_id, iiko_synced_at, sort_order, is_active)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?)`,
+                  [
+                    localGroupId,
+                    modifierName,
+                    modifierPrice,
+                    modifierWeightValue,
+                    modifierWeightUnit,
+                    modifierImageUrl,
+                    modifierExternalId,
+                    modifierSortOrder,
+                    modifierIsActive,
+                  ],
+                );
+                localModifierId = insertedModifier.insertId;
+              }
+              seenModifierExternalIds.add(modifierExternalId);
+              stats.modifiers += 1;
+            } else {
+              const [modifierRows] = await connection.query("SELECT id FROM modifiers WHERE iiko_modifier_id = ? LIMIT 1", [modifierExternalId]);
+              if (modifierRows.length > 0) {
+                localModifierId = modifierRows[0].id;
+              }
+            }
+            if (!Number.isFinite(Number(localModifierId)) || !Number.isFinite(Number(localVariantId))) continue;
+
+            await connection.query(
+              `INSERT INTO menu_modifier_variant_prices (modifier_id, variant_id, price, weight, weight_unit)
+               VALUES (?, ?, ?, ?, ?)
+               ON DUPLICATE KEY UPDATE price = VALUES(price), weight = VALUES(weight), weight_unit = VALUES(weight_unit)`,
+              [localModifierId, localVariantId, modifierPrice, modifierWeightValue, modifierWeightUnit],
+            );
+          }
+        }
+      }
+
+      await connection.query(
+        `DELETE img
+         FROM item_modifier_groups img
+         JOIN modifier_groups mg ON mg.id = img.modifier_group_id
+         WHERE img.item_id = ?
+           AND mg.iiko_modifier_group_id IS NOT NULL`,
+        [localItemId],
+      );
+      for (const groupId of modifierGroupIdsForItem) {
+        await connection.query(
+          `INSERT IGNORE INTO item_modifier_groups (item_id, modifier_group_id)
+           VALUES (?, ?)`,
+          [localItemId, groupId],
+        );
+      }
     }
-  } catch (error) {
-    await connection.rollback();
-    throw error;
-  } finally {
-    connection.release();
-  }
 
-  await invalidatePublicMenuCache();
+    // Local-first: при инкрементальных revision и ручной фильтрации категорий
+    // не удаляем локальные записи по отсутствию в текущем ответе.
+    // iiko-признак удаления обрабатывается на уровне самих объектов (isDeleted/is_active).
 
-  await logIntegrationEvent({
-    integrationType: INTEGRATION_TYPE.IIKO,
-    module: INTEGRATION_MODULE.MENU,
-    action: "sync_menu",
-    status: "success",
-    requestData: { reason, cityId },
-    responseData: {
+      await connection.commit();
+
+    // Сохраняем новые revision для инкрементальных обновлений
+      if (data?.organizationStats && Array.isArray(data.organizationStats)) {
+        const newRevisions = { ...lastRevisions };
+        for (const orgStat of data.organizationStats) {
+          if (orgStat.organizationId && orgStat.revision !== null && orgStat.revision !== undefined) {
+            newRevisions[orgStat.organizationId] = orgStat.revision;
+          }
+        }
+        // Обновляем настройку в БД
+        await updateSystemSettings({ iiko_last_revisions: newRevisions });
+      }
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+
+    await invalidatePublicMenuCache();
+    notifyMenuUpdated({
+      source: "iiko-sync",
+      scope: cityId ? "city" : "all",
+      cityId: cityId ? Number(cityId) || null : null,
+    });
+
+    const responseData = {
       hasData: Boolean(data),
       keys: data ? Object.keys(data).slice(0, 20) : [],
       organizationStats: Array.isArray(data?.organizationStats) ? data.organizationStats : [],
       selectedCategoryIds: [...selectedCategoryIds],
       externalMenuId: useExternalMenuFilter ? externalMenuId : null,
+      priceCategoryId: useExternalMenuFilter && priceCategoryId ? priceCategoryId : null,
       externalMenuItemCount: useExternalMenuFilter ? externalMenuItemIds.size : null,
       synced: stats,
       revisions:
@@ -1022,11 +1345,28 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
           if (stat.organizationId && stat.revision) acc[stat.organizationId] = stat.revision;
           return acc;
         }, {}) || {},
-    },
-    durationMs: Date.now() - startedAt,
-  });
+    };
 
-  return data;
+    await finishIntegrationEvent(logId, {
+      status: "success",
+      responseData,
+      durationMs: Date.now() - startedAt,
+    });
+
+    return data;
+  } catch (error) {
+    await finishIntegrationEvent(logId, {
+      status: "failed",
+      errorMessage: error?.message || "Ошибка синхронизации",
+      durationMs: Date.now() - startedAt,
+    });
+    notifyMenuUpdated({
+      source: "iiko-sync",
+      status: "failed",
+      error: error?.message || "Ошибка синхронизации",
+    });
+    throw error;
+  }
 }
 
 export async function processIikoStopListSync(reason = "manual", branchId = null) {

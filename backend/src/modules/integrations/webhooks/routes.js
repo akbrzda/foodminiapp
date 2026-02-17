@@ -38,7 +38,7 @@ router.post("/order-status", async (req, res, next) => {
         integrationType: INTEGRATION_TYPE.IIKO,
         module: INTEGRATION_MODULE.ORDERS,
         action: "webhook_order_status",
-        status: "error",
+        status: "failed",
         errorMessage: "Заказ по iiko_order_id не найден",
         requestData: payload,
       });

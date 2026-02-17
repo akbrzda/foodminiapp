@@ -32,6 +32,7 @@ router.get("/iiko/nomenclature-overview", async (req, res, next) => {
   try {
     const data = await getIikoNomenclatureOverview({
       externalMenuId: req.query?.external_menu_id,
+      priceCategoryId: req.query?.price_category_id,
     });
     return res.json(data);
   } catch (error) {

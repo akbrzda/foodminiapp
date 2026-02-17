@@ -1,6 +1,6 @@
 import { createHttpClient, normalizeIntegrationError, requestWithRetry } from "./baseClient.js";
 
-export function createIikoClient({ apiUrl, apiToken, organizationId }) {
+export function createIikoClient({ apiUrl, apiLogin, apiKey, organizationId }) {
   const normalizedApiUrl = String(apiUrl || "")
     .trim()
     .replace(/\/+$/, "")
@@ -25,25 +25,39 @@ export function createIikoClient({ apiUrl, apiToken, organizationId }) {
       return runtimeBearerToken;
     }
 
-    if (!apiToken) {
-      throw new Error("Не заполнен iiko_api_token");
+    const normalizedLogin = String(apiLogin || "").trim();
+    const normalizedKey = String(apiKey || "").trim();
+    const hasLogin = Boolean(normalizedLogin);
+    const hasKey = Boolean(normalizedKey);
+
+    if (!hasLogin) {
+      throw new Error("Не заполнен iiko_api_login");
     }
 
+    // Совместимость с iiko-профилями, где используется только apiLogin.
+    const requestPayloads = [];
+    if (hasKey) {
+      requestPayloads.push({ apiLogin: normalizedLogin, apiKey: normalizedKey });
+    }
+    requestPayloads.push({ apiLogin: normalizedLogin });
+
     try {
-      const { data } = await plainClient.post("/api/1/access_token", { apiLogin: apiToken });
-      const token = data?.token || data?.access_token || (typeof data === "string" ? data : null);
-      if (!token) {
-        throw new Error("iiko не вернул access token");
+      let lastError = null;
+      for (const requestPayload of requestPayloads) {
+        try {
+          const { data } = await plainClient.post("/api/1/access_token", requestPayload);
+          const token = data?.token || data?.access_token || (typeof data === "string" ? data : null);
+          if (!token) {
+            throw new Error("iiko не вернул access token");
+          }
+          runtimeBearerToken = token;
+          return runtimeBearerToken;
+        } catch (error) {
+          lastError = error;
+        }
       }
-      runtimeBearerToken = token;
-      return runtimeBearerToken;
+      throw lastError || new Error("Не удалось получить access token iiko");
     } catch (tokenError) {
-      // Fallback только когда в настройке действительно передан Bearer-токен.
-      const normalized = String(apiToken || "").trim();
-      if (/^Bearer\s+/i.test(normalized)) {
-        runtimeBearerToken = normalized.replace(/^Bearer\s+/i, "").trim();
-        return runtimeBearerToken;
-      }
       throw tokenError;
     }
   };
@@ -129,6 +143,12 @@ export function createIikoClient({ apiUrl, apiToken, organizationId }) {
     if (Array.isArray(payload?.externalMenus)) return payload.externalMenus;
     if (Array.isArray(payload?.menus)) return payload.menus;
     if (Array.isArray(payload?.items)) return payload.items;
+    return [];
+  };
+  const extractPriceCategories = (payload) => {
+    if (Array.isArray(payload?.priceCategories)) return payload.priceCategories;
+    if (Array.isArray(payload?.price_categories)) return payload.price_categories;
+    if (Array.isArray(payload?.prices)) return payload.prices;
     return [];
   };
 
@@ -378,7 +398,10 @@ export function createIikoClient({ apiUrl, apiToken, organizationId }) {
           retries: 2,
           baseDelayMs: 1200,
         });
-        return extractExternalMenus(data);
+        return {
+          externalMenus: extractExternalMenus(data),
+          priceCategories: extractPriceCategories(data),
+        };
       } catch (error) {
         throw normalizeIntegrationError(error, "Ошибка получения списка внешних меню iiko");
       }
@@ -403,6 +426,8 @@ export function createIikoClient({ apiUrl, apiToken, organizationId }) {
         const requestPayload = {
           organizationIds,
           externalMenuId,
+          version: Number(payload?.version) || 2,
+          language: String(payload?.language || "ru").trim() || "ru",
         };
 
         const priceCategoryId = String(payload?.priceCategoryId || payload?.price_category_id || "").trim();

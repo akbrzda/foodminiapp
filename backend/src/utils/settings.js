@@ -61,6 +61,20 @@ export const SETTINGS_SCHEMA = {
     group: "Интеграции",
     type: "string",
   },
+  iiko_api_login: {
+    default: "",
+    label: "iiko API Login",
+    description: "Логин для получения access token в iiko",
+    group: "Интеграции",
+    type: "string",
+  },
+  iiko_api_key: {
+    default: "",
+    label: "iiko API Key",
+    description: "API-ключ для получения access token в iiko",
+    group: "Интеграции",
+    type: "string",
+  },
   iiko_organization_id: {
     default: "",
     label: "iiko Organization ID",
@@ -88,6 +102,13 @@ export const SETTINGS_SCHEMA = {
     description: "ID категории цен iiko для внешнего меню (опционально)",
     group: "Интеграции",
     type: "string",
+  },
+  iiko_preserve_local_names: {
+    default: true,
+    label: "Сохранять локальные названия iiko",
+    description: "Не перезаписывать локально измененные названия при синхронизации меню iiko",
+    group: "Интеграции",
+    type: "boolean",
   },
   iiko_webhook_secret: {
     default: "",

@@ -206,6 +206,10 @@ const selectedTagId = ref(null);
 let observer = null;
 let activeCategoryScrollHandler = null;
 let orderStatusHandler = null;
+let orderCreatedHandler = null;
+let menuRealtimeTimer = null;
+let menuRealtimeVisibilityHandler = null;
+let menuUpdatedWsHandler = null;
 const cityName = computed(() => locationStore.selectedCity?.name || "Когалым");
 const ordersEnabled = computed(() => settingsStore.ordersEnabled);
 const deliveryEnabled = computed(() => settingsStore.deliveryEnabled);
@@ -244,6 +248,7 @@ onMounted(async () => {
     await loadActiveOrder();
     setupOrderStatusListener();
   }
+  setupMenuRealtimeSync();
 });
 watch(
   () => [ordersEnabled.value, deliveryEnabled.value, pickupEnabled.value],
@@ -289,6 +294,21 @@ onUnmounted(() => {
   if (orderStatusHandler) {
     wsService.off("order-status-updated", orderStatusHandler);
   }
+  if (orderCreatedHandler) {
+    wsService.off("order-created", orderCreatedHandler);
+  }
+  if (menuUpdatedWsHandler) {
+    wsService.off("menu-updated", menuUpdatedWsHandler);
+    menuUpdatedWsHandler = null;
+  }
+  if (menuRealtimeTimer) {
+    clearInterval(menuRealtimeTimer);
+    menuRealtimeTimer = null;
+  }
+  if (menuRealtimeVisibilityHandler) {
+    document.removeEventListener("visibilitychange", menuRealtimeVisibilityHandler);
+    menuRealtimeVisibilityHandler = null;
+  }
 });
 watch(
   () => activeCategory.value,
@@ -309,20 +329,32 @@ async function loadActiveOrder() {
   }
 }
 function setupOrderStatusListener() {
-  if (orderStatusHandler) return;
-  orderStatusHandler = (data) => {
-    if (!data?.orderId || !data?.newStatus) return;
-    const orderId = String(data.orderId);
-    const index = activeOrders.value.findIndex((order) => String(order.id) === orderId);
-    if (index === -1) return;
-    if (["completed", "cancelled"].includes(data.newStatus)) {
-      activeOrders.value = activeOrders.value.filter((order) => order.id !== data.orderId);
-      return;
-    }
-    const updated = { ...activeOrders.value[index], status: data.newStatus };
-    activeOrders.value = [...activeOrders.value.slice(0, index), updated, ...activeOrders.value.slice(index + 1)];
+  if (!orderStatusHandler) {
+    orderStatusHandler = (data) => {
+      if (!data?.orderId || !data?.newStatus) return;
+      const orderId = String(data.orderId);
+      const index = activeOrders.value.findIndex((order) => String(order.id) === orderId);
+      if (index === -1) return;
+      if (["completed", "cancelled"].includes(data.newStatus)) {
+        activeOrders.value = activeOrders.value.filter((order) => order.id !== data.orderId);
+        return;
+      }
+      const updated = { ...activeOrders.value[index], status: data.newStatus };
+      activeOrders.value = [...activeOrders.value.slice(0, index), updated, ...activeOrders.value.slice(index + 1)];
+    };
+    wsService.on("order-status-updated", orderStatusHandler);
+  }
+
+  if (orderCreatedHandler) return;
+  orderCreatedHandler = (data) => {
+    if (!data?.id) return;
+    const exists = activeOrders.value.some((order) => String(order.id) === String(data.id));
+    if (exists) return;
+    const status = String(data.status || "").toLowerCase();
+    if (["completed", "cancelled"].includes(status)) return;
+    activeOrders.value = [data, ...activeOrders.value];
   };
-  wsService.on("order-status-updated", orderStatusHandler);
+  wsService.on("order-created", orderCreatedHandler);
 }
 function getStatusText(status, orderType) {
   const isDelivery = orderType === "delivery";
@@ -397,10 +429,13 @@ function truncateText(text, maxLength) {
   return `${text.slice(0, maxLength - 1)}…`;
 }
 async function loadMenu() {
+  return loadMenuInternal({ force: false });
+}
+async function loadMenuInternal({ force = false } = {}) {
   if (!locationStore.selectedCity) return;
   const fulfillmentType = locationStore.isPickup ? "pickup" : "delivery";
   const branchId = locationStore.selectedBranch?.id || null;
-  if (menuStore.isCacheFresh(locationStore.selectedCity.id, fulfillmentType, branchId)) {
+  if (!force && menuStore.isCacheFresh(locationStore.selectedCity.id, fulfillmentType, branchId)) {
     await nextTick();
     setupIntersectionObserver();
     return;
@@ -430,6 +465,30 @@ async function loadMenu() {
     menuStore.setError("Не удалось загрузить меню");
   } finally {
     menuStore.setLoading(false);
+  }
+}
+function setupMenuRealtimeSync() {
+  if (!menuRealtimeTimer) {
+    menuRealtimeTimer = setInterval(async () => {
+      if (document.hidden || menuStore.loading || !locationStore.selectedCity) return;
+      await loadMenuInternal({ force: true });
+    }, 15000);
+  }
+
+  if (!menuRealtimeVisibilityHandler) {
+    menuRealtimeVisibilityHandler = async () => {
+      if (document.hidden || menuStore.loading || !locationStore.selectedCity) return;
+      await loadMenuInternal({ force: true });
+    };
+    document.addEventListener("visibilitychange", menuRealtimeVisibilityHandler);
+  }
+
+  if (!menuUpdatedWsHandler) {
+    menuUpdatedWsHandler = async () => {
+      if (menuStore.loading || !locationStore.selectedCity) return;
+      await loadMenuInternal({ force: true });
+    };
+    wsService.on("menu-updated", menuUpdatedWsHandler);
   }
 }
 function getItemsByCategory(categoryId) {

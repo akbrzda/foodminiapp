@@ -26,6 +26,7 @@ import { router as settingsRoutes } from "./modules/settings/index.js";
 import { router as broadcastsRoutes } from "./modules/broadcasts/index.js";
 import { adminRouter as integrationsAdminRoutes, webhooksRouter as integrationsWebhooksRoutes } from "./modules/integrations/index.js";
 import WSServer from "./websocket/server.js";
+import { registerWsServer } from "./websocket/runtime.js";
 import { startWorkers, stopWorkers } from "./workers/index.js";
 import { logger } from "./utils/logger.js";
 
@@ -187,6 +188,7 @@ app.use(notFoundHandler);
 app.use(errorHandler);
 const server = http.createServer(app);
 const wsServer = new WSServer(server);
+registerWsServer(wsServer);
 wsServer.startHeartbeat();
 export { wsServer };
 server.listen(PORT, async () => {

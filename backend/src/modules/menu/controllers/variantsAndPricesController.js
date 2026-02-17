@@ -1,5 +1,6 @@
 import db from "../../../config/database.js";
 import logger from "../../../utils/logger.js";
+import { notifyMenuUpdated } from "../../../websocket/runtime.js";
 
 // Вспомогательные функции
 async function getItemCityIds(itemId) {
@@ -21,6 +22,7 @@ async function invalidateAllMenuCache() {
     if (keys.length > 0) {
       await redis.del(keys);
     }
+    notifyMenuUpdated({ source: "admin", scope: "all" });
   } catch (error) {
     logger.error("Failed to invalidate all menu cache", { error });
   }

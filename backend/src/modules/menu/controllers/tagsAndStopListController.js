@@ -1,5 +1,6 @@
 import db from "../../../config/database.js";
 import logger from "../../../utils/logger.js";
+import { notifyMenuUpdated } from "../../../websocket/runtime.js";
 
 // Вспомогательные функции
 async function getItemCityIds(itemId) {
@@ -21,6 +22,7 @@ async function invalidateAllMenuCache() {
     if (keys.length > 0) {
       await redis.del(keys);
     }
+    notifyMenuUpdated({ source: "admin", scope: "all" });
   } catch (error) {
     logger.error("Failed to invalidate all menu cache", { error });
   }
@@ -515,8 +517,9 @@ export const addToStopList = async (req, res, next) => {
 
     const autoRemove = Boolean(auto_remove);
     const removeAtValue = autoRemove ? remove_at : null;
+    const parsedRemoveAt = removeAtValue ? new Date(removeAtValue) : null;
 
-    if (autoRemove && (!removeAtValue || Number.isNaN(Date.parse(removeAtValue)))) {
+    if (autoRemove && (!parsedRemoveAt || Number.isNaN(parsedRemoveAt.getTime()))) {
       return res.status(400).json({ error: "remove_at is required for auto_remove" });
     }
 
@@ -558,7 +561,7 @@ export const addToStopList = async (req, res, next) => {
         normalizedFulfillment && normalizedFulfillment.length > 0 ? JSON.stringify(normalizedFulfillment) : null,
         reason || null,
         autoRemove,
-        removeAtValue,
+        parsedRemoveAt,
         req.user.id,
       ],
     );

@@ -611,13 +611,14 @@ const handleOrderEvent = (payload) => {
   }
   if (payload.type === "order-status-updated") {
     const { orderId, newStatus, branchId } = payload.data || {};
-    if (!orderId) return;
+    const orderIdKey = orderId != null ? String(orderId) : "";
+    if (!orderIdKey) return;
     if (branchId && branchId.toString() !== selectedBranchId.value?.toString()) return;
-    const exists = orders.value.some((order) => order.id === orderId);
+    const exists = orders.value.some((order) => String(order.id) === orderIdKey);
     if (!exists) return;
-    orders.value = orders.value.map((order) => (order.id === orderId ? { ...order, status: newStatus } : order));
-    showSuccessNotification(`Статус заказа #${orderId} обновлен`);
-    if (expandedOrderId.value === orderId) {
+    orders.value = orders.value.map((order) => (String(order.id) === orderIdKey ? { ...order, status: newStatus } : order));
+    showSuccessNotification(`Статус заказа #${orderIdKey} обновлен`);
+    if (String(expandedOrderId.value || "") === orderIdKey) {
       expandedOrderId.value = null;
       clearOrderMap();
     }

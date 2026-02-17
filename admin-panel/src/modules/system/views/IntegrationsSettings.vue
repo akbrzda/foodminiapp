@@ -18,12 +18,40 @@
       </CardContent>
     </Card>
 
-    <Card>
+    <Tabs v-model="activeTab">
+      <TabsList>
+        <TabsTrigger value="iiko">iiko</TabsTrigger>
+        <TabsTrigger value="premiumbonus">PremiumBonus</TabsTrigger>
+        <TabsTrigger value="status">Статус</TabsTrigger>
+        <TabsTrigger value="queues">Очереди</TabsTrigger>
+        <TabsTrigger value="logs">Логи</TabsTrigger>
+      </TabsList>
+    </Tabs>
+
+    <Card v-show="activeTab === 'iiko'">
       <CardHeader>
         <CardTitle>iiko</CardTitle>
         <CardDescription>Настройки подключения и синхронизации</CardDescription>
       </CardHeader>
       <CardContent class="space-y-4">
+        <div v-if="loading && !settingsLoaded" class="space-y-4">
+          <div class="grid gap-4 md:grid-cols-2">
+            <Skeleton class="h-16 w-full" />
+            <Skeleton class="h-16 w-full" />
+            <Skeleton class="h-16 w-full" />
+            <Skeleton class="h-16 w-full" />
+          </div>
+          <Skeleton class="h-32 w-full" />
+          <div class="flex gap-2">
+            <Skeleton class="h-9 w-32" />
+            <Skeleton class="h-9 w-44" />
+          </div>
+        </div>
+        <template v-else>
+        <div class="hidden" aria-hidden="true">
+          <input type="text" tabindex="-1" autocomplete="username" />
+          <input type="password" tabindex="-1" autocomplete="current-password" />
+        </div>
         <FieldGroup class="grid gap-4 md:grid-cols-2">
           <Field>
             <FieldLabel>Включено</FieldLabel>
@@ -43,7 +71,7 @@
               <Input
                 v-model="form.iiko_api_url"
                 name="iiko_api_url_settings"
-                autocomplete="off"
+                autocomplete="section-iiko one-time-code"
                 autocapitalize="none"
                 autocorrect="off"
                 spellcheck="false"
@@ -53,13 +81,13 @@
             </FieldContent>
           </Field>
           <Field>
-            <FieldLabel>API Token</FieldLabel>
+            <FieldLabel>API Key</FieldLabel>
             <FieldContent>
               <Input
-                v-model="form.iiko_api_token"
+                v-model="form.iiko_api_key"
                 type="password"
-                name="iiko_api_token_settings"
-                autocomplete="new-password"
+                name="iiko_api_key_settings"
+                autocomplete="section-iiko new-password"
                 autocapitalize="none"
                 autocorrect="off"
                 spellcheck="false"
@@ -82,6 +110,32 @@
               </Select>
             </FieldContent>
           </Field>
+          <Field>
+            <FieldLabel>Категория цен iiko</FieldLabel>
+            <FieldContent>
+              <Select v-model="form.iiko_price_category_id">
+                <SelectTrigger><SelectValue placeholder="Не выбрано (базовые цены)" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Не выбрано</SelectItem>
+                  <SelectItem v-for="category in iikoOverview.priceCategories" :key="category.id" :value="category.id">
+                    {{ category.name }}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </FieldContent>
+          </Field>
+          <Field>
+            <FieldLabel>Сохранять локальные названия</FieldLabel>
+            <FieldContent>
+              <Select v-model="form.iiko_preserve_local_names">
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem :value="true">Да</SelectItem>
+                  <SelectItem :value="false">Нет</SelectItem>
+                </SelectContent>
+              </Select>
+            </FieldContent>
+          </Field>
         </FieldGroup>
         <div class="text-xs text-muted-foreground">
           Источник меню для синхронизации: выбранное внешнее меню iiko.
@@ -96,12 +150,19 @@
           <FieldLabel>Категории для синхронизации</FieldLabel>
           <FieldContent>
             <div class="max-h-64 space-y-2 overflow-auto rounded-lg border border-border/60 p-3">
+              <template v-if="overviewLoading">
+                <div v-for="index in 6" :key="`iiko-category-skeleton-${index}`" class="flex items-center justify-between gap-3">
+                  <Skeleton class="h-4 w-40" />
+                  <Skeleton class="h-4 w-16" />
+                  <Skeleton class="h-4 w-4" />
+                </div>
+              </template>
               <label v-for="category in iikoOverview.categories" :key="category.id" class="flex items-center justify-between gap-3 text-sm">
                 <span class="truncate">{{ category.name }}</span>
                 <span class="text-xs text-muted-foreground">{{ category.products_count }} блюд</span>
                 <input v-model="form.iiko_sync_category_ids" type="checkbox" :value="category.id" class="h-4 w-4" />
               </label>
-              <div v-if="!iikoOverview.categories.length" class="text-xs text-muted-foreground">
+              <div v-if="!overviewLoading && !iikoOverview.categories.length" class="text-xs text-muted-foreground">
                 Категории недоступны. Нажмите "Тест iiko" или проверьте настройки доступа.
               </div>
             </div>
@@ -132,15 +193,30 @@
             Синхронизировать меню
           </Button>
         </div>
+        </template>
       </CardContent>
     </Card>
 
-    <Card>
+    <Card v-show="activeTab === 'premiumbonus'">
       <CardHeader>
         <CardTitle>PremiumBonus</CardTitle>
         <CardDescription>Настройки лояльности и клиентов</CardDescription>
       </CardHeader>
       <CardContent class="space-y-4">
+        <div v-if="loading && !settingsLoaded" class="space-y-4">
+          <div class="grid gap-4 md:grid-cols-2">
+            <Skeleton class="h-16 w-full" />
+            <Skeleton class="h-16 w-full" />
+            <Skeleton class="h-16 w-full" />
+            <Skeleton class="h-16 w-full" />
+          </div>
+          <Skeleton class="h-9 w-40" />
+        </div>
+        <template v-else>
+        <div class="hidden" aria-hidden="true">
+          <input type="text" tabindex="-1" autocomplete="username" />
+          <input type="password" tabindex="-1" autocomplete="current-password" />
+        </div>
         <FieldGroup class="grid gap-4 md:grid-cols-2">
           <Field>
             <FieldLabel>Включено</FieldLabel>
@@ -166,7 +242,7 @@
               <Input
                 v-model="form.premiumbonus_api_url"
                 name="premiumbonus_api_url_settings"
-                autocomplete="off"
+                autocomplete="section-premiumbonus one-time-code"
                 autocapitalize="none"
                 autocorrect="off"
                 spellcheck="false"
@@ -182,7 +258,7 @@
                 v-model="form.premiumbonus_api_token"
                 type="password"
                 name="premiumbonus_api_token_settings"
-                autocomplete="new-password"
+                autocomplete="section-premiumbonus new-password"
                 autocapitalize="none"
                 autocorrect="off"
                 spellcheck="false"
@@ -198,15 +274,25 @@
             Тест PremiumBonus
           </Button>
         </div>
+        </template>
       </CardContent>
     </Card>
 
-    <Card>
+    <Card v-show="activeTab === 'status'">
       <CardHeader>
         <CardTitle>Статус синхронизации</CardTitle>
       </CardHeader>
       <CardContent class="space-y-3 text-sm">
-        <div class="grid gap-3 md:grid-cols-3">
+        <div v-if="statusLoading && !statusLoaded" class="grid gap-3 md:grid-cols-3">
+          <div v-for="index in 3" :key="`status-skeleton-${index}`" class="rounded-lg border border-border/60 p-3">
+            <Skeleton class="mb-2 h-4 w-24" />
+            <Skeleton class="mb-1 h-4 w-20" />
+            <Skeleton class="mb-1 h-4 w-20" />
+            <Skeleton class="mb-1 h-4 w-20" />
+            <Skeleton class="h-4 w-20" />
+          </div>
+        </div>
+        <div v-else class="grid gap-3 md:grid-cols-3">
           <div class="rounded-lg border border-border/60 p-3">
             <div class="font-medium">Заказы iiko</div>
             <div class="text-muted-foreground">synced: {{ syncStatus.iikoOrders?.synced || 0 }}</div>
@@ -236,7 +322,7 @@
       </CardContent>
     </Card>
 
-    <Card>
+    <Card v-show="activeTab === 'queues'">
       <CardHeader>
         <CardTitle>Очереди интеграции</CardTitle>
         <CardDescription>Текущее состояние очередей BullMQ</CardDescription>
@@ -254,6 +340,14 @@
             </TableRow>
           </TableHeader>
           <TableBody>
+            <TableRow v-if="queuesLoading && !queuesLoaded" v-for="index in 5" :key="`queue-skeleton-${index}`">
+              <TableCell><Skeleton class="h-4 w-32" /></TableCell>
+              <TableCell><Skeleton class="h-4 w-8" /></TableCell>
+              <TableCell><Skeleton class="h-4 w-8" /></TableCell>
+              <TableCell><Skeleton class="h-4 w-8" /></TableCell>
+              <TableCell><Skeleton class="h-4 w-8" /></TableCell>
+              <TableCell><Skeleton class="h-4 w-8" /></TableCell>
+            </TableRow>
             <TableRow v-for="queue in queues" :key="queue.key">
               <TableCell class="font-medium">{{ queue.key }}</TableCell>
               <TableCell>{{ queue.stats.waiting || 0 }}</TableCell>
@@ -262,7 +356,7 @@
               <TableCell>{{ queue.stats.failed || 0 }}</TableCell>
               <TableCell>{{ queue.stats.delayed || 0 }}</TableCell>
             </TableRow>
-            <TableRow v-if="!queues.length">
+            <TableRow v-if="!queuesLoading && !queues.length">
               <TableCell colspan="6" class="text-center text-muted-foreground">Нет данных по очередям</TableCell>
             </TableRow>
           </TableBody>
@@ -270,7 +364,7 @@
       </CardContent>
     </Card>
 
-    <Card>
+    <Card v-show="activeTab === 'logs'">
       <CardHeader>
         <CardTitle>Логи синхронизации</CardTitle>
         <CardDescription>Последние события обмена с внешними API</CardDescription>
@@ -288,17 +382,25 @@
             </TableRow>
           </TableHeader>
           <TableBody>
+            <TableRow v-if="logsLoading && !logsLoaded" v-for="index in 6" :key="`logs-skeleton-${index}`">
+              <TableCell><Skeleton class="h-4 w-32" /></TableCell>
+              <TableCell><Skeleton class="h-4 w-16" /></TableCell>
+              <TableCell><Skeleton class="h-4 w-16" /></TableCell>
+              <TableCell><Skeleton class="h-4 w-20" /></TableCell>
+              <TableCell><Skeleton class="h-4 w-14" /></TableCell>
+              <TableCell><Skeleton class="h-4 w-36" /></TableCell>
+            </TableRow>
             <TableRow v-for="log in syncLogs" :key="log.id">
               <TableCell class="text-xs">{{ formatDateTime(log.created_at) }}</TableCell>
               <TableCell>{{ log.integration_type }}</TableCell>
               <TableCell>{{ log.module }}</TableCell>
               <TableCell>{{ log.action }}</TableCell>
               <TableCell>
-                <span :class="log.status === 'success' ? 'text-emerald-600' : 'text-red-600'">{{ log.status }}</span>
+                <span :class="resolveLogStatusClass(log.status)">{{ log.status }}</span>
               </TableCell>
               <TableCell class="max-w-[340px] truncate text-xs text-muted-foreground">{{ log.error_message || "—" }}</TableCell>
             </TableRow>
-            <TableRow v-if="!syncLogs.length">
+            <TableRow v-if="!logsLoading && !syncLogs.length">
               <TableCell colspan="6" class="text-center text-muted-foreground">Логи отсутствуют</TableCell>
             </TableRow>
           </TableBody>
@@ -326,13 +428,17 @@ import TableCell from "@/shared/components/ui/table/TableCell.vue";
 import TableHead from "@/shared/components/ui/table/TableHead.vue";
 import TableHeader from "@/shared/components/ui/table/TableHeader.vue";
 import TableRow from "@/shared/components/ui/table/TableRow.vue";
+import Skeleton from "@/shared/components/ui/skeleton/Skeleton.vue";
 import { Field, FieldContent, FieldGroup, FieldLabel } from "@/shared/components/ui/field";
 import Input from "@/shared/components/ui/input/Input.vue";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/components/ui/select";
+import { Tabs, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
 
 const { showErrorNotification, showSuccessNotification } = useNotifications();
 
 const loading = ref(false);
+const settingsLoaded = ref(false);
+const activeTab = ref("iiko");
 const saving = ref(false);
 const retryLoading = ref(false);
 const overviewLoading = ref(false);
@@ -341,9 +447,11 @@ const testLoading = ref({ iiko: false, pb: false });
 const form = ref({
   iiko_enabled: false,
   iiko_api_url: "",
-  iiko_api_token: "",
+  iiko_api_key: "",
   iiko_sync_category_ids: [],
   iiko_external_menu_id: "",
+  iiko_price_category_id: "",
+  iiko_preserve_local_names: true,
   premiumbonus_enabled: false,
   premiumbonus_api_url: "",
   premiumbonus_api_token: "",
@@ -353,21 +461,47 @@ const form = ref({
 const iikoOverview = ref({
   categories: [],
   externalMenus: [],
+  priceCategories: [],
   warnings: {},
   selectedCategoryIds: [],
   selectedExternalMenuId: "",
+  selectedPriceCategoryId: "",
 });
 const syncStatus = ref({});
+const statusLoading = ref(false);
+const statusLoaded = ref(false);
 const queues = ref([]);
+const queuesLoading = ref(false);
+const queuesLoaded = ref(false);
 const syncLogs = ref([]);
+const logsLoading = ref(false);
+const logsLoaded = ref(false);
 const overviewWarningsList = ref([]);
 const overviewRequestTimer = ref(null);
+const liveRefreshTimer = ref(null);
+const liveRefreshing = ref(false);
 
 const formatDateTime = (value) => {
   if (!value) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return String(value);
+  const raw = String(value).trim();
+
+  // Для логов интеграций сервер может отдавать ISO-дату в UTC,
+  // но фактически время уже локальное. Убираем TZ-суффикс,
+  // чтобы не получать повторный сдвиг (+N часов) в браузере.
+  const normalized = raw
+    .replace("T", " ")
+    .replace(/(\.\d+)?Z$/, "")
+    .replace(/([+-]\d{2}:\d{2})$/, "");
+
+  const date = new Date(normalized);
+  if (Number.isNaN(date.getTime())) return raw;
   return date.toLocaleString("ru-RU");
+};
+
+const resolveLogStatusClass = (status) => {
+  if (status === "success") return "text-emerald-600";
+  if (status === "active") return "text-amber-600";
+  return "text-red-600";
 };
 
 const applyForm = (settings = {}) => {
@@ -381,6 +515,8 @@ const applyForm = (settings = {}) => {
     premiumbonus_enabled: Boolean(settings.premiumbonus_enabled),
     iiko_sync_category_ids: categories,
     iiko_external_menu_id: String(settings.iiko_external_menu_id || ""),
+    iiko_price_category_id: String(settings.iiko_price_category_id || ""),
+    iiko_preserve_local_names: settings.iiko_preserve_local_names !== false,
     integration_mode: settings.integration_mode || { menu: "local", orders: "local", loyalty: "local" },
   };
 };
@@ -393,14 +529,17 @@ const loadIikoOverview = async (paramsOverride = null) => {
         ? paramsOverride
         : {
             external_menu_id: String(form.value.iiko_external_menu_id || "").trim() || undefined,
+            price_category_id: String(form.value.iiko_price_category_id || "").trim() || undefined,
           };
     const { data } = await api.get("/api/admin/integrations/iiko/nomenclature-overview", { params });
     iikoOverview.value = {
       categories: data?.categories || [],
       externalMenus: data?.externalMenus || [],
+      priceCategories: data?.priceCategories || [],
       warnings: data?.warnings || {},
       selectedCategoryIds: data?.selectedCategoryIds || [],
       selectedExternalMenuId: data?.selectedExternalMenuId || "",
+      selectedPriceCategoryId: data?.selectedPriceCategoryId || "",
     };
     overviewWarningsList.value = Object.values(iikoOverview.value.warnings || {}).filter(Boolean).map((value) => String(value));
   } catch (error) {
@@ -418,29 +557,45 @@ const loadSettings = async () => {
   } catch (error) {
     showErrorNotification("Не удалось загрузить настройки интеграций");
   } finally {
+    settingsLoaded.value = true;
     loading.value = false;
   }
 };
 
-const loadStatus = async () => {
+const loadStatus = async ({ silent = false } = {}) => {
+  if (!silent || !statusLoaded.value) {
+    statusLoading.value = true;
+  }
   try {
     const { data } = await api.get("/api/admin/integrations/iiko/sync-status");
     syncStatus.value = data || {};
   } catch (error) {
     showErrorNotification("Не удалось загрузить статус синхронизации");
+  } finally {
+    statusLoaded.value = true;
+    statusLoading.value = false;
   }
 };
 
-const loadQueues = async () => {
+const loadQueues = async ({ silent = false } = {}) => {
+  if (!silent || !queuesLoaded.value) {
+    queuesLoading.value = true;
+  }
   try {
     const { data } = await api.get("/api/admin/integrations/queues");
     queues.value = data?.queues || [];
   } catch (error) {
     showErrorNotification("Не удалось загрузить список очередей");
+  } finally {
+    queuesLoaded.value = true;
+    queuesLoading.value = false;
   }
 };
 
-const loadSyncLogs = async () => {
+const loadSyncLogs = async ({ silent = false } = {}) => {
+  if (!silent || !logsLoaded.value) {
+    logsLoading.value = true;
+  }
   try {
     const { data } = await api.get("/api/admin/integrations/sync-logs", {
       params: { page: 1, limit: 20 },
@@ -448,6 +603,9 @@ const loadSyncLogs = async () => {
     syncLogs.value = data?.rows || [];
   } catch (error) {
     showErrorNotification("Не удалось загрузить логи синхронизации");
+  } finally {
+    logsLoaded.value = true;
+    logsLoading.value = false;
   }
 };
 
@@ -455,6 +613,35 @@ const loadAll = async () => {
   await loadSettings();
   await Promise.all([loadStatus(), loadQueues(), loadSyncLogs()]);
   await loadIikoOverview();
+};
+
+const refreshLiveData = async () => {
+  if (liveRefreshing.value) return;
+  liveRefreshing.value = true;
+  try {
+    await Promise.all([loadStatus({ silent: true }), loadQueues({ silent: true }), loadSyncLogs({ silent: true })]);
+  } finally {
+    liveRefreshing.value = false;
+  }
+};
+
+const startLiveRefresh = () => {
+  if (liveRefreshTimer.value) return;
+  liveRefreshTimer.value = setInterval(() => {
+    if (document.hidden) return;
+    refreshLiveData();
+  }, 3000);
+};
+
+const stopLiveRefresh = () => {
+  if (!liveRefreshTimer.value) return;
+  clearInterval(liveRefreshTimer.value);
+  liveRefreshTimer.value = null;
+};
+
+const handleVisibilityChange = () => {
+  if (document.hidden) return;
+  refreshLiveData();
 };
 
 const saveSettings = async () => {
@@ -520,9 +707,15 @@ const retryFailed = async () => {
   }
 };
 
-onMounted(loadAll);
+onMounted(async () => {
+  await loadAll();
+  startLiveRefresh();
+  document.addEventListener("visibilitychange", handleVisibilityChange);
+});
 
 onBeforeUnmount(() => {
+  stopLiveRefresh();
+  document.removeEventListener("visibilitychange", handleVisibilityChange);
   if (overviewRequestTimer.value) {
     clearTimeout(overviewRequestTimer.value);
     overviewRequestTimer.value = null;
@@ -540,6 +733,24 @@ watch(
     overviewRequestTimer.value = setTimeout(() => {
       loadIikoOverview({
         external_menu_id: String(form.value.iiko_external_menu_id || "").trim() || undefined,
+        price_category_id: String(form.value.iiko_price_category_id || "").trim() || undefined,
+      });
+    }, 250);
+  },
+);
+
+watch(
+  () => form.value.iiko_price_category_id,
+  (next, prev) => {
+    if (String(next || "") === String(prev || "")) return;
+    if (overviewRequestTimer.value) {
+      clearTimeout(overviewRequestTimer.value);
+      overviewRequestTimer.value = null;
+    }
+    overviewRequestTimer.value = setTimeout(() => {
+      loadIikoOverview({
+        external_menu_id: String(form.value.iiko_external_menu_id || "").trim() || undefined,
+        price_category_id: String(form.value.iiko_price_category_id || "").trim() || undefined,
       });
     }, 250);
   },

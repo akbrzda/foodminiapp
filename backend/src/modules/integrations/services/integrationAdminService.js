@@ -67,26 +67,33 @@ export async function getAdminIntegrationSettings() {
 
 export async function getIikoNomenclatureOverview(options = {}) {
   const externalMenuIdOverride = String(options.externalMenuId || "").trim();
+  const priceCategoryIdOverride = String(options.priceCategoryId || "").trim();
   const settings = await getIntegrationSettings();
   const client = await getIikoClientOrNull();
   if (!client) {
     return {
       categories: [],
       externalMenus: [],
+      priceCategories: [],
       warnings: {
         client: "Интеграция iiko выключена или не настроена",
       },
       selectedCategoryIds: settings.iikoSyncCategoryIds || [],
       selectedExternalMenuId: externalMenuIdOverride || settings.iikoExternalMenuId || "",
+      selectedPriceCategoryId: priceCategoryIdOverride || settings.iikoPriceCategoryId || "",
     };
   }
 
   const warnings = {};
   let externalMenusRaw = [];
+  let priceCategoriesRaw = [];
   try {
-    externalMenusRaw = await client.getExternalMenus({ useConfiguredOrganization: false });
+    const menusPayload = await client.getExternalMenus({ useConfiguredOrganization: false });
+    externalMenusRaw = Array.isArray(menusPayload?.externalMenus) ? menusPayload.externalMenus : [];
+    priceCategoriesRaw = Array.isArray(menusPayload?.priceCategories) ? menusPayload.priceCategories : [];
   } catch (error) {
     externalMenusRaw = [];
+    priceCategoriesRaw = [];
     warnings.externalMenus = error?.message || "Не удалось получить список внешних меню iiko";
   }
   let nomenclature = {};
@@ -111,6 +118,7 @@ export async function getIikoNomenclatureOverview(options = {}) {
       : [];
 
   const selectedExternalMenuId = externalMenuIdOverride || String(settings.iikoExternalMenuId || "").trim();
+  const selectedPriceCategoryId = priceCategoryIdOverride || String(settings.iikoPriceCategoryId || "").trim();
 
   let externalMenuItemIds = null;
   let externalMenuCategories = null;
@@ -118,6 +126,7 @@ export async function getIikoNomenclatureOverview(options = {}) {
     try {
       const menuById = await client.getMenuById({
         externalMenuId: selectedExternalMenuId,
+        priceCategoryId: selectedPriceCategoryId || undefined,
         useConfiguredOrganization: false,
       });
 
@@ -201,6 +210,13 @@ export async function getIikoNomenclatureOverview(options = {}) {
     }))
     .filter((menu) => Boolean(menu.id))
     .sort((a, b) => a.name.localeCompare(b.name, "ru"));
+  const priceCategories = (Array.isArray(priceCategoriesRaw) ? priceCategoriesRaw : [])
+    .map((category) => ({
+      id: String(category?.id || category?.priceCategoryId || category?.price_category_id || "").trim(),
+      name: normalizeDisplayName(category?.name || category?.caption || category?.title, "Категория цен"),
+    }))
+    .filter((category) => Boolean(category.id))
+    .sort((a, b) => a.name.localeCompare(b.name, "ru"));
   const selectedMenu = externalMenus.find((menu) => menu.id === selectedExternalMenuId) || null;
 
   if (selectedExternalMenuId && !selectedMenu && !warnings.externalMenus) {
@@ -216,9 +232,11 @@ export async function getIikoNomenclatureOverview(options = {}) {
   return {
     categories: categoriesView,
     externalMenus,
+    priceCategories,
     warnings,
     selectedCategoryIds: settings.iikoSyncCategoryIds || [],
     selectedExternalMenuId,
+    selectedPriceCategoryId,
   };
 }
 
@@ -250,8 +268,7 @@ export async function testIikoConnection() {
     const normalizedMessage = String(message).toLowerCase();
 
     if (status === 401) {
-      message =
-        "401 Unauthorized от iiko. Проверьте iiko_api_url (без /api/1), iiko_api_token (apiLogin или Bearer) и доступы ключа.";
+      message = "401 Unauthorized от iiko. Проверьте iiko_api_url (без /api/1), iiko_api_key и доступы ключа.";
     }
     if (normalizedMessage.includes("apilogin has been blocked")) {
       message = "ApiLogin iiko заблокирован. Разблокируйте или перевыпустите ключ в iiko и сохраните новый токен.";
