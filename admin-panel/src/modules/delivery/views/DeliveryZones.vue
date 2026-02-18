@@ -431,7 +431,7 @@ const modalTitle = computed(() => (editing.value ? "Редактировать �
 const modalSubtitle = computed(() => (editing.value ? "Измените параметры полигона" : "Добавьте зону доставки"));
 const getManagerDefaultCityId = () => {
   if (!isManager.value) return "";
-  const allowed = Array.isArray(authStore.cities) ? authStore.cities.map((id) => Number(id)).filter(Number.isFinite) : [];
+  const allowed = Array.isArray(authStore.user?.cities) ? authStore.user.cities.map((id) => Number(id)).filter(Number.isFinite) : [];
   if (!allowed.length) return "";
   const city = referenceStore.cities.find((item) => allowed.includes(Number(item.id)));
   return city ? String(city.id) : String(allowed[0]);
