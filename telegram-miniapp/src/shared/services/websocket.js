@@ -116,16 +116,19 @@ class WebSocketService {
   }
   send(type, payload) {
     if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({ type, payload }));
+      this.ws.send(JSON.stringify({ type, data: payload }));
     } else {
       devWarn("WebSocket не подключен");
     }
   }
   on(event, callback) {
+    if (typeof callback !== "function") return;
     if (!this.listeners.has(event)) {
       this.listeners.set(event, []);
     }
-    this.listeners.get(event).push(callback);
+    const callbacks = this.listeners.get(event);
+    if (callbacks.includes(callback)) return;
+    callbacks.push(callback);
   }
   off(event, callback) {
     if (!this.listeners.has(event)) return;
@@ -133,6 +136,9 @@ class WebSocketService {
     const index = callbacks.indexOf(callback);
     if (index !== -1) {
       callbacks.splice(index, 1);
+    }
+    if (callbacks.length === 0) {
+      this.listeners.delete(event);
     }
   }
   emit(event, data) {

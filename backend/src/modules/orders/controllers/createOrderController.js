@@ -12,6 +12,7 @@ import { addTelegramNotification } from "../../../queues/config.js";
 import { getSystemSettings } from "../../../utils/settings.js";
 import { findTariffForAmount } from "../../polygons/utils/deliveryTariffs.js";
 import { checkBranchIsOpen } from "../../../utils/workingHours.js";
+import { notifyNewOrder } from "../../../websocket/runtime.js";
 
 // Вспомогательные функции
 const getTariffsByPolygonId = async (polygonId) => {
@@ -722,14 +723,13 @@ export const createOrder = async (req, res, next) => {
 
     // WebSocket уведомление
     try {
-      const { wsServer } = await import("../../index.js");
-      wsServer.notifyNewOrder({
+      notifyNewOrder({
         ...order,
         bonuses_earned: earnedBonuses,
         city_id: city_id,
       });
     } catch (wsError) {
-      // WebSocket errors are non-critical
+      logger.error("Failed to notify new order via WebSocket", { error: wsError?.message || String(wsError), orderId });
     }
 
     // Telegram уведомление

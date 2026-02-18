@@ -24,24 +24,8 @@
         <div v-for="order in activeOrders" :key="order.id" class="active-order" @click="router.push(`/order/${order.id}`)">
           <div class="order-status">
             <div class="order-type-icon">
-              <svg
-                v-if="order.order_type === 'delivery'"
-                width="20"
-                height="20"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-              >
-                <rect x="1" y="3" width="15" height="13"></rect>
-                <polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon>
-                <circle cx="5.5" cy="18.5" r="2.5"></circle>
-                <circle cx="18.5" cy="18.5" r="2.5"></circle>
-              </svg>
-              <svg v-else width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
-                <polyline points="9 22 9 12 15 12 15 22"></polyline>
-              </svg>
+              <Truck v-if="order.order_type === 'delivery'" :size="20" />
+              <Store v-else :size="20" />
             </div>
             <div class="status-indicator" :class="getStatusClass(order.status)"></div>
             <div class="order-info">
@@ -49,9 +33,7 @@
               <div class="order-subtitle">Заказ #{{ order.order_number }} • {{ formatPrice(order.total) }} ₽</div>
             </div>
           </div>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="9 18 15 12 9 6"></polyline>
-          </svg>
+          <ChevronRight :size="20" />
         </div>
       </div>
       <div v-if="activeOrders.length > 1" class="scroll-hint">← Пролистайте →</div>
@@ -173,7 +155,7 @@
 <script setup>
 import { ref, computed, onMounted, watch, onUnmounted, nextTick } from "vue";
 import { useRouter, useRoute } from "vue-router";
-import { ShoppingCart } from "lucide-vue-next";
+import { ChevronRight, ShoppingCart, Store, Truck } from "lucide-vue-next";
 import { useAuthStore } from "@/modules/auth/stores/auth.js";
 import { useLocationStore } from "@/modules/location/stores/location.js";
 import { useCartStore } from "@/modules/cart/stores/cart.js";
@@ -324,13 +306,18 @@ function setupOrderStatusListener() {
       if (!data?.orderId || !data?.newStatus) return;
       const orderId = String(data.orderId);
       const index = activeOrders.value.findIndex((order) => String(order.id) === orderId);
-      if (index === -1) return;
+      if (index === -1) {
+        loadActiveOrder();
+        return;
+      }
       if (["completed", "cancelled"].includes(data.newStatus)) {
         activeOrders.value = activeOrders.value.filter((order) => order.id !== data.orderId);
+        loadActiveOrder();
         return;
       }
       const updated = { ...activeOrders.value[index], status: data.newStatus };
       activeOrders.value = [...activeOrders.value.slice(0, index), updated, ...activeOrders.value.slice(index + 1)];
+      loadActiveOrder();
     };
     wsService.on("order-status-updated", orderStatusHandler);
   }
@@ -339,10 +326,14 @@ function setupOrderStatusListener() {
   orderCreatedHandler = (data) => {
     if (!data?.id) return;
     const exists = activeOrders.value.some((order) => String(order.id) === String(data.id));
-    if (exists) return;
+    if (exists) {
+      loadActiveOrder();
+      return;
+    }
     const status = String(data.status || "").toLowerCase();
     if (["completed", "cancelled"].includes(status)) return;
     activeOrders.value = [data, ...activeOrders.value];
+    loadActiveOrder();
   };
   wsService.on("order-created", orderCreatedHandler);
 }

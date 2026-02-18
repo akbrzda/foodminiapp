@@ -193,7 +193,8 @@ class WSServer {
   handleMessage(ws, rawMessage) {
     try {
       const message = JSON.parse(rawMessage.toString());
-      const { type, data } = message;
+      const { type } = message;
+      const data = message?.data ?? message?.payload ?? {};
       switch (type) {
         case "ping":
           this.send(ws, { type: "pong" });

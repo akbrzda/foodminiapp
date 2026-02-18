@@ -630,7 +630,9 @@ async function submitOrder() {
     }
     if (paymentMethod.value === "cash") {
       if (cashChangeMode.value === "none") {
-        paymentError.value = "Выберите: без сдачи или нужна сдача";
+        const message = "Нужно указать сдачу, или без сдачи.";
+        paymentError.value = "";
+        showAlert(message);
         hapticFeedback("error");
         submitting.value = false;
         return;

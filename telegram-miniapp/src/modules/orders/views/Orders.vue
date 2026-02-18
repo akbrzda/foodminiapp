@@ -81,10 +81,15 @@ function setupWebSocketListeners() {
   statusUpdateHandler = (data) => {
     if (!data?.orderId || !data?.newStatus) return;
     const targetId = String(data.orderId);
+    let found = false;
     orders.value = orders.value.map((item) => {
       if (String(item.id) !== targetId) return item;
+      found = true;
       return { ...item, status: data.newStatus };
     });
+    if (!found) {
+      loadOrders();
+    }
   };
   wsService.on("order-status-updated", statusUpdateHandler);
 }

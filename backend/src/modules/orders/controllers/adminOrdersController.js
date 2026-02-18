@@ -8,6 +8,7 @@ import {
   getLoyaltyLevelsFromDb,
 } from "../../loyalty/services/loyaltyService.js";
 import { getSystemSettings } from "../../../utils/settings.js";
+import { notifyOrderStatusUpdate } from "../../../websocket/runtime.js";
 
 // Вспомогательные функции для работы с временными зонами
 const getTimeZoneOffset = (date, timeZone) => {
@@ -571,10 +572,13 @@ export const updateOrderStatus = async (req, res, next, forcedStatus = null) => 
 
     // WebSocket уведомление
     try {
-      const { wsServer } = await import("../../index.js");
-      wsServer.notifyOrderStatusUpdate(orderId, userId, status, oldStatus, oldOrderData[0]?.branch_id || null);
+      notifyOrderStatusUpdate(orderId, userId, status, oldStatus, oldOrderData[0]?.branch_id || null);
     } catch (wsError) {
-      // WebSocket errors are non-critical
+      logger.error("Failed to notify order status update via WebSocket", {
+        error: wsError?.message || String(wsError),
+        orderId,
+        status,
+      });
     }
 
     // Telegram уведомление

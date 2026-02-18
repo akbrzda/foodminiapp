@@ -97,6 +97,7 @@ const storedBranchId = ref("");
 const cancelDialog = ref({ open: false, order: null, loading: false });
 let searchTimer = null;
 let shiftTimer = null;
+let wsReloadTimer = null;
 
 // Состояние карты
 const orderRefs = new Map();
@@ -337,6 +338,7 @@ const loadOrders = async () => {
       params: { branch_id: selectedBranchId.value },
     });
     orders.value = response.data.orders || [];
+    ordersStore.trackOrders(orders.value);
     expandedOrderId.value = null;
     clearOrderMap();
     shiftMeta.value = response.data.shift || null;
@@ -580,6 +582,17 @@ const playNewOrderSound = () => {
   audio.play().catch(() => null);
 };
 
+const scheduleWsOrdersReload = () => {
+  if (!selectedBranchId.value) return;
+  if (wsReloadTimer) {
+    clearTimeout(wsReloadTimer);
+  }
+  wsReloadTimer = setTimeout(async () => {
+    wsReloadTimer = null;
+    await loadOrders();
+  }, 400);
+};
+
 const handleOrderEvent = (payload) => {
   if (!payload) return;
   if (payload.type === "new-order") {
@@ -608,6 +621,7 @@ const handleOrderEvent = (payload) => {
     }, 15000);
     showNewOrderNotification(order);
     playNewOrderSound();
+    scheduleWsOrdersReload();
   }
   if (payload.type === "order-status-updated") {
     const { orderId, newStatus, branchId } = payload.data || {};
@@ -622,6 +636,7 @@ const handleOrderEvent = (payload) => {
       expandedOrderId.value = null;
       clearOrderMap();
     }
+    scheduleWsOrdersReload();
   }
 };
 
@@ -697,6 +712,10 @@ watch(
 onBeforeUnmount(() => {
   if (shiftTimer) {
     clearTimeout(shiftTimer);
+  }
+  if (wsReloadTimer) {
+    clearTimeout(wsReloadTimer);
+    wsReloadTimer = null;
   }
   if (selectedBranchId.value) {
     ordersStore.leaveRoom(`branch-${selectedBranchId.value}-orders`);

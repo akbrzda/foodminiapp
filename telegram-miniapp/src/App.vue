@@ -29,6 +29,9 @@ let blurScrollHandler = null;
 let blurTouchHandler = null;
 let viewportChangedHandler = null;
 let resizeHandler = null;
+let appOrderStatusHandler = null;
+let appBonusHandler = null;
+let stopAuthTokenWatch = null;
 const stateToSync = computed(() => ({
   selected_city_id: locationStore.selectedCity?.id || null,
   selected_branch_id: locationStore.selectedBranch?.id || null,
@@ -122,6 +125,18 @@ onMounted(async () => {
 });
 onUnmounted(() => {
   wsService.disconnect();
+  if (appOrderStatusHandler) {
+    wsService.off("order-status-updated", appOrderStatusHandler);
+    appOrderStatusHandler = null;
+  }
+  if (appBonusHandler) {
+    wsService.off("bonus-updated", appBonusHandler);
+    appBonusHandler = null;
+  }
+  if (stopAuthTokenWatch) {
+    stopAuthTokenWatch();
+    stopAuthTokenWatch = null;
+  }
   detachBlurListeners();
   detachRuntimeLayoutClasses();
 });
@@ -129,22 +144,30 @@ function setupWebSocket() {
   if (authStore.token) {
     wsService.connect(authStore.token);
   }
-  wsService.on("order-status-updated", (data) => {
-    devLog("Order status updated:", data);
-  });
-  wsService.on("bonus-updated", (data) => {
-    devLog("Bonus updated:", data);
-  });
-  watch(
-    () => authStore.token,
-    (token) => {
-      if (token) {
-        wsService.connect(token);
-      } else {
-        wsService.disconnect();
-      }
-    },
-  );
+  if (!appOrderStatusHandler) {
+    appOrderStatusHandler = (data) => {
+      devLog("Order status updated:", data);
+    };
+    wsService.on("order-status-updated", appOrderStatusHandler);
+  }
+  if (!appBonusHandler) {
+    appBonusHandler = (data) => {
+      devLog("Bonus updated:", data);
+    };
+    wsService.on("bonus-updated", appBonusHandler);
+  }
+  if (!stopAuthTokenWatch) {
+    stopAuthTokenWatch = watch(
+      () => authStore.token,
+      (token) => {
+        if (token) {
+          wsService.connect(token);
+        } else {
+          wsService.disconnect();
+        }
+      },
+    );
+  }
 }
 function getStatusText(status) {
   const statuses = {
