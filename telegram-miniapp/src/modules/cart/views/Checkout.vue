@@ -112,8 +112,30 @@
             </div>
           </div>
           <div class="form-group" v-if="paymentMethod === 'cash'">
-            <label class="label">Сдача с</label>
-            <input v-model.number="changeFrom" type="number" class="mini-field" placeholder="Сумма" min="0" step="100" />
+            <label class="label">Сдача</label>
+            <div class="cash-mode-options">
+              <button type="button" class="payment-option" :class="{ active: cashChangeMode === 'no_change' }" @click="selectNoChange">
+                Без сдачи
+              </button>
+              <button type="button" class="payment-option" :class="{ active: cashChangeMode === 'change' }" @click="selectNeedChange">
+                Нужна сдача
+              </button>
+            </div>
+            <div v-if="cashChangeMode === 'change'" class="cash-change-panel">
+              <div class="quick-change-options">
+                <button
+                  v-for="amount in quickChangeOptions"
+                  :key="amount"
+                  type="button"
+                  class="quick-change-btn"
+                  :class="{ active: changeFrom === amount }"
+                  @click="setQuickChange(amount)"
+                >
+                  {{ amount }} ₽
+                </button>
+              </div>
+              <input v-model.number="changeFrom" type="number" class="mini-field" placeholder="Своя сумма" min="0" step="100" />
+            </div>
             <div v-if="paymentError" class="mt-2 text-xs text-red-500">{{ paymentError }}</div>
           </div>
           <div class="form-group">
@@ -187,6 +209,8 @@ const loadingBranches = ref(false);
 const paymentMethod = ref("cash");
 const changeFrom = ref(null);
 const paymentError = ref("");
+const cashChangeMode = ref("none");
+const quickChangeOptions = [1000, 2000, 5000];
 const orderComment = ref("");
 const deliveryTariffs = computed(() => locationStore.deliveryZone?.tariffs || []);
 const submitting = ref(false);
@@ -373,6 +397,21 @@ watch(
   },
 );
 watch(
+  () => paymentMethod.value,
+  (value) => {
+    paymentError.value = "";
+    if (value === "cash") {
+      if (cashChangeMode.value === "none") {
+        changeFrom.value = null;
+      }
+      return;
+    }
+    cashChangeMode.value = "none";
+    changeFrom.value = null;
+  },
+  { immediate: true },
+);
+watch(
   () => orderType.value,
   async (newType) => {
     if (newType === "pickup") {
@@ -497,6 +536,20 @@ function selectOrderType(type) {
     applyBranchTimes(selectedBranch.value);
   }
 }
+function selectNoChange() {
+  cashChangeMode.value = "no_change";
+  changeFrom.value = null;
+  paymentError.value = "";
+}
+function selectNeedChange() {
+  cashChangeMode.value = "change";
+  paymentError.value = "";
+}
+function setQuickChange(amount) {
+  cashChangeMode.value = "change";
+  changeFrom.value = amount;
+  paymentError.value = "";
+}
 function openDeliveryMap() {
   hapticFeedback("light");
   router.push("/delivery-map");
@@ -575,11 +628,27 @@ async function submitOrder() {
       showAlert("Выберите город перед оформлением заказа");
       return;
     }
-    if (paymentMethod.value === "cash" && changeFrom.value && changeFrom.value < finalTotalPrice.value) {
-      paymentError.value = "Сумма для сдачи должна быть больше или равна оплате";
-      hapticFeedback("error");
-      submitting.value = false;
-      return;
+    if (paymentMethod.value === "cash") {
+      if (cashChangeMode.value === "none") {
+        paymentError.value = "Выберите: без сдачи или нужна сдача";
+        hapticFeedback("error");
+        submitting.value = false;
+        return;
+      }
+      if (cashChangeMode.value === "change") {
+        if (!changeFrom.value || Number(changeFrom.value) <= 0) {
+          paymentError.value = "Укажите сумму, с которой нужна сдача";
+          hapticFeedback("error");
+          submitting.value = false;
+          return;
+        }
+        if (Number(changeFrom.value) < finalTotalPrice.value) {
+          paymentError.value = "Сумма для сдачи должна быть больше или равна оплате";
+          hapticFeedback("error");
+          submitting.value = false;
+          return;
+        }
+      }
     }
     let bonusToUse = bonusesEnabled.value ? appliedBonusToUse.value : 0;
     if (bonusesEnabled.value && cartStore.bonusUsage.useBonuses) {
@@ -618,6 +687,7 @@ async function submitOrder() {
       payment_method: paymentMethod.value,
       comment: orderComment.value,
       bonus_to_use: bonusToUse,
+      cash_without_change: paymentMethod.value === "cash" ? cashChangeMode.value === "no_change" : false,
     };
     if (orderType.value === "delivery") {
       if (locationStore.deliveryCoords?.lat && locationStore.deliveryCoords?.lng) {
@@ -650,8 +720,8 @@ async function submitOrder() {
     } else {
       orderData.branch_id = selectedBranch.value.id;
     }
-    if (paymentMethod.value === "cash" && changeFrom.value) {
-      orderData.change_from = changeFrom.value;
+    if (paymentMethod.value === "cash" && cashChangeMode.value === "change" && changeFrom.value) {
+      orderData.change_from = Number(changeFrom.value);
     }
     const response = await ordersAPI.createOrder(orderData);
     hapticFeedback("success");
@@ -665,6 +735,9 @@ async function submitOrder() {
       "Delivery is not available to this address": "Доставка по этому адресу недоступна.",
       "delivery address is required for delivery orders": "Укажите адрес доставки",
       "branch_id is required for pickup orders": "Выберите филиал для самовывоза",
+      "Для оплаты наличными укажите сумму купюры или выберите вариант без сдачи": "Для оплаты наличными выберите: без сдачи или сумма купюры",
+      "Выберите только один вариант: без сдачи или сумма купюры": "Выберите только один вариант: без сдачи или сумма купюры",
+      "Сумма для сдачи должна быть больше или равна оплате": "Сумма для сдачи должна быть больше или равна оплате",
       "Cart is empty": "Корзина пуста",
       "Insufficient stock": "Недостаточно товара на складе",
       "Minimum order amount is": "Минимальная сумма заказа не достигнута",
@@ -944,6 +1017,34 @@ async function submitOrder() {
   gap: 8px;
 }
 .payment-option.active {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+}
+.cash-mode-options {
+  display: flex;
+  gap: 12px;
+}
+.cash-change-panel {
+  margin-top: 10px;
+  display: grid;
+  gap: 10px;
+}
+.quick-change-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.quick-change-btn {
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  background: var(--color-background);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-semibold);
+  padding: 10px 8px;
+  cursor: pointer;
+}
+.quick-change-btn.active {
   border-color: var(--color-primary);
   background: var(--color-primary);
 }

@@ -1,5 +1,10 @@
 import { devLog, devWarn } from "@/shared/utils/logger.js";
 
+const normalizeApiBase = (value) => {
+  const raw = String(value || "").trim().replace(/\/$/, "");
+  return raw.replace(/\/api$/i, "");
+};
+
 class WebSocketService {
   constructor() {
     this.ws = null;
@@ -10,7 +15,7 @@ class WebSocketService {
     this.isConnecting = false;
   }
   async requestTicket(token) {
-    const apiBase = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
+    const apiBase = normalizeApiBase(import.meta.env.VITE_API_URL);
     const response = await fetch(`${apiBase}/api/auth/ws-ticket`, {
       method: "POST",
       headers: {
@@ -40,15 +45,16 @@ class WebSocketService {
     let wsUrl = import.meta.env.VITE_WS_URL;
     if (!wsUrl) {
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-      const host = import.meta.env.VITE_API_URL ? new URL(import.meta.env.VITE_API_URL).host : "localhost:3000";
+      const normalizedApiBase = normalizeApiBase(import.meta.env.VITE_API_URL);
+      const host = normalizedApiBase ? new URL(normalizedApiBase).host : "localhost:3000";
       wsUrl = `${protocol}//${host}/socket`;
     }
     try {
       const normalized = new URL(wsUrl, window.location.origin);
-      if (normalized.pathname === "/" || normalized.pathname === "") {
+      if (normalized.pathname.startsWith("/api") || normalized.pathname === "/" || normalized.pathname === "") {
         normalized.pathname = "/socket";
-        wsUrl = normalized.toString();
       }
+      wsUrl = normalized.toString();
     } catch (error) {
       // если URL некорректный, оставляем как есть
     }

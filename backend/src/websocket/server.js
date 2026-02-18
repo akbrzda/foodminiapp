@@ -40,6 +40,9 @@ function isOriginAllowed(origin, allowedList) {
   if (!Array.isArray(allowedList) || allowedList.length === 0) return true;
   const normalizedOrigin = normalizeOrigin(origin);
   const originHost = getOriginHost(normalizedOrigin);
+  if (originHost === "panda.akbrzda.ru" || originHost.endsWith(".panda.akbrzda.ru")) {
+    return true;
+  }
   return allowedList.some((allowed) => {
     const normalizedAllowed = normalizeOrigin(allowed);
     if (!normalizedAllowed) return false;
@@ -49,6 +52,15 @@ function isOriginAllowed(origin, allowedList) {
     if (originHost && allowedHost && originHost === allowedHost) return true;
     return false;
   });
+}
+function buildAllowedOrigins() {
+  const raw = process.env.CORS_ORIGINS || "";
+  const fromEnv = raw
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  const defaultProductionOrigins = process.env.NODE_ENV === "production" ? ["https://app.panda.akbrzda.ru", "https://admin.panda.akbrzda.ru"] : [];
+  return [...fromEnv, ...defaultProductionOrigins].filter((origin, index, arr) => arr.indexOf(origin) === index);
 }
 
 class WSServer {
@@ -76,9 +88,9 @@ class WSServer {
 
         // Проверяем Origin для защиты от CSRF
         const origin = request.headers.origin;
-        const allowedOrigins = process.env.CORS_ORIGINS?.split(",").map((o) => o.trim()).filter(Boolean) || [];
+        const allowedOrigins = buildAllowedOrigins();
 
-        if (process.env.NODE_ENV === "production" && (!origin || !isOriginAllowed(origin, allowedOrigins))) {
+        if (process.env.NODE_ENV === "production" && origin && !isOriginAllowed(origin, allowedOrigins)) {
           socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
           socket.destroy();
           return;

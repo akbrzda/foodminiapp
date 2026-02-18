@@ -311,6 +311,7 @@ export const createOrder = async (req, res, next) => {
       items,
       payment_method,
       change_from,
+      cash_without_change,
       bonus_to_use = 0,
       comment,
       desired_time,
@@ -364,6 +365,25 @@ export const createOrder = async (req, res, next) => {
       return res.status(400).json({
         error: "payment_method must be 'cash' or 'card'",
       });
+    }
+
+    const normalizedCashWithoutChange =
+      cash_without_change === true || cash_without_change === 1 || cash_without_change === "1" || cash_without_change === "true";
+    const hasChangeFrom = Number.isFinite(Number(change_from)) && Number(change_from) > 0;
+
+    if (payment_method === "cash") {
+      if (!normalizedCashWithoutChange && !hasChangeFrom) {
+        await connection.rollback();
+        return res.status(400).json({
+          error: "Для оплаты наличными укажите сумму купюры или выберите вариант без сдачи",
+        });
+      }
+      if (normalizedCashWithoutChange && hasChangeFrom) {
+        await connection.rollback();
+        return res.status(400).json({
+          error: "Выберите только один вариант: без сдачи или сумма купюры",
+        });
+      }
     }
 
     if (order_type === "pickup" && !branch_id) {
@@ -521,6 +541,13 @@ export const createOrder = async (req, res, next) => {
 
     const finalTotal = total + deliveryCost;
 
+    if (payment_method === "cash" && hasChangeFrom && Number(change_from) < finalTotal) {
+      await connection.rollback();
+      return res.status(400).json({
+        error: "Сумма для сдачи должна быть больше или равна оплате",
+      });
+    }
+
     // Расчет начисленных бонусов
     let earnedBonuses = 0;
     if (useLocalBonuses) {
@@ -597,7 +624,7 @@ export const createOrder = async (req, res, next) => {
         delivery_intercom || null,
         delivery_comment || null,
         payment_method,
-        change_from || null,
+        payment_method === "cash" && hasChangeFrom ? Number(change_from) : null,
         subtotal,
         deliveryCost,
         bonusUsed,
@@ -707,15 +734,16 @@ export const createOrder = async (req, res, next) => {
 
     // Telegram уведомление
     try {
+      const telegramBranchId = order?.branch_id || resolvedBranchId || branch_id || null;
       let branchMeta = null;
-      if (branch_id) {
+      if (telegramBranchId) {
         const [branchRows] = await db.query(
           `SELECT b.name AS branch_name, c.name AS city_name
            FROM branches b
            LEFT JOIN cities c ON c.id = b.city_id
            WHERE b.id = ?
            LIMIT 1`,
-          [branch_id],
+          [telegramBranchId],
         );
         branchMeta = branchRows?.[0] || null;
       }
