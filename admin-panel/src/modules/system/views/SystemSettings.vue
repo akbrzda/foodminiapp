@@ -80,7 +80,7 @@
                     v-if="group.name === 'Лояльность'"
                     class="rounded-xl border border-dashed border-border/60 bg-muted/30 px-4 py-3 text-xs text-muted-foreground"
                   >
-                    Параметры начисления и уровней фиксированы: 3 уровня (Бронза, Серебро, Золото), начисление 3/5/7% и максимум списания 25%.
+                    Параметры начисления и уровней фиксированы: 3 уровня (Бронза, Серебро, Золото), начисление 3/5/7% и максимум списания 20%.
                   </div>
                 </div>
               </div>
@@ -132,7 +132,9 @@
                       <Badge
                         variant="secondary"
                         :class="
-                          reason.is_active ? 'bg-emerald-100 text-emerald-700 border-transparent' : 'bg-muted text-muted-foreground border-transparent'
+                          reason.is_active
+                            ? 'bg-emerald-100 text-emerald-700 border-transparent'
+                            : 'bg-muted text-muted-foreground border-transparent'
                         "
                       >
                         {{ reason.is_active ? "Активна" : "Скрыта" }}
@@ -156,7 +158,6 @@
           </CardContent>
         </Card>
       </TabsContent>
-
     </Tabs>
 
     <Dialog v-if="showModal" :open="showModal" @update:open="(value) => (value ? null : closeModal())">

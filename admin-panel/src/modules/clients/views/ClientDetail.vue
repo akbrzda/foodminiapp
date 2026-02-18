@@ -137,6 +137,7 @@
             <TableRow>
               <TableHead>Заказ</TableHead>
               <TableHead>Дата</TableHead>
+              <TableHead>Статус</TableHead>
               <TableHead>Позиции</TableHead>
               <TableHead class="text-right">Сумма</TableHead>
             </TableRow>
@@ -145,6 +146,11 @@
             <TableRow v-for="order in orders" :key="order.id" class="cursor-pointer" @click="openOrder(order.id)">
               <TableCell class="font-medium">#{{ order.order_number }}</TableCell>
               <TableCell class="text-muted-foreground">{{ formatDateTime(order.created_at) }}</TableCell>
+              <TableCell>
+                <Badge variant="secondary" :style="getOrderStatusBadge(order.status).style">
+                  {{ getOrderStatusBadge(order.status).label }}
+                </Badge>
+              </TableCell>
               <TableCell>{{ formatNumber(order.items_count || 0) }}</TableCell>
               <TableCell class="text-right">{{ formatCurrency(order.total) }}</TableCell>
             </TableRow>
@@ -323,6 +329,31 @@ const formatLevelReason = (reason) => {
   if (reason === "threshold_reached") return "Повышение";
   return "—";
 };
+const getOrderStatusBadge = (status) => {
+  const labels = {
+    pending: "Новый",
+    confirmed: "Принят",
+    preparing: "Готовится",
+    ready: "Готов",
+    delivering: "В пути",
+    completed: "Завершен",
+    cancelled: "Отменен",
+  };
+  const styles = {
+    pending: { backgroundColor: "#3B82F6", color: "#FFFFFF" },
+    confirmed: { backgroundColor: "#10B981", color: "#FFFFFF" },
+    preparing: { backgroundColor: "#F59E0B", color: "#FFFFFF" },
+    ready: { backgroundColor: "#8B5CF6", color: "#FFFFFF" },
+    delivering: { backgroundColor: "#FFD200", color: "#000000" },
+    completed: { backgroundColor: "#6B7280", color: "#FFFFFF" },
+    cancelled: { backgroundColor: "#EF4444", color: "#FFFFFF" },
+  };
+
+  return {
+    label: labels[status] || status || "—",
+    style: styles[status] || { backgroundColor: "#E0E0E0", color: "#666666" },
+  };
+};
 const loadClient = async () => {
   const response = await api.get(`/api/admin/clients/${clientId}`);
   client.value = response.data.user;
@@ -410,7 +441,13 @@ const submitAdjustment = async () => {
   }
 };
 const openOrder = (orderId) => {
-  router.push(`/orders/${orderId}`);
+  router.push({
+    path: `/orders/${orderId}`,
+    query: {
+      from: "client",
+      client_id: String(clientId),
+    },
+  });
 };
 const goBack = () => {
   router.push("/clients");

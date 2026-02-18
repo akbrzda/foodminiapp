@@ -2,9 +2,9 @@
   <div class="space-y-6">
     <PageHeader title="Детали заказа" description="Управление заказом и составом">
       <template #actions>
-        <Button variant="outline" size="sm" @click="router.push('/orders')">
+        <Button variant="outline" size="sm" @click="goBack">
           <ArrowLeft :size="16" />
-          Назад к заказам
+          {{ backButtonLabel }}
         </Button>
       </template>
     </PageHeader>
@@ -329,8 +329,27 @@ const orderSubtitle = computed(() => {
   if (order.value?.created_at) return formatDateTime(order.value.created_at, { timeZone: orderTimeZone.value });
   return "Детали заказа";
 });
+const returnFromClientId = computed(() => {
+  const from = String(route.query?.from || "").trim();
+  const clientId = String(route.query?.client_id || "").trim();
+  if (from !== "client" || !clientId) return null;
+  return clientId;
+});
+const backButtonLabel = computed(() => (returnFromClientId.value ? "Назад к клиенту" : "Назад к заказам"));
 const updateBreadcrumbs = () => {
   const orderNumber = order.value?.order_number || route.params.id;
+  if (returnFromClientId.value) {
+    ordersStore.setBreadcrumbs(
+      [
+        { label: "Клиенты", to: "/clients" },
+        { label: "Клиент", to: `/clients/${returnFromClientId.value}` },
+        { label: `Заказ #${orderNumber}` },
+      ],
+      route.name,
+    );
+    return;
+  }
+
   ordersStore.setBreadcrumbs([{ label: "Заказы", to: "/orders" }, { label: `Заказ #${orderNumber}` }], route.name);
 };
 const updateDocumentTitle = (baseTitle) => {
@@ -454,6 +473,19 @@ watch(
     updateBreadcrumbs();
   },
 );
+watch(
+  () => [route.query?.from, route.query?.client_id],
+  () => {
+    updateBreadcrumbs();
+  },
+);
+const goBack = () => {
+  if (returnFromClientId.value) {
+    router.push(`/clients/${returnFromClientId.value}`);
+    return;
+  }
+  router.push("/orders");
+};
 const updateStatus = async () => {
   if (!statusUpdate.value) return;
   try {
