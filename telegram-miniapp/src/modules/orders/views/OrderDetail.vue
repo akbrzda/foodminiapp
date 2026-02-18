@@ -195,7 +195,8 @@ onUnmounted(() => {
 });
 function setupWebSocketListeners() {
   statusUpdateHandler = (data) => {
-    if (order.value && data.orderId === order.value.id) {
+    if (!order.value || !data?.orderId) return;
+    if (String(data.orderId) === String(order.value.id)) {
       order.value.status = data.newStatus;
       hapticFeedback("light");
     }

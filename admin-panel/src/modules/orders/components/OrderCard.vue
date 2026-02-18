@@ -36,14 +36,11 @@
     </div>
 
     <Transition name="fade-slide">
-      <div v-if="isExpanded" class="mt-4 space-y-4">
+      <div v-if="isExpanded" class="mt-4 space-y-1">
         <OrderItemsList :items="order.items || []" />
 
         <div v-if="Number(order.delivery_cost) > 0" class="text-sm text-muted-foreground">Доставка: {{ formatCurrency(order.delivery_cost) }}</div>
         <div v-if="discountAmount > 0" class="text-sm text-emerald-600">Скидка: -{{ formatCurrency(discountAmount) }}</div>
-        <div v-if="changeFromAmount > 0" class="text-sm text-muted-foreground">
-          Сдача: {{ formatCurrency(changeAmount) }} (с {{ formatCurrency(changeFromAmount) }})
-        </div>
 
         <div class="text-sm font-semibold text-foreground">Итого: {{ formatCurrency(order.total) }}</div>
 

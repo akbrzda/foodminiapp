@@ -34,26 +34,10 @@ export const createTelegramCommandBot = () => {
     return result.result;
   };
 
-  const buildInlineButton = () => {
-    if (!miniAppUrl) return null;
-    return {
-      inline_keyboard: [
-        [
-          {
-            text: "Открыть приложение",
-            web_app: { url: miniAppUrl },
-          },
-        ],
-      ],
-    };
-  };
-
   const sendText = async (chatId, text) => {
-    const replyMarkup = buildInlineButton();
     await apiRequest("sendMessage", {
       chat_id: chatId,
       text,
-      ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
     });
   };
 

@@ -39,20 +39,28 @@
   </div>
 </template>
 <script setup>
-import { ref, onMounted } from "vue";
+import { ref, onMounted, onUnmounted } from "vue";
 import { Truck, Store } from "lucide-vue-next";
 import { useRouter } from "vue-router";
 import PageHeader from "@/shared/components/PageHeader.vue";
 import { ordersAPI } from "@/shared/api/endpoints.js";
 import { hapticFeedback } from "@/shared/services/telegram.js";
+import { wsService } from "@/shared/services/websocket.js";
 import { formatPrice } from "@/shared/utils/format";
 import { formatRelativeTime, isToday, isYesterday, formatTime, formatDateOnly } from "@/shared/utils/date";
 import { devError } from "@/shared/utils/logger.js";
 const router = useRouter();
 const orders = ref([]);
 const loading = ref(false);
+let statusUpdateHandler = null;
 onMounted(async () => {
   await loadOrders();
+  setupWebSocketListeners();
+});
+onUnmounted(() => {
+  if (statusUpdateHandler) {
+    wsService.off("order-status-updated", statusUpdateHandler);
+  }
 });
 async function loadOrders() {
   try {
@@ -68,6 +76,17 @@ async function loadOrders() {
 function openOrder(orderId) {
   hapticFeedback("light");
   router.push(`/order/${orderId}`);
+}
+function setupWebSocketListeners() {
+  statusUpdateHandler = (data) => {
+    if (!data?.orderId || !data?.newStatus) return;
+    const targetId = String(data.orderId);
+    orders.value = orders.value.map((item) => {
+      if (String(item.id) !== targetId) return item;
+      return { ...item, status: data.newStatus };
+    });
+  };
+  wsService.on("order-status-updated", statusUpdateHandler);
 }
 function getStatusText(status) {
   const statuses = {
