@@ -28,8 +28,8 @@
           </div>
           <div v-else class="divide-y divide-border">
             <div v-for="(tariff, index) in localTariffs" :key="index" class="grid grid-cols-[1fr_1fr_1fr_auto] gap-3 px-4 py-3">
-              <Input v-model.number="tariff.amount_from" type="number" min="0" step="1" />
-              <Input v-model="tariff.amount_to" type="number" min="0" step="1" placeholder="∞" />
+              <Input v-model.number="tariff.amount_from" type="number" min="0" step="1" readonly class="bg-muted/40" />
+              <Input v-model="tariff.amount_to" type="number" min="0" step="1" placeholder="∞" @update:modelValue="onAmountToChange(index)" />
               <Input v-model.number="tariff.delivery_cost" type="number" min="0" step="1" />
               <button
                 type="button"
@@ -41,7 +41,7 @@
             </div>
           </div>
         </div>
-        <div v-if="errors.length" class="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
+        <div v-if="showValidationErrors && errors.length" class="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
           <div class="flex items-center gap-2 font-medium">
             <AlertTriangle :size="16" />
             Ошибки валидации
@@ -53,7 +53,7 @@
       </div>
       <DialogFooter class="mt-6 gap-2">
         <Button variant="outline" @click="emit('close')">Отмена</Button>
-        <Button :disabled="!canSave" @click="submit">Сохранить</Button>
+        <Button @click="submit">Сохранить</Button>
       </DialogFooter>
     </DialogContent>
   </Dialog>
@@ -85,6 +85,7 @@ const props = defineProps({
 const emit = defineEmits(["close", "save"]);
 
 const localTariffs = ref([]);
+const showValidationErrors = ref(false);
 
 const toIntOrNull = (value) => {
   if (value === null || value === undefined || value === "") return null;
@@ -160,23 +161,45 @@ const validate = (tariffs) => {
 };
 
 const errors = computed(() => validate(localTariffs.value));
-const canSave = computed(() => errors.value.length === 0);
+const syncTariffRanges = (startIndex = 0) => {
+  if (!localTariffs.value.length) return;
+  if (startIndex <= 0) {
+    localTariffs.value[0].amount_from = 0;
+    startIndex = 1;
+  }
+  for (let index = Math.max(1, startIndex); index < localTariffs.value.length; index += 1) {
+    const prev = localTariffs.value[index - 1];
+    const prevTo = toIntOrNull(prev?.amount_to);
+    localTariffs.value[index].amount_from = prevTo === null ? "" : prevTo + 1;
+  }
+};
+
+const onAmountToChange = (index) => {
+  syncTariffRanges(index + 1);
+};
 
 const addTariff = () => {
   const last = localTariffs.value[localTariffs.value.length - 1];
-  const nextFrom = last && Number.isInteger(Number(last.amount_to)) ? Number(last.amount_to) + 1 : 0;
+  const lastTo = toIntOrNull(last?.amount_to);
+  const nextFrom = last ? (lastTo === null ? "" : lastTo + 1) : 0;
   localTariffs.value.push({
-    amount_from: localTariffs.value.length === 0 ? 0 : nextFrom,
+    amount_from: nextFrom,
     amount_to: "",
     delivery_cost: 0,
   });
+  syncTariffRanges(localTariffs.value.length - 1);
 };
 
 const removeTariff = (index) => {
   localTariffs.value.splice(index, 1);
+  syncTariffRanges(index);
 };
 
 const submit = () => {
+  showValidationErrors.value = true;
+  if (errors.value.length > 0) {
+    return;
+  }
   const normalized = localTariffs.value.map((tariff) => ({
     amount_from: toInt(tariff.amount_from),
     amount_to: toIntOrNull(tariff.amount_to),
@@ -189,11 +212,13 @@ watch(
   () => props.open,
   (value) => {
     if (!value) return;
+    showValidationErrors.value = false;
     localTariffs.value = (props.tariffs || []).map((tariff) => ({
       amount_from: tariff.amount_from ?? 0,
       amount_to: tariff.amount_to ?? "",
       delivery_cost: tariff.delivery_cost ?? 0,
     }));
+    syncTariffRanges(0);
   },
   { immediate: true },
 );

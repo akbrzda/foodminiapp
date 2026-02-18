@@ -95,11 +95,29 @@
             </div>
           </div>
           <div v-if="branchId" class="pt-3 border-t border-border">
-            <Button v-if="!isManager && polygons.length < 3" class="w-full" size="sm" @click="startDrawing">
-              <Plus :size="16" />
-              Добавить полигон
-            </Button>
-            <p v-else-if="!isManager" class="text-center text-xs text-muted-foreground">Максимум 3 полигона на филиал</p>
+            <div v-if="!isManager" class="space-y-2">
+              <Button class="w-full" size="sm" @click="startDrawing">
+                <Plus :size="16" />
+                Добавить полигон
+              </Button>
+              <div class="grid grid-cols-2 gap-2">
+                <Button variant="outline" size="sm" @click="triggerGeoJsonImport">
+                  <Upload :size="16" />
+                  Импорт
+                </Button>
+                <Button variant="outline" size="sm" :disabled="!polygons.length" @click="exportGeoJson">
+                  <Download :size="16" />
+                  Экспорт
+                </Button>
+              </div>
+              <input
+                ref="geoJsonInputRef"
+                type="file"
+                accept=".geojson,application/geo+json,.json,application/json"
+                class="hidden"
+                @change="handleGeoJsonFileChange"
+              />
+            </div>
             <p v-else class="text-center text-xs text-muted-foreground">Редактирование доступно только администратору и CEO</p>
           </div>
           <div v-if="filteredPolygons.length > 0" class="pt-2 text-xs text-muted-foreground text-center">
@@ -194,6 +212,38 @@
         </form>
       </DialogContent>
     </Dialog>
+    <Dialog v-if="showGeoJsonImportDialog" :open="showGeoJsonImportDialog" @update:open="(value) => (value ? null : closeGeoJsonImportDialog())">
+      <DialogContent class="w-full max-w-3xl">
+        <DialogHeader>
+          <DialogTitle>Импорт GeoJSON</DialogTitle>
+          <DialogDescription>
+            Проверьте полигоны из файла <span class="font-medium text-foreground">{{ geoJsonImportFileName }}</span> и подтвердите сохранение.
+          </DialogDescription>
+        </DialogHeader>
+        <div class="space-y-3">
+          <div class="rounded-lg border border-border p-3 text-sm text-muted-foreground">
+            Предпросмотр выполнен на карте: импортируемые полигоны подсвечены пунктиром.
+          </div>
+          <div class="rounded-lg border border-border p-3 text-xs text-muted-foreground">
+            Найдено полигонов: <span class="font-semibold text-foreground">{{ geoJsonImportItems.length }}</span>
+          </div>
+        </div>
+        <div class="flex gap-2">
+          <Button type="button" variant="outline" class="flex-1" :disabled="geoJsonImportSaving" @click="closeGeoJsonImportDialog">
+            Отмена
+          </Button>
+          <Button
+            type="button"
+            class="flex-1"
+            :disabled="!geoJsonImportItems.length || geoJsonImportSaving"
+            @click="confirmGeoJsonImport"
+          >
+            <Upload :size="16" />
+            {{ geoJsonImportSaving ? "Сохранение..." : `Сохранить (${geoJsonImportItems.length})` }}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
     <PolygonSidebar
       :is-open="showSidebar"
       :polygon="selectedPolygon"
@@ -232,7 +282,7 @@
 <script setup>
 import { devError } from "@/shared/utils/logger";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
-import { Lock, Plus, Save } from "lucide-vue-next";
+import { Download, Lock, Plus, Save, Upload } from "lucide-vue-next";
 import { parseDate as parseCalendarDate } from "@internationalized/date";
 import api from "@/shared/api/client.js";
 import PolygonSidebar from "@/shared/components/PolygonSidebar.vue";
@@ -352,6 +402,11 @@ const tariffEditorOpen = ref(false);
 const tariffCopyOpen = ref(false);
 const tariffCopySource = ref("");
 const tariffCopyPreview = ref([]);
+const geoJsonInputRef = ref(null);
+const showGeoJsonImportDialog = ref(false);
+const geoJsonImportFileName = ref("");
+const geoJsonImportItems = ref([]);
+const geoJsonImportSaving = ref(false);
 const availableTariffSources = computed(() => {
   if (!selectedPolygon.value) return [];
   const pool = allPolygons.value.length ? allPolygons.value : polygons.value;
@@ -368,6 +423,7 @@ let tileLayer = null;
 let drawControl = null;
 let currentLayer = null;
 let editHandler = null;
+let importPreviewLayer = null;
 const polygonLayers = new Map();
 let branchesRequestId = 0;
 let drawControlVisible = true;
@@ -438,9 +494,255 @@ const loadAllPolygons = async () => {
     allPolygons.value = [];
   }
 };
+const isValidLatLng = (lat, lng) => Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
+const calcCenter = (coords = []) => {
+  if (!coords.length) return null;
+  const sum = coords.reduce(
+    (acc, [lat, lng]) => ({ lat: acc.lat + lat, lng: acc.lng + lng }),
+    { lat: 0, lng: 0 },
+  );
+  return { lat: sum.lat / coords.length, lng: sum.lng / coords.length };
+};
+const distanceSq = (a, b) => {
+  if (!a || !b) return Number.POSITIVE_INFINITY;
+  const dLat = a.lat - b.lat;
+  const dLng = a.lng - b.lng;
+  return dLat * dLat + dLng * dLng;
+};
+const getReferenceCenter = () => {
+  const selectedBranch = branches.value.find((branch) => branch.id === parseInt(branchId.value, 10));
+  if (selectedBranch?.latitude && selectedBranch?.longitude) {
+    return { lat: Number(selectedBranch.latitude), lng: Number(selectedBranch.longitude) };
+  }
+  if (cityId.value) {
+    const selectedCity = referenceStore.cities.find((city) => city.id === parseInt(cityId.value, 10));
+    if (selectedCity?.latitude && selectedCity?.longitude) {
+      return { lat: Number(selectedCity.latitude), lng: Number(selectedCity.longitude) };
+    }
+  }
+  if (map) {
+    const center = map.getCenter();
+    return { lat: center.lat, lng: center.lng };
+  }
+  return null;
+};
+const toLeafletCoords = (coords = [], referenceCenter = null) => {
+  const points = coords.filter((coord) => Array.isArray(coord) && coord.length >= 2);
+  const fromGeoJson = points
+    .map((coord) => [Number(coord[1]), Number(coord[0])])
+    .filter(([lat, lng]) => isValidLatLng(lat, lng));
+  const legacyLatLng = points
+    .map((coord) => [Number(coord[0]), Number(coord[1])])
+    .filter(([lat, lng]) => isValidLatLng(lat, lng));
+  if (!legacyLatLng.length) return fromGeoJson;
+  if (!fromGeoJson.length) return legacyLatLng;
+  if (!referenceCenter) return fromGeoJson;
+  const geoJsonCenter = calcCenter(fromGeoJson);
+  const legacyCenter = calcCenter(legacyLatLng);
+  return distanceSq(geoJsonCenter, referenceCenter) <= distanceSq(legacyCenter, referenceCenter) ? fromGeoJson : legacyLatLng;
+};
+const clearGeoJsonImportPreview = () => {
+  if (importPreviewLayer) {
+    importPreviewLayer.clearLayers();
+  }
+};
+const renderGeoJsonImportPreview = () => {
+  if (!map || !importPreviewLayer) return;
+  clearGeoJsonImportPreview();
+  if (!showGeoJsonImportDialog.value || !geoJsonImportItems.value.length) return;
+  if (importPreviewLayer.bringToFront) {
+    importPreviewLayer.bringToFront();
+  }
+  let bounds = null;
+  geoJsonImportItems.value.forEach((item) => {
+    const coords = toLeafletCoords(item.polygon, getReferenceCenter());
+    if (coords.length < 3) return;
+    const layer = L.polygon(coords, {
+      color: "#0ea5e9",
+      fillColor: "#38bdf8",
+      fillOpacity: 0.38,
+      weight: 4,
+      opacity: 1,
+      dashArray: "10 6",
+    });
+    importPreviewLayer.addLayer(layer);
+    if (!bounds) {
+      bounds = layer.getBounds();
+    } else {
+      bounds.extend(layer.getBounds());
+    }
+  });
+  if (bounds?.isValid()) {
+    map.fitBounds(bounds, { padding: [28, 28] });
+  }
+};
+const normalizePolygonRing = (ring) => {
+  if (!Array.isArray(ring)) return null;
+  const coords = ring
+    .filter((coord) => Array.isArray(coord) && coord.length >= 2 && Number.isFinite(Number(coord[0])) && Number.isFinite(Number(coord[1])))
+    .map((coord) => [Number(coord[0]), Number(coord[1])]);
+  if (coords.length < 3) return null;
+  const [firstLng, firstLat] = coords[0];
+  const [lastLng, lastLat] = coords[coords.length - 1];
+  if (firstLng !== lastLng || firstLat !== lastLat) {
+    coords.push([firstLng, firstLat]);
+  }
+  return coords;
+};
+const parseDeliveryTime = (value) => {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 30;
+};
+const readGeoJsonFeatures = (geoJson) => {
+  if (!geoJson || typeof geoJson !== "object") return [];
+  if (geoJson.type === "FeatureCollection") {
+    return Array.isArray(geoJson.features) ? geoJson.features : [];
+  }
+  if (geoJson.type === "Feature") {
+    return [geoJson];
+  }
+  if (geoJson.type === "Polygon" || geoJson.type === "MultiPolygon") {
+    return [{ type: "Feature", properties: {}, geometry: geoJson }];
+  }
+  return [];
+};
+const convertFeatureToImportItems = (feature, index) => {
+  const geometry = feature?.geometry;
+  if (!geometry || (geometry.type !== "Polygon" && geometry.type !== "MultiPolygon")) {
+    return [];
+  }
+  const baseName = typeof feature?.properties?.name === "string" && feature.properties.name.trim() ? feature.properties.name.trim() : `Импорт #${index + 1}`;
+  const deliveryTime = parseDeliveryTime(feature?.properties?.delivery_time);
+  if (geometry.type === "Polygon") {
+    const ring = normalizePolygonRing(geometry.coordinates?.[0]);
+    return ring ? [{ name: baseName, delivery_time: deliveryTime, polygon: ring }] : [];
+  }
+  return (geometry.coordinates || [])
+    .map((polygonCoords, partIndex) => {
+      const ring = normalizePolygonRing(polygonCoords?.[0]);
+      if (!ring) return null;
+      return {
+        name: `${baseName} (${partIndex + 1})`,
+        delivery_time: deliveryTime,
+        polygon: ring,
+      };
+    })
+    .filter(Boolean);
+};
+const closeGeoJsonImportDialog = () => {
+  showGeoJsonImportDialog.value = false;
+  geoJsonImportFileName.value = "";
+  geoJsonImportItems.value = [];
+  geoJsonImportSaving.value = false;
+  clearGeoJsonImportPreview();
+  if (geoJsonInputRef.value) {
+    geoJsonInputRef.value.value = "";
+  }
+};
+const triggerGeoJsonImport = () => {
+  if (!branchId.value || !geoJsonInputRef.value) return;
+  geoJsonInputRef.value.click();
+};
+const handleGeoJsonFileChange = async (event) => {
+  const file = event?.target?.files?.[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const payload = JSON.parse(text);
+    const features = readGeoJsonFeatures(payload);
+    if (!features.length) {
+      showErrorNotification("Файл не содержит поддерживаемых GeoJSON-объектов");
+      return;
+    }
+    const imported = features.flatMap((feature, index) => convertFeatureToImportItems(feature, index));
+    if (!imported.length) {
+      showErrorNotification("В файле нет корректных полигонов для импорта");
+      return;
+    }
+    geoJsonImportFileName.value = file.name;
+    geoJsonImportItems.value = imported;
+    showGeoJsonImportDialog.value = true;
+    renderGeoJsonImportPreview();
+  } catch (error) {
+    devError("Ошибка чтения GeoJSON:", error);
+    showErrorNotification("Не удалось прочитать GeoJSON-файл");
+  } finally {
+    if (geoJsonInputRef.value) {
+      geoJsonInputRef.value.value = "";
+    }
+  }
+};
+const confirmGeoJsonImport = async () => {
+  if (!branchId.value || !geoJsonImportItems.value.length || geoJsonImportSaving.value) return;
+  geoJsonImportSaving.value = true;
+  const total = geoJsonImportItems.value.length;
+  try {
+    for (const item of geoJsonImportItems.value) {
+      await api.post("/api/polygons/admin", {
+        branch_id: parseInt(branchId.value, 10),
+        name: item.name,
+        delivery_time: item.delivery_time,
+        polygon: item.polygon,
+      });
+    }
+    await loadPolygons();
+    await loadAllPolygons();
+    closeGeoJsonImportDialog();
+    showSuccessNotification(`Импортировано полигонов: ${total}`);
+  } catch (error) {
+    devError("Ошибка импорта GeoJSON:", error);
+    const message = error?.response?.data?.error || "Не удалось импортировать GeoJSON";
+    showErrorNotification(message);
+  } finally {
+    geoJsonImportSaving.value = false;
+  }
+};
+const sanitizeFileName = (value) => value.replace(/[^a-zA-Z0-9а-яА-ЯёЁ_-]+/g, "_").replace(/^_+|_+$/g, "");
+const exportGeoJson = () => {
+  if (!branchId.value || !polygons.value.length) {
+    showWarningNotification("Нет полигонов для экспорта");
+    return;
+  }
+  const branchName = branches.value.find((branch) => branch.id === parseInt(branchId.value, 10))?.name || `branch_${branchId.value}`;
+  const featureCollection = {
+    type: "FeatureCollection",
+    features: polygons.value
+      .filter((polygon) => polygon?.polygon?.type === "Polygon" && Array.isArray(polygon?.polygon?.coordinates))
+      .map((polygon) => ({
+        type: "Feature",
+        properties: {
+          id: polygon.id,
+          name: polygon.name || "",
+          delivery_time: polygon.delivery_time || 30,
+          is_active: Boolean(polygon.is_active),
+          tariffs_count: Number(polygon.tariffs_count || 0),
+        },
+        geometry: {
+          type: "Polygon",
+          coordinates: polygon.polygon.coordinates,
+        },
+      })),
+  };
+  if (!featureCollection.features.length) {
+    showWarningNotification("Нет полигонов для экспорта");
+    return;
+  }
+  const blob = new Blob([JSON.stringify(featureCollection, null, 2)], { type: "application/geo+json;charset=utf-8" });
+  const fileName = `${sanitizeFileName(branchName)}_polygons.geojson`;
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+  showSuccessNotification(`GeoJSON экспортирован: ${fileName}`);
+};
 const onCityChange = () => {
   branchId.value = "";
   polygons.value = [];
+  closeGeoJsonImportDialog();
   loadBranches();
   loadAllPolygons();
   if (map) {
@@ -455,6 +757,7 @@ const onCityChange = () => {
 };
 const onBranchChange = async () => {
   polygons.value = [];
+  closeGeoJsonImportDialog();
   await loadPolygons();
   await nextTick();
   initMap();
@@ -492,6 +795,8 @@ const initMap = () => {
   }
   drawnItems = new L.FeatureGroup();
   map.addLayer(drawnItems);
+  importPreviewLayer = new L.FeatureGroup();
+  map.addLayer(importPreviewLayer);
   if (branchId.value && !isManager.value) {
     drawControlVisible = true;
     drawControl = new L.Control.Draw({
@@ -535,6 +840,7 @@ const initMap = () => {
     drawControlVisible = false;
   }
   renderPolygonsOnMap();
+  renderGeoJsonImportPreview();
   if (branchId.value && !isManager.value) {
     editHandler = new L.EditToolbar.Edit(map, {
       featureGroup: drawnItems,
@@ -552,6 +858,7 @@ const renderPolygonsOnMap = () => {
   if (!map || !drawnItems) return;
   drawnItems.clearLayers();
   polygonLayers.clear();
+  const isImportPreviewActive = showGeoJsonImportDialog.value && geoJsonImportItems.value.length > 0;
   const visiblePolygons = branchId.value
     ? polygons.value
     : cityId.value
@@ -561,6 +868,7 @@ const renderPolygonsOnMap = () => {
   const accentFill = getMapColor("accentFill");
   const danger = getMapColor("danger");
   const muted = "#9ca3af";
+  const referenceCenter = getReferenceCenter();
   visiblePolygons.forEach((polygon) => {
     if (!polygon.polygon) return;
     let color, fillOpacity;
@@ -577,13 +885,14 @@ const renderPolygonsOnMap = () => {
     const style = {
       color: accent,
       fillColor: color,
-      fillOpacity: fillOpacity,
-      weight: 3,
-      opacity: 0.9,
+      fillOpacity: isImportPreviewActive ? Math.min(fillOpacity, 0.08) : fillOpacity,
+      weight: isImportPreviewActive ? 2 : 3,
+      opacity: isImportPreviewActive ? 0.35 : 0.9,
     };
     const rawCoords = polygon.polygon?.coordinates?.[0];
     if (!rawCoords?.length) return;
-    const coords = rawCoords.map((coord) => [coord[0], coord[1]]);
+    const coords = toLeafletCoords(rawCoords, referenceCenter);
+    if (!coords.length) return;
     const layer = L.polygon(coords, style);
     layer.polygonId = polygon.id;
     layer.on("click", () => {
@@ -896,6 +1205,7 @@ const savePolygonFromSidebar = async (data) => {
   if (!ensureEditAccess("Недостаточно прав для редактирования полигона")) return;
   try {
     const payload = {
+      name: data.name,
       delivery_time: data.delivery_time,
       is_active: data.is_active ? 1 : 0,
     };
@@ -1021,9 +1331,22 @@ watch(
   () => {
     if (map && drawnItems) {
       renderPolygonsOnMap();
+      renderGeoJsonImportPreview();
     }
   },
   { deep: true },
+);
+watch(
+  () => showGeoJsonImportDialog.value,
+  (open) => {
+    if (!map || !drawnItems) return;
+    renderPolygonsOnMap();
+    if (open) {
+      renderGeoJsonImportPreview();
+    } else {
+      clearGeoJsonImportPreview();
+    }
+  },
 );
 onMounted(async () => {
   await referenceStore.loadCities();
@@ -1059,10 +1382,12 @@ onMounted(async () => {
   }
 });
 onUnmounted(() => {
+  closeGeoJsonImportDialog();
   if (map) {
     map.remove();
     map = null;
   }
+  importPreviewLayer = null;
   tileLayer = null;
 });
 </script>

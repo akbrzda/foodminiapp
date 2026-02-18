@@ -157,6 +157,48 @@ const patchLeafletTouchEvents = () => {
   };
   L.DomEvent.__touchleavePatched = true;
 };
+const isValidLatLng = (lat, lng) => Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
+const calcCenter = (coords = []) => {
+  if (!coords.length) return null;
+  const sum = coords.reduce(
+    (acc, [lat, lng]) => ({ lat: acc.lat + lat, lng: acc.lng + lng }),
+    { lat: 0, lng: 0 },
+  );
+  return { lat: sum.lat / coords.length, lng: sum.lng / coords.length };
+};
+const distanceSq = (a, b) => {
+  if (!a || !b) return Number.POSITIVE_INFINITY;
+  const dLat = a.lat - b.lat;
+  const dLng = a.lng - b.lng;
+  return dLat * dLat + dLng * dLng;
+};
+const getReferenceCenter = () => {
+  const cityBranches = cityId.value ? referenceStore.branchesByCity[cityId.value] || [] : [];
+  const selectedBranch = cityBranches.find((branch) => branch.id === branchId.value);
+  if (selectedBranch?.latitude && selectedBranch?.longitude) {
+    return { lat: Number(selectedBranch.latitude), lng: Number(selectedBranch.longitude) };
+  }
+  if (map) {
+    const center = map.getCenter();
+    return { lat: center.lat, lng: center.lng };
+  }
+  return null;
+};
+const toLeafletCoords = (coords = [], referenceCenter = null) => {
+  const points = coords.filter((coord) => Array.isArray(coord) && coord.length >= 2);
+  const fromGeoJson = points
+    .map((coord) => [Number(coord[1]), Number(coord[0])])
+    .filter(([lat, lng]) => isValidLatLng(lat, lng));
+  const legacyLatLng = points
+    .map((coord) => [Number(coord[0]), Number(coord[1])])
+    .filter(([lat, lng]) => isValidLatLng(lat, lng));
+  if (!legacyLatLng.length) return fromGeoJson;
+  if (!fromGeoJson.length) return legacyLatLng;
+  if (!referenceCenter) return fromGeoJson;
+  const geoJsonCenter = calcCenter(fromGeoJson);
+  const legacyCenter = calcCenter(legacyLatLng);
+  return distanceSq(geoJsonCenter, referenceCenter) <= distanceSq(legacyCenter, referenceCenter) ? fromGeoJson : legacyLatLng;
+};
 
 // Убираем предупреждения Leaflet о неверном событии touchleave.
 patchLeafletTouchEvents();
@@ -261,7 +303,8 @@ const renderPolygon = (polygon) => {
   if (!map || !drawnItems || !polygon?.polygon?.coordinates?.[0]) return;
   drawnItems.clearLayers();
   const rawCoords = polygon.polygon.coordinates[0];
-  const coords = rawCoords.map((coord) => [coord[0], coord[1]]);
+  const coords = toLeafletCoords(rawCoords, getReferenceCenter());
+  if (!coords.length) return;
   currentLayer = L.polygon(coords, {
     color: getMapColor("accent"),
     fillColor: getMapColor("accentFill"),
@@ -287,7 +330,8 @@ const renderBackgroundPolygons = (excludeId = null) => {
     if (excludeId && polygon.id === excludeId) return;
     const rawCoords = polygon.polygon?.coordinates?.[0];
     if (!rawCoords?.length) return;
-    const coords = rawCoords.map((coord) => [coord[0], coord[1]]);
+    const coords = toLeafletCoords(rawCoords, getReferenceCenter());
+    if (!coords.length) return;
     const layer = L.polygon(coords, style);
     backgroundLayer.addLayer(layer);
   });

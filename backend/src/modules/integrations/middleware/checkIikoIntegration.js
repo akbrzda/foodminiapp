@@ -5,12 +5,13 @@ const READ_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 export async function checkIikoIntegration(req, res, next) {
   try {
     if (READ_METHODS.has(req.method)) return next();
+    if (req.user?.role === "admin") return next();
 
     const settings = await getIntegrationSettings();
     if (settings.iikoEnabled) {
       return res.status(403).json({
-        error: "Редактирование меню отключено. Активна интеграция с iiko.",
-        message: "Управляйте меню в системе iiko",
+        error: "Редактирование локальных данных отключено. Активна интеграция с iiko.",
+        message: "Управляйте данными в системе iiko",
       });
     }
 

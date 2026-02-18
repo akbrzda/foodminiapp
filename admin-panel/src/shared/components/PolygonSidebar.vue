@@ -30,6 +30,10 @@
       <div class="flex-1 overflow-y-auto px-4 pb-4 pt-4">
         <div v-if="activeTab === 'general'" class="space-y-4">
           <div>
+            <p class="text-xs text-muted-foreground mb-2">Название</p>
+            <Input v-model="editForm.name" type="text" placeholder="Название полигона" :disabled="readOnly" />
+          </div>
+          <div>
             <p class="text-xs text-muted-foreground mb-2">Статус</p>
             <Label class="flex items-center gap-2 cursor-pointer" :class="readOnly ? 'opacity-60 cursor-not-allowed' : ''">
               <input v-model="editForm.is_active" type="checkbox" class="h-4 w-4 rounded border-gray-300" :disabled="readOnly" />
@@ -157,6 +161,7 @@ const tabs = computed(() => {
   return baseTabs;
 });
 const editForm = ref({
+  name: "",
   delivery_time: 30,
   courier_reward: 0,
   is_active: true,
@@ -179,6 +184,7 @@ watch(
   (newPolygon) => {
     if (newPolygon) {
       editForm.value = {
+        name: newPolygon.name || "",
         delivery_time: newPolygon.delivery_time || 30,
         is_active: newPolygon.is_active === null || newPolygon.is_active === undefined ? true : Boolean(newPolygon.is_active),
       };

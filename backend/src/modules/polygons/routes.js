@@ -7,7 +7,7 @@ import { findTariffForAmount, getNextThreshold, validateTariffs } from "./utils/
 import { checkIikoIntegration } from "../integrations/middleware/checkIikoIntegration.js";
 const router = express.Router();
 
-router.use("/admin", checkIikoIntegration);
+router.use("/admin", authenticateToken, checkIikoIntegration);
 const parseGeoJson = (value) => {
   if (!value) return null;
   if (typeof value === "string") {
@@ -1175,10 +1175,6 @@ router.post("/admin/:id/transfer", authenticateToken, requireRole("admin", "mana
     }
     if (newBranches[0].city_id !== currentCityId) {
       return res.status(400).json({ error: "Cannot transfer polygon to a branch in a different city" });
-    }
-    const [branchPolygons] = await db.query(`SELECT COUNT(*) as count FROM delivery_polygons WHERE branch_id = ?`, [new_branch_id]);
-    if (branchPolygons[0].count >= 3) {
-      return res.status(400).json({ error: "Target branch already has maximum number of polygons (3)" });
     }
     await db.query(`UPDATE delivery_polygons SET branch_id = ? WHERE id = ?`, [new_branch_id, polygonId]);
     const [updatedPolygon] = await db.query(

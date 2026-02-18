@@ -175,7 +175,7 @@ async function initBranchMap(branchId) {
     const lat = Number(branch.latitude);
     const lon = Number(branch.longitude);
     if (Number.isFinite(lat) && Number.isFinite(lon)) {
-      L.marker([lat, lon])
+      L.marker([lat, lon], { icon: createBranchMarkerIcon(L) })
         .addTo(map)
         .bindPopup(branch.address || branch.displayAddress || branch.name || "Филиал", { autoPan: false });
     }
@@ -205,6 +205,32 @@ async function initBranchMap(branchId) {
   if (bounds.isValid()) {
     map.fitBounds(bounds, { padding: [12, 12] });
   }
+}
+function createBranchMarkerIcon(L) {
+  const pinSize = 36;
+  const headSize = 20;
+  const tailSize = 8;
+  return L.divIcon({
+    className: "fma-miniapp-branch-marker",
+    html: `
+      <div style="position:relative;width:${pinSize}px;height:${pinSize}px;">
+        <div style="
+          position:absolute;left:50%;bottom:8px;transform:translateX(-50%);
+          width:${headSize}px;height:${headSize}px;border-radius:999px;
+          background:#e53935;border:2px solid #fff;box-shadow:0 4px 12px rgba(15,23,42,.35);
+          display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:800;line-height:1;
+        ">Я</div>
+        <div style="
+          position:absolute;left:50%;bottom:2px;transform:translateX(-50%) rotate(45deg);
+          width:${tailSize}px;height:${tailSize}px;background:#e53935;
+          border-right:2px solid #fff;border-bottom:2px solid #fff;box-shadow:0 3px 10px rgba(15,23,42,.25);
+        "></div>
+      </div>
+    `,
+    iconSize: [pinSize, pinSize],
+    iconAnchor: [pinSize / 2, Math.round(pinSize * 0.95)],
+    popupAnchor: [0, -Math.round(pinSize * 0.75)],
+  });
 }
 function buildTariffPopup(polygon, index) {
   const rawTariffs = polygon?.tariffs || polygon?.delivery_tariffs || [];
