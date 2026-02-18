@@ -5,9 +5,22 @@ import { showBackButton, hideBackButton, isDesktop } from "@/shared/services/tel
 
 const HOME_SCROLL_Y_STORAGE_KEY = "home-scroll-y-before-item-detail";
 
+const getCurrentScrollY = () => {
+  if (typeof window === "undefined") return 0;
+
+  const windowScrollY = Number(window.scrollY ?? window.pageYOffset ?? 0);
+  if (Number.isFinite(windowScrollY) && windowScrollY > 0) return windowScrollY;
+
+  const scrollingElement = document.scrollingElement || document.documentElement || document.body;
+  const elementScrollTop = Number(scrollingElement?.scrollTop ?? 0);
+  if (Number.isFinite(elementScrollTop) && elementScrollTop > 0) return elementScrollTop;
+
+  return 0;
+};
+
 const saveHomeScrollY = () => {
   if (typeof window === "undefined") return;
-  const scrollY = Number(window.scrollY || window.pageYOffset || 0);
+  const scrollY = getCurrentScrollY();
   window.sessionStorage.setItem(HOME_SCROLL_Y_STORAGE_KEY, String(scrollY));
 };
 
@@ -98,10 +111,20 @@ const routes = [
 const router = createRouter({
   history: createWebHistory(),
   scrollBehavior(to, from, savedPosition) {
+    if (to.name === "ItemDetail") {
+      return { top: 0, left: 0 };
+    }
+
     if (to.name === "Home" && from.name === "ItemDetail") {
       const homeScrollY = consumeHomeScrollY();
       if (homeScrollY !== null) {
-        return { top: homeScrollY, left: 0 };
+        return new Promise((resolve) => {
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              resolve({ top: homeScrollY, left: 0 });
+            });
+          });
+        });
       }
     }
     if (savedPosition) {

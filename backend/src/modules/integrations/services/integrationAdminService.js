@@ -57,6 +57,41 @@ function normalizeIikoId(value) {
   return String(value).trim();
 }
 
+function normalizeStringArray(value) {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => String(item || "").trim()).filter(Boolean);
+}
+
+function getRemovedCategoryIds(previousIds = [], nextIds = []) {
+  const nextSet = new Set(normalizeStringArray(nextIds));
+  return normalizeStringArray(previousIds).filter((id) => !nextSet.has(id));
+}
+
+async function deactivateRemovedIikoCategories(categoryIds = []) {
+  const normalizedCategoryIds = normalizeStringArray(categoryIds);
+  if (normalizedCategoryIds.length === 0) return 0;
+
+  const placeholders = normalizedCategoryIds.map(() => "?").join(", ");
+  const [updateResult] = await db.query(
+    `UPDATE menu_categories
+     SET is_active = 0, iiko_synced_at = NOW()
+     WHERE iiko_category_id IN (${placeholders})
+       AND is_active = 1`,
+    normalizedCategoryIds,
+  );
+
+  await db.query(
+    `UPDATE menu_category_cities mcc
+     JOIN menu_categories mc ON mc.id = mcc.category_id
+     SET mcc.is_active = 0
+     WHERE mc.iiko_category_id IN (${placeholders})
+       AND mcc.is_active = 1`,
+    normalizedCategoryIds,
+  );
+
+  return Number(updateResult?.affectedRows || 0);
+}
+
 export async function getAdminIntegrationSettings() {
   const settings = await getSystemSettings();
   return {
@@ -241,14 +276,24 @@ export async function getIikoNomenclatureOverview(options = {}) {
 }
 
 export async function updateAdminIntegrationSettings(patch) {
+  const previousSettings = await getSystemSettings();
   const { updated, errors } = await updateSystemSettings(patch);
   if (errors) {
     return { errors };
   }
 
+  let deactivatedCategoriesCount = 0;
+  if (Object.prototype.hasOwnProperty.call(updated, "iiko_sync_category_ids")) {
+    const removedCategoryIds = getRemovedCategoryIds(previousSettings.iiko_sync_category_ids, updated.iiko_sync_category_ids);
+    deactivatedCategoriesCount = await deactivateRemovedIikoCategories(removedCategoryIds);
+  }
+
   return {
     errors: null,
     updated,
+    meta: {
+      deactivatedCategoriesCount,
+    },
     settings: await getSystemSettings(),
   };
 }
