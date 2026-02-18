@@ -40,6 +40,10 @@
         <OrderItemsList :items="order.items || []" />
 
         <div v-if="Number(order.delivery_cost) > 0" class="text-sm text-muted-foreground">Доставка: {{ formatCurrency(order.delivery_cost) }}</div>
+        <div v-if="discountAmount > 0" class="text-sm text-emerald-600">Скидка: -{{ formatCurrency(discountAmount) }}</div>
+        <div v-if="changeFromAmount > 0" class="text-sm text-muted-foreground">
+          Сдача: {{ formatCurrency(changeAmount) }} (с {{ formatCurrency(changeFromAmount) }})
+        </div>
 
         <div class="text-sm font-semibold text-foreground">Итого: {{ formatCurrency(order.total) }}</div>
 
@@ -137,9 +141,19 @@ const getOrderLocation = (order) => {
 const getPaymentSummary = (order) => {
   const method = order.payment_method === "cash" ? "наличными" : "картой";
   const itemsCount = order.items?.length || 0;
-  const changeFrom = order.payment_method === "cash" && order.change_from ? `, сдача с ${formatCurrency(order.change_from)}` : "";
-  return `К оплате: ${formatCurrency(order.total)} ${method} (${itemsCount}шт)${changeFrom}`;
+  const total = Number(order.total) || 0;
+  const changeFromAmount = Number(order.change_from) || 0;
+  const hasChange = order.payment_method === "cash" && changeFromAmount > 0;
+  const changePart = hasChange ? `, сдача ${formatCurrency(Math.max(0, changeFromAmount - total))} (с ${formatCurrency(changeFromAmount)})` : "";
+  return `К оплате: ${formatCurrency(order.total)} ${method} (${itemsCount}шт)${changePart}`;
 };
+
+const discountAmount = computed(() => Math.max(0, Number(props.order.bonus_spent) || 0));
+const changeFromAmount = computed(() => {
+  if (props.order.payment_method !== "cash") return 0;
+  return Math.max(0, Number(props.order.change_from) || 0);
+});
+const changeAmount = computed(() => Math.max(0, changeFromAmount.value - (Number(props.order.total) || 0)));
 
 // Бейдж статуса
 const statusBadge = computed(() => {
