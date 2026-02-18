@@ -207,8 +207,6 @@ let observer = null;
 let activeCategoryScrollHandler = null;
 let orderStatusHandler = null;
 let orderCreatedHandler = null;
-let menuRealtimeTimer = null;
-let menuRealtimeVisibilityHandler = null;
 let menuUpdatedWsHandler = null;
 const cityName = computed(() => locationStore.selectedCity?.name || "Когалым");
 const ordersEnabled = computed(() => settingsStore.ordersEnabled);
@@ -300,14 +298,6 @@ onUnmounted(() => {
   if (menuUpdatedWsHandler) {
     wsService.off("menu-updated", menuUpdatedWsHandler);
     menuUpdatedWsHandler = null;
-  }
-  if (menuRealtimeTimer) {
-    clearInterval(menuRealtimeTimer);
-    menuRealtimeTimer = null;
-  }
-  if (menuRealtimeVisibilityHandler) {
-    document.removeEventListener("visibilitychange", menuRealtimeVisibilityHandler);
-    menuRealtimeVisibilityHandler = null;
   }
 });
 watch(
@@ -468,21 +458,6 @@ async function loadMenuInternal({ force = false } = {}) {
   }
 }
 function setupMenuRealtimeSync() {
-  if (!menuRealtimeTimer) {
-    menuRealtimeTimer = setInterval(async () => {
-      if (document.hidden || menuStore.loading || !locationStore.selectedCity) return;
-      await loadMenuInternal({ force: true });
-    }, 15000);
-  }
-
-  if (!menuRealtimeVisibilityHandler) {
-    menuRealtimeVisibilityHandler = async () => {
-      if (document.hidden || menuStore.loading || !locationStore.selectedCity) return;
-      await loadMenuInternal({ force: true });
-    };
-    document.addEventListener("visibilitychange", menuRealtimeVisibilityHandler);
-  }
-
   if (!menuUpdatedWsHandler) {
     menuUpdatedWsHandler = async () => {
       if (menuStore.loading || !locationStore.selectedCity) return;
