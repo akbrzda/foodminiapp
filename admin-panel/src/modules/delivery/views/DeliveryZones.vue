@@ -792,7 +792,7 @@ const initMap = () => {
   map = L.map("map", {
     zoomControl: false,
     attributionControl: false,
-  }).setView(center, 13);
+  }).setView(center, 12);
   tileLayer = getTileLayer({ maxZoom: 20 }).addTo(map);
   if (selectedBranch) {
     const branchIcon = createMarkerIcon("pin", "primary", 18);
@@ -939,7 +939,6 @@ const saveDeliveryZonesContext = () => {
   if (map) {
     const center = map.getCenter();
     additionalData.mapCenter = { lat: center.lat, lng: center.lng };
-    additionalData.mapZoom = map.getZoom();
   }
   saveContext({ cityId: cityId.value }, additionalData);
 };
@@ -1383,8 +1382,8 @@ onMounted(async () => {
   await nextTick();
   initMap();
 
-  if (context?.mapCenter && Number.isFinite(Number(context.mapZoom)) && map) {
-    map.setView([context.mapCenter.lat, context.mapCenter.lng], Number(context.mapZoom));
+  if (context?.mapCenter && map) {
+    map.setView([context.mapCenter.lat, context.mapCenter.lng], 12);
     restoreScroll(context.scroll);
   }
 });
