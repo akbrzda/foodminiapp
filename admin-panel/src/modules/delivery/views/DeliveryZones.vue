@@ -429,6 +429,13 @@ let branchesRequestId = 0;
 let drawControlVisible = true;
 const modalTitle = computed(() => (editing.value ? "Редактировать полигон" : "Новый полигон"));
 const modalSubtitle = computed(() => (editing.value ? "Измените параметры полигона" : "Добавьте зону доставки"));
+const getManagerDefaultCityId = () => {
+  if (!isManager.value) return "";
+  const allowed = Array.isArray(authStore.cities) ? authStore.cities.map((id) => Number(id)).filter(Number.isFinite) : [];
+  if (!allowed.length) return "";
+  const city = referenceStore.cities.find((item) => allowed.includes(Number(item.id)));
+  return city ? String(city.id) : String(allowed[0]);
+};
 const ensureEditAccess = (message) => {
   if (!isManager.value) return true;
   showWarningNotification(message || "Недостаточно прав для выполнения действия");
@@ -1362,7 +1369,7 @@ onMounted(async () => {
     statusFilter.value = context.statusFilter || "all";
     leftTab.value = context.leftTab || "zones";
   } else {
-    cityId.value = initialCity;
+    cityId.value = initialCity || getManagerDefaultCityId();
     branchId.value = initialBranch;
   }
 
