@@ -5,7 +5,9 @@ const RETRY_DELAY_MS = 2000;
 
 export const createTelegramCommandBot = () => {
   const token = process.env.TELEGRAM_BOT_TOKEN;
-  const miniAppUrl = String(process.env.TELEGRAM_MINIAPP_URL || process.env.MINIAPP_URL || "").trim();
+  const miniAppUrl = String(process.env.TELEGRAM_MINIAPP_URL || process.env.MINIAPP_URL || "")
+    .trim()
+    .replace(/\/$/, "");
   const enabled = (process.env.TELEGRAM_COMMAND_BOT_ENABLED || "true").toLowerCase() !== "false";
 
   let running = false;
@@ -32,10 +34,26 @@ export const createTelegramCommandBot = () => {
     return result.result;
   };
 
+  const buildInlineButton = () => {
+    if (!miniAppUrl) return null;
+    return {
+      inline_keyboard: [
+        [
+          {
+            text: "Открыть приложение",
+            web_app: { url: miniAppUrl },
+          },
+        ],
+      ],
+    };
+  };
+
   const sendText = async (chatId, text) => {
+    const replyMarkup = buildInlineButton();
     await apiRequest("sendMessage", {
       chat_id: chatId,
       text,
+      ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
     });
   };
 
@@ -127,6 +145,8 @@ export const createTelegramCommandBot = () => {
 
     const me = await apiRequest("getMe");
     botName = me?.username || "";
+    // Для режима polling webhook должен быть отключен.
+    await apiRequest("deleteWebhook", { drop_pending_updates: false });
     running = true;
     loopPromise = pollingLoop();
     logger.system.info("Telegram command bot запущен", { botName });

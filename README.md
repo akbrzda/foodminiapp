@@ -275,7 +275,7 @@ node import.cjs --file=./menu-prices-export.csv --dry-run
 - Настройки заказов: минимальная сумма, время автоотмены, рабочие часы.
 - Настройки уведомлений: Telegram bot token, chat ID для уведомлений персонала.
 - Переменная окружения `TELEGRAM_MINIAPP_URL` для формирования кнопки перехода в Mini App из Telegram-уведомлений о статусе заказа.
-- Командный Telegram-бот backend работает через long polling (`getUpdates`, без webhook), поддерживает `/start`, `/help`, `/ping` и inline-кнопки.
+- Командный Telegram-бот backend работает через long polling (`getUpdates`, без webhook), поддерживает команду `/start` и показывает кнопку `Открыть приложение` в нижней клавиатуре Telegram (`reply keyboard web_app`).
 - Переменная окружения `TELEGRAM_COMMAND_BOT_ENABLED` управляет запуском командного бота (`true` по умолчанию).
 - Настройки доставки: тарифы по умолчанию, минимальная сумма для бесплатной доставки.
 - Динамическое обновление настроек без перезапуска сервера.
