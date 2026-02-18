@@ -707,13 +707,26 @@ export const createOrder = async (req, res, next) => {
 
     // Telegram уведомление
     try {
+      let branchMeta = null;
+      if (branch_id) {
+        const [branchRows] = await db.query(
+          `SELECT b.name AS branch_name, c.name AS city_name
+           FROM branches b
+           LEFT JOIN cities c ON c.id = b.city_id
+           WHERE b.id = ?
+           LIMIT 1`,
+          [branch_id],
+        );
+        branchMeta = branchRows?.[0] || null;
+      }
       await addTelegramNotification({
         type: "new_order",
         priority: 1,
         data: {
           order_number: orderNumber,
           order_type: order_type,
-          branch_name: branch_id ? (await db.query("SELECT name FROM branches WHERE id = ?", [branch_id]))[0]?.[0]?.name : null,
+          city_name: branchMeta?.city_name || null,
+          branch_name: branchMeta?.branch_name || null,
           delivery_street,
           delivery_house,
           delivery_apartment,

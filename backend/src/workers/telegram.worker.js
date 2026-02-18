@@ -9,6 +9,7 @@ function formatNewOrderMessage(orderData) {
   const {
     order_number,
     order_type,
+    city_name,
     branch_name,
     delivery_address,
     delivery_street,
@@ -22,13 +23,17 @@ function formatNewOrderMessage(orderData) {
   } = orderData;
   let message = `🔔 <b>Новый заказ #${order_number}</b>\n\n`;
   message += `📍 <b>Тип:</b> ${order_type === "delivery" ? "Доставка 🚚" : "Самовывоз 🏪"}\n`;
+  if (city_name) {
+    message += `🏙️ <b>Город:</b> ${city_name}\n`;
+  }
+  if (branch_name) {
+    message += `🏪 <b>Филиал:</b> ${branch_name}\n`;
+  }
   if (order_type === "delivery" && delivery_street) {
     message += `📫 <b>Адрес:</b> ${delivery_street}, д. ${delivery_house}`;
     if (delivery_entrance) message += `, подъезд ${delivery_entrance}`;
     if (delivery_apartment) message += `, кв. ${delivery_apartment}`;
     message += "\n";
-  } else if (branch_name) {
-    message += `🏪 <b>Филиал:</b> ${branch_name}\n`;
   }
   message += `💳 <b>Оплата:</b> ${payment_method === "cash" ? "Наличные 💵" : "Карта 💳"}\n`;
   message += `💰 <b>Сумма:</b> ${total}₽\n\n`;
