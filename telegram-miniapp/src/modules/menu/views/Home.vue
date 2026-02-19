@@ -188,17 +188,16 @@
               <div v-if="selectedRelease.description" class="release-description">{{ selectedRelease.description }}</div>
 
               <div class="release-section-title">Изменения</div>
-              <div v-if="selectedRelease.items?.length" class="release-items">
-                <div v-for="item in selectedRelease.items" :key="item.id" class="release-item">
+              <div v-if="clientFacingItems.length" class="release-items">
+                <div v-for="item in clientFacingItems" :key="item.id" class="release-item">
                   <div class="release-item-top">
                     <span class="release-item-type">{{ getItemTypeLabel(item.item_type) }}</span>
-                    <span class="release-item-module">{{ item.module }}</span>
                   </div>
                   <div class="release-item-title">{{ item.title }}</div>
                   <div v-if="item.description" class="release-item-description">{{ item.description }}</div>
                 </div>
               </div>
-              <div v-else class="release-empty">Пункты релиза не заполнены</div>
+              <div v-else class="release-empty">Нет изменений</div>
             </div>
           </div>
         </div>
@@ -274,6 +273,10 @@ const actionButtonText = computed(() => {
     return locationStore.selectedBranch ? truncateText(locationStore.selectedBranch.name, 22) : "Выбрать филиал";
   }
   return "Укажите адрес";
+});
+const clientFacingItems = computed(() => {
+  if (!selectedRelease.value?.items) return [];
+  return selectedRelease.value.items.filter((item) => item.module === "telegram-miniapp");
 });
 onMounted(async () => {
   resolveDeliveryType();
@@ -1071,8 +1074,7 @@ function closeReleaseDialog() {
   gap: 6px;
   align-items: center;
 }
-.release-item-type,
-.release-item-module {
+.release-item-type {
   font-size: 11px;
   border-radius: 9999px;
   padding: 2px 8px;
