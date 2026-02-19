@@ -1,17 +1,43 @@
 <template>
-  <div class="min-h-screen min-w-[1280px] bg-background text-foreground">
+  <div class="flex min-h-screen flex-col bg-background text-foreground">
     <!-- Шапка страницы -->
     <ShiftHeader
       v-model:theme="themeValue"
       v-model:selected-branch-id="selectedBranchId"
       :branch-options="branchOptions"
+      :shift-meta="shiftMeta"
+      :active-orders-count="activeOrders.length"
+      :delivering-count="deliveringCount"
+      :total-orders-count="orders.length"
       @open-admin-panel="openAdminPanel"
     />
 
-    <div class="flex h-[calc(100vh-72px)]">
+    <div class="border-b border-border bg-background/90 px-3 py-2 backdrop-blur lg:hidden">
+      <div class="grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          class="rounded-md border px-3 py-2 text-sm font-medium transition-colors"
+          :class="mobilePane === 'orders' ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground'"
+          @click="mobilePane = 'orders'"
+        >
+          Заказы
+        </button>
+        <button
+          type="button"
+          class="rounded-md border px-3 py-2 text-sm font-medium transition-colors"
+          :class="mobilePane === 'map' ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground'"
+          @click="mobilePane = 'map'"
+        >
+          Карта
+        </button>
+      </div>
+    </div>
+
+    <div class="flex min-h-0 flex-1 flex-col lg:flex-row">
       <!-- Список заказов -->
       <OrdersList
         ref="ordersListRef"
+        v-show="mobilePane === 'orders' || !isMobileViewport"
         v-model:active-tab="activeTab"
         v-model:order-type-filter="orderTypeFilter"
         v-model:search-query="searchQuery"
@@ -28,7 +54,13 @@
       />
 
       <!-- Карта -->
-      <OrderMap ref="orderMapRef" :polygons-visible="polygonsVisible" @toggle-polygons="togglePolygons" @center-on-branch="centerOnBranch" />
+      <OrderMap
+        v-show="mobilePane === 'map' || !isMobileViewport"
+        ref="orderMapRef"
+        :polygons-visible="polygonsVisible"
+        @toggle-polygons="togglePolygons"
+        @center-on-branch="centerOnBranch"
+      />
     </div>
 
     <!-- Диалог выбора филиала -->
@@ -92,12 +124,15 @@ const debouncedSearch = ref("");
 const expandedOrderId = ref(null);
 const selectedBranchId = ref("");
 const shiftMeta = ref(null);
+const mobilePane = ref("orders");
+const isMobileViewport = ref(false);
 const branchDialogOpen = ref(false);
 const storedBranchId = ref("");
 const cancelDialog = ref({ open: false, order: null, loading: false });
 let searchTimer = null;
 let shiftTimer = null;
 let wsReloadTimer = null;
+let viewportResizeHandler = null;
 
 // Состояние карты
 const orderRefs = new Map();
@@ -198,6 +233,11 @@ const closeBranchDialog = () => {
   }
 };
 
+const updateViewportState = () => {
+  if (typeof window === "undefined") return;
+  isMobileViewport.value = window.matchMedia("(max-width: 1023px)").matches;
+};
+
 const openAdminPanel = () => {
   window.open("/dashboard", "_blank");
 };
@@ -251,6 +291,9 @@ const toggleOrder = (order) => {
   ensureOrderDetails(order).then(() => {
     expandedOrderId.value = order.id;
     showOrderOnMap(order);
+    if (isMobileViewport.value && order.order_type === "delivery") {
+      mobilePane.value = "map";
+    }
   });
 };
 
@@ -399,6 +442,9 @@ const centerOnBranch = () => {
   const lat = branch?.latitude || city?.latitude;
   const lng = branch?.longitude || city?.longitude;
   if (!lat || !lng) return;
+  if (isMobileViewport.value) {
+    mobilePane.value = "map";
+  }
   mapInstance.setView([lat, lng], 12, { animate: true });
 };
 
@@ -666,6 +712,9 @@ watch(
       localStorage.setItem("shift_selected_branch_id", String(next));
       await loadOrders();
       initMap();
+      if (isMobileViewport.value) {
+        mobilePane.value = "orders";
+      }
       renderBranchMarker();
       await loadPolygons();
       ordersStore.joinRoom(`branch-${next}-orders`);
@@ -686,9 +735,32 @@ watch(
     handleOrderEvent(payload);
   },
 );
+watch(
+  () => mobilePane.value,
+  (pane) => {
+    if (pane !== "map") return;
+    nextTick(() => {
+      mapInstance?.invalidateSize?.();
+    });
+  },
+);
+watch(
+  () => isMobileViewport.value,
+  (isMobile) => {
+    if (!isMobile) {
+      mobilePane.value = "orders";
+    }
+    nextTick(() => {
+      mapInstance?.invalidateSize?.();
+    });
+  },
+);
 
 // Lifecycle хуки
 onMounted(async () => {
+  updateViewportState();
+  viewportResizeHandler = () => updateViewportState();
+  window.addEventListener("resize", viewportResizeHandler);
   readStoredBranch();
   await referenceStore.fetchCitiesAndBranches();
   restoreBranchSelection();
@@ -710,6 +782,10 @@ watch(
 );
 
 onBeforeUnmount(() => {
+  if (viewportResizeHandler) {
+    window.removeEventListener("resize", viewportResizeHandler);
+    viewportResizeHandler = null;
+  }
   if (shiftTimer) {
     clearTimeout(shiftTimer);
   }

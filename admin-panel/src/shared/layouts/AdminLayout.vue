@@ -1,8 +1,8 @@
 <template>
   <div class="min-h-screen bg-background text-foreground">
-    <div class="flex min-h-screen">
-      <SidebarNav class="hidden lg:flex" :is-open="true" :is-collapsed="sidebarCollapsed" />
-      <div class="flex min-h-screen flex-1 flex-col">
+    <div class="flex min-h-screen overflow-x-clip">
+      <SidebarNav v-if="!isMobile" class="flex" :is-open="true" :is-collapsed="sidebarCollapsed" />
+      <div class="flex min-h-screen min-w-0 flex-1 flex-col">
         <TopBar :title="pageTitle" :subtitle="pageSubtitle" @toggle-menu="handleSidebarToggle" />
         <main :class="mainClasses">
           <RouterView />
@@ -10,11 +10,11 @@
       </div>
     </div>
     <Transition name="fade">
-      <div v-if="mobileMenuOpen" class="fixed inset-0 z-40 bg-black/40" @click="mobileMenuOpen = false"></div>
+      <div v-if="isMobile && mobileMenuOpen" class="fixed inset-0 z-40 bg-black/40" @click="mobileMenuOpen = false"></div>
     </Transition>
     <Transition name="slide">
       <SidebarNav
-        v-if="mobileMenuOpen"
+        v-if="isMobile && mobileMenuOpen"
         class="lg:hidden"
         :is-open="mobileMenuOpen"
         :is-collapsed="false"
@@ -36,10 +36,12 @@ const authStore = useAuthStore();
 const ordersStore = useOrdersStore();
 const mobileMenuOpen = ref(false);
 const sidebarCollapsed = ref(false);
-const isMobile = ref(false);
+const isMobile = ref(window.innerWidth < 1024);
 const pageTitle = computed(() => route.meta.title || "Админ-панель");
 const pageSubtitle = computed(() => route.meta.subtitle || "Операционная панель");
-const mainClasses = computed(() => (route.meta.fullBleed ? "flex-1" : "flex-1 px-4 pb-12 pt-6 px-6"));
+const mainClasses = computed(() =>
+  route.meta.fullBleed ? "flex-1 min-w-0" : "flex-1 min-w-0 px-3 pb-8 pt-4 sm:px-4 sm:pt-5 lg:px-6 lg:pb-12 lg:pt-6",
+);
 const syncDocumentTitle = () => {
   const baseTitle = pageTitle.value || "Админ-панель";
   const count = ordersStore.newOrdersCount;
@@ -72,7 +74,22 @@ onMounted(() => {
 });
 onBeforeUnmount(() => {
   window.removeEventListener("resize", updateIsMobile);
+  document.body.style.overflow = "";
   ordersStore.disconnectWebSocket();
+});
+watch(mobileMenuOpen, (isOpen) => {
+  document.body.style.overflow = isOpen ? "hidden" : "";
+});
+watch(
+  () => route.fullPath,
+  () => {
+    mobileMenuOpen.value = false;
+  },
+);
+watch(isMobile, (mobile) => {
+  if (!mobile) {
+    mobileMenuOpen.value = false;
+  }
 });
 watch(
   () => authStore.token,

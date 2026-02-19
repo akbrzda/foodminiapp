@@ -44,78 +44,123 @@
     </Card>
     <Card>
       <CardContent class="!p-0">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Позиция</TableHead>
-              <TableHead>Категории</TableHead>
-              <TableHead>Цена</TableHead>
-              <TableHead>Статус</TableHead>
-              <TableHead class="text-right">Действия</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            <template v-if="isLoading">
-              <TableRow v-for="index in 6" :key="`loading-${index}`">
-                <TableCell>
-                  <div class="flex items-center gap-3">
-                    <Skeleton class="h-12 w-12 rounded-lg" />
-                    <div class="space-y-2">
-                      <Skeleton class="h-4 w-40" />
-                      <Skeleton class="h-3 w-56" />
-                    </div>
-                  </div>
-                </TableCell>
-                <TableCell><Skeleton class="h-6 w-32" /></TableCell>
-                <TableCell><Skeleton class="h-4 w-20" /></TableCell>
-                <TableCell><Skeleton class="h-6 w-20" /></TableCell>
-                <TableCell class="text-right"><Skeleton class="ml-auto h-8 w-20" /></TableCell>
+        <div class="space-y-3 p-3 md:hidden">
+          <template v-if="isLoading">
+            <div v-for="index in 6" :key="`mobile-loading-${index}`" class="rounded-xl border border-border p-3 space-y-3">
+              <Skeleton class="h-4 w-36" />
+              <Skeleton class="h-3 w-44" />
+              <Skeleton class="h-5 w-20" />
+            </div>
+          </template>
+          <template v-else>
+            <div v-for="item in paginatedItems" :key="`mobile-${item.id}`" class="rounded-xl border border-border bg-background p-3">
+              <div class="flex items-start gap-3">
+                <img v-if="item.image_url" :src="normalizeImageUrl(item.image_url)" :alt="item.name" class="h-12 w-12 rounded-lg object-cover" />
+                <div class="min-w-0 flex-1">
+                  <div class="font-medium text-foreground">{{ item.name }}</div>
+                  <div class="text-xs text-muted-foreground">{{ item.description || "—" }}</div>
+                </div>
+              </div>
+              <div class="mt-2 flex flex-wrap gap-1">
+                <Badge v-for="cat in item.categories" :key="`mobile-cat-${item.id}-${cat.id}`" variant="secondary" class="text-xs">{{ cat.name }}</Badge>
+              </div>
+              <div class="mt-2 flex items-center justify-between">
+                <div class="text-sm font-medium text-foreground">
+                  {{ item.base_price !== null && item.base_price !== undefined ? `от ${formatCurrency(item.base_price)}` : "—" }}
+                </div>
+                <Badge
+                  variant="secondary"
+                  :class="item.is_active ? 'bg-emerald-100 text-emerald-700 border-transparent' : 'bg-muted text-muted-foreground border-transparent'"
+                >
+                  {{ item.is_active ? "Активна" : "Скрыта" }}
+                </Badge>
+              </div>
+              <div class="mt-3 flex justify-end gap-2">
+                <Button variant="ghost" size="icon" @click="editItem(item)">
+                  <Pencil :size="16" />
+                </Button>
+                <Button variant="ghost" size="icon" @click="deleteItem(item)">
+                  <Trash2 :size="16" class="text-red-600" />
+                </Button>
+              </div>
+            </div>
+            <div v-if="filteredItems.length === 0" class="py-8 text-center text-sm text-muted-foreground">По заданным фильтрам ничего не найдено</div>
+          </template>
+        </div>
+        <div class="hidden md:block">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Позиция</TableHead>
+                <TableHead>Категории</TableHead>
+                <TableHead>Цена</TableHead>
+                <TableHead>Статус</TableHead>
+                <TableHead class="text-right">Действия</TableHead>
               </TableRow>
-            </template>
-            <template v-else>
-              <TableRow v-for="item in paginatedItems" :key="item.id">
-                <TableCell>
-                  <div class="flex items-center gap-3">
-                    <img v-if="item.image_url" :src="normalizeImageUrl(item.image_url)" :alt="item.name" class="h-12 w-12 rounded-lg object-cover" />
-                    <div>
-                      <div class="font-medium text-foreground">{{ item.name }}</div>
-                      <div class="text-xs text-muted-foreground w-120">{{ item.description || "—" }}</div>
+            </TableHeader>
+            <TableBody>
+              <template v-if="isLoading">
+                <TableRow v-for="index in 6" :key="`loading-${index}`">
+                  <TableCell>
+                    <div class="flex items-center gap-3">
+                      <Skeleton class="h-12 w-12 rounded-lg" />
+                      <div class="space-y-2">
+                        <Skeleton class="h-4 w-40" />
+                        <Skeleton class="h-3 w-56" />
+                      </div>
                     </div>
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <div class="flex flex-wrap gap-1">
-                    <Badge v-for="cat in item.categories" :key="cat.id" variant="secondary" class="text-xs">{{ cat.name }}</Badge>
-                  </div>
-                </TableCell>
-                <TableCell>{{ item.base_price !== null && item.base_price !== undefined ? `от ${formatCurrency(item.base_price)}` : "—" }}</TableCell>
-                <TableCell>
-                  <Badge
-                    variant="secondary"
-                    :class="
-                      item.is_active ? 'bg-emerald-100 text-emerald-700 border-transparent' : 'bg-muted text-muted-foreground border-transparent'
-                    "
-                  >
-                    {{ item.is_active ? "Активна" : "Скрыта" }}
-                  </Badge>
-                </TableCell>
-                <TableCell class="text-right">
-                  <div class="flex justify-end gap-2">
-                    <Button variant="ghost" size="icon" @click="editItem(item)">
-                      <Pencil :size="16" />
-                    </Button>
-                    <Button variant="ghost" size="icon" @click="deleteItem(item)">
-                      <Trash2 :size="16" class="text-red-600" />
-                    </Button>
-                  </div>
-                </TableCell>
+                  </TableCell>
+                  <TableCell><Skeleton class="h-6 w-32" /></TableCell>
+                  <TableCell><Skeleton class="h-4 w-20" /></TableCell>
+                  <TableCell><Skeleton class="h-6 w-20" /></TableCell>
+                  <TableCell class="text-right"><Skeleton class="ml-auto h-8 w-20" /></TableCell>
+                </TableRow>
+              </template>
+              <template v-else>
+                <TableRow v-for="item in paginatedItems" :key="item.id">
+                  <TableCell>
+                    <div class="flex items-center gap-3">
+                      <img v-if="item.image_url" :src="normalizeImageUrl(item.image_url)" :alt="item.name" class="h-12 w-12 rounded-lg object-cover" />
+                      <div>
+                        <div class="font-medium text-foreground">{{ item.name }}</div>
+                        <div class="text-xs text-muted-foreground">{{ item.description || "—" }}</div>
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div class="flex flex-wrap gap-1">
+                      <Badge v-for="cat in item.categories" :key="cat.id" variant="secondary" class="text-xs">{{ cat.name }}</Badge>
+                    </div>
+                  </TableCell>
+                  <TableCell>{{ item.base_price !== null && item.base_price !== undefined ? `от ${formatCurrency(item.base_price)}` : "—" }}</TableCell>
+                  <TableCell>
+                    <Badge
+                      variant="secondary"
+                      :class="
+                        item.is_active ? 'bg-emerald-100 text-emerald-700 border-transparent' : 'bg-muted text-muted-foreground border-transparent'
+                      "
+                    >
+                      {{ item.is_active ? "Активна" : "Скрыта" }}
+                    </Badge>
+                  </TableCell>
+                  <TableCell class="text-right">
+                    <div class="flex justify-end gap-2">
+                      <Button variant="ghost" size="icon" @click="editItem(item)">
+                        <Pencil :size="16" />
+                      </Button>
+                      <Button variant="ghost" size="icon" @click="deleteItem(item)">
+                        <Trash2 :size="16" class="text-red-600" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              </template>
+              <TableRow v-if="!isLoading && filteredItems.length === 0">
+                <TableCell colspan="5" class="py-8 text-center text-sm text-muted-foreground">По заданным фильтрам ничего не найдено</TableCell>
               </TableRow>
-            </template>
-            <TableRow v-if="!isLoading && filteredItems.length === 0">
-              <TableCell colspan="5" class="py-8 text-center text-sm text-muted-foreground">По заданным фильтрам ничего не найдено</TableCell>
-            </TableRow>
-          </TableBody>
-        </Table>
+            </TableBody>
+          </Table>
+        </div>
       </CardContent>
     </Card>
     <TablePagination

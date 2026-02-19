@@ -7,8 +7,8 @@
     </Card>
     <Card>
       <CardContent>
-        <div class="flex flex-wrap items-end gap-3">
-          <div class="min-w-[220px] flex-1">
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-12">
+          <div class="min-w-0 sm:col-span-2 xl:col-span-4">
             <Field>
               <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Поиск</FieldLabel>
               <FieldContent>
@@ -19,7 +19,7 @@
               </FieldContent>
             </Field>
           </div>
-          <div class="min-w-[160px]">
+          <div class="min-w-0 xl:col-span-2">
             <Field>
               <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Город</FieldLabel>
               <FieldContent>
@@ -35,7 +35,7 @@
               </FieldContent>
             </Field>
           </div>
-          <div class="min-w-[160px]">
+          <div class="min-w-0 xl:col-span-2">
             <Field>
               <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Статус</FieldLabel>
               <FieldContent>
@@ -57,7 +57,7 @@
               </FieldContent>
             </Field>
           </div>
-          <div class="min-w-[160px]">
+          <div class="min-w-0 xl:col-span-2">
             <Field>
               <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Тип</FieldLabel>
               <FieldContent>
@@ -74,7 +74,7 @@
               </FieldContent>
             </Field>
           </div>
-          <div class="min-w-[220px]">
+          <div class="min-w-0 sm:col-span-2 xl:col-span-2">
             <Field>
               <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Период</FieldLabel>
               <FieldContent>
@@ -88,11 +88,11 @@
                       <CalendarIcon class="text-muted-foreground" :size="16" />
                     </button>
                   </PopoverTrigger>
-                  <PopoverContent class="w-auto p-0" align="start">
+                  <PopoverContent class="w-[calc(100vw-2rem)] max-w-md p-0 sm:w-auto" align="start">
                     <div class="space-y-3 p-3">
                       <Calendar
                         :model-value="calendarRange"
-                        :number-of-months="2"
+                        :number-of-months="calendarMonths"
                         :is-date-disabled="isFutureDateDisabled"
                         locale="ru-RU"
                         multiple
@@ -108,7 +108,7 @@
               </FieldContent>
             </Field>
           </div>
-          <div class="ml-auto flex flex-wrap items-center gap-2">
+          <div class="flex flex-wrap items-center gap-2 sm:col-span-2 xl:col-span-12 xl:justify-end">
             <Button variant="outline" @click="resetFilters">
               <RotateCcw :size="16" />
               Сбросить
@@ -120,72 +120,126 @@
     </Card>
     <Card>
       <CardContent class="!p-0">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Заказ</TableHead>
-              <TableHead>Город</TableHead>
-              <TableHead>Клиент</TableHead>
-              <TableHead>Тип</TableHead>
-              <TableHead>Статус</TableHead>
-              <TableHead class="text-right">Сумма</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            <template v-if="isLoading">
-              <TableRow v-for="index in 8" :key="`loading-${index}`">
-                <TableCell><Skeleton class="h-4 w-28" /></TableCell>
-                <TableCell><Skeleton class="h-4 w-24" /></TableCell>
-                <TableCell><Skeleton class="h-4 w-36" /></TableCell>
-                <TableCell><Skeleton class="h-6 w-20" /></TableCell>
-                <TableCell><Skeleton class="h-6 w-24" /></TableCell>
-                <TableCell class="text-right"><Skeleton class="ml-auto h-4 w-20" /></TableCell>
-              </TableRow>
-            </template>
-            <template v-else>
-              <TableRow
-                v-for="order in paginatedOrders"
-                :key="order.id"
-                class="cursor-pointer"
-                :class="orderRowClass(order)"
-                @click="selectOrder(order)"
-              >
-                <TableCell>
-                  <div class="font-medium text-foreground">#{{ order.order_number }}</div>
+        <div class="space-y-3 p-3 md:hidden">
+          <template v-if="isLoading">
+            <div v-for="index in 6" :key="`mobile-loading-${index}`" class="rounded-xl border border-border p-3 space-y-3">
+              <div class="flex items-center justify-between">
+                <Skeleton class="h-4 w-24" />
+                <Skeleton class="h-5 w-20" />
+              </div>
+              <Skeleton class="h-3 w-36" />
+              <Skeleton class="h-3 w-40" />
+              <div class="flex items-center justify-between">
+                <Skeleton class="h-6 w-24" />
+                <Skeleton class="h-4 w-20" />
+              </div>
+            </div>
+          </template>
+          <template v-else>
+            <button
+              v-for="order in paginatedOrders"
+              :key="`mobile-${order.id}`"
+              type="button"
+              class="w-full rounded-xl border border-border bg-background p-3 text-left transition hover:bg-accent/40"
+              :class="orderRowClass(order)"
+              @click="selectOrder(order)"
+            >
+              <div class="flex items-start justify-between gap-2">
+                <div>
+                  <div class="font-semibold text-foreground">#{{ order.order_number }}</div>
                   <div class="text-xs text-muted-foreground">{{ formatDateTime(order.created_at) }}</div>
-                </TableCell>
-                <TableCell>{{ order.city_name || "—" }}</TableCell>
-                <TableCell>
-                  <a
-                    v-if="normalizePhone(order.user_phone)"
-                    class="text-foreground hover:underline"
-                    :href="`tel:${normalizePhone(order.user_phone)}`"
-                    @click.stop
-                  >
-                    {{ formatPhone(order.user_phone) }}
-                  </a>
-                  <div v-else>—</div>
-                  <div class="text-xs text-muted-foreground">{{ order.branch_name || "" }}</div>
-                </TableCell>
-                <TableCell>
-                  <Badge variant="outline">{{ order.order_type === "delivery" ? "Доставка" : "Самовывоз" }}</Badge>
-                </TableCell>
-                <TableCell>
-                  <Badge variant="secondary" :class="getStatusBadge(order.status).class" :style="getStatusBadge(order.status).style">
-                    {{ getStatusBadge(order.status).label }}
-                  </Badge>
-                </TableCell>
-                <TableCell class="text-right">
+                </div>
+                <Badge variant="secondary" :class="getStatusBadge(order.status).class" :style="getStatusBadge(order.status).style">
+                  {{ getStatusBadge(order.status).label }}
+                </Badge>
+              </div>
+              <div class="mt-2 text-sm text-foreground">{{ order.city_name || "—" }}</div>
+              <div class="mt-1 text-sm">
+                <a v-if="normalizePhone(order.user_phone)" class="hover:underline" :href="`tel:${normalizePhone(order.user_phone)}`" @click.stop>
+                  {{ formatPhone(order.user_phone) }}
+                </a>
+                <span v-else>—</span>
+              </div>
+              <div class="mt-1 text-xs text-muted-foreground">{{ order.branch_name || "—" }}</div>
+              <div class="mt-3 flex items-center justify-between">
+                <Badge variant="outline">{{ order.order_type === "delivery" ? "Доставка" : "Самовывоз" }}</Badge>
+                <div class="text-right">
                   <div class="font-semibold text-foreground">{{ formatCurrency(order.total) }}</div>
                   <div class="text-xs uppercase text-muted-foreground">{{ order.payment_method }}</div>
-                </TableCell>
+                </div>
+              </div>
+            </button>
+            <div v-if="orders.length === 0" class="py-8 text-center text-sm text-muted-foreground">Заказы не найдены</div>
+          </template>
+        </div>
+        <div class="hidden md:block">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Заказ</TableHead>
+                <TableHead>Город</TableHead>
+                <TableHead>Клиент</TableHead>
+                <TableHead>Тип</TableHead>
+                <TableHead>Статус</TableHead>
+                <TableHead class="text-right">Сумма</TableHead>
               </TableRow>
-              <TableRow v-if="orders.length === 0">
-                <TableCell colspan="6" class="py-8 text-center text-sm text-muted-foreground">Заказы не найдены</TableCell>
-              </TableRow>
-            </template>
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              <template v-if="isLoading">
+                <TableRow v-for="index in 8" :key="`loading-${index}`">
+                  <TableCell><Skeleton class="h-4 w-28" /></TableCell>
+                  <TableCell><Skeleton class="h-4 w-24" /></TableCell>
+                  <TableCell><Skeleton class="h-4 w-36" /></TableCell>
+                  <TableCell><Skeleton class="h-6 w-20" /></TableCell>
+                  <TableCell><Skeleton class="h-6 w-24" /></TableCell>
+                  <TableCell class="text-right"><Skeleton class="ml-auto h-4 w-20" /></TableCell>
+                </TableRow>
+              </template>
+              <template v-else>
+                <TableRow
+                  v-for="order in paginatedOrders"
+                  :key="order.id"
+                  class="cursor-pointer"
+                  :class="orderRowClass(order)"
+                  @click="selectOrder(order)"
+                >
+                  <TableCell>
+                    <div class="font-medium text-foreground">#{{ order.order_number }}</div>
+                    <div class="text-xs text-muted-foreground">{{ formatDateTime(order.created_at) }}</div>
+                  </TableCell>
+                  <TableCell>{{ order.city_name || "—" }}</TableCell>
+                  <TableCell>
+                    <a
+                      v-if="normalizePhone(order.user_phone)"
+                      class="text-foreground hover:underline"
+                      :href="`tel:${normalizePhone(order.user_phone)}`"
+                      @click.stop
+                    >
+                      {{ formatPhone(order.user_phone) }}
+                    </a>
+                    <div v-else>—</div>
+                    <div class="text-xs text-muted-foreground">{{ order.branch_name || "" }}</div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline">{{ order.order_type === "delivery" ? "Доставка" : "Самовывоз" }}</Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="secondary" :class="getStatusBadge(order.status).class" :style="getStatusBadge(order.status).style">
+                      {{ getStatusBadge(order.status).label }}
+                    </Badge>
+                  </TableCell>
+                  <TableCell class="text-right">
+                    <div class="font-semibold text-foreground">{{ formatCurrency(order.total) }}</div>
+                    <div class="text-xs uppercase text-muted-foreground">{{ order.payment_method }}</div>
+                  </TableCell>
+                </TableRow>
+                <TableRow v-if="orders.length === 0">
+                  <TableCell colspan="6" class="py-8 text-center text-sm text-muted-foreground">Заказы не найдены</TableCell>
+                </TableRow>
+              </template>
+            </TableBody>
+          </Table>
+        </div>
       </CardContent>
     </Card>
     <TablePagination :total="orders.length" :page="page" :page-size="pageSize" @update:page="page = $event" @update:page-size="onPageSizeChange" />
@@ -193,7 +247,7 @@
 </template>
 <script setup>
 import { devError } from "@/shared/utils/logger";
-import { computed, onMounted, reactive, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { Calendar as CalendarIcon, RotateCcw, Search } from "lucide-vue-next";
 import { DateFormatter, getLocalTimeZone, parseDate, today } from "@internationalized/date";
@@ -235,6 +289,7 @@ const pageSize = ref(20);
 const recentOrderIds = ref(new Set());
 const loadTimer = ref(null);
 const isRangeOpen = ref(false);
+const calendarMonths = ref(window.innerWidth < 1024 ? 1 : 2);
 const filters = reactive({
   city_id: "",
   status: "",
@@ -292,6 +347,9 @@ const isFutureDateDisabled = (date) => date.compare(today(timeZone)) > 0;
 const clearDateRange = () => {
   filters.date_from = "";
   filters.date_to = "";
+};
+const updateCalendarMonths = () => {
+  calendarMonths.value = window.innerWidth < 1024 ? 1 : 2;
 };
 const paginatedOrders = computed(() => {
   const start = (page.value - 1) * pageSize.value;
@@ -370,6 +428,8 @@ const getStatusBadge = (status) => {
   };
 };
 onMounted(async () => {
+  updateCalendarMonths();
+  window.addEventListener("resize", updateCalendarMonths);
   try {
     await referenceStore.loadCities();
 
@@ -398,6 +458,12 @@ onMounted(async () => {
   } catch (error) {
     devError("Ошибка загрузки заказов:", error);
     showErrorNotification("Ошибка загрузки заказов");
+  }
+});
+onBeforeUnmount(() => {
+  window.removeEventListener("resize", updateCalendarMonths);
+  if (loadTimer.value) {
+    clearTimeout(loadTimer.value);
   }
 });
 watch(

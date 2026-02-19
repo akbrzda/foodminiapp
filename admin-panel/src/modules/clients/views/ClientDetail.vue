@@ -6,10 +6,7 @@
           <Trash2 :size="16" />
           {{ deletingClient ? "Удаление..." : "Удалить клиента" }}
         </Button>
-        <Button variant="outline" size="sm" @click="goBack">
-          <ArrowLeft :size="16" />
-          Назад к клиентам
-        </Button>
+        <BackButton label="Назад к клиентам" @click="goBack" />
       </template>
     </PageHeader>
     <Card>
@@ -241,7 +238,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { ArrowLeft, Save, Trash2 } from "lucide-vue-next";
+import { Save, Trash2 } from "lucide-vue-next";
 import api from "@/shared/api/client.js";
 import { devError } from "@/shared/utils/logger";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
@@ -268,6 +265,7 @@ import { Field, FieldContent, FieldGroup, FieldLabel } from "@/shared/components
 import Progress from "@/shared/components/ui/progress/Progress.vue";
 import Skeleton from "@/shared/components/ui/skeleton/Skeleton.vue";
 import Spinner from "@/shared/components/ui/spinner/Spinner.vue";
+import BackButton from "@/shared/components/BackButton.vue";
 const route = useRoute();
 const router = useRouter();
 const { showErrorNotification, showSuccessNotification } = useNotifications();

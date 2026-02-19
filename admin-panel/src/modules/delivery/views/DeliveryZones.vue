@@ -1,8 +1,36 @@
 <template>
   <div class="relative h-full min-h-[calc(100vh-80px)] bg-background">
     <div id="map" class="absolute inset-0 z-0"></div>
+    <input
+      ref="geoJsonInputRef"
+      type="file"
+      accept=".geojson,application/geo+json,.json,application/json"
+      class="hidden"
+      @change="handleGeoJsonFileChange"
+    />
+    <div class="absolute left-2 right-2 top-2 z-10 md:hidden">
+      <div class="space-y-2 rounded-xl border border-border bg-background/95 p-2 shadow-lg backdrop-blur">
+        <div class="grid grid-cols-2 gap-2">
+          <Button variant="secondary" size="sm" class="w-full" @click="showMobileFilters = true">
+            <SlidersHorizontal :size="16" />
+            Фильтры
+          </Button>
+          <Button variant="secondary" size="sm" class="w-full" @click="showMobilePolygonList = true">
+            <List :size="16" />
+            Список зон
+          </Button>
+        </div>
+        <div class="text-[11px] text-muted-foreground">
+          <span class="font-medium text-foreground">{{ activeCityName }}</span>
+          <span> · </span>
+          <span>{{ activeBranchName }}</span>
+          <span> · </span>
+          <span>{{ statusFilterLabel }}</span>
+        </div>
+      </div>
+    </div>
     <div
-      class="absolute left-4 top-4 z-10 w-[320px] max-w-[calc(100%-2rem)] rounded-xl border border-border bg-background/95 shadow-xl backdrop-blur"
+      class="absolute left-4 top-4 z-10 hidden w-[360px] max-w-[calc(100%-2rem)] rounded-xl border border-border bg-background/95 shadow-xl backdrop-blur md:block"
     >
       <div class="p-4 space-y-4">
         <div class="grid grid-cols-2 gap-2">
@@ -110,18 +138,60 @@
                   Экспорт
                 </Button>
               </div>
-              <input
-                ref="geoJsonInputRef"
-                type="file"
-                accept=".geojson,application/geo+json,.json,application/json"
-                class="hidden"
-                @change="handleGeoJsonFileChange"
-              />
             </div>
             <p v-else class="text-center text-xs text-muted-foreground">Редактирование доступно только администратору и CEO</p>
           </div>
           <div v-if="filteredPolygons.length > 0" class="pt-2 text-xs text-muted-foreground text-center">
             {{ filteredPolygons.length }} {{ getPluralForm(filteredPolygons.length) }}
+          </div>
+          <div class="space-y-2 border-t border-border pt-3">
+            <div class="flex items-center justify-between">
+              <p class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Список зон</p>
+              <button
+                v-if="selectedPolygons.length"
+                type="button"
+                class="text-xs text-primary transition hover:underline"
+                @click="selectedPolygons = []"
+              >
+                Сбросить выбор
+              </button>
+            </div>
+            <div v-if="!filteredPolygons.length" class="rounded-lg border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">
+              {{ listEmptyStateLabel }}
+            </div>
+            <div v-else class="max-h-60 space-y-2 overflow-y-auto pr-1">
+              <div
+                v-for="polygon in filteredPolygons"
+                :key="polygon.id"
+                class="rounded-lg border border-border bg-card/50 px-3 py-2 transition hover:bg-muted/40"
+              >
+                <div class="flex items-start gap-2">
+                  <input
+                    type="checkbox"
+                    class="mt-0.5 h-4 w-4 rounded border-border text-primary focus:ring-primary"
+                    :checked="selectedPolygons.includes(polygon.id)"
+                    :disabled="isManager"
+                    @change="togglePolygonSelection(polygon.id)"
+                  />
+                  <button type="button" class="min-w-0 flex-1 text-left" @click="focusPolygonOnMap(polygon, true)">
+                    <p class="truncate text-sm font-semibold text-foreground">{{ polygon.name || `Полигон #${polygon.id}` }}</p>
+                    <p class="truncate text-[11px] text-muted-foreground">{{ polygon.branch_name || "Без филиала" }}</p>
+                    <div class="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
+                      <span>{{ polygon.delivery_time || 30 }} мин</span>
+                      <span>·</span>
+                      <span>Тарифов: {{ Number(polygon.tariffs_count || 0) }}</span>
+                    </div>
+                  </button>
+                  <span class="rounded-full px-2 py-0.5 text-[10px] font-semibold" :class="getPolygonStatusClass(polygon)">
+                    {{ getPolygonStatusLabel(polygon) }}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div v-if="selectedPolygons.length && !isManager" class="grid grid-cols-2 gap-2 pt-1">
+              <Button size="sm" variant="outline" @click="bulkBlock">Блок. ({{ selectedPolygons.length }})</Button>
+              <Button size="sm" variant="outline" @click="bulkUnblock">Разблок.</Button>
+            </div>
           </div>
         </div>
         <div v-else class="space-y-2 text-sm text-muted-foreground">
@@ -129,6 +199,121 @@
         </div>
       </div>
     </div>
+    <Button
+      v-if="branchId && !isManager"
+      type="button"
+      size="sm"
+      class="absolute bottom-4 left-2 z-10 md:hidden"
+      @click="startDrawing"
+    >
+      <Plus :size="16" />
+      Добавить полигон
+    </Button>
+    <Dialog v-if="showMobileFilters" :open="showMobileFilters" @update:open="(value) => (showMobileFilters = value)">
+      <DialogContent class="w-full max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Фильтры зон доставки</DialogTitle>
+          <DialogDescription>Выберите город, филиал и статус отображения.</DialogDescription>
+        </DialogHeader>
+        <div class="space-y-3">
+          <Field>
+            <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Город</FieldLabel>
+            <FieldContent>
+              <Select v-model="cityId" @update:modelValue="onCityChange">
+                <SelectTrigger class="w-full">
+                  <SelectValue placeholder="Все города" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Все города</SelectItem>
+                  <SelectItem v-for="city in referenceStore.cities" :key="city.id" :value="city.id">
+                    {{ city.name }}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </FieldContent>
+          </Field>
+          <Field v-if="cityId">
+            <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Филиал</FieldLabel>
+            <FieldContent>
+              <Select v-model="branchId" @update:modelValue="onBranchChange">
+                <SelectTrigger class="w-full">
+                  <SelectValue placeholder="Все филиалы" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Все филиалы</SelectItem>
+                  <SelectItem v-for="branch in branches" :key="branch.id" :value="branch.id">
+                    {{ branch.name }}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </FieldContent>
+          </Field>
+          <Field>
+            <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Статус</FieldLabel>
+            <FieldContent>
+              <Select v-model="statusFilter" @update:modelValue="onFilterChange">
+                <SelectTrigger class="w-full">
+                  <SelectValue placeholder="Все полигоны" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Все полигоны</SelectItem>
+                  <SelectItem value="active">Активные</SelectItem>
+                  <SelectItem value="inactive">Неактивные</SelectItem>
+                  <SelectItem value="blocked">Заблокированные</SelectItem>
+                </SelectContent>
+              </Select>
+            </FieldContent>
+          </Field>
+          <div v-if="branchId && !isManager" class="grid grid-cols-2 gap-2 border-t border-border pt-3">
+            <Button variant="outline" size="sm" @click="triggerGeoJsonImport">
+              <Upload :size="16" />
+              Импорт
+            </Button>
+            <Button variant="outline" size="sm" :disabled="!polygons.length" @click="exportGeoJson">
+              <Download :size="16" />
+              Экспорт
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+    <Dialog
+      v-if="showMobilePolygonList"
+      :open="showMobilePolygonList"
+      @update:open="(value) => (showMobilePolygonList = value)"
+    >
+      <DialogContent class="w-full max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Зоны доставки</DialogTitle>
+          <DialogDescription>
+            {{ filteredPolygons.length }} {{ getPluralForm(filteredPolygons.length) }} · {{ statusFilterLabel }}
+          </DialogDescription>
+        </DialogHeader>
+        <div class="space-y-2">
+          <div v-if="!filteredPolygons.length" class="rounded-lg border border-dashed border-border px-3 py-5 text-center text-sm text-muted-foreground">
+            {{ listEmptyStateLabel }}
+          </div>
+          <div v-else class="max-h-[60dvh] space-y-2 overflow-y-auto pr-1">
+            <div
+              v-for="polygon in filteredPolygons"
+              :key="polygon.id"
+              class="rounded-lg border border-border bg-card px-3 py-2"
+            >
+              <div class="flex items-start justify-between gap-3">
+                <button type="button" class="min-w-0 flex-1 text-left" @click="focusPolygonOnMap(polygon, true)">
+                  <p class="truncate text-sm font-semibold text-foreground">{{ polygon.name || `Полигон #${polygon.id}` }}</p>
+                  <p class="truncate text-xs text-muted-foreground">{{ polygon.branch_name || "Без филиала" }}</p>
+                  <p class="mt-1 text-[11px] text-muted-foreground">Время: {{ polygon.delivery_time || 30 }} мин · Тарифов: {{ Number(polygon.tariffs_count || 0) }}</p>
+                </button>
+                <span class="rounded-full px-2 py-0.5 text-[10px] font-semibold" :class="getPolygonStatusClass(polygon)">
+                  {{ getPolygonStatusLabel(polygon) }}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
     <Dialog v-if="showModal" :open="showModal" @update:open="(value) => (value ? null : closeModal())">
       <DialogContent class="w-full max-w-2xl">
         <DialogHeader>
@@ -282,7 +467,7 @@
 <script setup>
 import { devError } from "@/shared/utils/logger";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
-import { Download, Lock, Plus, Save, Upload } from "lucide-vue-next";
+import { Download, List, Lock, Plus, Save, SlidersHorizontal, Upload } from "lucide-vue-next";
 import { parseDate as parseCalendarDate } from "@internationalized/date";
 import api from "@/shared/api/client.js";
 import PolygonSidebar from "@/shared/components/PolygonSidebar.vue";
@@ -353,6 +538,8 @@ const showBlockModalWindow = ref(false);
 const editing = ref(null);
 const blockingPolygon = ref(null);
 const leftTab = ref("zones");
+const showMobileFilters = ref(false);
+const showMobilePolygonList = ref(false);
 const form = ref({
   name: "",
   delivery_time: 30,
@@ -457,6 +644,26 @@ const filteredPolygons = computed(() => {
     return polygonsList.filter((p) => isPolygonBlocked(p));
   }
   return polygonsList;
+});
+const activeCityName = computed(() => {
+  if (!cityId.value) return "Все города";
+  return referenceStore.cities.find((city) => city.id === parseInt(cityId.value, 10))?.name || "Город не выбран";
+});
+const activeBranchName = computed(() => {
+  if (!cityId.value) return "Выберите город";
+  if (!branchId.value) return "Все филиалы";
+  return branches.value.find((branch) => branch.id === parseInt(branchId.value, 10))?.name || "Филиал не выбран";
+});
+const statusFilterLabel = computed(() => {
+  if (statusFilter.value === "active") return "Активные";
+  if (statusFilter.value === "inactive") return "Неактивные";
+  if (statusFilter.value === "blocked") return "Заблокированные";
+  return "Все полигоны";
+});
+const listEmptyStateLabel = computed(() => {
+  if (!cityId.value) return "Выберите город для отображения зон";
+  if (!branchId.value) return "Выберите филиал, чтобы работать с зонами";
+  return "По текущим фильтрам зоны не найдены";
 });
 const loadBranches = async () => {
   if (!cityId.value) {
@@ -749,6 +956,8 @@ const exportGeoJson = () => {
 const onCityChange = () => {
   branchId.value = "";
   polygons.value = [];
+  selectedPolygons.value = [];
+  showMobilePolygonList.value = false;
   closeGeoJsonImportDialog();
   loadBranches();
   loadAllPolygons();
@@ -764,6 +973,7 @@ const onCityChange = () => {
 };
 const onBranchChange = async () => {
   polygons.value = [];
+  selectedPolygons.value = [];
   closeGeoJsonImportDialog();
   await loadPolygons();
   await nextTick();
@@ -866,11 +1076,7 @@ const renderPolygonsOnMap = () => {
   drawnItems.clearLayers();
   polygonLayers.clear();
   const isImportPreviewActive = showGeoJsonImportDialog.value && geoJsonImportItems.value.length > 0;
-  const visiblePolygons = branchId.value
-    ? polygons.value
-    : cityId.value
-      ? allPolygons.value.filter((polygon) => polygon.city_id === parseInt(cityId.value))
-      : allPolygons.value;
+  const visiblePolygons = filteredPolygons.value;
   const accent = getMapColor("accent");
   const accentFill = getMapColor("accentFill");
   const danger = getMapColor("danger");
@@ -979,6 +1185,25 @@ const isPolygonBlocked = (polygon) => {
   const from = new Date(polygon.blocked_from);
   const until = new Date(polygon.blocked_until);
   return now >= from && now <= until;
+};
+const getPolygonStatusLabel = (polygon) => {
+  if (isPolygonBlocked(polygon)) return "Заблокирован";
+  return polygon.is_active ? "Активен" : "Неактивен";
+};
+const getPolygonStatusClass = (polygon) => {
+  if (isPolygonBlocked(polygon)) return "bg-red-500/10 text-red-600";
+  return polygon.is_active ? "bg-emerald-500/10 text-emerald-600" : "bg-muted text-muted-foreground";
+};
+const focusPolygonOnMap = (polygon, openSidebar = false) => {
+  if (!polygon?.id) return;
+  const layer = polygonLayers.get(polygon.id);
+  if (layer?.getBounds && map) {
+    map.fitBounds(layer.getBounds(), { padding: [36, 36], maxZoom: 16 });
+  }
+  if (openSidebar) {
+    showMobilePolygonList.value = false;
+    openPolygonSidebar(polygon);
+  }
 };
 const formatDateTime = (dateTimeStr) => {
   if (!dateTimeStr) return "";
@@ -1135,6 +1360,8 @@ const openPolygonSidebar = (polygon) => {
     stopPolygonEditing();
   }
   selectedPolygon.value = enrichedPolygon;
+  showMobileFilters.value = false;
+  showMobilePolygonList.value = false;
   showSidebar.value = true;
   selectedTariffs.value = [];
   loadTariffsForPolygon(enrichedPolygon.id);
@@ -1341,6 +1568,13 @@ watch(
     }
   },
   { deep: true },
+);
+watch(
+  () => filteredPolygons.value.map((polygon) => polygon.id),
+  (ids) => {
+    const allowedIds = new Set(ids);
+    selectedPolygons.value = selectedPolygons.value.filter((id) => allowedIds.has(id));
+  },
 );
 watch(
   () => showGeoJsonImportDialog.value,

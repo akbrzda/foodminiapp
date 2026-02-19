@@ -4,10 +4,7 @@
       <CardContent>
         <PageHeader :title="pageTitle" :description="pageSubtitle">
           <template #actions>
-            <Button variant="secondary" @click="goBack">
-              <ArrowLeft :size="16" />
-              Назад
-            </Button>
+            <BackButton variant="secondary" @click="goBack" />
           </template>
         </PageHeader>
       </CardContent>
@@ -358,7 +355,7 @@
 <script setup>
 import { devError } from "@/shared/utils/logger";
 import { computed, onMounted, ref, watch } from "vue";
-import { ArrowLeft, Calendar as CalendarIcon, Plus, Save, Send, Trash2, UploadCloud } from "lucide-vue-next";
+import { Calendar as CalendarIcon, Plus, Save, Send, Trash2, UploadCloud } from "lucide-vue-next";
 import { DateFormatter, getLocalTimeZone, parseDate as parseCalendarDate } from "@internationalized/date";
 import { useRoute, useRouter } from "vue-router";
 import api from "@/shared/api/client.js";
@@ -375,6 +372,7 @@ import { Calendar as CalendarView } from "@/shared/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/shared/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/components/ui/select";
 import Textarea from "@/shared/components/ui/textarea/Textarea.vue";
+import BackButton from "@/shared/components/BackButton.vue";
 import SegmentBuilder from "../components/SegmentBuilder.vue";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
 import { useOrdersStore } from "@/modules/orders/stores/orders.js";

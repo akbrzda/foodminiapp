@@ -4,10 +4,7 @@
       <CardContent>
         <PageHeader :title="modalTitle" :description="modalSubtitle">
           <template #actions>
-            <Button type="button" variant="outline" @click="goBack">
-              <ArrowLeft :size="16" />
-              Назад к списку
-            </Button>
+            <BackButton label="Назад к списку" @click="goBack" />
             <Button type="button" @click="saveAll" :disabled="saving || isInitialLoading">
               <Save :size="16" />
               {{ saving ? "Сохранение..." : "Сохранить" }}
@@ -520,10 +517,11 @@
 <script setup>
 import { computed, onMounted, ref, watch } from "vue";
 import { useRouter, useRoute } from "vue-router";
-import { ArrowLeft, GripVertical, Plus, Save, Trash2, UploadCloud } from "lucide-vue-next";
+import { GripVertical, Plus, Save, Trash2, UploadCloud } from "lucide-vue-next";
 import { devError } from "@/shared/utils/logger";
 import api from "@/shared/api/client.js";
 import Badge from "@/shared/components/ui/badge/Badge.vue";
+import BackButton from "@/shared/components/BackButton.vue";
 import Button from "@/shared/components/ui/button/Button.vue";
 import Card from "@/shared/components/ui/card/Card.vue";
 import CardContent from "@/shared/components/ui/card/CardContent.vue";

@@ -302,7 +302,7 @@
           </div>
         </form>
         <DialogFooter class="flex flex-wrap gap-2">
-          <Button variant="outline" type="button" @click="handleBack" :disabled="step === 1">Назад</Button>
+          <BackButton type="button" @click="handleBack" :disabled="step === 1" />
           <Button v-if="!isFinalStep" type="button" @click="handleNext" :disabled="!canProceed"> Следующий шаг </Button>
           <Button v-else type="button" @click="submitStopList" :disabled="saving || !canSubmit">
             <Save :size="16" />
@@ -319,6 +319,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { Plus, Save, Trash2 } from "lucide-vue-next";
 import api from "@/shared/api/client.js";
 import Badge from "@/shared/components/ui/badge/Badge.vue";
+import BackButton from "@/shared/components/BackButton.vue";
 import Button from "@/shared/components/ui/button/Button.vue";
 import Card from "@/shared/components/ui/card/Card.vue";
 import CardContent from "@/shared/components/ui/card/CardContent.vue";

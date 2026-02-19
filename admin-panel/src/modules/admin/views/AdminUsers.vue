@@ -15,8 +15,8 @@
     </Card>
     <Card>
       <CardContent>
-        <div class="flex flex-wrap items-end gap-3">
-          <div class="min-w-[180px]">
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-6">
+          <div class="min-w-0 xl:col-span-2">
             <Field>
               <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Роль</FieldLabel>
               <FieldContent>
@@ -34,7 +34,7 @@
               </FieldContent>
             </Field>
           </div>
-          <div class="min-w-[180px]">
+          <div class="min-w-0 xl:col-span-2">
             <Field>
               <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Статус</FieldLabel>
               <FieldContent>
@@ -56,93 +56,155 @@
     </Card>
     <Card>
       <CardContent class="!p-0">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Пользователь</TableHead>
-              <TableHead>Роль</TableHead>
-              <TableHead>Статус</TableHead>
-              <TableHead>Eruda</TableHead>
-              <TableHead>Доступ</TableHead>
-              <TableHead class="text-right">Действия</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            <template v-if="isLoading">
-              <TableRow v-for="index in 6" :key="`loading-${index}`">
-                <TableCell><Skeleton class="h-4 w-48" /></TableCell>
-                <TableCell><Skeleton class="h-6 w-28" /></TableCell>
-                <TableCell><Skeleton class="h-6 w-24" /></TableCell>
-                <TableCell><Skeleton class="h-6 w-24" /></TableCell>
-                <TableCell><Skeleton class="h-6 w-40" /></TableCell>
-                <TableCell class="text-right"><Skeleton class="ml-auto h-8 w-20" /></TableCell>
+        <div class="space-y-3 p-3 md:hidden">
+          <template v-if="isLoading">
+            <div v-for="index in 6" :key="`mobile-loading-${index}`" class="rounded-xl border border-border p-3 space-y-3">
+              <Skeleton class="h-4 w-40" />
+              <Skeleton class="h-3 w-36" />
+              <div class="flex items-center gap-2">
+                <Skeleton class="h-6 w-20" />
+                <Skeleton class="h-6 w-24" />
+              </div>
+            </div>
+          </template>
+          <template v-else>
+            <div v-for="user in paginatedUsers" :key="`mobile-${user.id}`" class="rounded-xl border border-border bg-background p-3">
+              <div class="font-medium text-foreground">{{ user.first_name }} {{ user.last_name }}</div>
+              <div class="text-xs text-muted-foreground">{{ user.email }}</div>
+              <div v-if="user.telegram_id" class="text-xs text-muted-foreground mt-1">Telegram ID: {{ user.telegram_id }}</div>
+              <div class="mt-3 flex flex-wrap items-center gap-2">
+                <Badge :variant="roleVariant(user.role)" :class="roleClass(user.role)">{{ getRoleLabel(user.role) }}</Badge>
+                <Badge
+                  variant="secondary"
+                  :class="user.is_active ? 'bg-emerald-100 text-emerald-700 border-transparent' : 'bg-muted text-muted-foreground border-transparent'"
+                >
+                  {{ user.is_active ? "Активен" : "Неактивен" }}
+                </Badge>
+                <Badge
+                  variant="secondary"
+                  :class="user.eruda_enabled ? 'bg-emerald-100 text-emerald-700 border-transparent' : 'bg-muted text-muted-foreground border-transparent'"
+                >
+                  Eruda: {{ user.eruda_enabled ? "Вкл" : "Выкл" }}
+                </Badge>
+              </div>
+              <div class="mt-3">
+                <div v-if="user.role === 'manager'" class="space-y-2">
+                  <div v-if="user.branches?.length" class="flex flex-wrap gap-1">
+                    <Badge v-for="branch in user.branches" :key="`mobile-branch-${user.id}-${branch.id}`" variant="secondary">{{ branch.name }}</Badge>
+                  </div>
+                  <div v-if="user.cities?.length" class="flex flex-wrap gap-1">
+                    <Badge v-for="city in user.cities" :key="`mobile-city-${user.id}-${city.id}`" variant="outline">{{ city.name }}</Badge>
+                  </div>
+                  <span v-else class="text-xs text-muted-foreground">Доступ не назначен</span>
+                </div>
+                <span v-else class="text-xs text-muted-foreground">Полный доступ по роли</span>
+              </div>
+              <div class="mt-3 flex justify-end gap-2">
+                <Button v-if="!(authStore.role === 'ceo' && user.role === 'admin')" variant="ghost" size="icon" @click="openModal(user)">
+                  <Pencil :size="16" />
+                </Button>
+                <Button
+                  v-if="user.id !== authStore.user?.id && !(authStore.role === 'ceo' && user.role === 'admin')"
+                  variant="ghost"
+                  size="icon"
+                  @click="deleteUser(user)"
+                >
+                  <Trash2 :size="16" class="text-red-600" />
+                </Button>
+              </div>
+            </div>
+            <div v-if="users.length === 0" class="py-8 text-center text-sm text-muted-foreground">Пользователи не найдены</div>
+          </template>
+        </div>
+        <div class="hidden md:block">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Пользователь</TableHead>
+                <TableHead>Роль</TableHead>
+                <TableHead>Статус</TableHead>
+                <TableHead>Eruda</TableHead>
+                <TableHead>Доступ</TableHead>
+                <TableHead class="text-right">Действия</TableHead>
               </TableRow>
-            </template>
-            <template v-else>
-              <TableRow v-for="user in paginatedUsers" :key="user.id">
-                <TableCell>
-                  <div class="font-medium text-foreground">{{ user.first_name }} {{ user.last_name }}</div>
-                  <div class="text-xs text-muted-foreground">{{ user.email }}</div>
-                  <div v-if="user.telegram_id" class="text-xs text-muted-foreground">Telegram ID: {{ user.telegram_id }}</div>
-                </TableCell>
-                <TableCell>
-                  <Badge :variant="roleVariant(user.role)" :class="roleClass(user.role)">{{ getRoleLabel(user.role) }}</Badge>
-                </TableCell>
-                <TableCell>
-                  <Badge
-                    variant="secondary"
-                    :class="user.is_active ? 'bg-emerald-100 text-emerald-700 border-transparent' : 'bg-muted text-muted-foreground border-transparent'"
-                  >
-                    {{ user.is_active ? "Активен" : "Неактивен" }}
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  <Badge
-                    variant="secondary"
-                    :class="user.eruda_enabled ? 'bg-emerald-100 text-emerald-700 border-transparent' : 'bg-muted text-muted-foreground border-transparent'"
-                  >
-                    {{ user.eruda_enabled ? "Включено" : "Выключено" }}
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  <div v-if="user.role === 'manager'" class="space-y-2">
-                    <div v-if="user.branches?.length" class="flex flex-wrap gap-1">
-                      <Badge v-for="branch in user.branches" :key="branch.id" variant="secondary">{{ branch.name }}</Badge>
-                    </div>
-                    <div v-if="user.cities?.length" class="flex flex-wrap gap-1">
-                      <Badge v-for="city in user.cities" :key="city.id" variant="outline">{{ city.name }}</Badge>
+            </TableHeader>
+            <TableBody>
+              <template v-if="isLoading">
+                <TableRow v-for="index in 6" :key="`loading-${index}`">
+                  <TableCell><Skeleton class="h-4 w-48" /></TableCell>
+                  <TableCell><Skeleton class="h-6 w-28" /></TableCell>
+                  <TableCell><Skeleton class="h-6 w-24" /></TableCell>
+                  <TableCell><Skeleton class="h-6 w-24" /></TableCell>
+                  <TableCell><Skeleton class="h-6 w-40" /></TableCell>
+                  <TableCell class="text-right"><Skeleton class="ml-auto h-8 w-20" /></TableCell>
+                </TableRow>
+              </template>
+              <template v-else>
+                <TableRow v-for="user in paginatedUsers" :key="user.id">
+                  <TableCell>
+                    <div class="font-medium text-foreground">{{ user.first_name }} {{ user.last_name }}</div>
+                    <div class="text-xs text-muted-foreground">{{ user.email }}</div>
+                    <div v-if="user.telegram_id" class="text-xs text-muted-foreground">Telegram ID: {{ user.telegram_id }}</div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge :variant="roleVariant(user.role)" :class="roleClass(user.role)">{{ getRoleLabel(user.role) }}</Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Badge
+                      variant="secondary"
+                      :class="user.is_active ? 'bg-emerald-100 text-emerald-700 border-transparent' : 'bg-muted text-muted-foreground border-transparent'"
+                    >
+                      {{ user.is_active ? "Активен" : "Неактивен" }}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Badge
+                      variant="secondary"
+                      :class="user.eruda_enabled ? 'bg-emerald-100 text-emerald-700 border-transparent' : 'bg-muted text-muted-foreground border-transparent'"
+                    >
+                      {{ user.eruda_enabled ? "Включено" : "Выключено" }}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <div v-if="user.role === 'manager'" class="space-y-2">
+                      <div v-if="user.branches?.length" class="flex flex-wrap gap-1">
+                        <Badge v-for="branch in user.branches" :key="branch.id" variant="secondary">{{ branch.name }}</Badge>
+                      </div>
+                      <div v-if="user.cities?.length" class="flex flex-wrap gap-1">
+                        <Badge v-for="city in user.cities" :key="city.id" variant="outline">{{ city.name }}</Badge>
+                      </div>
+                      <span v-else class="text-xs text-muted-foreground">—</span>
                     </div>
                     <span v-else class="text-xs text-muted-foreground">—</span>
-                  </div>
-                  <span v-else class="text-xs text-muted-foreground">—</span>
-                </TableCell>
-                <TableCell class="text-right">
-                  <div class="flex justify-end gap-2">
-                    <Button
-                      v-if="!(authStore.role === 'ceo' && user.role === 'admin')"
-                      variant="ghost"
-                      size="icon"
-                      @click="openModal(user)"
-                    >
-                      <Pencil :size="16" />
-                    </Button>
-                    <Button
-                      v-if="user.id !== authStore.user?.id && !(authStore.role === 'ceo' && user.role === 'admin')"
-                      variant="ghost"
-                      size="icon"
-                      @click="deleteUser(user)"
-                    >
-                      <Trash2 :size="16" class="text-red-600" />
-                    </Button>
-                  </div>
-                </TableCell>
-              </TableRow>
-              <TableRow v-if="users.length === 0">
-                <TableCell colspan="6" class="py-8 text-center text-sm text-muted-foreground">Пользователи не найдены</TableCell>
-              </TableRow>
-            </template>
-          </TableBody>
-        </Table>
+                  </TableCell>
+                  <TableCell class="text-right">
+                    <div class="flex justify-end gap-2">
+                      <Button
+                        v-if="!(authStore.role === 'ceo' && user.role === 'admin')"
+                        variant="ghost"
+                        size="icon"
+                        @click="openModal(user)"
+                      >
+                        <Pencil :size="16" />
+                      </Button>
+                      <Button
+                        v-if="user.id !== authStore.user?.id && !(authStore.role === 'ceo' && user.role === 'admin')"
+                        variant="ghost"
+                        size="icon"
+                        @click="deleteUser(user)"
+                      >
+                        <Trash2 :size="16" class="text-red-600" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+                <TableRow v-if="users.length === 0">
+                  <TableCell colspan="6" class="py-8 text-center text-sm text-muted-foreground">Пользователи не найдены</TableCell>
+                </TableRow>
+              </template>
+            </TableBody>
+          </Table>
+        </div>
       </CardContent>
     </Card>
     <TablePagination :total="users.length" :page="page" :page-size="pageSize" @update:page="page = $event" @update:page-size="onPageSizeChange" />

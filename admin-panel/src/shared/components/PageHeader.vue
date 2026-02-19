@@ -5,12 +5,12 @@
         <div class="text-lg font-semibold text-foreground">{{ title }}</div>
         <div v-if="description" class="text-sm text-muted-foreground">{{ description }}</div>
       </div>
-      <div v-if="$slots.actions" class="flex flex-wrap items-center gap-2">
+      <div v-if="$slots.actions" class="flex w-full flex-wrap items-center gap-2 md:w-auto">
         <slot name="actions" />
       </div>
     </div>
-    <div v-if="$slots.filters" class="rounded-xl border border-border bg-background p-4">
-      <div class="flex flex-wrap items-end gap-3">
+    <div v-if="$slots.filters" class="rounded-xl border border-border bg-background p-3 sm:p-4">
+      <div class="grid gap-3 sm:flex sm:flex-wrap sm:items-end sm:gap-3 [&>*]:w-full sm:[&>*]:w-auto">
         <slot name="filters" />
       </div>
     </div>

@@ -16,52 +16,81 @@
 
     <Card>
       <CardContent class="!p-0">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Название</TableHead>
-              <TableHead>Описание</TableHead>
-              <TableHead>Размер</TableHead>
-              <TableHead>Обновлено</TableHead>
-              <TableHead class="text-right">Действия</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            <template v-if="isLoading">
-              <TableRow v-for="index in 6" :key="`loading-${index}`">
-                <TableCell><Skeleton class="h-4 w-44" /></TableCell>
-                <TableCell><Skeleton class="h-4 w-56" /></TableCell>
-                <TableCell><Skeleton class="h-4 w-16" /></TableCell>
-                <TableCell><Skeleton class="h-4 w-28" /></TableCell>
-                <TableCell class="text-right"><Skeleton class="ml-auto h-8 w-20" /></TableCell>
+        <div class="space-y-3 p-3 md:hidden">
+          <template v-if="isLoading">
+            <div v-for="index in 6" :key="`mobile-loading-${index}`" class="rounded-xl border border-border p-3 space-y-3">
+              <Skeleton class="h-4 w-32" />
+              <Skeleton class="h-3 w-44" />
+              <Skeleton class="h-3 w-24" />
+            </div>
+          </template>
+          <template v-else>
+            <div v-for="segment in paginatedSegments" :key="`mobile-${segment.id}`" class="rounded-xl border border-border bg-background p-3">
+              <div class="font-medium text-foreground">{{ segment.name }}</div>
+              <div class="text-xs text-muted-foreground">ID: {{ segment.id }}</div>
+              <div class="mt-2 text-sm text-muted-foreground">{{ segment.description || "—" }}</div>
+              <div class="mt-2 text-xs text-muted-foreground">Размер: {{ formatNumber(segment.estimated_size || 0) }}</div>
+              <div class="text-xs text-muted-foreground">Обновлено: {{ formatDateTime(segment.updated_at) || "—" }}</div>
+              <div class="mt-3 flex justify-end gap-2">
+                <Button variant="ghost" size="icon" @click="openModal(segment)">
+                  <Pencil :size="16" />
+                </Button>
+                <Button variant="ghost" size="icon" @click="deleteSegment(segment)">
+                  <Trash2 :size="16" class="text-red-600" />
+                </Button>
+              </div>
+            </div>
+            <div v-if="segments.length === 0" class="py-8 text-center text-sm text-muted-foreground">Сегменты не найдены</div>
+          </template>
+        </div>
+        <div class="hidden md:block">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Название</TableHead>
+                <TableHead>Описание</TableHead>
+                <TableHead>Размер</TableHead>
+                <TableHead>Обновлено</TableHead>
+                <TableHead class="text-right">Действия</TableHead>
               </TableRow>
-            </template>
-            <template v-else>
-              <TableRow v-for="segment in paginatedSegments" :key="segment.id">
-                <TableCell>
-                  <div class="font-medium text-foreground">{{ segment.name }}</div>
-                  <div class="text-xs text-muted-foreground">ID: {{ segment.id }}</div>
-                </TableCell>
-                <TableCell>{{ segment.description || "—" }}</TableCell>
-                <TableCell>{{ formatNumber(segment.estimated_size || 0) }}</TableCell>
-                <TableCell>{{ formatDateTime(segment.updated_at) || "—" }}</TableCell>
-                <TableCell class="text-right">
-                  <div class="flex justify-end gap-2">
-                    <Button variant="ghost" size="icon" @click="openModal(segment)">
-                      <Pencil :size="16" />
-                    </Button>
-                    <Button variant="ghost" size="icon" @click="deleteSegment(segment)">
-                      <Trash2 :size="16" class="text-red-600" />
-                    </Button>
-                  </div>
-                </TableCell>
-              </TableRow>
-              <TableRow v-if="segments.length === 0">
-                <TableCell colspan="5" class="py-8 text-center text-sm text-muted-foreground">Сегменты не найдены</TableCell>
-              </TableRow>
-            </template>
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              <template v-if="isLoading">
+                <TableRow v-for="index in 6" :key="`loading-${index}`">
+                  <TableCell><Skeleton class="h-4 w-44" /></TableCell>
+                  <TableCell><Skeleton class="h-4 w-56" /></TableCell>
+                  <TableCell><Skeleton class="h-4 w-16" /></TableCell>
+                  <TableCell><Skeleton class="h-4 w-28" /></TableCell>
+                  <TableCell class="text-right"><Skeleton class="ml-auto h-8 w-20" /></TableCell>
+                </TableRow>
+              </template>
+              <template v-else>
+                <TableRow v-for="segment in paginatedSegments" :key="segment.id">
+                  <TableCell>
+                    <div class="font-medium text-foreground">{{ segment.name }}</div>
+                    <div class="text-xs text-muted-foreground">ID: {{ segment.id }}</div>
+                  </TableCell>
+                  <TableCell>{{ segment.description || "—" }}</TableCell>
+                  <TableCell>{{ formatNumber(segment.estimated_size || 0) }}</TableCell>
+                  <TableCell>{{ formatDateTime(segment.updated_at) || "—" }}</TableCell>
+                  <TableCell class="text-right">
+                    <div class="flex justify-end gap-2">
+                      <Button variant="ghost" size="icon" @click="openModal(segment)">
+                        <Pencil :size="16" />
+                      </Button>
+                      <Button variant="ghost" size="icon" @click="deleteSegment(segment)">
+                        <Trash2 :size="16" class="text-red-600" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+                <TableRow v-if="segments.length === 0">
+                  <TableCell colspan="5" class="py-8 text-center text-sm text-muted-foreground">Сегменты не найдены</TableCell>
+                </TableRow>
+              </template>
+            </TableBody>
+          </Table>
+        </div>
       </CardContent>
     </Card>
     <TablePagination :total="segments.length" :page="page" :page-size="pageSize" @update:page="page = $event" @update:page-size="onPageSizeChange" />

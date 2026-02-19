@@ -5,7 +5,7 @@
       <div class="p-4 space-y-3">
         <PageHeader :title="pageTitle" description="Редактирование полигона">
           <template #actions>
-            <Button variant="outline" class="w-full" @click="goBack">Назад</Button>
+            <BackButton :button-class="'w-full'" @click="goBack" />
           </template>
         </PageHeader>
       </div>
@@ -124,6 +124,7 @@ import Button from "@/shared/components/ui/button/Button.vue";
 import CardContent from "@/shared/components/ui/card/CardContent.vue";
 import CardHeader from "@/shared/components/ui/card/CardHeader.vue";
 import CardTitle from "@/shared/components/ui/card/CardTitle.vue";
+import BackButton from "@/shared/components/BackButton.vue";
 import Input from "@/shared/components/ui/input/Input.vue";
 import PageHeader from "@/shared/components/PageHeader.vue";
 import { Field, FieldContent, FieldGroup, FieldLabel } from "@/shared/components/ui/field";

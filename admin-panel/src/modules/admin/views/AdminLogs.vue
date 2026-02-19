@@ -7,8 +7,8 @@
     </Card>
     <Card>
       <CardContent>
-        <div class="flex flex-wrap items-end gap-3">
-          <div class="min-w-[200px]">
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-12">
+          <div class="min-w-0 xl:col-span-3">
             <Field>
               <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Администратор</FieldLabel>
               <FieldContent>
@@ -24,7 +24,7 @@
               </FieldContent>
             </Field>
           </div>
-          <div class="min-w-[180px]">
+          <div class="min-w-0 xl:col-span-2">
             <Field>
               <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Тип действия</FieldLabel>
               <FieldContent>
@@ -42,7 +42,7 @@
               </FieldContent>
             </Field>
           </div>
-          <div class="min-w-[180px]">
+          <div class="min-w-0 xl:col-span-2">
             <Field>
               <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Объект</FieldLabel>
               <FieldContent>
@@ -66,7 +66,7 @@
               </FieldContent>
             </Field>
           </div>
-          <div class="min-w-[220px]">
+          <div class="min-w-0 sm:col-span-2 xl:col-span-3">
             <Field>
               <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Период</FieldLabel>
               <FieldContent>
@@ -80,11 +80,11 @@
                       <CalendarIcon class="text-muted-foreground" :size="16" />
                     </button>
                   </PopoverTrigger>
-                  <PopoverContent class="w-auto p-0" align="start">
+                  <PopoverContent class="w-[calc(100vw-2rem)] max-w-md p-0 sm:w-auto" align="start">
                     <div class="space-y-3 p-3">
                       <Calendar
                         :model-value="calendarRange"
-                        :number-of-months="2"
+                        :number-of-months="calendarMonths"
                         :is-date-disabled="isFutureDateDisabled"
                         locale="ru-RU"
                         multiple
@@ -100,7 +100,7 @@
               </FieldContent>
             </Field>
           </div>
-          <div class="ml-auto flex flex-wrap items-center gap-2">
+          <div class="flex flex-wrap items-center gap-2 sm:col-span-2 xl:col-span-2 xl:justify-end">
             <Button variant="outline" @click="resetFilters">
               <RotateCcw :size="16" />
               Сбросить
@@ -126,47 +126,69 @@
     </Card>
     <Card v-else>
       <CardContent class="!p-0">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Дата/Время</TableHead>
-              <TableHead>Администратор</TableHead>
-              <TableHead>Действие</TableHead>
-              <TableHead>Объект</TableHead>
-              <TableHead>IP</TableHead>
-              <TableHead class="text-right">Детали</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            <TableRow v-for="log in logs" :key="log.id">
-              <TableCell>
-                <div class="text-sm">{{ formatDateTime(log.created_at) }}</div>
-              </TableCell>
-              <TableCell>
-                <div class="text-sm font-medium">{{ log.admin_name }}</div>
-                <div class="text-xs text-muted-foreground">{{ log.admin_email }}</div>
-              </TableCell>
-              <TableCell>
-                <Badge :variant="getActionVariant(log.action)" :class="getActionClass(log.action)">
-                  {{ getActionLabel(log.action) }}
-                </Badge>
-              </TableCell>
-              <TableCell>
-                <div class="text-sm">{{ getObjectLabel(log.object_type) }}</div>
-                <div class="text-xs text-muted-foreground">#{{ log.object_id }}</div>
-              </TableCell>
-              <TableCell>
-                <span class="text-xs text-muted-foreground">{{ log.ip_address || "—" }}</span>
-              </TableCell>
-              <TableCell class="text-right">
-                <Button variant="ghost" size="sm" @click="showDetails(log)">
-                  <Eye :size="16" />
-                  Просмотр
-                </Button>
-              </TableCell>
-            </TableRow>
-          </TableBody>
-        </Table>
+        <div class="space-y-3 p-3 md:hidden">
+          <div v-for="log in logs" :key="`mobile-${log.id}`" class="rounded-xl border border-border bg-background p-3">
+            <div class="flex items-start justify-between gap-2">
+              <div class="text-sm font-medium text-foreground">{{ log.admin_name }}</div>
+              <Badge :variant="getActionVariant(log.action)" :class="getActionClass(log.action)">
+                {{ getActionLabel(log.action) }}
+              </Badge>
+            </div>
+            <div class="mt-1 text-xs text-muted-foreground">{{ log.admin_email }}</div>
+            <div class="mt-2 text-sm text-foreground">{{ getObjectLabel(log.object_type) }} #{{ log.object_id }}</div>
+            <div class="mt-1 text-xs text-muted-foreground">{{ formatDateTime(log.created_at) }}</div>
+            <div class="mt-1 text-xs text-muted-foreground">IP: {{ log.ip_address || "—" }}</div>
+            <div class="mt-3 flex justify-end">
+              <Button variant="ghost" size="sm" @click="showDetails(log)">
+                <Eye :size="16" />
+                Просмотр
+              </Button>
+            </div>
+          </div>
+        </div>
+        <div class="hidden md:block">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Дата/Время</TableHead>
+                <TableHead>Администратор</TableHead>
+                <TableHead>Действие</TableHead>
+                <TableHead>Объект</TableHead>
+                <TableHead>IP</TableHead>
+                <TableHead class="text-right">Детали</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow v-for="log in logs" :key="log.id">
+                <TableCell>
+                  <div class="text-sm">{{ formatDateTime(log.created_at) }}</div>
+                </TableCell>
+                <TableCell>
+                  <div class="text-sm font-medium">{{ log.admin_name }}</div>
+                  <div class="text-xs text-muted-foreground">{{ log.admin_email }}</div>
+                </TableCell>
+                <TableCell>
+                  <Badge :variant="getActionVariant(log.action)" :class="getActionClass(log.action)">
+                    {{ getActionLabel(log.action) }}
+                  </Badge>
+                </TableCell>
+                <TableCell>
+                  <div class="text-sm">{{ getObjectLabel(log.object_type) }}</div>
+                  <div class="text-xs text-muted-foreground">#{{ log.object_id }}</div>
+                </TableCell>
+                <TableCell>
+                  <span class="text-xs text-muted-foreground">{{ log.ip_address || "—" }}</span>
+                </TableCell>
+                <TableCell class="text-right">
+                  <Button variant="ghost" size="sm" @click="showDetails(log)">
+                    <Eye :size="16" />
+                    Просмотр
+                  </Button>
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </div>
       </CardContent>
     </Card>
     <TablePagination
@@ -239,7 +261,7 @@ import TableHead from "@/shared/components/ui/table/TableHead.vue";
 import TableHeader from "@/shared/components/ui/table/TableHeader.vue";
 import TableRow from "@/shared/components/ui/table/TableRow.vue";
 import TablePagination from "@/shared/components/TablePagination.vue";
-import { computed, onMounted, reactive, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { Calendar as CalendarIcon, Eye, RotateCcw } from "lucide-vue-next";
 import { DateFormatter, getLocalTimeZone, parseDate, today } from "@internationalized/date";
 const logs = ref([]);
@@ -250,6 +272,7 @@ const { showErrorNotification } = useNotifications();
 const { shouldRestore, saveContext, restoreContext, restoreScroll } = useListContext("admin-logs");
 const loadTimer = ref(null);
 const isRestoringContext = ref(false);
+const calendarMonths = ref(window.innerWidth < 1024 ? 1 : 2);
 const filters = reactive({
   admin_id: "",
   action_type: "",
@@ -306,6 +329,9 @@ const isFutureDateDisabled = (date) => date.compare(today(timeZone)) > 0;
 const clearDateRange = () => {
   filters.date_from = "";
   filters.date_to = "";
+};
+const updateCalendarMonths = () => {
+  calendarMonths.value = window.innerWidth < 1024 ? 1 : 2;
 };
 const pagination = reactive({
   page: 1,
@@ -421,6 +447,8 @@ const formatJSON = (json) => {
   return JSON.stringify(json, null, 2);
 };
 onMounted(async () => {
+  updateCalendarMonths();
+  window.addEventListener("resize", updateCalendarMonths);
   try {
     if (shouldRestore.value) {
       const context = restoreContext();
@@ -443,6 +471,12 @@ onMounted(async () => {
     showErrorNotification("Ошибка загрузки логов");
   } finally {
     isRestoringContext.value = false;
+  }
+});
+onBeforeUnmount(() => {
+  window.removeEventListener("resize", updateCalendarMonths);
+  if (loadTimer.value) {
+    clearTimeout(loadTimer.value);
   }
 });
 watch(

@@ -4,7 +4,7 @@
       <CardContent>
         <PageHeader title="Дашборд рассылок" description="Сводная аналитика по кампаниям">
           <template #filters>
-            <div class="min-w-[180px] space-y-1">
+            <div class="w-full min-w-0 space-y-1 sm:w-auto sm:min-w-[180px]">
               <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Период</label>
               <Select v-model="period">
                 <SelectTrigger class="w-full">
@@ -20,7 +20,7 @@
                 </SelectContent>
               </Select>
             </div>
-            <div v-if="period === 'custom'" class="min-w-[240px] space-y-1">
+            <div v-if="period === 'custom'" class="w-full min-w-0 space-y-1 sm:w-auto sm:min-w-[240px]">
               <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Диапазон дат</label>
               <Popover v-model:open="isRangeOpen">
                 <PopoverTrigger asChild>
@@ -32,11 +32,11 @@
                     <CalendarIcon class="text-muted-foreground" :size="16" />
                   </button>
                 </PopoverTrigger>
-                <PopoverContent class="w-auto p-0" align="start">
+                <PopoverContent class="w-[calc(100vw-2rem)] max-w-md p-0 sm:w-auto" align="start">
                   <div class="space-y-3 p-3">
                     <Calendar
                       :model-value="calendarRange"
-                      :number-of-months="2"
+                      :number-of-months="calendarMonths"
                       :is-date-disabled="isFutureDateDisabled"
                       locale="ru-RU"
                       multiple
@@ -105,7 +105,7 @@
 </template>
 <script setup>
 import { devError } from "@/shared/utils/logger";
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { Calendar as CalendarIcon } from "lucide-vue-next";
 import { DateFormatter, getLocalTimeZone, parseDate, today } from "@internationalized/date";
 import api from "@/shared/api/client.js";
@@ -126,6 +126,7 @@ const period = ref("month");
 const dateFrom = ref("");
 const dateTo = ref("");
 const isRangeOpen = ref(false);
+const calendarMonths = ref(window.innerWidth < 1024 ? 1 : 2);
 const isLoading = ref(false);
 const stats = ref({});
 const timeZone = getLocalTimeZone();
@@ -185,6 +186,9 @@ const clearDateRange = () => {
   dateFrom.value = "";
   dateTo.value = "";
 };
+const updateCalendarMonths = () => {
+  calendarMonths.value = window.innerWidth < 1024 ? 1 : 2;
+};
 
 const loadStats = async () => {
   if (period.value === "custom" && (!dateFrom.value || !dateTo.value)) {
@@ -207,7 +211,14 @@ const loadStats = async () => {
   }
 };
 
-onMounted(loadStats);
+onMounted(async () => {
+  updateCalendarMonths();
+  window.addEventListener("resize", updateCalendarMonths);
+  await loadStats();
+});
+onBeforeUnmount(() => {
+  window.removeEventListener("resize", updateCalendarMonths);
+});
 
 watch(period, async (nextPeriod, prevPeriod) => {
   if (nextPeriod !== "custom" && prevPeriod === "custom") {

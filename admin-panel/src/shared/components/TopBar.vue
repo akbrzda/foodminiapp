@@ -1,6 +1,6 @@
 <template>
-  <header class="flex h-16 shrink-0 items-center gap-2 border-b border-border bg-background/95 backdrop-blur">
-    <div class="flex items-center gap-2 px-4">
+  <header class="sticky top-0 z-30 flex min-h-16 shrink-0 items-center gap-2 border-b border-border bg-background/95 backdrop-blur">
+    <div class="flex min-w-0 flex-1 items-center gap-2 px-3 sm:px-4">
       <button
         type="button"
         class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-border/60 text-muted-foreground transition hover:bg-accent/40 hover:text-foreground"
@@ -10,8 +10,8 @@
         <PanelLeft :size="18" />
       </button>
       <Separator orientation="vertical" class="hidden h-4 lg:block" />
-      <Breadcrumb v-if="items.length">
-        <BreadcrumbList>
+      <Breadcrumb v-if="items.length" class="min-w-0 flex-1 overflow-hidden">
+        <BreadcrumbList class="flex-nowrap overflow-x-auto whitespace-nowrap [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
           <template v-for="(item, index) in items" :key="`${item.label}-${index}`">
             <BreadcrumbItem>
               <BreadcrumbLink v-if="item.to && index < items.length - 1" as-child>
@@ -24,8 +24,8 @@
         </BreadcrumbList>
       </Breadcrumb>
     </div>
-    <div class="ml-auto flex items-center gap-2 px-4">
-      <div class="hidden items-center gap-2 sm:flex">
+    <div class="ml-auto flex items-center gap-1.5 px-3 py-2 sm:gap-2 sm:px-4">
+      <div class="hidden items-center gap-2 md:flex">
         <Select v-model="themeValue">
           <SelectTrigger class="h-9 w-[160px] text-xs">
             <div class="flex items-center gap-2">
@@ -55,9 +55,13 @@
           </SelectContent>
         </Select>
       </div>
-      <Button variant="outline" size="sm" @click="openShiftPage">
+      <Button variant="outline" size="icon-sm" class="md:hidden" aria-label="Сменить тему" @click="cycleTheme">
+        <component :is="activeThemeIcon" :size="16" />
+      </Button>
+      <Button variant="outline" size="sm" class="h-9 px-2.5 sm:px-3" @click="openShiftPage">
         <ExternalLink :size="16" />
-        Текущая смена
+        <span class="hidden sm:inline">Текущая смена</span>
+        <span class="sm:hidden">Смена</span>
       </Button>
     </div>
   </header>
@@ -91,6 +95,12 @@ const activeThemeIcon = computed(() => {
   if (theme.value === "light") return Sun;
   return Monitor;
 });
+const cycleTheme = () => {
+  const themes = ["system", "light", "dark"];
+  const index = themes.indexOf(theme.value);
+  const nextTheme = themes[(index + 1) % themes.length];
+  setTheme(nextTheme);
+};
 const normalizePath = (path) => {
   if (!path) return "/";
   return path.startsWith("/") ? path : `/${path}`;

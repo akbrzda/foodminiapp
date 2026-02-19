@@ -1,6 +1,15 @@
 <template>
   <aside :class="asideClasses">
     <div class="flex h-full flex-col">
+      <button
+        v-if="isOpen"
+        type="button"
+        class="absolute right-3 top-3 z-20 inline-flex h-9 w-9 items-center justify-center rounded-md border border-border/60 bg-background/80 text-muted-foreground transition hover:bg-accent/40 hover:text-foreground lg:hidden"
+        aria-label="Закрыть меню"
+        @click.stop="handleClose"
+      >
+        <X :size="16" />
+      </button>
       <div :class="['flex items-center', isCollapsed ? 'justify-center py-4' : 'min-h-[72px] gap-3 px-4']">
         <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
           <svg
@@ -30,7 +39,7 @@
           <p class="text-xs text-muted-foreground">Админ-панель</p>
         </div>
       </div>
-      <div class="flex-1 overflow-y-auto px-3">
+      <div class="flex-1 overflow-y-auto px-3 pb-3">
         <nav :class="['flex flex-col text-sm', isCollapsed ? '' : 'gap-3']">
           <div v-for="section in navSections" :key="section.id" class="space-y-1">
             <div v-if="!isCollapsed" class="nav-group-title">
@@ -62,7 +71,7 @@
           </div>
         </nav>
       </div>
-      <div class="border-t border-border/60 p-3">
+      <div class="border-t border-border/60 p-3 pb-[max(env(safe-area-inset-bottom),0.75rem)]">
         <DropdownMenu>
           <DropdownMenuTrigger as-child>
             <button
@@ -119,6 +128,7 @@ import {
   Users,
   UtensilsCrossed,
   LogOut,
+  X,
 } from "lucide-vue-next";
 import { Avatar, AvatarFallback } from "@/shared/components/ui/avatar";
 import {
@@ -207,17 +217,20 @@ const navSections = computed(() => {
 });
 
 const asideClasses = computed(() => ["sidebar", props.isOpen ? "is-open" : "is-closed", props.isCollapsed ? "is-collapsed" : ""]);
+const handleClose = () => {
+  emit("close");
+};
 </script>
 <style scoped>
 .sidebar {
-  @apply relative flex h-screen w-60 shrink-0 flex-col border-r border-border/60 bg-card/90 backdrop-blur transition-all duration-200 lg:sticky lg:top-0;
+  @apply relative flex h-dvh w-60 shrink-0 flex-col border-r border-border/60 bg-card/90 pt-[max(env(safe-area-inset-top),0px)] backdrop-blur transition-all duration-200 lg:sticky lg:top-0 lg:h-screen;
 }
 .sidebar.is-collapsed {
   @apply w-20;
 }
 @media (max-width: 1023px) {
   .sidebar {
-    @apply fixed inset-y-0 left-0 z-50 -translate-x-full;
+    @apply fixed inset-y-0 left-0 z-50 w-[min(20rem,calc(100vw-1rem))] -translate-x-full;
   }
   .sidebar.is-open {
     @apply translate-x-0;

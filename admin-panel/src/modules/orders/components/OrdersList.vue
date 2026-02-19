@@ -1,5 +1,5 @@
 <template>
-  <section class="flex w-[40%] min-w-[480px] flex-col border-r border-border bg-muted/40 p-4">
+  <section class="flex h-full w-full flex-1 flex-col border-border bg-muted/40 p-3 sm:p-4 lg:w-[42%] lg:min-w-[420px] lg:border-r">
     <!-- Табы и фильтры -->
     <div class="flex flex-wrap items-center justify-between gap-3">
       <div class="flex items-center gap-2 border-b border-transparent">

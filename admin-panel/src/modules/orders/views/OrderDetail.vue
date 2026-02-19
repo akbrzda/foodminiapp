@@ -2,10 +2,7 @@
   <div class="space-y-6">
     <PageHeader title="Детали заказа" description="Управление заказом и составом">
       <template #actions>
-        <Button variant="outline" size="sm" @click="goBack">
-          <ArrowLeft :size="16" />
-          {{ backButtonLabel }}
-        </Button>
+        <BackButton :label="backButtonLabel" @click="goBack" />
       </template>
     </PageHeader>
     <Card v-if="!order">
@@ -292,7 +289,7 @@
 import { devError } from "@/shared/utils/logger";
 import { ref, computed, onMounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { ArrowLeft, CircleCheck } from "lucide-vue-next";
+import { CircleCheck } from "lucide-vue-next";
 import api from "@/shared/api/client.js";
 import { formatCurrency, formatDateTime, formatNumber, formatPhone, normalizePhone } from "@/shared/utils/format.js";
 import Badge from "@/shared/components/ui/badge/Badge.vue";
@@ -311,6 +308,7 @@ import TableHead from "@/shared/components/ui/table/TableHead.vue";
 import TableHeader from "@/shared/components/ui/table/TableHeader.vue";
 import TableRow from "@/shared/components/ui/table/TableRow.vue";
 import PageHeader from "@/shared/components/PageHeader.vue";
+import BackButton from "@/shared/components/BackButton.vue";
 import Skeleton from "@/shared/components/ui/skeleton/Skeleton.vue";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
 import { useOrdersStore } from "@/modules/orders/stores/orders.js";

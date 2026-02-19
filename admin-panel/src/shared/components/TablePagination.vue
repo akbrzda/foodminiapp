@@ -1,22 +1,42 @@
 <template>
   <Card v-if="total > 0">
-    <CardContent class="py-4">
+    <CardContent class="px-3 py-4 sm:px-6">
       <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div class="text-sm text-muted-foreground">
+        <div class="text-sm text-muted-foreground sm:pr-4">
           Показаны записи {{ from }} - {{ to }} из {{ total }}
         </div>
-        <div class="flex items-center gap-2">
-          <span class="text-sm text-muted-foreground">На странице</span>
-          <Select :model-value="String(pageSize)" @update:model-value="onPageSizeChange">
-            <SelectTrigger class="w-[90px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem v-for="option in pageSizeOptions" :key="option" :value="String(option)">{{ option }}</SelectItem>
-            </SelectContent>
-          </Select>
-          <Button variant="outline" size="sm" :disabled="page <= 1" @click="$emit('update:page', page - 1)">Назад</Button>
-          <Button variant="outline" size="sm" :disabled="page >= totalPages" @click="$emit('update:page', page + 1)">Вперед</Button>
+        <div class="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+          <div class="flex items-center justify-between gap-2 sm:justify-start">
+            <span class="text-sm text-muted-foreground">На странице</span>
+            <Select :model-value="String(pageSize)" @update:model-value="onPageSizeChange">
+              <SelectTrigger class="h-9 w-[88px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem v-for="option in pageSizeOptions" :key="option" :value="String(option)">{{ option }}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div class="grid grid-cols-2 gap-2 sm:flex">
+            <Button
+              variant="outline"
+              size="sm"
+              class="w-full sm:w-auto"
+              :disabled="page <= 1"
+              @click="$emit('update:page', page - 1)"
+            >
+              Назад
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              class="w-full sm:w-auto"
+              :disabled="page >= totalPages"
+              @click="$emit('update:page', page + 1)"
+            >
+              Вперед
+            </Button>
+          </div>
         </div>
       </div>
     </CardContent>

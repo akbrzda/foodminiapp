@@ -4,10 +4,7 @@
       <CardContent>
         <PageHeader :title="campaign?.name || 'Рассылка'" :description="campaign?.description || 'Детальная статистика'">
           <template #actions>
-            <Button variant="secondary" @click="goBack">
-              <ArrowLeft :size="16" />
-              Назад
-            </Button>
+            <BackButton variant="secondary" @click="goBack" />
             <Button variant="secondary" @click="editCampaign">
               <Pencil :size="16" />
               Редактировать
@@ -183,7 +180,7 @@
 <script setup>
 import { devError } from "@/shared/utils/logger";
 import { computed, onMounted, ref, watch } from "vue";
-import { ArrowLeft, Pencil } from "lucide-vue-next";
+import { Pencil } from "lucide-vue-next";
 import { useRoute, useRouter } from "vue-router";
 import api from "@/shared/api/client.js";
 import Badge from "@/shared/components/ui/badge/Badge.vue";
@@ -193,6 +190,7 @@ import CardContent from "@/shared/components/ui/card/CardContent.vue";
 import CardHeader from "@/shared/components/ui/card/CardHeader.vue";
 import CardTitle from "@/shared/components/ui/card/CardTitle.vue";
 import PageHeader from "@/shared/components/PageHeader.vue";
+import BackButton from "@/shared/components/BackButton.vue";
 import Table from "@/shared/components/ui/table/Table.vue";
 import TableBody from "@/shared/components/ui/table/TableBody.vue";
 import TableCell from "@/shared/components/ui/table/TableCell.vue";

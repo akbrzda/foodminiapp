@@ -4,9 +4,7 @@
       <CardContent>
         <PageHeader :title="pageTitle" :description="pageSubtitle">
           <template #actions>
-            <Button variant="outline" @click="goBack">
-              Назад
-            </Button>
+            <BackButton @click="goBack" />
           </template>
         </PageHeader>
       </CardContent>
@@ -101,6 +99,7 @@ import CardContent from "@/shared/components/ui/card/CardContent.vue";
 import { Field, FieldContent, FieldGroup, FieldLabel } from "@/shared/components/ui/field";
 import Input from "@/shared/components/ui/input/Input.vue";
 import PageHeader from "@/shared/components/PageHeader.vue";
+import BackButton from "@/shared/components/BackButton.vue";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/components/ui/select";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
 import { createMarkerIcon, getTileLayer } from "@/shared/utils/leaflet.js";

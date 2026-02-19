@@ -72,7 +72,7 @@ const getShiftWindowUtc = (timeZone, nowOrDate = new Date()) => {
   let localMonth = Number(parts.month || now.getMonth() + 1);
   let localDay = Number(parts.day || now.getDate());
 
-  if (localHour >= 0 && localHour < 7) {
+  if (localHour >= 0 && localHour < 5) {
     const prevDay = new Date(localYear, localMonth - 1, localDay);
     prevDay.setDate(prevDay.getDate() - 1);
     localYear = prevDay.getFullYear();
@@ -80,7 +80,7 @@ const getShiftWindowUtc = (timeZone, nowOrDate = new Date()) => {
     localDay = prevDay.getDate();
   }
 
-  const startUtc = zonedTimeToUtc({ year: localYear, month: localMonth, day: localDay, hour: 7, minute: 0, second: 0 }, timeZone);
+  const startUtc = zonedTimeToUtc({ year: localYear, month: localMonth, day: localDay, hour: 5, minute: 0, second: 0 }, timeZone);
   const endUtc = new Date(startUtc.getTime() + 24 * 60 * 60 * 1000);
 
   return { startUtc, endUtc };

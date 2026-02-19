@@ -4,7 +4,8 @@
       <CardContent class="space-y-4">
         <PageHeader title="Аналитика" description="Сводка по заказам и клиентам">
           <template #filters>
-            <Field class="min-w-[180px] !w-auto">
+            <div class="grid w-full gap-3 lg:grid-cols-12 lg:items-end">
+              <Field class="min-w-0 lg:col-span-8">
               <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Период</FieldLabel>
               <FieldContent>
                 <div class="flex flex-wrap items-center gap-2">
@@ -14,19 +15,23 @@
                     <Button size="sm" :variant="periodButtonVariant('month')" @click="setPeriod('month')">М</Button>
                     <Button size="sm" :variant="periodButtonVariant('year')" @click="setPeriod('year')">Г</Button>
                   </div>
-                  <div class="inline-flex items-center gap-2 rounded-full border border-border bg-background px-2 py-[1px]">
-                    <Button size="sm" variant="ghost" @click="shiftPeriod(-1)" :disabled="isCustomPeriod">
-                      <ChevronLeft :size="14" />
-                    </Button>
-                    <span class="min-w-[160px] text-center text-sm font-medium text-foreground">{{ periodRangeLabel }}</span>
-                    <Button size="sm" variant="ghost" @click="shiftPeriod(1)" :disabled="isCustomPeriod">
-                      <ChevronRight :size="14" />
+                  <div class="flex w-full items-center gap-2 sm:w-auto">
+                    <div class="inline-flex min-w-0 flex-1 items-center gap-2 rounded-full border border-border bg-background px-2 py-[1px] sm:min-w-[220px] sm:flex-none">
+                      <Button size="sm" variant="ghost" @click="shiftPeriod(-1)" :disabled="isCustomPeriod">
+                        <ChevronLeft :size="14" />
+                      </Button>
+                      <span class="min-w-0 flex-1 text-center text-sm font-medium text-foreground">
+                        {{ periodRangeLabel }}
+                      </span>
+                      <Button size="sm" variant="ghost" @click="shiftPeriod(1)" :disabled="isCustomPeriod">
+                        <ChevronRight :size="14" />
+                      </Button>
+                    </div>
+                    <Button size="icon" variant="outline" class="shrink-0" @click="activateCustomPeriod">
+                      <Calendar :size="16" />
                     </Button>
                   </div>
-                  <Button size="icon" variant="outline" @click="activateCustomPeriod">
-                    <Calendar :size="16" />
-                  </Button>
-                  <div v-if="isCustomPeriod" class="min-w-[240px]">
+                  <div v-if="isCustomPeriod" class="w-full sm:min-w-[240px] sm:flex-1">
                     <Popover v-model:open="isRangeOpen">
                       <PopoverTrigger asChild>
                         <Button
@@ -38,11 +43,11 @@
                           {{ customRangeLabel }}
                         </Button>
                       </PopoverTrigger>
-                      <PopoverContent class="w-auto p-0" align="start">
+                      <PopoverContent class="w-[calc(100vw-2rem)] max-w-md p-0 sm:w-auto" align="start">
                         <div class="space-y-3 p-3">
                           <CalendarView
                             :model-value="calendarRange"
-                            :number-of-months="2"
+                            :number-of-months="calendarMonths"
                             :is-date-disabled="isFutureDateDisabled"
                             locale="ru-RU"
                             multiple
@@ -59,8 +64,8 @@
                 </div>
               </FieldContent>
             </Field>
-            <div class="grid grid-cols-2 gap-4">
-              <Field class="min-w-[180px]">
+            <div class="grid gap-3 sm:grid-cols-2 lg:col-span-4">
+              <Field class="min-w-0">
                 <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Город</FieldLabel>
                 <FieldContent>
                   <Select v-model="filters.city_id" :disabled="isLocationLocked" @update:modelValue="onCityChange">
@@ -76,7 +81,7 @@
                   </Select>
                 </FieldContent>
               </Field>
-              <Field class="min-w-[180px]">
+              <Field class="min-w-0">
                 <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Филиал</FieldLabel>
                 <FieldContent>
                   <Select v-model="filters.branch_id" :disabled="isLocationLocked || !filters.city_id" @update:modelValue="scheduleLoad">
@@ -92,6 +97,7 @@
                   </Select>
                 </FieldContent>
               </Field>
+            </div>
             </div>
           </template>
         </PageHeader>
@@ -297,7 +303,7 @@
 </template>
 <script setup>
 import { devError } from "@/shared/utils/logger";
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import {
   Activity,
   Banknote,
@@ -365,6 +371,7 @@ const filters = ref({
   branch_id: "",
 });
 const isRangeOpen = ref(false);
+const calendarMonths = ref(window.innerWidth < 1024 ? 1 : 2);
 const timeZone = getLocalTimeZone();
 const rangeFormatter = new DateFormatter("ru-RU", { dateStyle: "medium" });
 const normalizeRangeValues = (value) => {
@@ -413,6 +420,9 @@ const isFutureDateDisabled = (date) => date.compare(today(timeZone)) > 0;
 const clearDateRange = () => {
   filters.value.date_from = "";
   filters.value.date_to = "";
+};
+const updateCalendarMonths = () => {
+  calendarMonths.value = window.innerWidth < 1024 ? 1 : 2;
 };
 const chartTabs = ["Выручка", "Заказы", "Средний чек"];
 const isCustomPeriod = computed(() => filters.value.period === "custom");
@@ -654,6 +664,8 @@ watch(
   },
 );
 onMounted(async () => {
+  updateCalendarMonths();
+  window.addEventListener("resize", updateCalendarMonths);
   try {
     await referenceStore.loadCities();
     if (isManager.value && managerBranches.value.length > 0) {
@@ -670,6 +682,12 @@ onMounted(async () => {
   } catch (error) {
     devError("Ошибка загрузки аналитики:", error);
     showErrorNotification("Ошибка загрузки аналитики");
+  }
+});
+onBeforeUnmount(() => {
+  window.removeEventListener("resize", updateCalendarMonths);
+  if (loadTimer.value) {
+    clearTimeout(loadTimer.value);
   }
 });
 </script>

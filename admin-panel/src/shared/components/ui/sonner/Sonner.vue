@@ -1,5 +1,6 @@
 <script setup>
 import { reactiveOmit } from "@vueuse/core";
+import { computed } from "vue";
 import {
   CircleCheckIcon,
   InfoIcon,
@@ -34,22 +35,35 @@ const props = defineProps({
   containerAriaLabel: { type: String, required: false },
 });
 const delegatedProps = reactiveOmit(props, "toastOptions");
+const toasterPosition = computed(() => props.position || "top-right");
+const toasterOffset = computed(() => props.offset ?? "16px");
+const toasterMobileOffset = computed(() => props.mobileOffset ?? "12px");
+const mergedToastOptions = computed(() => {
+  const userOptions = props.toastOptions || {};
+  const userClasses = userOptions.classes || {};
+
+  return {
+    ...userOptions,
+    classes: {
+      toast:
+        "group toast w-[calc(100vw-1rem)] rounded-lg group-[.toaster]:bg-background group-[.toaster]:text-foreground group-[.toaster]:border-border group-[.toaster]:shadow-lg sm:w-auto",
+      title: "text-sm leading-5",
+      description: "group-[.toast]:text-muted-foreground text-xs leading-4 sm:text-sm",
+      actionButton: "w-full justify-center group-[.toast]:bg-primary group-[.toast]:text-primary-foreground sm:w-auto",
+      cancelButton: "w-full justify-center group-[.toast]:bg-muted group-[.toast]:text-muted-foreground sm:w-auto",
+      ...userClasses,
+    },
+  };
+});
 </script>
 
 <template>
   <Sonner
     class="toaster group z-[200]"
-    :toast-options="{
-      classes: {
-        toast:
-          'group toast group-[.toaster]:bg-background group-[.toaster]:text-foreground group-[.toaster]:border-border group-[.toaster]:shadow-lg',
-        description: 'group-[.toast]:text-muted-foreground',
-        actionButton:
-          'group-[.toast]:bg-primary group-[.toast]:text-primary-foreground',
-        cancelButton:
-          'group-[.toast]:bg-muted group-[.toast]:text-muted-foreground',
-      },
-    }"
+    :position="toasterPosition"
+    :offset="toasterOffset"
+    :mobile-offset="toasterMobileOffset"
+    :toast-options="mergedToastOptions"
     v-bind="delegatedProps"
   >
     <template #success-icon>
