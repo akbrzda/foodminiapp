@@ -1,6 +1,6 @@
 <template>
-  <div class="min-h-screen bg-background text-foreground">
-    <main class="min-h-screen">
+  <div class="h-dvh min-h-screen overflow-hidden bg-background text-foreground">
+    <main class="h-full min-h-0">
       <RouterView />
     </main>
   </div>

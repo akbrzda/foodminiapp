@@ -1,5 +1,5 @@
 <template>
-  <section class="relative h-full min-h-[320px] flex-1 bg-background">
+  <section class="relative h-full min-h-[320px] w-full flex-1 bg-background lg:min-h-0">
     <div ref="mapContainerRef" class="absolute inset-0 z-0"></div>
     <div class="pointer-events-auto absolute right-2 top-2 z-20 flex flex-col gap-2 sm:right-4 sm:top-4">
       <Button size="icon" variant="outline" @click="$emit('togglePolygons')">

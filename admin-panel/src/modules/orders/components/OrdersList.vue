@@ -1,5 +1,5 @@
 <template>
-  <section class="flex h-full w-full flex-1 flex-col border-border bg-muted/40 p-3 sm:p-4 lg:w-[42%] lg:min-w-[420px] lg:border-r">
+  <section class="flex h-full min-h-0 w-full flex-1 flex-col border-border bg-muted/40 p-3 sm:p-4 lg:w-[42%] lg:min-w-[420px] lg:border-r">
     <!-- Табы и фильтры -->
     <div class="flex flex-wrap items-center justify-between gap-3">
       <div class="flex items-center gap-2 border-b border-transparent">
@@ -68,7 +68,7 @@
     </div>
 
     <!-- Список заказов -->
-    <div class="mt-4 flex-1 overflow-y-auto pr-1">
+    <div class="mt-4 min-h-0 flex-1 overflow-y-auto pr-1">
       <div v-if="visibleOrders.length === 0" class="flex h-full flex-col items-center justify-center gap-3 text-center text-sm text-muted-foreground">
         <component :is="emptyStateIcon" :size="28" />
         <div class="max-w-[240px]">
