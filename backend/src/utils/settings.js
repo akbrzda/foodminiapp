@@ -7,6 +7,7 @@ export const TELEGRAM_START_MESSAGE_DEFAULT = {
   enabled: true,
   text: "Привет! Добро пожаловать в Панда Пиццу.",
   image_url: "",
+  images: [],
   button_type: "web_app",
   button_text: "Открыть приложение",
   button_url: "",
@@ -198,6 +199,8 @@ const normalizeString = (value) => {
   if (!trimmed) return null;
   return trimmed;
 };
+const TELEGRAM_START_MAX_IMAGES = 20;
+const TELEGRAM_START_MAX_IMAGE_WEIGHT = 1000;
 
 const isValidAbsoluteUrl = (value) => {
   if (!value) return false;
@@ -227,10 +230,65 @@ const validateTelegramStartMessage = (value) => {
     return { normalized: null, error: "Текст приветствия не должен превышать 4096 символов" };
   }
 
-  const imageUrl = String(value.image_url || "").trim();
-  if (imageUrl && !isValidAbsoluteUrl(imageUrl)) {
+  const legacyImageUrl = String(value.image_url || "").trim();
+  if (legacyImageUrl && !isValidAbsoluteUrl(legacyImageUrl)) {
     return { normalized: null, error: "Поле image_url должно содержать корректный URL" };
   }
+  const imagesSource = Array.isArray(value.images) ? value.images : [];
+  if (imagesSource.length > TELEGRAM_START_MAX_IMAGES) {
+    return { normalized: null, error: `Количество изображений не должно превышать ${TELEGRAM_START_MAX_IMAGES}` };
+  }
+  const normalizedImages = [];
+  const imageUrls = new Set();
+
+  for (let index = 0; index < imagesSource.length; index += 1) {
+    const image = imagesSource[index];
+    if (!image || typeof image !== "object" || Array.isArray(image)) {
+      return { normalized: null, error: `Изображение #${index + 1} имеет некорректный формат` };
+    }
+
+    const url = String(image.url || "").trim();
+    if (!url) {
+      return { normalized: null, error: `Изображение #${index + 1}: поле url обязательно` };
+    }
+    if (!isValidAbsoluteUrl(url)) {
+      return { normalized: null, error: `Изображение #${index + 1}: поле url должно быть корректным URL` };
+    }
+    if (imageUrls.has(url)) {
+      return { normalized: null, error: `Изображение #${index + 1}: дубликат URL` };
+    }
+    imageUrls.add(url);
+
+    const weightRaw = image.weight === undefined ? 1 : Number(image.weight);
+    if (!Number.isFinite(weightRaw) || weightRaw <= 0) {
+      return { normalized: null, error: `Изображение #${index + 1}: weight должен быть числом больше 0` };
+    }
+    const weight = Math.round(weightRaw);
+    if (weight > TELEGRAM_START_MAX_IMAGE_WEIGHT) {
+      return { normalized: null, error: `Изображение #${index + 1}: weight не должен превышать ${TELEGRAM_START_MAX_IMAGE_WEIGHT}` };
+    }
+
+    const isActive = image.is_active === undefined ? true : normalizeBoolean(image.is_active);
+    if (isActive === null) {
+      return { normalized: null, error: `Изображение #${index + 1}: is_active должен быть булевым` };
+    }
+
+    normalizedImages.push({
+      url,
+      weight,
+      is_active: isActive,
+    });
+  }
+
+  if (legacyImageUrl && normalizedImages.length === 0) {
+    normalizedImages.push({
+      url: legacyImageUrl,
+      weight: 1,
+      is_active: true,
+    });
+  }
+
+  const primaryImageUrl = normalizedImages.find((image) => image.is_active)?.url || normalizedImages[0]?.url || "";
 
   const buttonTypeRaw = String(value.button_type || "url").trim().toLowerCase();
   const buttonType = TELEGRAM_START_BUTTON_TYPES.has(buttonTypeRaw) ? buttonTypeRaw : null;
@@ -254,7 +312,8 @@ const validateTelegramStartMessage = (value) => {
     normalized: {
       enabled,
       text: text || TELEGRAM_START_MESSAGE_DEFAULT.text,
-      image_url: imageUrl,
+      image_url: primaryImageUrl,
+      images: normalizedImages,
       button_type: buttonType,
       button_text: buttonText,
       button_url: buttonUrl,

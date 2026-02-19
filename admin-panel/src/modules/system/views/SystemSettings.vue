@@ -224,15 +224,53 @@
 
             <FieldGroup class="grid gap-4 md:grid-cols-[1fr_auto] md:items-end">
               <Field>
-                <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Изображение</FieldLabel>
+                <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Изображения</FieldLabel>
                 <FieldContent>
-                  <input ref="telegramFileInput" type="file" accept="image/*" class="hidden" @change="onTelegramFileChange" />
+                  <input ref="telegramFileInput" type="file" accept="image/*" multiple class="hidden" @change="onTelegramFileChange" />
                   <div class="flex min-h-24 flex-col items-start justify-center rounded-xl border border-dashed border-border/70 bg-muted/20 p-3">
                     <div class="text-xs text-muted-foreground">JPG/PNG/WebP, до 10MB</div>
+                    <div class="text-xs text-muted-foreground">Можно выбрать несколько файлов сразу</div>
                     <div v-if="telegramUploadState.error" class="text-xs text-red-600">{{ telegramUploadState.error }}</div>
-                    <div v-if="telegramUploadState.loading" class="text-xs text-muted-foreground">Загрузка...</div>
-                    <div v-if="telegramUploadState.preview || telegramForm.image_url" class="mt-3">
-                      <img :src="telegramUploadState.preview || telegramForm.image_url" alt="preview" class="h-24 w-24 rounded-lg object-cover" />
+                    <div v-if="telegramUploadState.loading" class="text-xs text-muted-foreground">Загрузка {{ telegramUploadState.completed }} из {{ telegramUploadState.total }}...</div>
+                    <div v-if="telegramForm.images.length" class="mt-3 grid w-full gap-3">
+                      <div
+                        v-for="(image, index) in telegramForm.images"
+                        :key="`${image.url}-${index}`"
+                        class="grid gap-3 rounded-xl border border-border/60 bg-background p-3 md:grid-cols-[88px_1fr_auto]"
+                      >
+                        <img :src="image.url" alt="telegram-start-image" class="h-20 w-20 rounded-lg object-cover" />
+                        <div class="grid gap-3 md:grid-cols-2">
+                          <Field>
+                            <FieldLabel class="text-[11px] uppercase tracking-wide text-muted-foreground">Вес</FieldLabel>
+                            <FieldContent>
+                              <Input
+                                :model-value="image.weight"
+                                type="number"
+                                min="1"
+                                max="1000"
+                                @update:model-value="(value) => updateTelegramImageWeight(index, value)"
+                              />
+                            </FieldContent>
+                          </Field>
+                          <Field>
+                            <FieldLabel class="text-[11px] uppercase tracking-wide text-muted-foreground">Статус</FieldLabel>
+                            <FieldContent>
+                              <Select :model-value="image.is_active" @update:model-value="(value) => updateTelegramImageActive(index, value)">
+                                <SelectTrigger class="w-full">
+                                  <SelectValue placeholder="Выберите статус" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem :value="true">Активно</SelectItem>
+                                  <SelectItem :value="false">Отключено</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </FieldContent>
+                          </Field>
+                        </div>
+                        <Button type="button" variant="outline" size="icon" class="justify-self-start md:justify-self-end" @click="removeTelegramImage(index)">
+                          <X :size="16" />
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 </FieldContent>
@@ -240,17 +278,7 @@
               <div class="flex w-full gap-2 md:w-auto">
                 <Button type="button" variant="outline" class="w-full md:w-auto" @click="triggerTelegramFileInput">
                   <ImagePlus :size="16" />
-                  Загрузить
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  class="w-full md:w-auto"
-                  :disabled="!telegramForm.image_url && !telegramUploadState.preview"
-                  @click="clearTelegramImage"
-                >
-                  <X :size="16" />
-                  Удалить
+                  Добавить фото
                 </Button>
               </div>
             </FieldGroup>
@@ -290,11 +318,14 @@
               </CardHeader>
               <CardContent class="space-y-3 pt-0">
                 <img
-                  v-if="telegramUploadState.preview || telegramForm.image_url"
-                  :src="telegramUploadState.preview || telegramForm.image_url"
+                  v-if="telegramPreviewImageUrl"
+                  :src="telegramPreviewImageUrl"
                   alt="preview"
                   class="max-h-64 rounded-lg object-cover"
                 />
+                <p v-if="telegramForm.images.length" class="text-xs text-muted-foreground">
+                  Фото в ротации: {{ telegramActiveImagesCount }} из {{ telegramForm.images.length }}
+                </p>
                 <p class="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
                   {{ telegramForm.text || "Текст приветствия не задан" }}
                 </p>
@@ -404,12 +435,14 @@ const telegramTestId = ref("");
 const telegramUploadState = ref({
   loading: false,
   error: null,
-  preview: null,
+  total: 0,
+  completed: 0,
 });
 const telegramForm = ref({
   enabled: true,
   text: "",
   image_url: "",
+  images: [],
   button_type: "web_app",
   button_text: "",
   button_url: "",
@@ -429,10 +462,35 @@ const primitiveTypes = new Set(["boolean", "string", "number"]);
 const normalizeTelegramForm = (value = {}) => {
   const config = value && typeof value === "object" && !Array.isArray(value) ? value : {};
   const buttonType = String(config.button_type || "web_app").toLowerCase();
+  const sourceImages = Array.isArray(config.images) ? config.images : [];
+  const images = sourceImages
+    .map((image) => {
+      if (!image || typeof image !== "object" || Array.isArray(image)) return null;
+      const url = String(image.url || "").trim();
+      if (!url) return null;
+      const weightRaw = Number(image.weight);
+      const weight = Number.isFinite(weightRaw) && weightRaw > 0 ? Math.round(weightRaw) : 1;
+      return {
+        url,
+        weight: Math.min(Math.max(weight, 1), 1000),
+        is_active: image.is_active !== false,
+      };
+    })
+    .filter(Boolean);
+  const legacyImageUrl = String(config.image_url || "").trim();
+  if (legacyImageUrl && !images.some((image) => image.url === legacyImageUrl)) {
+    images.push({
+      url: legacyImageUrl,
+      weight: 1,
+      is_active: true,
+    });
+  }
+  const primaryImageUrl = images.find((image) => image.is_active)?.url || images[0]?.url || "";
   return {
     enabled: config.enabled !== false,
     text: String(config.text || ""),
-    image_url: String(config.image_url || ""),
+    image_url: primaryImageUrl,
+    images,
     button_type: buttonType === "url" || buttonType === "web_app" ? buttonType : "web_app",
     button_text: String(config.button_text || ""),
     button_url: String(config.button_url || ""),
@@ -447,7 +505,8 @@ const applySettingsResponse = (data) => {
   telegramUploadState.value = {
     loading: false,
     error: null,
-    preview: telegramForm.value.image_url || null,
+    total: 0,
+    completed: 0,
   };
 };
 
@@ -465,6 +524,10 @@ const groupSettings = (list) => {
 
 const groupedModuleSettings = computed(() => groupSettings(moduleItems.value));
 const moduleGroups = computed(() => groupedModuleSettings.value);
+const telegramActiveImagesCount = computed(() => telegramForm.value.images.filter((image) => image.is_active !== false).length);
+const telegramPreviewImageUrl = computed(() => {
+  return telegramForm.value.images.find((image) => image.is_active !== false)?.url || telegramForm.value.images[0]?.url || "";
+});
 
 const normalizeInteger = (targetForm, key) => {
   const value = targetForm.value[key];
@@ -638,41 +701,82 @@ const triggerTelegramFileInput = () => {
 };
 
 const onTelegramFileChange = (event) => {
-  const file = event.target.files?.[0];
-  if (!file) return;
-  void handleTelegramFile(file);
+  const files = Array.from(event.target.files || []);
+  if (event.target) {
+    event.target.value = "";
+  }
+  if (!files.length) return;
+  void handleTelegramFiles(files);
 };
 
-const handleTelegramFile = async (file) => {
-  if (!file.type.startsWith("image/")) {
-    telegramUploadState.value = { loading: false, error: "Нужен файл изображения", preview: null };
-    return;
-  }
-  if (file.size > 10 * 1024 * 1024) {
-    telegramUploadState.value = { loading: false, error: "Файл больше 10MB", preview: null };
-    return;
-  }
-
-  telegramUploadState.value = { loading: true, error: null, preview: URL.createObjectURL(file) };
-  const formData = new FormData();
-  formData.append("image", file);
-
-  try {
-    const response = await api.post("/api/uploads/telegram-start/1", formData, {
-      headers: { "Content-Type": "multipart/form-data" },
-    });
-    const uploadedUrl = response.data?.data?.url || "";
-    telegramForm.value.image_url = uploadedUrl;
-    telegramUploadState.value = { loading: false, error: null, preview: uploadedUrl };
-  } catch (error) {
-    devError("Ошибка загрузки изображения /start:", error);
-    telegramUploadState.value = { loading: false, error: "Не удалось загрузить изображение", preview: null };
-  }
+const syncTelegramPrimaryImage = () => {
+  telegramForm.value.image_url = telegramPreviewImageUrl.value;
 };
 
-const clearTelegramImage = () => {
-  telegramForm.value.image_url = "";
-  telegramUploadState.value = { loading: false, error: null, preview: null };
+const handleTelegramFiles = async (files) => {
+  const validFiles = files.filter((file) => file?.type?.startsWith("image/"));
+  if (!validFiles.length) {
+    telegramUploadState.value = { loading: false, error: "Нужен файл изображения", total: 0, completed: 0 };
+    return;
+  }
+  if (validFiles.some((file) => file.size > 10 * 1024 * 1024)) {
+    telegramUploadState.value = { loading: false, error: "Один из файлов больше 10MB", total: 0, completed: 0 };
+    return;
+  }
+
+  telegramUploadState.value = {
+    loading: true,
+    error: null,
+    total: validFiles.length,
+    completed: 0,
+  };
+
+  let uploadedCount = 0;
+  for (const file of validFiles) {
+    const formData = new FormData();
+    formData.append("image", file);
+    try {
+      const response = await api.post("/api/uploads/telegram-start/1", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      const uploadedUrl = response.data?.data?.url || "";
+      if (uploadedUrl && !telegramForm.value.images.some((image) => image.url === uploadedUrl)) {
+        telegramForm.value.images.push({
+          url: uploadedUrl,
+          weight: 1,
+          is_active: true,
+        });
+      }
+      uploadedCount += 1;
+      telegramUploadState.value.completed = uploadedCount;
+    } catch (error) {
+      devError("Ошибка загрузки изображения /start:", error);
+      telegramUploadState.value.error = "Часть изображений не удалось загрузить";
+    }
+  }
+
+  telegramUploadState.value.loading = false;
+  syncTelegramPrimaryImage();
+};
+
+const updateTelegramImageWeight = (index, value) => {
+  const image = telegramForm.value.images[index];
+  if (!image) return;
+  const parsed = Number(value);
+  image.weight = Number.isFinite(parsed) && parsed > 0 ? Math.min(Math.round(parsed), 1000) : 1;
+  syncTelegramPrimaryImage();
+};
+
+const updateTelegramImageActive = (index, value) => {
+  const image = telegramForm.value.images[index];
+  if (!image) return;
+  image.is_active = normalizeBoolean(value, true);
+  syncTelegramPrimaryImage();
+};
+
+const removeTelegramImage = (index) => {
+  telegramForm.value.images.splice(index, 1);
+  syncTelegramPrimaryImage();
 };
 
 onMounted(async () => {

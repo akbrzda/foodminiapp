@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import db from "../config/database.js";
 import { TELEGRAM_START_MESSAGE_DEFAULT } from "./settings.js";
 export const validateTelegramData = (telegramInitData, botToken) => {
   try {
@@ -45,6 +46,7 @@ const resolveMiniAppBaseUrl = () => {
 };
 
 const TELEGRAM_BUTTON_TYPES = new Set(["url", "web_app"]);
+const TELEGRAM_START_IMAGE_WEIGHT_DEFAULT = 1;
 
 const getValidAbsoluteUrl = (value) => {
   const normalized = String(value || "").trim();
@@ -65,11 +67,41 @@ const trimTextByLimit = (value, limit) => {
   return text.slice(0, limit);
 };
 
+const normalizeTelegramStartImages = (rawConfig = {}) => {
+  const source = Array.isArray(rawConfig.images) ? rawConfig.images : [];
+  const result = [];
+
+  for (const image of source) {
+    if (!image || typeof image !== "object" || Array.isArray(image)) continue;
+    const url = getValidAbsoluteUrl(image.url || "");
+    if (!url) continue;
+    const weightRaw = Number(image.weight);
+    const weight = Number.isFinite(weightRaw) && weightRaw > 0 ? Math.round(weightRaw) : TELEGRAM_START_IMAGE_WEIGHT_DEFAULT;
+    const isActive = image.is_active !== false;
+    result.push({
+      url,
+      weight,
+      is_active: isActive,
+    });
+  }
+
+  const legacyImageUrl = getValidAbsoluteUrl(rawConfig.image_url || "");
+  if (legacyImageUrl && !result.some((image) => image.url === legacyImageUrl)) {
+    result.push({
+      url: legacyImageUrl,
+      weight: TELEGRAM_START_IMAGE_WEIGHT_DEFAULT,
+      is_active: true,
+    });
+  }
+
+  return result;
+};
+
 const getTelegramStartMessageConfig = (systemSettings = null) => {
   const raw = systemSettings?.telegram_start_message || TELEGRAM_START_MESSAGE_DEFAULT;
   const enabled = raw.enabled !== false;
   const text = trimTextByLimit(raw.text || TELEGRAM_START_MESSAGE_DEFAULT.text, 4096);
-  const imageUrl = getValidAbsoluteUrl(raw.image_url || "");
+  const images = normalizeTelegramStartImages(raw);
   const buttonTypeRaw = String(raw.button_type || TELEGRAM_START_MESSAGE_DEFAULT.button_type || "url").toLowerCase();
   const buttonType = TELEGRAM_BUTTON_TYPES.has(buttonTypeRaw) ? buttonTypeRaw : "url";
   const buttonText = trimTextByLimit(raw.button_text || "", 64);
@@ -79,7 +111,7 @@ const getTelegramStartMessageConfig = (systemSettings = null) => {
   if (!enabled) {
     return {
       text: TELEGRAM_START_MESSAGE_DEFAULT.text,
-      imageUrl: "",
+      images: [],
       buttonType: "",
       buttonText: "",
       buttonUrl: "",
@@ -88,11 +120,78 @@ const getTelegramStartMessageConfig = (systemSettings = null) => {
 
   return {
     text: text || TELEGRAM_START_MESSAGE_DEFAULT.text,
-    imageUrl,
+    images,
     buttonType: buttonText && buttonUrl ? buttonType : "",
     buttonText: buttonText && buttonUrl ? buttonText : "",
     buttonUrl: buttonText && buttonUrl ? buttonUrl : "",
   };
+};
+
+const getLastTelegramStartImageUrl = async (telegramId) => {
+  const [rows] = await db.query("SELECT last_image_url FROM telegram_start_message_history WHERE telegram_id = ? LIMIT 1", [telegramId]);
+  if (!rows.length) return "";
+  return String(rows[0]?.last_image_url || "").trim();
+};
+
+const saveLastTelegramStartImageUrl = async (telegramId, imageUrl) => {
+  await db.query(
+    `INSERT INTO telegram_start_message_history (telegram_id, last_image_url)
+     VALUES (?, ?)
+     ON DUPLICATE KEY UPDATE last_image_url = VALUES(last_image_url), updated_at = CURRENT_TIMESTAMP`,
+    [telegramId, imageUrl],
+  );
+};
+
+const pickWeightedImage = (images) => {
+  if (!Array.isArray(images) || images.length === 0) return null;
+  let totalWeight = 0;
+  for (const image of images) {
+    totalWeight += Number(image.weight) > 0 ? Number(image.weight) : TELEGRAM_START_IMAGE_WEIGHT_DEFAULT;
+  }
+  if (totalWeight <= 0) return images[0];
+
+  let random = Math.random() * totalWeight;
+  for (const image of images) {
+    const weight = Number(image.weight) > 0 ? Number(image.weight) : TELEGRAM_START_IMAGE_WEIGHT_DEFAULT;
+    random -= weight;
+    if (random <= 0) return image;
+  }
+  return images[images.length - 1];
+};
+
+const resolveTelegramStartImage = async (telegramId, images) => {
+  const activeImages = (Array.isArray(images) ? images : []).filter((image) => image?.is_active !== false && image?.url);
+  if (activeImages.length === 0) return null;
+  if (!Number.isFinite(Number(telegramId)) || Number(telegramId) <= 0) {
+    return pickWeightedImage(activeImages);
+  }
+
+  const normalizedTelegramId = Number(telegramId);
+  let lastImageUrl = "";
+  try {
+    lastImageUrl = await getLastTelegramStartImageUrl(normalizedTelegramId);
+  } catch (error) {
+    console.error("Failed to read telegram start image history:", error);
+  }
+
+  let candidatePool = activeImages;
+  if (lastImageUrl && activeImages.length > 1) {
+    const withoutLast = activeImages.filter((image) => image.url !== lastImageUrl);
+    if (withoutLast.length > 0) {
+      candidatePool = withoutLast;
+    }
+  }
+
+  const selected = pickWeightedImage(candidatePool);
+  if (!selected?.url) return null;
+
+  try {
+    await saveLastTelegramStartImageUrl(normalizedTelegramId, selected.url);
+  } catch (error) {
+    console.error("Failed to write telegram start image history:", error);
+  }
+
+  return selected;
 };
 
 const buildStartReplyMarkup = ({ buttonType, buttonText, buttonUrl }) => {
@@ -182,11 +281,12 @@ export const sendTelegramStartMessage = async (telegramId, systemSettings = null
   try {
     const config = getTelegramStartMessageConfig(systemSettings);
     const replyMarkup = buildStartReplyMarkup(config);
-    if (config.imageUrl) {
+    const selectedImage = await resolveTelegramStartImage(telegramId, config.images);
+    if (selectedImage?.url) {
       const caption = trimTextByLimit(config.text, 1024);
       const response = await sendTelegramRequest("sendPhoto", {
         chat_id: telegramId,
-        photo: config.imageUrl,
+        photo: selectedImage.url,
         caption,
         ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
       });
