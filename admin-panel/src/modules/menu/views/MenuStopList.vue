@@ -13,24 +13,90 @@
       </CardContent>
     </Card>
     <Card>
-      <CardContent class="!p-0">
-        <Table v-if="isLoading || stopList.length > 0">
+      <CardContent class="space-y-4 p-4">
+        <FieldGroup class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <Field>
+            <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Филиал</FieldLabel>
+            <FieldContent>
+              <Select v-model="filters.branch_id">
+                <SelectTrigger class="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Все филиалы</SelectItem>
+                  <SelectGroup v-for="city in referenceStore.cities" :key="city.id">
+                    <SelectLabel>{{ city.name }}</SelectLabel>
+                    <SelectItem v-for="branch in referenceStore.branchesByCity[city.id] || []" :key="branch.id" :value="String(branch.id)">
+                      {{ branch.name }}
+                    </SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </FieldContent>
+          </Field>
+          <Field>
+            <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Тип</FieldLabel>
+            <FieldContent>
+              <Select v-model="filters.entity_type">
+                <SelectTrigger class="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Все типы</SelectItem>
+                  <SelectItem value="item">Блюдо</SelectItem>
+                  <SelectItem value="variant">Вариант</SelectItem>
+                  <SelectItem value="modifier">Модификатор</SelectItem>
+                </SelectContent>
+              </Select>
+            </FieldContent>
+          </Field>
+          <Field>
+            <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Канал</FieldLabel>
+            <FieldContent>
+              <Select v-model="filters.fulfillment_type">
+                <SelectTrigger class="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Все каналы</SelectItem>
+                  <SelectItem v-for="option in fulfillmentOptions" :key="option.value" :value="option.value">
+                    {{ option.label }}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </FieldContent>
+          </Field>
+          <Field>
+            <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Поиск</FieldLabel>
+            <FieldContent>
+              <Input v-model="filters.search" placeholder="ID, название, причина" />
+            </FieldContent>
+          </Field>
+        </FieldGroup>
+        <div class="flex justify-end">
+          <Button type="button" variant="outline" size="sm" @click="resetFilters">Сбросить фильтры</Button>
+        </div>
+        <Table v-if="isLoading || filteredStopList.length > 0">
           <TableHeader>
             <TableRow>
+              <TableHead>ID стопа</TableHead>
               <TableHead>Филиал</TableHead>
               <TableHead>Тип</TableHead>
               <TableHead>Название</TableHead>
+              <TableHead>Каналы</TableHead>
               <TableHead>Причина</TableHead>
-              <TableHead>Добавлено</TableHead>
+              <TableHead>Дата и время</TableHead>
               <TableHead class="text-right">Действия</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             <template v-if="isLoading">
               <TableRow v-for="index in 6" :key="`loading-${index}`">
+                <TableCell><Skeleton class="h-4 w-16" /></TableCell>
                 <TableCell><Skeleton class="h-4 w-40" /></TableCell>
                 <TableCell><Skeleton class="h-6 w-24" /></TableCell>
                 <TableCell><Skeleton class="h-4 w-44" /></TableCell>
+                <TableCell><Skeleton class="h-6 w-28" /></TableCell>
                 <TableCell><Skeleton class="h-4 w-36" /></TableCell>
                 <TableCell><Skeleton class="h-4 w-28" /></TableCell>
                 <TableCell class="text-right"><Skeleton class="ml-auto h-8 w-8" /></TableCell>
@@ -38,6 +104,9 @@
             </template>
             <template v-else>
               <TableRow v-for="item in paginatedStopList" :key="item.id">
+                <TableCell>
+                  <div class="text-xs text-muted-foreground">#{{ item.id }}</div>
+                </TableCell>
                 <TableCell>
                   <div class="text-sm font-medium">{{ getBranchName(item.branch_id) }}</div>
                 </TableCell>
@@ -50,10 +119,18 @@
                   <div class="text-sm font-medium text-foreground">{{ item.entity_name }}</div>
                 </TableCell>
                 <TableCell>
+                  <div class="flex flex-wrap gap-1">
+                    <Badge v-for="channel in getFulfillmentTypes(item.fulfillment_types)" :key="`${item.id}-${channel}`" variant="secondary">
+                      {{ getFulfillmentLabel(channel) }}
+                    </Badge>
+                    <Badge v-if="getFulfillmentTypes(item.fulfillment_types).length === 0" variant="outline">Все каналы</Badge>
+                  </div>
+                </TableCell>
+                <TableCell>
                   <div class="text-xs text-muted-foreground">{{ item.reason || "—" }}</div>
                 </TableCell>
                 <TableCell>
-                  <div class="text-xs text-muted-foreground">{{ formatDate(item.created_at) }}</div>
+                  <div class="text-xs text-muted-foreground">{{ formatStopCreatedAt(item.created_at) }}</div>
                 </TableCell>
                 <TableCell class="text-right">
                   <Button variant="ghost" size="icon" @click="removeFromStopList(item)">
@@ -64,10 +141,12 @@
             </template>
           </TableBody>
         </Table>
-        <div v-else class="py-8 text-center text-sm text-muted-foreground">Стоп-лист пуст</div>
+        <div v-else class="py-8 text-center text-sm text-muted-foreground">
+          {{ stopList.length === 0 ? "Стоп-лист пуст" : "По выбранным фильтрам ничего не найдено" }}
+        </div>
       </CardContent>
     </Card>
-    <TablePagination :total="stopList.length" :page="page" :page-size="pageSize" @update:page="page = $event" @update:page-size="onPageSizeChange" />
+    <TablePagination :total="filteredStopList.length" :page="page" :page-size="pageSize" @update:page="page = $event" @update:page-size="onPageSizeChange" />
     <Dialog v-if="showModal" :open="showModal" @update:open="(value) => (value ? null : closeModal())">
       <DialogContent class="w-full max-w-5xl">
         <DialogHeader>
@@ -377,15 +456,46 @@ const form = ref({
   auto_remove: false,
   remove_at: null,
 });
+const filters = ref({
+  branch_id: "all",
+  entity_type: "all",
+  fulfillment_type: "all",
+  search: "",
+});
 const fulfillmentOptions = [
   { value: "pickup", label: "Самовывоз" },
   { value: "delivery", label: "Доставка" },
 ];
+const fulfillmentLabelMap = {
+  pickup: "Самовывоз",
+  delivery: "Доставка",
+};
 const hours = Array.from({ length: 24 }, (_, index) => String(index).padStart(2, "0"));
 const minutes = Array.from({ length: 60 }, (_, index) => String(index).padStart(2, "0"));
 const paginatedStopList = computed(() => {
   const start = (page.value - 1) * pageSize.value;
-  return stopList.value.slice(start, start + pageSize.value);
+  return filteredStopList.value.slice(start, start + pageSize.value);
+});
+const filteredStopList = computed(() => {
+  const search = filters.value.search.trim().toLowerCase();
+  return stopList.value.filter((item) => {
+    if (filters.value.branch_id !== "all" && String(item.branch_id) !== filters.value.branch_id) {
+      return false;
+    }
+    if (filters.value.entity_type !== "all" && item.entity_type !== filters.value.entity_type) {
+      return false;
+    }
+    const fulfillmentTypes = getFulfillmentTypes(item.fulfillment_types);
+    const isAllChannelsStop = fulfillmentTypes.length === 0;
+    if (filters.value.fulfillment_type !== "all" && !isAllChannelsStop && !fulfillmentTypes.includes(filters.value.fulfillment_type)) {
+      return false;
+    }
+    if (!search) {
+      return true;
+    }
+    const raw = `${item.id} ${item.entity_name || ""} ${item.reason || ""}`.toLowerCase();
+    return raw.includes(search);
+  });
 });
 const isModifierType = computed(() => form.value.type === "modifier");
 const isProductType = computed(() => form.value.type === "product");
@@ -438,6 +548,38 @@ const allProductsSelected = computed(() => {
 });
 const getBranchName = (branchId) => {
   return referenceStore.branches.find((b) => b.id === branchId)?.name || "Неизвестно";
+};
+const getFulfillmentTypes = (value) => {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+};
+const getFulfillmentLabel = (value) => fulfillmentLabelMap[value] || value;
+const formatStopCreatedAt = (value) => {
+  if (!value) return "—";
+  return formatDate(value, {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+const resetFilters = () => {
+  filters.value = {
+    branch_id: "all",
+    entity_type: "all",
+    fulfillment_type: "all",
+    search: "",
+  };
 };
 const loadStopList = async ({ preservePage = false } = {}) => {
   isLoading.value = true;
@@ -763,6 +905,12 @@ watch(
   () => [page.value, pageSize.value],
   () => {
     saveContext({}, { page: page.value, pageSize: pageSize.value });
+  },
+);
+watch(
+  () => [filters.value.branch_id, filters.value.entity_type, filters.value.fulfillment_type, filters.value.search],
+  () => {
+    page.value = 1;
   },
 );
 </script>

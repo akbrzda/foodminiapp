@@ -46,9 +46,6 @@
                         Обновить список
                       </Button>
                     </div>
-                    <p class="text-xs text-muted-foreground">
-                      Шаги: 1) выберите город iiko в списке, 2) сохраните карточку города.
-                    </p>
                   </div>
                 </template>
               </FieldContent>
