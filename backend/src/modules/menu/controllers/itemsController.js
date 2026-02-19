@@ -271,7 +271,7 @@ export const getAdminItems = async (req, res, next) => {
     const [itemCities] = await db.query(
       `SELECT item_id, city_id
        FROM menu_item_cities
-       WHERE is_available = TRUE`,
+       WHERE is_active = TRUE`,
     );
 
     const cityIdsByItemId = new Map();

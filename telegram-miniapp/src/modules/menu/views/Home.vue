@@ -19,7 +19,7 @@
         </div>
       </template>
     </div>
-    <div v-if="changelogLoading" class="release-banner release-banner-skeleton">
+ <!--   <div v-if="changelogLoading" class="release-banner release-banner-skeleton">
       <div class="skeleton release-skeleton-title"></div>
       <div class="skeleton release-skeleton-line"></div>
     </div>
@@ -33,6 +33,7 @@
       <div v-if="latestRelease.description" class="release-description">{{ latestRelease.description }}</div>
       <button type="button" class="release-open-btn" @click="openReleaseDetails(latestRelease.id)">Открыть changelog</button>
     </div>
+    -->
     <div v-if="activeOrders.length > 0" class="active-orders-container">
       <div class="active-orders" :class="{ 'has-scroll': activeOrders.length > 1 }">
         <div v-for="order in activeOrders" :key="order.id" class="active-order" @click="router.push(`/order/${order.id}`)">

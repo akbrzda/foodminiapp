@@ -21,6 +21,39 @@
               </FieldContent>
             </Field>
             <Field>
+              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Город iiko (справочник)</FieldLabel>
+              <FieldContent>
+                <div v-if="iikoAddressCitiesLoading" class="space-y-2">
+                  <Skeleton class="h-10 w-full" />
+                  <Skeleton class="h-10 w-full" />
+                </div>
+                <template v-else>
+                  <div class="space-y-2">
+                    <Select v-model="form.iiko_city_id">
+                      <SelectTrigger class="w-full" :disabled="!iikoAddressCities.length">
+                        <SelectValue placeholder="Не привязан" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">Не привязан</SelectItem>
+                        <SelectItem v-for="city in iikoAddressCities" :key="city.id" :value="city.id">
+                          {{ city.name }}
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <div class="flex items-center justify-between gap-2 text-xs">
+                      <p :class="iikoHintClass">{{ iikoHintText }}</p>
+                      <Button type="button" variant="outline" size="sm" :disabled="iikoAddressCitiesLoading" @click="loadIikoAddressCities">
+                        Обновить список
+                      </Button>
+                    </div>
+                    <p class="text-xs text-muted-foreground">
+                      Шаги: 1) выберите город iiko в списке, 2) сохраните карточку города.
+                    </p>
+                  </div>
+                </template>
+              </FieldContent>
+            </Field>
+            <Field>
               <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Поиск на карте</FieldLabel>
               <FieldContent>
                 <div class="flex flex-col gap-2 sm:flex-row">
@@ -100,6 +133,7 @@ import { Field, FieldContent, FieldGroup, FieldLabel } from "@/shared/components
 import Input from "@/shared/components/ui/input/Input.vue";
 import PageHeader from "@/shared/components/PageHeader.vue";
 import BackButton from "@/shared/components/BackButton.vue";
+import Skeleton from "@/shared/components/ui/skeleton/Skeleton.vue";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/components/ui/select";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
 import { createMarkerIcon, getTileLayer } from "@/shared/utils/leaflet.js";
@@ -115,12 +149,26 @@ const pageSubtitle = computed(() => (isEditing.value ? "Изменение да�
 
 const saving = ref(false);
 const searchQuery = ref("");
+const iikoAddressCities = ref([]);
+const iikoAddressCitiesLoading = ref(false);
+const iikoAddressCitiesError = ref("");
 const form = ref({
   name: "",
+  iiko_city_id: "",
   latitude: null,
   longitude: null,
   timezone: "Europe/Moscow",
   is_active: true,
+});
+const iikoHintText = computed(() => {
+  if (iikoAddressCitiesLoading.value) return "Загружаем список городов iiko...";
+  if (iikoAddressCitiesError.value) return iikoAddressCitiesError.value;
+  if (!iikoAddressCities.value.length) return "Список пуст. Проверьте настройки iiko в Интеграциях и нажмите «Обновить список».";
+  return `Доступно городов iiko: ${iikoAddressCities.value.length}`;
+});
+const iikoHintClass = computed(() => {
+  if (iikoAddressCitiesError.value || !iikoAddressCities.value.length) return "text-red-600";
+  return "text-muted-foreground";
 });
 const timezoneOptions = [
   { value: "Europe/Kaliningrad", label: "Europe/Kaliningrad (UTC+2)" },
@@ -238,6 +286,7 @@ const loadCity = async () => {
     }
     form.value = {
       name: city.name,
+      iiko_city_id: city.iiko_city_id || "",
       latitude: city.latitude ? Number(city.latitude) : null,
       longitude: city.longitude ? Number(city.longitude) : null,
       timezone: city.timezone || "Europe/Moscow",
@@ -249,6 +298,29 @@ const loadCity = async () => {
     devError("Ошибка загрузки города:", error);
     showErrorNotification("Ошибка загрузки города");
     goBack();
+  }
+};
+
+const loadIikoAddressCities = async () => {
+  iikoAddressCitiesLoading.value = true;
+  iikoAddressCitiesError.value = "";
+  try {
+    const response = await api.get("/api/cities/admin/iiko/address-cities");
+    iikoAddressCities.value = Array.isArray(response.data?.cities) ? response.data.cities : [];
+    if (!iikoAddressCities.value.length) {
+      iikoAddressCitiesError.value = "iiko вернул пустой справочник городов.";
+    }
+  } catch (error) {
+    iikoAddressCities.value = [];
+    if (error?.response?.status === 400) {
+      iikoAddressCitiesError.value = "Интеграция iiko выключена или не настроена.";
+      return;
+    }
+    iikoAddressCitiesError.value = "Не удалось загрузить справочник городов iiko.";
+    devError("Ошибка загрузки справочника городов iiko:", error);
+    showErrorNotification("Не удалось загрузить справочник городов iiko");
+  } finally {
+    iikoAddressCitiesLoading.value = false;
   }
 };
 
@@ -271,6 +343,7 @@ const submitCity = async () => {
 };
 
 onMounted(() => {
+  loadIikoAddressCities();
   loadCity();
 });
 

@@ -37,27 +37,29 @@
         <div v-if="addressValidated && inDeliveryZone" class="address-details">
           <div class="form-row">
             <div class="form-group">
-              <label class="label">Подъезд</label>
-              <input v-model="deliveryDetails.entrance" class="mini-field" placeholder="Номер подъезда" />
+              <FloatingField v-model="deliveryDetails.entrance" label="Подъезд" placeholder="Подъезд" :control-class="'mini-field'" />
             </div>
             <div class="form-group">
-              <label class="label">Этаж</label>
-              <input v-model="deliveryDetails.floor" class="mini-field" placeholder="Этаж" />
+              <FloatingField v-model="deliveryDetails.floor" label="Этаж" placeholder="Этаж" :control-class="'mini-field'" />
             </div>
           </div>
           <div class="form-row">
             <div class="form-group">
-              <label class="label">Квартира</label>
-              <input v-model="deliveryDetails.apartment" class="mini-field" placeholder="Номер квартиры" />
+              <FloatingField v-model="deliveryDetails.apartment" label="Квартира" placeholder="Квартира" :control-class="'mini-field'" />
             </div>
             <div class="form-group">
-              <label class="label">Код на двери</label>
-              <input v-model="deliveryDetails.doorCode" class="mini-field" placeholder="Код" />
+              <FloatingField v-model="deliveryDetails.doorCode" label="Код на двери" placeholder="Код на двери" :control-class="'mini-field'" />
             </div>
           </div>
           <div class="form-group">
-            <label class="label">Комментарий к адресу</label>
-            <textarea v-model="deliveryDetails.comment" class="mini-textarea" placeholder="Дополнительная информация для курьера"></textarea>
+            <FloatingField
+              v-model="deliveryDetails.comment"
+              as="textarea"
+              label="Комментарий"
+              placeholder="Комментарий к адресу"
+              :rows="3"
+              :control-class="'mini-textarea'"
+            />
           </div>
         </div>
         <div v-if="addressValidated && !inDeliveryZone" class="error-message">
@@ -134,13 +136,28 @@
                   {{ amount }} ₽
                 </button>
               </div>
-              <input v-model.number="changeFrom" type="number" class="mini-field" placeholder="Своя сумма" min="0" step="100" />
+              <FloatingField
+                v-model="changeFrom"
+                label="Своя сумма"
+                placeholder="Своя сумма"
+                type="number"
+                :number="true"
+                :min="0"
+                :step="100"
+                :control-class="'mini-field'"
+              />
             </div>
             <div v-if="paymentError" class="mt-2 text-xs text-red-500">{{ paymentError }}</div>
           </div>
           <div class="form-group">
-            <label class="label">Комментарий к заказу</label>
-            <textarea v-model="orderComment" class="mini-textarea" placeholder="Дополнительные пожелания"></textarea>
+            <FloatingField
+              v-model="orderComment"
+              as="textarea"
+              label="Комментарий"
+              placeholder="Комментарий к заказу"
+              :rows="3"
+              :control-class="'mini-textarea'"
+            />
           </div>
         </div>
         <div class="order-summary">
@@ -178,7 +195,6 @@
 import { ref, computed, onMounted, onUnmounted, watch } from "vue";
 import { useRouter } from "vue-router";
 import { Banknote, CreditCard, Phone, Store, Truck, Clock, Pencil } from "lucide-vue-next";
-import PageHeader from "@/shared/components/PageHeader.vue";
 import { useCartStore } from "@/modules/cart/stores/cart.js";
 import { useLoyaltyStore } from "@/modules/loyalty/stores/loyalty.js";
 import { useLocationStore } from "@/modules/location/stores/location.js";
@@ -192,6 +208,7 @@ import { formatPhone, normalizePhone } from "@/shared/utils/phone";
 import { calculateDeliveryCost } from "@/shared/utils/deliveryTariffs";
 import { getBranchOpenState, normalizeWorkHours } from "@/shared/utils/workingHours";
 import { devError } from "@/shared/utils/logger.js";
+import FloatingField from "@/shared/components/FloatingField.vue";
 const router = useRouter();
 const cartStore = useCartStore();
 const locationStore = useLocationStore();

@@ -151,6 +151,38 @@ export function createIikoClient({ apiUrl, apiLogin, apiKey, organizationId }) {
     if (Array.isArray(payload?.prices)) return payload.prices;
     return [];
   };
+  const extractAddressCities = (payload) => {
+    const flatten = (rows = []) => {
+      const result = [];
+      for (const row of rows) {
+        if (!row || typeof row !== "object") continue;
+        if (row.id || row.name || row.classifierId) {
+          result.push(row);
+          continue;
+        }
+        const nestedItems = Array.isArray(row.items) ? row.items : [];
+        for (const item of nestedItems) {
+          if (!item || typeof item !== "object") continue;
+          result.push({
+            ...item,
+            organizationId: item.organizationId || row.organizationId || row.organization_id || null,
+          });
+        }
+      }
+      return result;
+    };
+
+    if (Array.isArray(payload?.cities)) return flatten(payload.cities);
+    if (Array.isArray(payload?.items)) return flatten(payload.items);
+    if (Array.isArray(payload)) return flatten(payload);
+    return [];
+  };
+  const extractAddressStreets = (payload) => {
+    if (Array.isArray(payload?.streets)) return payload.streets;
+    if (Array.isArray(payload?.items)) return payload.items;
+    if (Array.isArray(payload)) return payload;
+    return [];
+  };
 
   const normalizeOrganizationId = (org) => org?.id || org?.organizationId || org?.organization_id || null;
 
@@ -553,6 +585,62 @@ export function createIikoClient({ apiUrl, apiLogin, apiKey, organizationId }) {
         return extractTerminalGroups(data);
       } catch (error) {
         throw normalizeIntegrationError(error, "Ошибка получения списка филиалов iiko");
+      }
+    },
+
+    async getAddressCities(payload = {}) {
+      try {
+        const useConfiguredOrganization = payload?.useConfiguredOrganization !== false;
+        const organizationIds =
+          Array.isArray(payload?.organizationIds) && payload.organizationIds.length > 0
+            ? payload.organizationIds
+            : await getOrganizationIds({ useConfiguredOrganization });
+        if (!organizationIds.length) {
+          throw new Error("Не найдено доступных организаций iiko");
+        }
+
+        const { data } = await requestWithRetry(
+          () =>
+            withAuthorizedRequest((client) =>
+              client.post("/api/1/cities", {
+                organizationIds,
+                includeDeleted: Boolean(payload?.includeDeleted),
+              }),
+            ),
+          { retries: 2, baseDelayMs: 1200 },
+        );
+
+        return extractAddressCities(data);
+      } catch (error) {
+        throw normalizeIntegrationError(error, "Ошибка получения справочника городов iiko");
+      }
+    },
+
+    async getAddressStreetsByCity(payload = {}) {
+      try {
+        const cityId = String(payload?.cityId || "").trim();
+        if (!cityId) {
+          throw new Error("Не передан cityId");
+        }
+
+        const organizationIdValue = String(payload?.organizationId || "").trim();
+        const organizationIdToUse = organizationIdValue || (await getPrimaryOrganizationId());
+
+        const { data } = await requestWithRetry(
+          () =>
+            withAuthorizedRequest((client) =>
+              client.post("/api/1/streets/by_city", {
+                organizationId: organizationIdToUse,
+                cityId,
+                includeDeleted: Boolean(payload?.includeDeleted),
+              }),
+            ),
+          { retries: 2, baseDelayMs: 1200 },
+        );
+
+        return extractAddressStreets(data);
+      } catch (error) {
+        throw normalizeIntegrationError(error, "Ошибка получения справочника улиц iiko");
       }
     },
   };

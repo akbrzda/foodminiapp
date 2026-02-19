@@ -105,6 +105,17 @@ export const addressesAPI = {
   getCityPolygons(cityId) {
     return api.get(`/polygons/city/${cityId}`);
   },
+  searchStreetDirectory(cityId, query, limit = 10, config = {}) {
+    return api.get("/polygons/address-directory/streets", {
+      ...config,
+      params: {
+        city_id: cityId,
+        q: query,
+        limit,
+        ...(config?.params || {}),
+      },
+    });
+  },
 };
 export const geocodeAPI = {
   geocode(address) {

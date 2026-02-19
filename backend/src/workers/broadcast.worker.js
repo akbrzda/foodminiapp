@@ -17,6 +17,8 @@ const RETRY_DELAYS = String(process.env.BROADCAST_RETRY_DELAYS || "5,15,60")
 const LOCK_TIMEOUT_MINUTES = 10;
 const STATS_EMIT_EVERY = Number(process.env.BROADCAST_WS_STATS_EVERY || 100);
 const STATS_EMIT_FAIL_EVERY = Number(process.env.BROADCAST_WS_STATS_FAIL_EVERY || 25);
+const DB_TIMEOUT_BACKOFF_BASE_MS = Number(process.env.BROADCAST_DB_TIMEOUT_BACKOFF_BASE_MS || 5000);
+const DB_TIMEOUT_BACKOFF_MAX_MS = Number(process.env.BROADCAST_DB_TIMEOUT_BACKOFF_MAX_MS || 120000);
 
 const statsEmitState = new Map();
 
@@ -28,6 +30,25 @@ const isSchemaUnavailableError = (error) => {
     message.includes("unknown database") ||
     ((message.includes("broadcast_queue") || message.includes("broadcast_messages")) &&
       (message.includes("doesn't exist") || message.includes("does not exist") || message.includes("unknown table")))
+  );
+};
+
+const isTemporaryDbConnectionError = (error) => {
+  const code = String(error?.code || "").toUpperCase();
+  const errno = String(error?.errno || "").toUpperCase();
+  const message = String(error?.message || "").toLowerCase();
+
+  return (
+    code === "ETIMEDOUT" ||
+    code === "ECONNREFUSED" ||
+    code === "EHOSTUNREACH" ||
+    code === "ENETUNREACH" ||
+    code === "PROTOCOL_CONNECTION_LOST" ||
+    errno === "ETIMEDOUT" ||
+    message.includes("connect etimedout") ||
+    message.includes("read etimedout") ||
+    message.includes("connection lost") ||
+    message.includes("too many connections")
   );
 };
 
@@ -265,11 +286,15 @@ export function createBroadcastWorker() {
   let intervalId = null;
   let stoppedBySchemaError = false;
   const workerId = `broadcast-${process.pid}-${Date.now()}`;
+  let pauseUntil = 0;
+  let timeoutErrorsInRow = 0;
 
   const run = async () => {
     if (!WORKER_ENABLED || stoppedBySchemaError) return;
+    if (Date.now() < pauseUntil) return;
     try {
       const batch = await fetchQueueBatch(workerId);
+      timeoutErrorsInRow = 0;
       if (!batch.length) return;
       const delayMs = RATE_LIMIT > 0 ? Math.ceil(1000 / RATE_LIMIT) : 0;
       for (const item of batch) {
@@ -288,6 +313,21 @@ export function createBroadcastWorker() {
         logger.system.warn("Broadcast worker disabled: schema is not ready", { error: error.message });
         return;
       }
+      if (isTemporaryDbConnectionError(error)) {
+        timeoutErrorsInRow += 1;
+        const backoffMs = Math.min(DB_TIMEOUT_BACKOFF_BASE_MS * 2 ** (timeoutErrorsInRow - 1), DB_TIMEOUT_BACKOFF_MAX_MS);
+        pauseUntil = Date.now() + backoffMs;
+        logger.system.warn("Broadcast worker paused due to temporary DB connectivity issue", {
+          error: error.message,
+          code: error?.code || null,
+          pauseMs: backoffMs,
+          retryAt: new Date(pauseUntil).toISOString(),
+          timeoutErrorsInRow,
+        });
+        return;
+      }
+      timeoutErrorsInRow = 0;
+      pauseUntil = 0;
       logger.system.dbError(`BroadcastWorker error: ${error.message}`);
     }
   };

@@ -2,7 +2,7 @@
   <div class="pickup-map">
     <div ref="mapContainerRef" class="map"></div>
     <div class="search-bar">
-      <input v-model="searchQuery" class="search-input mini-field" placeholder="Найти пиццерию" />
+      <FloatingField v-model="searchQuery" label="Найти пиццерию" placeholder="Найти пиццерию" :control-class="['search-input', 'mini-field']" />
     </div>
     <div v-if="filteredBranches.length" class="branch-list">
       <button v-for="branch in filteredBranches" :key="branch.id" class="branch-card" @click="selectBranch(branch)">
@@ -39,13 +39,13 @@
 import { ref, computed, onMounted } from "vue";
 import { X, MapPin } from "lucide-vue-next";
 import { useRouter } from "vue-router";
-import PageHeader from "@/shared/components/PageHeader.vue";
 import { useLocationStore } from "@/modules/location/stores/location.js";
 import { formatPhone, normalizePhone } from "@/shared/utils/phone.js";
 import { citiesAPI } from "@/shared/api/endpoints.js";
 import { hapticFeedback } from "@/shared/services/telegram.js";
 import { formatWorkHoursLines, getBranchOpenState, normalizeWorkHours } from "@/shared/utils/workingHours";
 import { devError } from "@/shared/utils/logger.js";
+import FloatingField from "@/shared/components/FloatingField.vue";
 const router = useRouter();
 const locationStore = useLocationStore();
 const mapContainerRef = ref(null);

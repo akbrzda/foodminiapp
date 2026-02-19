@@ -221,7 +221,7 @@ const toIikoBranchView = (terminalGroup = {}, organizationNameById = new Map()) 
 router.get("/", async (req, res, next) => {
   try {
     const [cities] = await db.query(
-      `SELECT id, name, latitude, longitude, timezone, is_active, created_at, updated_at
+      `SELECT id, name, iiko_city_id, latitude, longitude, timezone, is_active, created_at, updated_at
        FROM cities
        WHERE is_active = TRUE
        ORDER BY name`,
@@ -235,7 +235,7 @@ router.get("/:id", async (req, res, next) => {
   try {
     const cityId = req.params.id;
     const [cities] = await db.query(
-      `SELECT id, name, latitude, longitude, timezone, is_active, created_at, updated_at
+      `SELECT id, name, iiko_city_id, latitude, longitude, timezone, is_active, created_at, updated_at
        FROM cities
        WHERE id = ? AND is_active = TRUE`,
       [cityId],
@@ -289,7 +289,7 @@ router.get("/:cityId/branches/:branchId", async (req, res, next) => {
 router.get("/admin/all", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
   try {
     let query = `
-        SELECT id, name, latitude, longitude, timezone, is_active, 
+        SELECT id, name, iiko_city_id, latitude, longitude, timezone, is_active, 
                created_at, updated_at
         FROM cities
       `;
@@ -307,17 +307,17 @@ router.get("/admin/all", authenticateToken, requireRole("admin", "manager", "ceo
 });
 router.post("/admin", authenticateToken, requireRole("admin", "ceo"), async (req, res, next) => {
   try {
-    const { name, latitude, longitude, timezone } = req.body;
+    const { name, iiko_city_id, latitude, longitude, timezone } = req.body;
     if (!name) {
       return res.status(400).json({ error: "Name is required" });
     }
     const [result] = await db.query(
-      `INSERT INTO cities (name, latitude, longitude, timezone)
-         VALUES (?, ?, ?, ?)`,
-      [name, latitude || null, longitude || null, timezone || "Europe/Moscow"],
+      `INSERT INTO cities (name, iiko_city_id, latitude, longitude, timezone)
+         VALUES (?, ?, ?, ?, ?)`,
+      [name, iiko_city_id || null, latitude || null, longitude || null, timezone || "Europe/Moscow"],
     );
     const [newCity] = await db.query(
-      `SELECT id, name, latitude, longitude, timezone, is_active, 
+      `SELECT id, name, iiko_city_id, latitude, longitude, timezone, is_active, 
                 created_at, updated_at
          FROM cities WHERE id = ?`,
       [result.insertId],
@@ -330,7 +330,7 @@ router.post("/admin", authenticateToken, requireRole("admin", "ceo"), async (req
 router.put("/admin/:id", authenticateToken, requireRole("admin", "ceo"), async (req, res, next) => {
   try {
     const cityId = req.params.id;
-    const { name, latitude, longitude, timezone, is_active } = req.body;
+    const { name, iiko_city_id, latitude, longitude, timezone, is_active } = req.body;
     const [cities] = await db.query("SELECT id FROM cities WHERE id = ?", [cityId]);
     if (cities.length === 0) {
       return res.status(404).json({ error: "City not found" });
@@ -340,6 +340,10 @@ router.put("/admin/:id", authenticateToken, requireRole("admin", "ceo"), async (
     if (name !== undefined) {
       updates.push("name = ?");
       values.push(name);
+    }
+    if (iiko_city_id !== undefined) {
+      updates.push("iiko_city_id = ?");
+      values.push(iiko_city_id || null);
     }
     if (latitude !== undefined) {
       updates.push("latitude = ?");
@@ -363,7 +367,7 @@ router.put("/admin/:id", authenticateToken, requireRole("admin", "ceo"), async (
     values.push(cityId);
     await db.query(`UPDATE cities SET ${updates.join(", ")} WHERE id = ?`, values);
     const [updatedCity] = await db.query(
-      `SELECT id, name, latitude, longitude, timezone, is_active, 
+      `SELECT id, name, iiko_city_id, latitude, longitude, timezone, is_active, 
                 created_at, updated_at
          FROM cities WHERE id = ?`,
       [cityId],
@@ -373,6 +377,40 @@ router.put("/admin/:id", authenticateToken, requireRole("admin", "ceo"), async (
     next(error);
   }
 });
+
+router.get("/admin/iiko/address-cities", authenticateToken, requireRole("admin", "ceo"), async (req, res, next) => {
+  try {
+    const client = await getIikoClientOrNull();
+    if (!client) {
+      return res.status(400).json({ error: "Интеграция iiko выключена или не настроена" });
+    }
+
+    const cities = await client.getAddressCities({ includeDeleted: false, useConfiguredOrganization: false });
+    const normalized = (Array.isArray(cities) ? cities : [])
+      .map((city) => ({
+        id: String(city?.id || "").trim(),
+        name: String(city?.name || "").trim(),
+        classifierId: String(city?.classifierId || "").trim() || null,
+        isDeleted: Boolean(city?.isDeleted),
+      }))
+      .filter((city) => city.id && city.name);
+    const uniqueById = new Map();
+    for (const city of normalized) {
+      if (!uniqueById.has(city.id)) {
+        uniqueById.set(city.id, city);
+      }
+    }
+    const deduplicated = [...uniqueById.values()].sort((a, b) => a.name.localeCompare(b.name, "ru"));
+
+    return res.json({
+      cities: deduplicated,
+      fetchedAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
 router.delete("/admin/:id", authenticateToken, requireRole("admin", "ceo"), async (req, res, next) => {
   try {
     const cityId = req.params.id;

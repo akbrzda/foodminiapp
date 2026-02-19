@@ -8,21 +8,30 @@
         </a>
         <div v-else class="field-value">—</div>
       </div>
-      <div class="form-card">
-        <label class="field-label" for="first-name">Имя</label>
-        <input id="first-name" v-model="profileForm.first_name" class="field-input mini-field" type="text" placeholder="Введите имя" />
+      <div class="profile-field">
+        <FloatingField id="first-name" v-model="profileForm.first_name" label="Имя" placeholder="Имя" :control-class="['field-input', 'mini-field']" />
       </div>
-      <div class="form-card">
-        <label class="field-label" for="last-name">Фамилия</label>
-        <input id="last-name" v-model="profileForm.last_name" class="field-input mini-field" type="text" placeholder="Введите фамилию" />
+      <div class="profile-field">
+        <FloatingField
+          id="last-name"
+          v-model="profileForm.last_name"
+          label="Фамилия"
+          placeholder="Фамилия"
+          :control-class="['field-input', 'mini-field']"
+        />
       </div>
-      <div class="form-card">
-        <label class="field-label" for="email">Email</label>
-        <input id="email" v-model="profileForm.email" class="field-input mini-field" type="email" placeholder="Введите email" />
+      <div class="profile-field">
+        <FloatingField id="email" v-model="profileForm.email" type="email" label="Email" placeholder="Email" :control-class="['field-input', 'mini-field']" />
       </div>
-      <div class="form-card">
-        <label class="field-label" for="birthdate">День рождения</label>
-        <input id="birthdate" v-model="profileForm.date_of_birth" class="field-input mini-field" type="date" />
+      <div class="profile-field">
+        <FloatingField
+          id="birthdate"
+          v-model="profileForm.date_of_birth"
+          type="date"
+          label="День рождения"
+          placeholder="День рождения"
+          :control-class="['field-input', 'mini-field']"
+        />
       </div>
       <button class="save-btn action-btn btn-primary" @click="saveProfile" :disabled="saving">
         {{ saving ? "Сохранение..." : "Сохранить" }}
@@ -40,11 +49,11 @@
 import { ref, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { useAuthStore } from "@/modules/auth/stores/auth.js";
-import PageHeader from "@/shared/components/PageHeader.vue";
 import { authAPI } from "@/shared/api/endpoints.js";
 import { hapticFeedback, showConfirm } from "@/shared/services/telegram.js";
 import { formatPhone, normalizePhone } from "@/shared/utils/phone";
 import { devError } from "@/shared/utils/logger.js";
+import FloatingField from "@/shared/components/FloatingField.vue";
 const router = useRouter();
 const authStore = useAuthStore();
 const saving = ref(false);
@@ -152,7 +161,10 @@ function normalizeDateForInput(value) {
   padding: 8px 12px;
   margin-bottom: 14px;
 }
-#birthdate {
+.profile-field {
+  margin-bottom: 14px;
+}
+:deep(#birthdate) {
   text-align: left;
 }
 .phone-card {

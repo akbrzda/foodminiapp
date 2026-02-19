@@ -5,7 +5,7 @@ import redis from "../../config/redis.js";
 import axios from "axios";
 import { findTariffForAmount, getNextThreshold, validateTariffs } from "./utils/deliveryTariffs.js";
 import { checkIikoIntegration } from "../integrations/middleware/checkIikoIntegration.js";
-import { getIntegrationSettings } from "../integrations/services/integrationConfigService.js";
+import { getIikoClientOrNull, getIntegrationSettings } from "../integrations/services/integrationConfigService.js";
 const router = express.Router();
 
 router.use("/admin", authenticateToken, checkIikoIntegration);
@@ -65,6 +65,86 @@ const denyManagerWrite = (req, res) => {
   res.status(403).json({ error: "Недостаточно прав для выполнения действия" });
   return true;
 };
+const IIKO_STREETS_CACHE_TTL = 6 * 60 * 60;
+const IIKO_STREETS_SEARCH_CACHE_TTL = 5 * 60;
+const NOMINATIM_HEADERS = {
+  "User-Agent": "MiniappPanda/1.0 (Food Delivery Service)",
+};
+const normalizeStreetName = (value) => String(value || "").trim();
+const normalizeStreetQuery = (value) => String(value || "").trim().toLowerCase();
+const mapIikoStreetItem = (street = {}) => {
+  const id = String(street?.id || "").trim();
+  const name = normalizeStreetName(street?.name);
+  if (!id || !name) return null;
+  const classifierId = String(street?.classifierId || "").trim();
+  return {
+    id,
+    classifier_id: classifierId || null,
+    name,
+    source: "iiko",
+  };
+};
+const mapNominatimStreetItem = (name = "") => {
+  const normalizedName = normalizeStreetName(name);
+  if (!normalizedName) return null;
+  return {
+    id: `nominatim:${normalizedName.toLowerCase()}`,
+    classifier_id: null,
+    name: normalizedName,
+    source: "nominatim",
+  };
+};
+const filterStreetItemsByQuery = (items = [], rawQuery = "", limit = 10) => {
+  const query = normalizeStreetQuery(rawQuery);
+  const normalizedLimit = Math.min(Math.max(Number(limit) || 10, 1), 20);
+  const filtered = items
+    .filter((item) => normalizeStreetQuery(item?.name).includes(query))
+    .slice(0, normalizedLimit);
+  return filtered;
+};
+const searchNominatimStreets = async ({ query, cityName, latitude, longitude, limit = 10 }) => {
+  const requestLimit = Math.min(Math.max(Number(limit) || 10, 1), 20);
+  const params = {
+    q: cityName ? `${query}, ${cityName}` : query,
+    format: "json",
+    limit: Math.max(requestLimit * 2, 10),
+    addressdetails: 1,
+  };
+  if (Number.isFinite(latitude) && Number.isFinite(longitude) && query.length >= 3) {
+    const radius = 0.7;
+    params.viewbox = `${longitude - radius},${latitude - radius},${longitude + radius},${latitude + radius}`;
+    params.bounded = 1;
+  }
+
+  const { data } = await axios.get("https://nominatim.openstreetmap.org/search", {
+    params,
+    headers: NOMINATIM_HEADERS,
+    timeout: 5000,
+  });
+
+  const uniqueStreetNames = [];
+  const seen = new Set();
+  for (const row of Array.isArray(data) ? data : []) {
+    const address = row?.address || {};
+    const streetName =
+      address.road ||
+      address.pedestrian ||
+      address.footway ||
+      address.residential ||
+      address.living_street ||
+      address.street ||
+      address.neighbourhood ||
+      "";
+    const normalized = normalizeStreetName(streetName);
+    const lower = normalized.toLowerCase();
+    if (!normalized || seen.has(lower)) continue;
+    seen.add(lower);
+    uniqueStreetNames.push(normalized);
+  }
+
+  return uniqueStreetNames.map((name) => mapNominatimStreetItem(name)).filter(Boolean).slice(0, requestLimit);
+};
+
 router.get("/city/:cityId", async (req, res, next) => {
   try {
     const cityId = req.params.cityId;
@@ -184,6 +264,128 @@ router.get("/branch/:branchId", async (req, res, next) => {
     next(error);
   }
 });
+router.get("/address-directory/streets", async (req, res, next) => {
+  try {
+    const cityId = Number(req.query?.city_id);
+    const query = String(req.query?.q || "").trim();
+    const requestedLimit = Number(req.query?.limit);
+    const limit = Number.isFinite(requestedLimit) ? Math.min(Math.max(Math.trunc(requestedLimit), 1), 20) : 10;
+
+    if (!Number.isFinite(cityId)) {
+      return res.status(400).json({ error: "city_id is required and must be a number" });
+    }
+    if (!query) {
+      return res.status(400).json({ error: "q is required and must be a non-empty string" });
+    }
+
+    const searchCacheKey = `iiko:streets:search:${cityId}:${query.toLowerCase()}:${limit}`;
+    try {
+      const cachedSearch = await redis.get(searchCacheKey);
+      if (cachedSearch) {
+        return res.json(JSON.parse(cachedSearch));
+      }
+    } catch (redisError) {
+      // Redis errors are non-critical
+    }
+
+    const [cityRows] = await db.query(
+      `SELECT id, name, iiko_city_id, latitude, longitude
+       FROM cities
+       WHERE id = ?`,
+      [cityId],
+    );
+    const city = cityRows?.[0];
+    if (!city) {
+      return res.status(404).json({ error: "City not found" });
+    }
+
+    const integrationSettings = await getIntegrationSettings();
+    const canUseIiko = Boolean(integrationSettings.iikoEnabled && String(city.iiko_city_id || "").trim());
+    let responsePayload = null;
+
+    if (canUseIiko) {
+      try {
+        const client = await getIikoClientOrNull();
+        if (client) {
+          const organizations = await client.getOrganizations();
+          const primaryOrganizationId =
+            (Array.isArray(organizations) ? organizations : [])
+              .map((organization) => String(organization?.id || organization?.organizationId || organization?.organization_id || "").trim())
+              .find(Boolean) || "unknown";
+          const cityIikoId = String(city.iiko_city_id).trim();
+          const streetsCacheKey = `iiko:streets:${primaryOrganizationId}:${cityIikoId}`;
+
+          let allStreets = null;
+          try {
+            const cachedStreets = await redis.get(streetsCacheKey);
+            if (cachedStreets) {
+              allStreets = JSON.parse(cachedStreets);
+            }
+          } catch (redisError) {
+            // Redis errors are non-critical
+          }
+
+          if (!Array.isArray(allStreets)) {
+            const streets = await client.getAddressStreetsByCity({
+              organizationId: primaryOrganizationId === "unknown" ? undefined : primaryOrganizationId,
+              cityId: cityIikoId,
+              includeDeleted: false,
+            });
+            allStreets = (Array.isArray(streets) ? streets : []).map((street) => mapIikoStreetItem(street)).filter(Boolean);
+            try {
+              await redis.set(streetsCacheKey, JSON.stringify(allStreets), "EX", IIKO_STREETS_CACHE_TTL);
+            } catch (redisError) {
+              // Redis errors are non-critical
+            }
+          }
+
+          const filtered = filterStreetItemsByQuery(allStreets, query, limit);
+          if (filtered.length > 0) {
+            responsePayload = {
+              items: filtered,
+              source: "iiko",
+              fallbackUsed: false,
+            };
+          }
+        }
+      } catch (iikoError) {
+        responsePayload = null;
+      }
+    }
+
+    if (!responsePayload) {
+      const nominatimStreets = await searchNominatimStreets({
+        query,
+        cityName: city.name,
+        latitude: Number(city.latitude),
+        longitude: Number(city.longitude),
+        limit,
+      });
+      responsePayload = {
+        items: nominatimStreets,
+        source: "nominatim",
+        fallbackUsed: true,
+      };
+    }
+
+    try {
+      await redis.set(searchCacheKey, JSON.stringify(responsePayload), "EX", IIKO_STREETS_SEARCH_CACHE_TTL);
+    } catch (redisError) {
+      // Redis errors are non-critical
+    }
+
+    return res.json(responsePayload);
+  } catch (error) {
+    if (error.response) {
+      return res.status(502).json({
+        error: "Address directory service unavailable",
+        details: error.message,
+      });
+    }
+    return next(error);
+  }
+});
+
 router.post("/geocode", async (req, res, next) => {
   try {
     const rawQuery = typeof req.body?.query === "string" ? req.body.query : req.body?.address;

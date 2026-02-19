@@ -98,7 +98,16 @@
           </button>
         </div>
         <div class="bonus-modal-subtitle">Доступно к списанию до {{ maxRedeemPercentLabel }}% от {{ formatPrice(cartStore.totalPrice) }} ₽.</div>
-        <input v-model="partialBonusInput" type="number" min="0" :max="maxBonusToUse" class="bonus-modal-input mini-field" placeholder="Введите сумму" />
+        <FloatingField
+          v-model="partialBonusInput"
+          label="Введите сумму"
+          placeholder="Введите сумму"
+          type="number"
+          :number="true"
+          :min="0"
+          :max="maxBonusToUse"
+          :control-class="['bonus-modal-input', 'mini-field']"
+        />
         <div class="bonus-modal-actions">
           <button class="bonus-preset" type="button" @click="applyPreset(0.25)">25%</button>
           <button class="bonus-preset" type="button" @click="applyPreset(0.5)">50%</button>
@@ -114,7 +123,6 @@
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { X } from "lucide-vue-next";
 import { useRouter } from "vue-router";
-import PageHeader from "@/shared/components/PageHeader.vue";
 import { useCartStore } from "@/modules/cart/stores/cart.js";
 import { useLoyaltyStore } from "@/modules/loyalty/stores/loyalty.js";
 import { useLocationStore } from "@/modules/location/stores/location.js";
@@ -128,6 +136,7 @@ import { formatWeight, formatWeightValue } from "@/shared/utils/weight";
 import { calculateDeliveryCost, getThresholds, normalizeTariffs, findTariffForAmount } from "@/shared/utils/deliveryTariffs";
 import { getBranchOpenState } from "@/shared/utils/workingHours";
 import { devError } from "@/shared/utils/logger.js";
+import FloatingField from "@/shared/components/FloatingField.vue";
 const router = useRouter();
 const cartStore = useCartStore();
 const locationStore = useLocationStore();

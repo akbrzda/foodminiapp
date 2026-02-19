@@ -30,33 +30,37 @@
     <div class="form-section" data-keep-focus="true" @touchstart.stop @mousedown.stop @pointerdown.stop>
       <div class="sheet-handle"></div>
       <div class="input-wrapper" @pointerdown.stop>
-        <input
-          ref="addressInputRef"
-          v-model="deliveryAddress"
-          class="address-input mini-field"
-          placeholder="улица, дом"
+        <FloatingField
+          ref="addressFieldRef"
+          v-model="deliveryStreet"
+          class="street-field"
+          label="Улица"
+          placeholder="Улица"
+          :control-class="['address-input', 'mini-field']"
           @input="onAddressInput"
           @focus="onAddressFocus"
           @blur="onAddressBlur"
-          @pointerdown.stop
-        />
-        <button
-          v-if="deliveryAddress"
-          class="clear-btn"
-          type="button"
-          aria-label="Очистить адрес"
-          @pointerdown.stop="onInputControlPointerDown"
-          @touchstart.stop="onInputControlPointerDown"
-          @mousedown.stop="onInputControlPointerDown"
-          @click="clearAddress"
         >
-          <X :size="16" />
-        </button>
+          <template #suffix>
+            <button
+              v-if="deliveryStreet"
+              class="clear-btn"
+              type="button"
+              aria-label="Очистить улицу"
+              @pointerdown.stop="onInputControlPointerDown"
+              @touchstart.stop="onInputControlPointerDown"
+              @mousedown.stop="onInputControlPointerDown"
+              @click="clearAddress"
+            >
+              <X :size="14" />
+            </button>
+          </template>
+        </FloatingField>
         <div v-if="showSuggestionsPanel" class="suggestions-dropdown">
           <div v-if="isSuggestionsLoading" class="suggestion suggestion-meta">Поиск адреса...</div>
           <button
             v-for="(suggestion, index) in addressSuggestions"
-            :key="`${suggestion.label}-${suggestion.lat}-${suggestion.lon}-${index}`"
+            :key="`${suggestion.id || suggestion.label}-${index}`"
             class="suggestion"
             @pointerdown.stop="onInputControlPointerDown"
             @touchstart.stop="onInputControlPointerDown"
@@ -68,19 +72,29 @@
           <div v-if="canShowNoResults" class="suggestion suggestion-meta">Адрес не найден, уточните запрос</div>
         </div>
       </div>
-
       <div v-if="deliveryZoneError" class="error-message">
         {{ deliveryZoneError }}
       </div>
 
-      <div class="details-grid">
-        <input v-model="deliveryDetails.apartment" class="detail-input mini-field" placeholder="Квартира" />
-        <input v-model="deliveryDetails.entrance" class="detail-input mini-field" placeholder="Подъезд" />
-        <input v-model="deliveryDetails.floor" class="detail-input mini-field" placeholder="Этаж" />
-        <input v-model="deliveryDetails.doorCode" class="detail-input mini-field" placeholder="Домофон" />
+      <div class="details-grid details-grid-three">
+        <FloatingField v-model="deliveryHouse" label="Дом" placeholder="Дом" :control-class="['detail-input', 'mini-field']" />
+        <FloatingField v-model="deliveryDetails.entrance" label="Подъезд" placeholder="Подъезд" :control-class="['detail-input', 'mini-field']" />
+        <FloatingField v-model="deliveryDetails.floor" label="Этаж" placeholder="Этаж" :control-class="['detail-input', 'mini-field']" />
+      </div>
+      <div class="details-grid details-grid-two">
+        <FloatingField v-model="deliveryDetails.apartment" label="Квартира" placeholder="Квартира" :control-class="['detail-input', 'mini-field']" />
+        <FloatingField v-model="deliveryDetails.doorCode" label="Домофон" placeholder="Домофон" :control-class="['detail-input', 'mini-field']" />
       </div>
 
-      <textarea v-model="deliveryDetails.comment" class="detail-textarea mini-textarea" placeholder="Комментарий курьеру"></textarea>
+      <FloatingField
+        v-model="deliveryDetails.comment"
+        class="floating-textarea"
+        as="textarea"
+        label="Комментарий"
+        placeholder="Комментарий курьеру"
+        :rows="3"
+        :control-class="['detail-textarea', 'mini-textarea']"
+      />
       <button class="primary-btn" @click="confirmAddress">Сохранить адрес</button>
     </div>
   </div>
@@ -90,20 +104,42 @@
 import { ref, computed, onMounted, onUnmounted, reactive, watch } from "vue";
 import { LocateFixed, MapPin, Minus, Plus, X } from "lucide-vue-next";
 import { useRouter } from "vue-router";
-import PageHeader from "@/shared/components/PageHeader.vue";
 import { useLocationStore } from "@/modules/location/stores/location.js";
 import { addressesAPI } from "@/shared/api/endpoints.js";
 import { hapticFeedback } from "@/shared/services/telegram.js";
 import { devDebug, devError } from "@/shared/utils/logger.js";
+import FloatingField from "@/shared/components/FloatingField.vue";
 
 const router = useRouter();
 const locationStore = useLocationStore();
 
 const mapContainerRef = ref(null);
-const addressInputRef = ref(null);
+const addressFieldRef = ref(null);
 const cityPolygons = ref([]);
 
-const deliveryAddress = ref(locationStore.deliveryAddress || "");
+const parseSavedAddress = (value) => {
+  const raw = String(value || "").trim();
+  if (!raw) {
+    return { street: "", house: "" };
+  }
+  const parts = raw
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  if (parts.length < 2) {
+    return { street: raw, house: "" };
+  }
+  const maybeHouse = parts[parts.length - 1];
+  if (/\d/.test(maybeHouse)) {
+    return { street: parts.slice(0, -1).join(", "), house: maybeHouse };
+  }
+  return { street: raw, house: "" };
+};
+
+const savedAddress = parseSavedAddress(locationStore.deliveryAddress || "");
+const deliveryStreet = ref(savedAddress.street);
+const deliveryHouse = ref(savedAddress.house);
+const mapAddressHint = ref(locationStore.deliveryAddress || "");
 const addressSuggestions = ref([]);
 const showSuggestions = ref(false);
 const selectedLocation = ref(normalizeCoords(locationStore.deliveryCoords));
@@ -116,7 +152,7 @@ const deliveryDetails = reactive({
   comment: locationStore.deliveryDetails?.comment || "",
 });
 
-const lastAddress = ref(deliveryAddress.value);
+const lastAddress = ref(`${deliveryStreet.value}__${deliveryHouse.value}`);
 const deliveryZoneError = ref("");
 
 const GEO_PERMISSION_KEY = "geoPermission";
@@ -148,9 +184,9 @@ const showSuggestionsPanel = computed(() => {
   return Boolean(showSuggestions.value && (isSuggestionsLoading.value || addressSuggestions.value.length || canShowNoResults.value));
 });
 const canShowNoResults = computed(() => {
-  const hasQuery = deliveryAddress.value.trim().length >= SEARCH_MIN_LENGTH;
+  const hasQuery = deliveryStreet.value.trim().length >= SEARCH_MIN_LENGTH;
   return Boolean(
-    hasQuery && !isSuggestionsLoading.value && lastSearchedQuery.value === deliveryAddress.value.trim() && !addressSuggestions.value.length,
+    hasQuery && !isSuggestionsLoading.value && lastSearchedQuery.value === deliveryStreet.value.trim() && !addressSuggestions.value.length,
   );
 });
 
@@ -200,14 +236,15 @@ onMounted(async () => {
     await requestInitialLocation();
   }
 
-  if (deliveryAddress.value && !selectedLocation.value) {
-    const resolved = await geocodeAddress(deliveryAddress.value.trim());
+  const combinedAddress = buildCombinedAddress();
+  if (combinedAddress && !selectedLocation.value) {
+    const resolved = await geocodeAddress(combinedAddress);
     if (resolved) {
       selectedLocation.value = { lat: resolved.lat, lon: resolved.lon, lng: resolved.lon };
       setMapCenter(resolved.lat, resolved.lon, { animate: false, resolveAddress: false });
-      deliveryAddress.value = resolved.label;
+      mapAddressHint.value = resolved.label;
     }
-  } else if (selectedLocation.value && !deliveryAddress.value) {
+  } else if (selectedLocation.value && !combinedAddress) {
     scheduleReverseFromCenter(selectedLocation.value.lat, selectedLocation.value.lon, true);
   }
 
@@ -227,7 +264,30 @@ onUnmounted(() => {
   polygonsLayer = null;
 });
 
+function buildCombinedAddress() {
+  const street = deliveryStreet.value.trim();
+  const house = deliveryHouse.value.trim();
+  if (street && house) {
+    return cityName.value ? `${street}, ${house}, ${cityName.value}` : `${street}, ${house}`;
+  }
+  if (street) {
+    return cityName.value ? `${street}, ${cityName.value}` : street;
+  }
+  return "";
+}
+
 function onAddressInput() {
+  // Ручной ввод имеет приоритет: отменяем отложенный reverse, чтобы он не перезаписал поле.
+  if (reverseTimeout) {
+    clearTimeout(reverseTimeout);
+    reverseTimeout = null;
+  }
+  if (reverseController) {
+    reverseController.abort();
+    reverseController = null;
+  }
+  lastReverseId += 1;
+
   deliveryZoneError.value = "";
   showSuggestions.value = true;
   selectedLocation.value = null;
@@ -237,7 +297,7 @@ function onAddressInput() {
     clearTimeout(searchTimeout);
   }
 
-  const query = deliveryAddress.value.trim();
+  const query = deliveryStreet.value.trim();
   if (query.length < SEARCH_MIN_LENGTH) {
     addressSuggestions.value = [];
     lastSearchedQuery.value = "";
@@ -251,7 +311,7 @@ function onAddressInput() {
 
 function onAddressFocus() {
   isAddressFocused.value = true;
-  showSuggestions.value = deliveryAddress.value.trim().length >= SEARCH_MIN_LENGTH;
+  showSuggestions.value = deliveryStreet.value.trim().length >= SEARCH_MIN_LENGTH;
   queueMapResize();
 }
 
@@ -279,6 +339,10 @@ function queueMapResize() {
       mapInstance.invalidateSize({ debounceMoveend: true });
     }
   }, 120);
+}
+
+function getAddressInputElement() {
+  return addressFieldRef.value?.$el?.querySelector?.("input");
 }
 
 function getStoredGeoPermission() {
@@ -312,7 +376,7 @@ async function requestInitialLocation() {
     const location = await locationStore.detectUserLocation();
     if (location) {
       setStoredGeoPermission("granted");
-      setMapCenter(location.lat, location.lon, { animate: true, resolveAddress: !deliveryAddress.value });
+      setMapCenter(location.lat, location.lon, { animate: true, resolveAddress: !buildCombinedAddress() });
     }
   } catch (error) {
     if (error?.code === 1) {
@@ -323,43 +387,55 @@ async function requestInitialLocation() {
 
 function selectAddress(address) {
   hapticFeedback("light");
-  deliveryAddress.value = address.label;
+  deliveryStreet.value = address.label;
   deliveryZoneError.value = "";
   showSuggestions.value = false;
   addressSuggestions.value = [];
-  selectedLocation.value = { lat: address.lat, lon: address.lon, lng: address.lon };
-  setMapCenter(address.lat, address.lon, { animate: true, resolveAddress: false });
-  addressInputRef.value?.blur();
+  selectedLocation.value = null;
+  getAddressInputElement()?.blur();
 }
 
 function clearAddress() {
   onInputControlPointerDown();
-  deliveryAddress.value = "";
+  // После очистки игнорируем "долетевшие" reverse-ответы.
+  if (reverseTimeout) {
+    clearTimeout(reverseTimeout);
+    reverseTimeout = null;
+  }
+  if (reverseController) {
+    reverseController.abort();
+    reverseController = null;
+  }
+  lastReverseId += 1;
+
+  deliveryStreet.value = "";
+  deliveryHouse.value = "";
   addressSuggestions.value = [];
   showSuggestions.value = false;
   isSuggestionsLoading.value = false;
   lastSearchedQuery.value = "";
   deliveryZoneError.value = "";
   selectedLocation.value = null;
-  addressInputRef.value?.focus({ preventScroll: true });
+  getAddressInputElement()?.focus({ preventScroll: true });
 }
 
 async function confirmAddress() {
   deliveryZoneError.value = "";
-
-  if (!deliveryAddress.value.trim()) {
+  const hasStreetAndHouse = Boolean(deliveryStreet.value.trim() && deliveryHouse.value.trim());
+  const preferredAddress = hasStreetAndHouse ? buildCombinedAddress() : buildCombinedAddress() || mapAddressHint.value.trim();
+  if (!preferredAddress) {
     hapticFeedback("error");
     return;
   }
-
-  if (!selectedLocation.value) {
-    const resolved = await geocodeAddress(deliveryAddress.value.trim());
+  if (hasStreetAndHouse || !selectedLocation.value) {
+    const resolved = await geocodeAddress(preferredAddress);
     if (!resolved) {
       hapticFeedback("error");
       showSuggestions.value = true;
+      deliveryZoneError.value = "Не удалось определить координаты адреса";
       return;
     }
-    deliveryAddress.value = resolved.label;
+    mapAddressHint.value = resolved.label;
     selectedLocation.value = { lat: resolved.lat, lon: resolved.lon, lng: resolved.lon };
     setMapCenter(resolved.lat, resolved.lon, { animate: true, resolveAddress: false });
   }
@@ -391,8 +467,8 @@ async function confirmAddress() {
       return;
     }
   }
-
-  locationStore.setDeliveryAddress(deliveryAddress.value.trim());
+  const addressToSave = hasStreetAndHouse ? `${deliveryStreet.value.trim()}, ${deliveryHouse.value.trim()}` : preferredAddress.trim();
+  locationStore.setDeliveryAddress(addressToSave);
   locationStore.setDeliveryDetails({ ...deliveryDetails });
   locationStore.setDeliveryCoords({
     lat: selectedLocation.value.lat,
@@ -535,7 +611,18 @@ function scheduleReverseFromCenter(lat, lon, immediate = false) {
   const run = async () => {
     const suggestion = await reverseGeocode(lat, lon);
     if (requestId !== lastReverseId || !suggestion?.label) return;
-    deliveryAddress.value = suggestion.label;
+    mapAddressHint.value = suggestion.label;
+    const parts = String(suggestion.label || "")
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean);
+    if (parts.length >= 2 && /\d/.test(parts[parts.length - 1])) {
+      deliveryHouse.value = parts[parts.length - 1];
+      deliveryStreet.value = parts.slice(0, -1).join(", ");
+    } else {
+      deliveryStreet.value = suggestion.label;
+      deliveryHouse.value = "";
+    }
 
     // Привязываем центр карты к точке найденного адреса (например, к ближайшему дому),
     // чтобы центр-маркер и выбранный адрес всегда совпадали.
@@ -604,33 +691,17 @@ async function fetchAddressSuggestions(query) {
 
   try {
     const start = performance.now();
-    let response = await addressesAPI.searchAddress(
-      {
-        query,
-        city: cityName.value || undefined,
-        limit: 10,
-        latitude: cityCenter.value?.lat,
-        longitude: cityCenter.value?.lon,
-        radius: 0.7,
-      },
-      { signal: suggestionsController.signal },
-    );
-
+    if (!locationStore.selectedCity?.id) {
+      addressSuggestions.value = [];
+      isSuggestionsLoading.value = false;
+      return;
+    }
+    const response = await addressesAPI.searchStreetDirectory(locationStore.selectedCity.id, query, 10, {
+      signal: suggestionsController.signal,
+    });
     if (searchId !== lastSearchId) return;
 
-    let suggestions = normalizeGeocodeItems(response?.data);
-    if (!suggestions.length && query.trim().length <= 5) {
-      response = await addressesAPI.searchAddress(
-        {
-          query,
-          city: cityName.value || undefined,
-          limit: 10,
-        },
-        { signal: suggestionsController.signal },
-      );
-      if (searchId !== lastSearchId) return;
-      suggestions = normalizeGeocodeItems(response?.data);
-    }
+    const suggestions = normalizeStreetDirectoryItems(response?.data);
     addressSuggestions.value = suggestions;
     showSuggestions.value = true;
     isSuggestionsLoading.value = false;
@@ -715,6 +786,22 @@ function normalizeGeocodeItems(payload) {
   return [];
 }
 
+function normalizeStreetDirectoryItems(payload) {
+  if (!payload || !Array.isArray(payload?.items)) return [];
+  return payload.items
+    .map((item) => {
+      const label = String(item?.name || item?.label || "").trim();
+      if (!label) return null;
+      return {
+        id: String(item?.id || "").trim() || label.toLowerCase(),
+        classifierId: String(item?.classifier_id || item?.classifierId || "").trim() || null,
+        label,
+        source: String(item?.source || payload?.source || "nominatim"),
+      };
+    })
+    .filter(Boolean);
+}
+
 function normalizeReverseResult(payload) {
   if (!payload) return null;
   const normalized = normalizeSuggestion(payload);
@@ -762,14 +849,15 @@ async function loadLeaflet() {
   return leafletLoading;
 }
 
-watch(deliveryAddress, (value) => {
-  if (value !== lastAddress.value) {
+watch([deliveryStreet, deliveryHouse], ([street, house]) => {
+  const signature = `${street}__${house}`;
+  if (signature !== lastAddress.value) {
     deliveryDetails.apartment = "";
     deliveryDetails.entrance = "";
     deliveryDetails.floor = "";
     deliveryDetails.doorCode = "";
     deliveryDetails.comment = "";
-    lastAddress.value = value;
+    lastAddress.value = signature;
   }
 });
 
@@ -783,6 +871,9 @@ watch(
 watch(
   () => locationStore.selectedCity?.id,
   async () => {
+    searchCache.clear();
+    addressSuggestions.value = [];
+    lastSearchedQuery.value = "";
     await loadCityPolygons();
   },
 );
@@ -1011,9 +1102,16 @@ watch(
 
 .details-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
   gap: 8px;
   margin-bottom: 10px;
+}
+
+.details-grid-three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.details-grid-two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .detail-input {
@@ -1023,6 +1121,15 @@ watch(
 .detail-textarea {
   margin-bottom: 10px;
   resize: none;
+  min-height: 92px;
+}
+
+.floating-textarea {
+  margin-bottom: 10px;
+}
+
+.floating-textarea .detail-textarea {
+  margin-bottom: 0;
 }
 
 .primary-btn:hover {
