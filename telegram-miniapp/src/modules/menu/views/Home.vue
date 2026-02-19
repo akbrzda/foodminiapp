@@ -19,6 +19,20 @@
         </div>
       </template>
     </div>
+    <div v-if="changelogLoading" class="release-banner release-banner-skeleton">
+      <div class="skeleton release-skeleton-title"></div>
+      <div class="skeleton release-skeleton-line"></div>
+    </div>
+    <div v-else-if="latestRelease && !isReleaseDismissed(latestRelease.id)" class="release-banner">
+      <div class="release-banner-header">
+        <div class="release-badge">Что нового</div>
+        <button type="button" class="release-close" @click="dismissRelease(latestRelease.id)">Скрыть</button>
+      </div>
+      <div class="release-version">Версия {{ latestRelease.version }}</div>
+      <div class="release-title">{{ latestRelease.title }}</div>
+      <div v-if="latestRelease.description" class="release-description">{{ latestRelease.description }}</div>
+      <button type="button" class="release-open-btn" @click="openReleaseDetails(latestRelease.id)">Открыть changelog</button>
+    </div>
     <div v-if="activeOrders.length > 0" class="active-orders-container">
       <div class="active-orders" :class="{ 'has-scroll': activeOrders.length > 1 }">
         <div v-for="order in activeOrders" :key="order.id" class="active-order" @click="router.push(`/order/${order.id}`)">
@@ -150,6 +164,46 @@
       </span>
       <span class="cart-total">{{ formatPrice(cartTotalWithDelivery) }} ₽</span>
     </button>
+    <Teleport to="body">
+      <Transition name="fade">
+        <div v-if="showReleaseDialog" class="release-dialog-overlay" @click="closeReleaseDialog">
+          <div class="release-dialog" @click.stop>
+            <div class="release-dialog-header">
+              <div>
+                <div class="release-dialog-label">Changelog</div>
+                <div class="release-dialog-title">
+                  {{ selectedRelease?.version ? `Версия ${selectedRelease.version}` : "Детали релиза" }}
+                </div>
+              </div>
+              <button type="button" class="release-dialog-close" @click="closeReleaseDialog">Закрыть</button>
+            </div>
+
+            <div v-if="releaseDetailsLoading" class="release-dialog-skeleton">
+              <div class="skeleton release-skeleton-line"></div>
+              <div class="skeleton release-skeleton-line"></div>
+              <div class="skeleton release-skeleton-line"></div>
+            </div>
+            <div v-else-if="selectedRelease" class="release-dialog-content">
+              <div class="release-dialog-name">{{ selectedRelease.title }}</div>
+              <div v-if="selectedRelease.description" class="release-description">{{ selectedRelease.description }}</div>
+
+              <div class="release-section-title">Изменения</div>
+              <div v-if="selectedRelease.items?.length" class="release-items">
+                <div v-for="item in selectedRelease.items" :key="item.id" class="release-item">
+                  <div class="release-item-top">
+                    <span class="release-item-type">{{ getItemTypeLabel(item.item_type) }}</span>
+                    <span class="release-item-module">{{ item.module }}</span>
+                  </div>
+                  <div class="release-item-title">{{ item.title }}</div>
+                  <div v-if="item.description" class="release-item-description">{{ item.description }}</div>
+                </div>
+              </div>
+              <div v-else class="release-empty">Пункты релиза не заполнены</div>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>
 <script setup>
@@ -162,7 +216,7 @@ import { useCartStore } from "@/modules/cart/stores/cart.js";
 import { useMenuStore } from "@/modules/menu/stores/menu.js";
 import { useSettingsStore } from "@/modules/settings/stores/settings.js";
 import { useKeyboardHandler } from "@/shared/composables/useKeyboardHandler";
-import { bonusesAPI, menuAPI, ordersAPI } from "@/shared/api/endpoints.js";
+import { bonusesAPI, changelogAPI, menuAPI, ordersAPI } from "@/shared/api/endpoints.js";
 import { hapticFeedback } from "@/shared/services/telegram.js";
 import { wsService } from "@/shared/services/websocket.js";
 import AppHeader from "@/shared/components/AppHeader.vue";
@@ -185,6 +239,12 @@ const activeCategory = ref(null);
 const isScrolling = ref(false);
 const activeOrders = ref([]);
 const selectedTagId = ref(null);
+const changelogLoading = ref(false);
+const releaseDetailsLoading = ref(false);
+const latestRelease = ref(null);
+const selectedRelease = ref(null);
+const showReleaseDialog = ref(false);
+const dismissedReleases = ref({});
 let observer = null;
 let activeCategoryScrollHandler = null;
 let orderStatusHandler = null;
@@ -217,6 +277,7 @@ const actionButtonText = computed(() => {
 });
 onMounted(async () => {
   resolveDeliveryType();
+  await loadLatestRelease();
   if (route.query.openCity === "1") {
     window.dispatchEvent(new CustomEvent("open-city-popup"));
     router.replace({ query: {} });
@@ -671,6 +732,69 @@ function scrollCategoryIntoView(categoryId) {
 function goToCart() {
   router.push("/cart");
 }
+function getDismissedReleaseKey(releaseId) {
+  return `miniapp:release-dismissed:${releaseId}`;
+}
+function syncDismissedRelease(releaseId) {
+  if (!releaseId || typeof window === "undefined") return;
+  const isDismissed = window.localStorage.getItem(getDismissedReleaseKey(releaseId)) === "1";
+  if (isDismissed) {
+    dismissedReleases.value = {
+      ...dismissedReleases.value,
+      [String(releaseId)]: true,
+    };
+  }
+}
+function isReleaseDismissed(releaseId) {
+  if (!releaseId) return true;
+  return Boolean(dismissedReleases.value[String(releaseId)]);
+}
+function dismissRelease(releaseId) {
+  if (!releaseId || typeof window === "undefined") return;
+  window.localStorage.setItem(getDismissedReleaseKey(releaseId), "1");
+  dismissedReleases.value = {
+    ...dismissedReleases.value,
+    [String(releaseId)]: true,
+  };
+}
+function getItemTypeLabel(itemType) {
+  if (itemType === "fix") return "Исправление";
+  if (itemType === "breaking") return "Важно";
+  if (itemType === "internal") return "Сервисное";
+  return "Новое";
+}
+async function loadLatestRelease() {
+  changelogLoading.value = true;
+  try {
+    const response = await changelogAPI.getLatest();
+    latestRelease.value = response.data?.release || null;
+    if (latestRelease.value?.id) {
+      syncDismissedRelease(latestRelease.value.id);
+    }
+  } catch (error) {
+    latestRelease.value = null;
+    devError("Не удалось загрузить последний релиз:", error);
+  } finally {
+    changelogLoading.value = false;
+  }
+}
+async function openReleaseDetails(releaseId) {
+  showReleaseDialog.value = true;
+  selectedRelease.value = null;
+  releaseDetailsLoading.value = true;
+  try {
+    const response = await changelogAPI.getReleaseById(releaseId);
+    selectedRelease.value = response.data?.release || null;
+  } catch (error) {
+    devError("Не удалось загрузить детали релиза:", error);
+    selectedRelease.value = null;
+  } finally {
+    releaseDetailsLoading.value = false;
+  }
+}
+function closeReleaseDialog() {
+  showReleaseDialog.value = false;
+}
 </script>
 <style scoped>
 .home {
@@ -802,6 +926,175 @@ function goToCart() {
 .location-bar {
   padding: 12px;
   background: var(--color-background);
+}
+.release-banner {
+  margin: 0 12px 8px;
+  padding: 12px;
+  border-radius: var(--border-radius-lg);
+  border: 1px solid var(--color-border);
+  background: var(--color-background-secondary);
+}
+.release-banner-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.release-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: var(--font-size-small);
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-semibold);
+}
+.release-close {
+  border: none;
+  background: transparent;
+  font-size: var(--font-size-small);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+.release-version {
+  margin-top: 6px;
+  font-size: var(--font-size-small);
+  color: var(--color-text-secondary);
+}
+.release-title {
+  margin-top: 4px;
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+.release-description {
+  margin-top: 6px;
+  font-size: var(--font-size-small);
+  color: var(--color-text-secondary);
+}
+.release-open-btn {
+  margin-top: 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  background: var(--color-background);
+  color: var(--color-text-primary);
+  padding: 8px 12px;
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+}
+.release-open-btn:active {
+  transform: scale(0.98);
+}
+.release-banner-skeleton {
+  min-height: 74px;
+}
+.release-skeleton-title {
+  height: 14px;
+  width: 34%;
+  margin-bottom: 10px;
+}
+.release-skeleton-line {
+  height: 12px;
+  width: 100%;
+  margin-bottom: 8px;
+}
+.release-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 120;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.release-dialog {
+  width: 100%;
+  max-width: 640px;
+  max-height: 85vh;
+  background: var(--color-background);
+  border-radius: 16px 16px 0 0;
+  padding: 16px;
+  overflow-y: auto;
+}
+.release-dialog-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.release-dialog-label {
+  font-size: var(--font-size-small);
+  color: var(--color-text-secondary);
+}
+.release-dialog-title {
+  margin-top: 2px;
+  font-size: var(--font-size-h3);
+  font-weight: var(--font-weight-semibold);
+}
+.release-dialog-close {
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  background: var(--color-background-secondary);
+  color: var(--color-text-primary);
+  padding: 6px 10px;
+  font-size: var(--font-size-small);
+  cursor: pointer;
+}
+.release-dialog-content {
+  margin-top: 14px;
+}
+.release-dialog-name {
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+.release-section-title {
+  margin-top: 14px;
+  margin-bottom: 8px;
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+}
+.release-items {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.release-item {
+  border: 1px solid var(--color-border);
+  background: var(--color-background-secondary);
+  border-radius: var(--border-radius-md);
+  padding: 10px;
+}
+.release-item-top {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.release-item-type,
+.release-item-module {
+  font-size: 11px;
+  border-radius: 9999px;
+  padding: 2px 8px;
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+}
+.release-item-title {
+  margin-top: 6px;
+  font-size: var(--font-size-body);
+  color: var(--color-text-primary);
+}
+.release-item-description {
+  margin-top: 4px;
+  font-size: var(--font-size-small);
+  color: var(--color-text-secondary);
+}
+.release-empty {
+  font-size: var(--font-size-small);
+  color: var(--color-text-secondary);
+}
+.release-dialog-skeleton {
+  margin-top: 12px;
 }
 .location-tabs {
   display: flex;

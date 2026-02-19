@@ -116,3 +116,15 @@ export const settingsAPI = {
     return api.get("/settings");
   },
 };
+
+export const changelogAPI = {
+  getLatest() {
+    return api.get("/changelog/latest");
+  },
+  getReleaseById(releaseId) {
+    return api.get(`/changelog/releases/${releaseId}`);
+  },
+  getPublished(params = {}) {
+    return api.get("/changelog/releases", { params });
+  },
+};

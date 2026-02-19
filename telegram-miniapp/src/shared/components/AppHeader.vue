@@ -46,6 +46,9 @@
               </button>
             </nav>
           </div>
+          <div class="sidebar-footer">
+            <button class="sidebar-version-link" @click="openChangelogPopup">v{{ latestRelease?.version || "—" }}</button>
+          </div>
         </div>
       </div>
     </Transition>
@@ -70,15 +73,65 @@
       </div>
     </Transition>
   </Teleport>
+  <Teleport to="body">
+    <Transition name="fade">
+      <div v-if="showChangelogPopup" class="changelog-overlay" @click="closeChangelogPopup">
+        <div class="changelog-popup" @click.stop>
+          <div class="popup-header">
+            <div class="popup-title">Что нового</div>
+            <button class="close-btn" aria-label="Закрыть changelog" @click="closeChangelogPopup">
+              <X :size="18" />
+            </button>
+          </div>
+          <div v-if="changelogLoading" class="changelog-skeleton">
+            <div class="skeleton changelog-skeleton-line"></div>
+            <div class="skeleton changelog-skeleton-line"></div>
+            <div class="skeleton changelog-skeleton-line"></div>
+          </div>
+          <div v-else-if="changelogReleases.length" class="changelog-list">
+            <div v-for="release in changelogReleases" :key="release.id" class="changelog-item">
+              <button class="changelog-item-header" @click="toggleRelease(release)">
+                <div class="changelog-item-main">
+                  <div class="changelog-item-version">v{{ release.version }}</div>
+                  <div class="changelog-item-title">{{ release.title }}</div>
+                  <div class="changelog-item-date">{{ formatReleaseDate(release.published_at) }}</div>
+                </div>
+                <ChevronDown :size="16" :class="{ 'changelog-chevron-open': expandedReleaseId === release.id }" />
+              </button>
+              <div v-if="expandedReleaseId === release.id" class="changelog-item-details">
+                <div v-if="releaseDetailsLoadingId === release.id" class="changelog-skeleton">
+                  <div class="skeleton changelog-skeleton-line"></div>
+                  <div class="skeleton changelog-skeleton-line"></div>
+                </div>
+                <template v-else>
+                  <div v-if="releaseDetailsMap[release.id]?.description" class="changelog-item-description">
+                    {{ releaseDetailsMap[release.id].description }}
+                  </div>
+                  <div v-if="getClientItems(releaseDetailsMap[release.id]?.items)?.length" class="changelog-points">
+                    <div v-for="item in getClientItems(releaseDetailsMap[release.id].items)" :key="item.id" class="changelog-point">
+                      <span class="changelog-point-type">{{ getItemTypeLabel(item.item_type) }}</span>
+                      <span>{{ item.title }}</span>
+                    </div>
+                  </div>
+                  <div v-else class="changelog-empty">Пункты релиза не заполнены</div>
+                </template>
+              </div>
+            </div>
+          </div>
+          <div v-else class="changelog-empty">Опубликованных релизов пока нет</div>
+        </div>
+      </div>
+    </Transition>
+  </Teleport>
 </template>
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from "vue";
 import { useRouter } from "vue-router";
-import { Menu, MapPin, X, Home, Package, Gift, User, Phone } from "lucide-vue-next";
+import { Menu, MapPin, X, Home, Package, Gift, User, Phone, ChevronDown } from "lucide-vue-next";
 import { useLocationStore } from "@/modules/location/stores/location.js";
 import { useAuthStore } from "@/modules/auth/stores/auth.js";
 import { useSettingsStore } from "@/modules/settings/stores/settings.js";
-import { citiesAPI, bonusesAPI } from "@/shared/api/endpoints.js";
+import { bonusesAPI, changelogAPI, citiesAPI } from "@/shared/api/endpoints.js";
 import { hapticFeedback } from "@/shared/services/telegram.js";
 const router = useRouter();
 const locationStore = useLocationStore();
@@ -90,6 +143,13 @@ const showCityPopup = ref(false);
 const cityQuery = ref("");
 const cities = ref([]);
 const bonusBalance = ref(0);
+const showChangelogPopup = ref(false);
+const changelogLoading = ref(false);
+const latestRelease = ref(null);
+const changelogReleases = ref([]);
+const expandedReleaseId = ref(null);
+const releaseDetailsLoadingId = ref(null);
+const releaseDetailsMap = ref({});
 let removeAfterEachHook = null;
 const currentCityName = computed(() => locationStore.selectedCity?.name || "Город");
 const bonusesEnabled = computed(() => settingsStore.bonusesEnabled);
@@ -109,6 +169,78 @@ function navigateTo(path) {
   hapticFeedback("light");
   closeSidebar();
   router.push(path);
+}
+function formatReleaseDate(value) {
+  if (!value) return "Без даты";
+  return new Intl.DateTimeFormat("ru-RU", {
+    dateStyle: "medium",
+  }).format(new Date(value));
+}
+function getItemTypeLabel(itemType) {
+  if (itemType === "fix") return "Исправление";
+  if (itemType === "breaking") return "Важно";
+  if (itemType === "internal") return "Сервисное";
+  return "Новое";
+}
+
+function getClientItems(items) {
+  if (!items || !Array.isArray(items)) return [];
+  return items.filter((item) => item.module === "telegram-miniapp");
+}
+
+async function loadLatestRelease() {
+  try {
+    const response = await changelogAPI.getLatest();
+    latestRelease.value = response.data?.release || null;
+  } catch (error) {
+    latestRelease.value = null;
+    console.error("Не удалось загрузить текущую версию:", error);
+  }
+}
+async function openChangelogPopup() {
+  hapticFeedback("light");
+  showChangelogPopup.value = true;
+  if (changelogReleases.value.length > 0 || changelogLoading.value) return;
+  changelogLoading.value = true;
+  try {
+    const response = await changelogAPI.getPublished({ page: 1, limit: 20 });
+    changelogReleases.value = response.data?.items || [];
+  } catch (error) {
+    changelogReleases.value = [];
+    console.error("Не удалось загрузить changelog:", error);
+  } finally {
+    changelogLoading.value = false;
+  }
+}
+function closeChangelogPopup() {
+  showChangelogPopup.value = false;
+  expandedReleaseId.value = null;
+}
+async function toggleRelease(release) {
+  if (expandedReleaseId.value === release.id) {
+    expandedReleaseId.value = null;
+    return;
+  }
+  expandedReleaseId.value = release.id;
+  if (releaseDetailsMap.value[release.id] || releaseDetailsLoadingId.value === release.id) {
+    return;
+  }
+  releaseDetailsLoadingId.value = release.id;
+  try {
+    const response = await changelogAPI.getReleaseById(release.id);
+    releaseDetailsMap.value = {
+      ...releaseDetailsMap.value,
+      [release.id]: response.data?.release || null,
+    };
+  } catch (error) {
+    console.error("Не удалось загрузить детали релиза:", error);
+    releaseDetailsMap.value = {
+      ...releaseDetailsMap.value,
+      [release.id]: null,
+    };
+  } finally {
+    releaseDetailsLoadingId.value = null;
+  }
 }
 function openBonusHistory() {
   hapticFeedback("light");
@@ -161,6 +293,7 @@ function handleOpenCityPopup() {
 onMounted(() => {
   window.addEventListener("open-city-popup", handleOpenCityPopup);
   loadBonusBalance();
+  loadLatestRelease();
   removeAfterEachHook = router.afterEach(() => {
     loadBonusBalance();
   });
@@ -290,6 +423,11 @@ onBeforeUnmount(() => {
   overflow-y: auto;
   padding: 8px;
 }
+.sidebar-footer {
+  padding: 8px 12px 12px;
+  border-top: 1px solid var(--color-border);
+  text-align: right;
+}
 .sidebar-nav {
   display: flex;
   flex-direction: column;
@@ -312,6 +450,18 @@ onBeforeUnmount(() => {
 }
 .sidebar-item:hover {
   background: var(--color-background-secondary);
+}
+.sidebar-version-link {
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-small);
+  cursor: pointer;
+  padding: 0;
+  text-align: right;
+}
+.sidebar-version-link:hover {
+  color: var(--color-text-primary);
 }
 .sidebar-enter-active {
   transition: transform 0.3s ease-out;
@@ -401,6 +551,105 @@ onBeforeUnmount(() => {
 }
 .city-item:hover {
   background: var(--color-border);
+}
+.changelog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2100;
+  padding: 16px;
+}
+.changelog-popup {
+  width: 100%;
+  max-width: 560px;
+  max-height: 84vh;
+  background: var(--color-background);
+  border-radius: var(--border-radius-md);
+  padding: 16px;
+  box-shadow: var(--shadow-md);
+  overflow-y: auto;
+}
+.changelog-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.changelog-item {
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  background: var(--color-background-secondary);
+}
+.changelog-item-header {
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  cursor: pointer;
+}
+.changelog-item-main {
+  text-align: left;
+}
+.changelog-item-version {
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-semibold);
+}
+.changelog-item-title {
+  margin-top: 2px;
+  color: var(--color-text-primary);
+}
+.changelog-item-date {
+  margin-top: 2px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-small);
+}
+.changelog-chevron-open {
+  transform: rotate(180deg);
+}
+.changelog-item-details {
+  padding: 0 12px 12px;
+}
+.changelog-item-description {
+  margin-bottom: 8px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-small);
+}
+.changelog-points {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.changelog-point {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--font-size-small);
+}
+.changelog-point-type {
+  border: 1px solid var(--color-border);
+  background: var(--color-background);
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+}
+.changelog-empty {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-small);
+}
+.changelog-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.changelog-skeleton-line {
+  height: 12px;
+  width: 100%;
 }
 .fade-enter-active,
 .fade-leave-active {

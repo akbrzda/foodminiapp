@@ -31,11 +31,6 @@
             <div class="truncate text-xs text-muted-foreground">{{ shiftSubtitle }}</div>
           </div>
         </div>
-        <div class="mt-2 flex flex-wrap items-center gap-2 pl-[52px]">
-          <span class="rounded-full bg-primary/10 px-2 py-1 text-[11px] font-semibold text-primary">Активные: {{ activeOrdersCount }}</span>
-          <span class="rounded-full bg-amber-500/10 px-2 py-1 text-[11px] font-semibold text-amber-700 dark:text-amber-300">В пути: {{ deliveringCount }}</span>
-          <span class="rounded-full bg-muted px-2 py-1 text-[11px] font-semibold text-muted-foreground">Всего: {{ totalOrdersCount }}</span>
-        </div>
       </div>
 
       <div class="grid w-full grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto] lg:w-auto lg:min-w-[520px]">
