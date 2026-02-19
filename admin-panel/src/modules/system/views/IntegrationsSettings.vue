@@ -192,6 +192,10 @@
             <RefreshCcw :size="16" />
             Синхронизировать меню
           </Button>
+          <Button variant="secondary" :disabled="manualLoading.delivery_zones" @click="syncDeliveryZonesNow">
+            <RefreshCcw :size="16" />
+            Синхронизировать зоны доставки
+          </Button>
         </div>
         </template>
       </CardContent>
@@ -442,7 +446,7 @@ const activeTab = ref("iiko");
 const saving = ref(false);
 const retryLoading = ref(false);
 const overviewLoading = ref(false);
-const manualLoading = ref({ menu: false });
+const manualLoading = ref({ menu: false, delivery_zones: false });
 const testLoading = ref({ iiko: false, pb: false });
 const form = ref({
   iiko_enabled: false,
@@ -694,6 +698,22 @@ const syncMenuNow = async () => {
   }
 };
 
+const syncDeliveryZonesNow = async () => {
+  manualLoading.value.delivery_zones = true;
+  try {
+    const { data } = await api.post("/api/admin/integrations/iiko/sync-delivery-zones");
+    const stats = data?.stats || {};
+    const created = Number(stats.createdCount || 0);
+    const updated = Number(stats.updatedCount || 0);
+    const synced = Number(stats.syncedPolygons || 0);
+    showSuccessNotification(`Синхронизация зон завершена: ${synced} (создано ${created}, обновлено ${updated})`);
+  } catch (error) {
+    showErrorNotification(error?.response?.data?.error || "Не удалось запустить синхронизацию зон доставки");
+  } finally {
+    manualLoading.value.delivery_zones = false;
+  }
+};
+
 const retryFailed = async () => {
   retryLoading.value = true;
   try {
@@ -761,6 +781,7 @@ const isBusy = () =>
   saving.value ||
   retryLoading.value ||
   manualLoading.value.menu ||
+  manualLoading.value.delivery_zones ||
   testLoading.value.iiko ||
   testLoading.value.pb ||
   overviewLoading.value;

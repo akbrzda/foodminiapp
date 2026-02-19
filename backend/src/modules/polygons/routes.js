@@ -5,6 +5,7 @@ import redis from "../../config/redis.js";
 import axios from "axios";
 import { findTariffForAmount, getNextThreshold, validateTariffs } from "./utils/deliveryTariffs.js";
 import { checkIikoIntegration } from "../integrations/middleware/checkIikoIntegration.js";
+import { getIntegrationSettings } from "../integrations/services/integrationConfigService.js";
 const router = express.Router();
 
 router.use("/admin", authenticateToken, checkIikoIntegration);
@@ -21,13 +22,27 @@ const parseGeoJson = (value) => {
 };
 const getPolygonMeta = async (polygonId) => {
   const [rows] = await db.query(
-    `SELECT dp.id, dp.branch_id, b.city_id
+    `SELECT dp.id, dp.branch_id, dp.source, b.city_id
      FROM delivery_polygons dp
      JOIN branches b ON dp.branch_id = b.id
      WHERE dp.id = ?`,
     [polygonId],
   );
   return rows[0] || null;
+};
+const hasIikoBranchMapping = (value) => {
+  return String(value || "").trim().length > 0;
+};
+const resolveBranchPolygonSource = (branch, iikoEnabled) => {
+  if (!iikoEnabled) return "local";
+  return hasIikoBranchMapping(branch?.iiko_terminal_group_id) ? "iiko" : "local";
+};
+const denyIikoPolygonWrite = (polygon, res) => {
+  if (polygon?.source !== "iiko") return false;
+  res.status(403).json({
+    error: "Редактирование iiko-полигонов недоступно. Изменения выполняются в iiko.",
+  });
+  return true;
 };
 const getTariffsByPolygonId = async (polygonId) => {
   const [rows] = await db.query(
@@ -53,12 +68,16 @@ const denyManagerWrite = (req, res) => {
 router.get("/city/:cityId", async (req, res, next) => {
   try {
     const cityId = req.params.cityId;
+    const integrationSettings = await getIntegrationSettings();
+    const iikoEnabled = Boolean(integrationSettings.iikoEnabled);
     const [polygons] = await db.query(
       `SELECT dp.id, dp.branch_id, dp.name, 
+              dp.source,
               ST_AsGeoJSON(dp.polygon) as polygon,
               dp.delivery_time,
               dp.min_order_amount, dp.delivery_cost,
               b.name as branch_name,
+              b.iiko_terminal_group_id,
               (SELECT COUNT(*) FROM delivery_tariffs dt WHERE dt.polygon_id = dp.id) as tariffs_count
        FROM delivery_polygons dp
        JOIN branches b ON dp.branch_id = b.id
@@ -68,10 +87,14 @@ router.get("/city/:cityId", async (req, res, next) => {
                AND NOW() NOT BETWEEN dp.blocked_from AND dp.blocked_until))`,
       [cityId],
     );
-    if (!polygons.length) {
+    const filteredPolygons = polygons.filter((polygon) => {
+      const requiredSource = resolveBranchPolygonSource(polygon, iikoEnabled);
+      return polygon.source === requiredSource;
+    });
+    if (!filteredPolygons.length) {
       return res.json({ polygons: [] });
     }
-    const polygonIds = polygons.map((p) => p.id);
+    const polygonIds = filteredPolygons.map((p) => p.id);
     const placeholders = polygonIds.map(() => "?").join(",");
     const [tariffsRows] = await db.query(
       `SELECT id, polygon_id, amount_from, amount_to, delivery_cost
@@ -93,7 +116,7 @@ router.get("/city/:cityId", async (req, res, next) => {
         delivery_cost: row.delivery_cost,
       });
     });
-    const parsedPolygons = polygons.map((p) => ({
+    const parsedPolygons = filteredPolygons.map((p) => ({
       ...p,
       polygon: parseGeoJson(p.polygon),
       tariffs: tariffsByPolygon.get(p.id) || [],
@@ -106,18 +129,25 @@ router.get("/city/:cityId", async (req, res, next) => {
 router.get("/branch/:branchId", async (req, res, next) => {
   try {
     const branchId = req.params.branchId;
+    const [branchRows] = await db.query("SELECT id, iiko_terminal_group_id FROM branches WHERE id = ?", [branchId]);
+    if (!branchRows.length) {
+      return res.status(404).json({ error: "Branch not found" });
+    }
+    const integrationSettings = await getIntegrationSettings();
+    const source = resolveBranchPolygonSource(branchRows[0], Boolean(integrationSettings.iikoEnabled));
     const [polygons] = await db.query(
       `SELECT id, branch_id, name, 
+              source,
               ST_AsGeoJSON(polygon) as polygon,
               delivery_time,
               min_order_amount, delivery_cost,
               (SELECT COUNT(*) FROM delivery_tariffs dt WHERE dt.polygon_id = delivery_polygons.id) as tariffs_count
        FROM delivery_polygons
-       WHERE branch_id = ? AND is_active = TRUE
+       WHERE branch_id = ? AND source = ? AND is_active = TRUE
          AND (is_blocked = FALSE OR 
               (blocked_from IS NOT NULL AND blocked_until IS NOT NULL 
                AND NOW() NOT BETWEEN blocked_from AND blocked_until))`,
-      [branchId],
+      [branchId, source],
     );
     if (!polygons.length) {
       return res.json({ polygons: [] });
@@ -559,6 +589,8 @@ router.post("/reverse", async (req, res, next) => {
 router.post("/check-delivery", async (req, res, next) => {
   try {
     const { latitude, longitude, city_id, cart_amount } = req.body;
+    const integrationSettings = await getIntegrationSettings();
+    const iikoEnabled = Boolean(integrationSettings.iikoEnabled);
     const lat = Number(latitude);
     const lon = Number(longitude);
     const cityId = Number(city_id);
@@ -570,7 +602,7 @@ router.post("/check-delivery", async (req, res, next) => {
     const findPolygon = async (pointLat, pointLon) => {
       const point = `POINT(${pointLon} ${pointLat})`;
       const [polygons] = await db.query(
-        `SELECT dp.id, dp.branch_id, dp.name,
+        `SELECT dp.id, dp.branch_id, dp.name, dp.source,
                 dp.delivery_time,
                 dp.min_order_amount, dp.delivery_cost,
                 b.name as branch_name, b.address as branch_address,
@@ -583,10 +615,15 @@ router.post("/check-delivery", async (req, res, next) => {
            AND (dp.is_blocked = FALSE OR 
                 (dp.blocked_from IS NOT NULL AND dp.blocked_until IS NOT NULL 
                  AND NOW() NOT BETWEEN dp.blocked_from AND dp.blocked_until))
+           AND (
+                (? = 1 AND COALESCE(NULLIF(TRIM(b.iiko_terminal_group_id), ''), NULL) IS NOT NULL AND dp.source = 'iiko')
+                OR
+                ((? = 0 OR COALESCE(NULLIF(TRIM(b.iiko_terminal_group_id), ''), NULL) IS NULL) AND dp.source = 'local')
+           )
            AND ST_Contains(dp.polygon, ST_GeomFromText(?, 4326))
          ORDER BY dp.delivery_time, dp.id
          LIMIT 1`,
-        [cityId, point],
+        [cityId, iikoEnabled ? 1 : 0, iikoEnabled ? 1 : 0, point],
       );
       return polygons[0] || null;
     };
@@ -628,6 +665,15 @@ router.post("/check-delivery", async (req, res, next) => {
       });
     }
     const cartAmountValue = Number.isFinite(Number(cart_amount)) ? Number(cart_amount) : null;
+    const minOrderAmount = Number.isFinite(Number(polygon.min_order_amount)) ? Number(polygon.min_order_amount) : 0;
+    if (cartAmountValue !== null && cartAmountValue < minOrderAmount) {
+      return res.json({
+        available: false,
+        polygon,
+        coords_swapped: coordsSwapped,
+        message: `Минимальная сумма заказа для этой зоны: ${minOrderAmount}`,
+      });
+    }
     const currentTariff = cartAmountValue === null ? null : findTariffForAmount(tariffs, cartAmountValue);
     const deliveryCost = currentTariff ? currentTariff.delivery_cost : null;
     const nextThreshold = currentTariff ? getNextThreshold(tariffs, cartAmountValue) : null;
@@ -645,6 +691,8 @@ router.post("/check-delivery", async (req, res, next) => {
 });
 router.get("/admin/all", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
   try {
+    const integrationSettings = await getIntegrationSettings();
+    const iikoEnabled = Boolean(integrationSettings.iikoEnabled);
     let cityFilter = "";
     const values = [];
     if (req.user.role === "manager") {
@@ -656,12 +704,12 @@ router.get("/admin/all", authenticateToken, requireRole("admin", "manager", "ceo
       values.push(...cities);
     }
     const [polygons] = await db.query(
-      `SELECT dp.id, dp.branch_id, dp.name,
+      `SELECT dp.id, dp.branch_id, dp.name, dp.source,
               ST_AsGeoJSON(dp.polygon) as polygon,
               dp.delivery_time,
               dp.min_order_amount, dp.delivery_cost, dp.is_active,
               dp.is_blocked, dp.blocked_from, dp.blocked_until, dp.block_reason,
-              b.city_id, b.name as branch_name,
+              b.city_id, b.name as branch_name, b.iiko_terminal_group_id,
               (SELECT COUNT(*) FROM delivery_tariffs dt WHERE dt.polygon_id = dp.id) as tariffs_count
        FROM delivery_polygons dp
        JOIN branches b ON dp.branch_id = b.id
@@ -669,7 +717,11 @@ router.get("/admin/all", authenticateToken, requireRole("admin", "manager", "ceo
        ORDER BY b.city_id, dp.name`,
       values,
     );
-    const parsedPolygons = polygons.map((p) => ({
+    const filteredPolygons = polygons.filter((polygon) => {
+      const requiredSource = resolveBranchPolygonSource(polygon, iikoEnabled);
+      return polygon.source === requiredSource;
+    });
+    const parsedPolygons = filteredPolygons.map((p) => ({
       ...p,
       polygon: parseGeoJson(p.polygon),
     }));
@@ -681,17 +733,19 @@ router.get("/admin/all", authenticateToken, requireRole("admin", "manager", "ceo
 router.get("/admin/branch/:branchId", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
   try {
     const branchId = req.params.branchId;
-    const [branches] = await db.query("SELECT city_id FROM branches WHERE id = ?", [branchId]);
+    const [branches] = await db.query("SELECT city_id, iiko_terminal_group_id FROM branches WHERE id = ?", [branchId]);
     if (branches.length === 0) {
       return res.status(404).json({ error: "Branch not found" });
     }
+    const integrationSettings = await getIntegrationSettings();
+    const source = resolveBranchPolygonSource(branches[0], Boolean(integrationSettings.iikoEnabled));
     if (req.user.role === "manager" && !req.user.cities.includes(branches[0].city_id)) {
       return res.status(403).json({
         error: "You do not have access to this city",
       });
     }
     const [polygons] = await db.query(
-      `SELECT id, branch_id, name,
+      `SELECT id, branch_id, name, source,
                 ST_AsGeoJSON(polygon) as polygon,
                 delivery_time,
                 min_order_amount, delivery_cost, is_active,
@@ -699,9 +753,9 @@ router.get("/admin/branch/:branchId", authenticateToken, requireRole("admin", "m
                 created_at, updated_at,
                 (SELECT COUNT(*) FROM delivery_tariffs dt WHERE dt.polygon_id = delivery_polygons.id) as tariffs_count
          FROM delivery_polygons
-         WHERE branch_id = ?
+         WHERE branch_id = ? AND source = ?
          ORDER BY name`,
-      [branchId],
+      [branchId, source],
     );
     const parsedPolygons = polygons.map((p) => ({
       ...p,
@@ -722,6 +776,9 @@ router.get("/admin/:id/tariffs", authenticateToken, requireRole("admin", "manage
     if (req.user.role === "manager" && !req.user.cities.includes(meta.city_id)) {
       return res.status(403).json({ error: "You do not have access to this city" });
     }
+    if (meta.source === "iiko") {
+      return res.json({ tariffs: [], read_only: true });
+    }
     const tariffs = await getTariffsByPolygonId(polygonId);
     res.json({ tariffs });
   } catch (error) {
@@ -740,6 +797,7 @@ router.put("/admin/:id/tariffs", authenticateToken, requireRole("admin", "manage
     if (req.user.role === "manager" && !req.user.cities.includes(meta.city_id)) {
       return res.status(403).json({ error: "You do not have access to this city" });
     }
+    if (denyIikoPolygonWrite(meta, res)) return;
     const { tariffs = [] } = req.body;
     const { valid, errors, normalized } = validateTariffs(tariffs);
     if (!valid) {
@@ -783,6 +841,8 @@ router.post("/admin/:id/tariffs/copy", authenticateToken, requireRole("admin", "
         return res.status(403).json({ error: "You do not have access to this city" });
       }
     }
+    if (denyIikoPolygonWrite(targetMeta, res)) return;
+    if (denyIikoPolygonWrite(sourceMeta, res)) return;
     if (targetMeta.branch_id !== sourceMeta.branch_id) {
       return res.status(400).json({ error: "Полигон-источник должен быть в том же филиале" });
     }
@@ -821,9 +881,16 @@ router.post("/admin", authenticateToken, requireRole("admin", "manager", "ceo"),
         error: "branch_id and polygon are required",
       });
     }
-    const [branches] = await db.query("SELECT city_id FROM branches WHERE id = ?", [branch_id]);
+    const [branches] = await db.query("SELECT city_id, iiko_terminal_group_id FROM branches WHERE id = ?", [branch_id]);
     if (branches.length === 0) {
       return res.status(404).json({ error: "Branch not found" });
+    }
+    const integrationSettings = await getIntegrationSettings();
+    const source = resolveBranchPolygonSource(branches[0], Boolean(integrationSettings.iikoEnabled));
+    if (source === "iiko") {
+      return res.status(403).json({
+        error: "Для филиала с интеграцией iiko локальные полигоны недоступны.",
+      });
     }
     if (req.user.role === "manager" && !req.user.cities.includes(branches[0].city_id)) {
       return res.status(403).json({
@@ -841,13 +908,13 @@ router.post("/admin", authenticateToken, requireRole("admin", "manager", "ceo"),
     const wkt = `POLYGON((${coordinates}))`;
     const [result] = await db.query(
       `INSERT INTO delivery_polygons 
-         (branch_id, name, polygon, delivery_time, 
+         (branch_id, name, source, polygon, delivery_time, 
           min_order_amount, delivery_cost)
-         VALUES (?, ?, ST_GeomFromText(?, 4326), ?, ?, ?)`,
+         VALUES (?, ?, 'local', ST_GeomFromText(?, 4326), ?, ?, ?)`,
       [branch_id, name || null, wkt, delivery_time || 30, safeMinOrderAmount, safeDeliveryCost],
     );
     const [newPolygon] = await db.query(
-      `SELECT id, branch_id, name, 
+      `SELECT id, branch_id, name, source,
                 ST_AsGeoJSON(polygon) as polygon,
                 delivery_time,
                 min_order_amount, delivery_cost, is_active,
@@ -871,7 +938,7 @@ router.put("/admin/:id", authenticateToken, requireRole("admin", "manager", "ceo
     const polygonId = req.params.id;
     const { name, polygon, delivery_time, min_order_amount, delivery_cost, is_active } = req.body;
     const [polygons] = await db.query(
-      `SELECT dp.id, b.city_id
+      `SELECT dp.id, dp.source, b.city_id
          FROM delivery_polygons dp
          JOIN branches b ON dp.branch_id = b.id
          WHERE dp.id = ?`,
@@ -885,6 +952,7 @@ router.put("/admin/:id", authenticateToken, requireRole("admin", "manager", "ceo
         error: "You do not have access to this city",
       });
     }
+    if (denyIikoPolygonWrite(polygons[0], res)) return;
     const updates = [];
     const values = [];
     if (name !== undefined) {
@@ -924,7 +992,7 @@ router.put("/admin/:id", authenticateToken, requireRole("admin", "manager", "ceo
     values.push(polygonId);
     await db.query(`UPDATE delivery_polygons SET ${updates.join(", ")} WHERE id = ?`, values);
     const [updatedPolygon] = await db.query(
-      `SELECT id, branch_id, name, 
+      `SELECT id, branch_id, name, source,
                 ST_AsGeoJSON(polygon) as polygon,
                 delivery_time,
                 min_order_amount, delivery_cost, is_active,
@@ -947,7 +1015,7 @@ router.post("/admin/:id/block", authenticateToken, requireRole("admin", "manager
     const polygonId = req.params.id;
     const { blocked_from, blocked_until, block_reason } = req.body;
     const [polygons] = await db.query(
-      `SELECT dp.id, b.city_id
+      `SELECT dp.id, dp.source, b.city_id
          FROM delivery_polygons dp
          JOIN branches b ON dp.branch_id = b.id
          WHERE dp.id = ?`,
@@ -961,6 +1029,7 @@ router.post("/admin/:id/block", authenticateToken, requireRole("admin", "manager
         error: "You do not have access to this city",
       });
     }
+    if (denyIikoPolygonWrite(polygons[0], res)) return;
     if (blocked_from && blocked_until) {
       const from = new Date(blocked_from);
       const until = new Date(blocked_until);
@@ -980,7 +1049,7 @@ router.post("/admin/:id/block", authenticateToken, requireRole("admin", "manager
       [blocked_from || null, blocked_until || null, block_reason || null, req.user.id, polygonId],
     );
     const [updatedPolygon] = await db.query(
-      `SELECT id, branch_id, name, 
+      `SELECT id, branch_id, name, source,
               ST_AsGeoJSON(polygon) as polygon,
               delivery_time,
               min_order_amount, delivery_cost, is_active,
@@ -1004,7 +1073,7 @@ router.post("/admin/:id/unblock", authenticateToken, requireRole("admin", "manag
   try {
     const polygonId = req.params.id;
     const [polygons] = await db.query(
-      `SELECT dp.id, b.city_id
+      `SELECT dp.id, dp.source, b.city_id
          FROM delivery_polygons dp
          JOIN branches b ON dp.branch_id = b.id
          WHERE dp.id = ?`,
@@ -1018,6 +1087,7 @@ router.post("/admin/:id/unblock", authenticateToken, requireRole("admin", "manag
         error: "You do not have access to this city",
       });
     }
+    if (denyIikoPolygonWrite(polygons[0], res)) return;
     await db.query(
       `UPDATE delivery_polygons 
        SET is_blocked = FALSE, 
@@ -1030,7 +1100,7 @@ router.post("/admin/:id/unblock", authenticateToken, requireRole("admin", "manag
       [polygonId],
     );
     const [updatedPolygon] = await db.query(
-      `SELECT id, branch_id, name, 
+      `SELECT id, branch_id, name, source,
               ST_AsGeoJSON(polygon) as polygon,
               delivery_time,
               min_order_amount, delivery_cost, is_active,
@@ -1065,7 +1135,7 @@ router.post("/admin/bulk-block", authenticateToken, requireRole("admin", "manage
     }
     const placeholders = polygon_ids.map(() => "?").join(",");
     const [polygons] = await db.query(
-      `SELECT dp.id, b.city_id
+      `SELECT dp.id, dp.source, b.city_id
          FROM delivery_polygons dp
          JOIN branches b ON dp.branch_id = b.id
          WHERE dp.id IN (${placeholders})`,
@@ -1081,6 +1151,9 @@ router.post("/admin/bulk-block", authenticateToken, requireRole("admin", "manage
           error: "You do not have access to one or more cities",
         });
       }
+    }
+    if (polygons.some((polygon) => polygon.source === "iiko")) {
+      return res.status(403).json({ error: "Массовая блокировка iiko-полигонов недоступна" });
     }
     await db.query(
       `UPDATE delivery_polygons 
@@ -1109,7 +1182,7 @@ router.post("/admin/bulk-unblock", authenticateToken, requireRole("admin", "mana
     }
     const placeholders = polygon_ids.map(() => "?").join(",");
     const [polygons] = await db.query(
-      `SELECT dp.id, b.city_id
+      `SELECT dp.id, dp.source, b.city_id
          FROM delivery_polygons dp
          JOIN branches b ON dp.branch_id = b.id
          WHERE dp.id IN (${placeholders})`,
@@ -1125,6 +1198,9 @@ router.post("/admin/bulk-unblock", authenticateToken, requireRole("admin", "mana
           error: "You do not have access to one or more cities",
         });
       }
+    }
+    if (polygons.some((polygon) => polygon.source === "iiko")) {
+      return res.status(403).json({ error: "Массовая разблокировка iiko-полигонов недоступна" });
     }
     await db.query(
       `UPDATE delivery_polygons 
@@ -1154,7 +1230,7 @@ router.post("/admin/:id/transfer", authenticateToken, requireRole("admin", "mana
       return res.status(400).json({ error: "new_branch_id is required" });
     }
     const [polygons] = await db.query(
-      `SELECT dp.id, dp.branch_id, b.city_id
+      `SELECT dp.id, dp.branch_id, dp.source, b.city_id
          FROM delivery_polygons dp
          JOIN branches b ON dp.branch_id = b.id
          WHERE dp.id = ?`,
@@ -1169,6 +1245,7 @@ router.post("/admin/:id/transfer", authenticateToken, requireRole("admin", "mana
         error: "You do not have access to this city",
       });
     }
+    if (denyIikoPolygonWrite(polygons[0], res)) return;
     const [newBranches] = await db.query(`SELECT id, city_id, name FROM branches WHERE id = ?`, [new_branch_id]);
     if (newBranches.length === 0) {
       return res.status(404).json({ error: "New branch not found" });
@@ -1206,7 +1283,7 @@ router.delete("/admin/:id", authenticateToken, requireRole("admin", "manager", "
     if (denyManagerWrite(req, res)) return;
     const polygonId = req.params.id;
     const [polygons] = await db.query(
-      `SELECT dp.id, b.city_id
+      `SELECT dp.id, dp.source, b.city_id
          FROM delivery_polygons dp
          JOIN branches b ON dp.branch_id = b.id
          WHERE dp.id = ?`,
@@ -1220,6 +1297,7 @@ router.delete("/admin/:id", authenticateToken, requireRole("admin", "manager", "
         error: "You do not have access to this city",
       });
     }
+    if (denyIikoPolygonWrite(polygons[0], res)) return;
     await db.query("DELETE FROM delivery_polygons WHERE id = ?", [polygonId]);
     res.json({ message: "Polygon deleted successfully" });
   } catch (error) {

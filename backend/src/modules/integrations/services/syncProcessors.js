@@ -1,5 +1,6 @@
 import db from "../../../config/database.js";
 import redis from "../../../config/redis.js";
+import { createHash } from "node:crypto";
 import { getIikoClientOrNull, getIntegrationSettings, getPremiumBonusClientOrNull } from "./integrationConfigService.js";
 import { INTEGRATION_MODULE, INTEGRATION_TYPE, MAX_SYNC_ATTEMPTS, SYNC_STATUS } from "../constants.js";
 import { finishIntegrationEvent, logIntegrationEvent, startIntegrationEvent } from "./integrationLoggerService.js";
@@ -1432,7 +1433,55 @@ export async function processIikoStopListSync(reason = "manual", branchId = null
   return data;
 }
 
-export async function processIikoDeliveryZonesSync() {
+function normalizeIikoTerminalGroupId(value) {
+  return String(value || "").trim();
+}
+
+function normalizeZoneName(value) {
+  return String(value || "").trim();
+}
+
+function normalizeZoneCoordinates(rawCoordinates) {
+  if (!Array.isArray(rawCoordinates)) return null;
+
+  const points = rawCoordinates
+    .map((point) => {
+      if (Array.isArray(point) && point.length >= 2) {
+        const lat = Number(point[0]);
+        const lon = Number(point[1]);
+        if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+        return [lon, lat];
+      }
+
+      const lat = Number(point?.latitude);
+      const lon = Number(point?.longitude);
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+      return [lon, lat];
+    })
+    .filter(Boolean);
+
+  if (points.length < 3) return null;
+
+  const [firstLon, firstLat] = points[0];
+  const [lastLon, lastLat] = points[points.length - 1];
+  if (firstLon !== lastLon || firstLat !== lastLat) {
+    points.push([firstLon, firstLat]);
+  }
+
+  if (points.length < 4) return null;
+  return points;
+}
+
+function coordinatesToWkt(points) {
+  const coordinates = points.map(([lon, lat]) => `${lon} ${lat}`).join(", ");
+  return `POLYGON((${coordinates}))`;
+}
+
+function buildIikoPolygonExternalId({ organizationId, terminalGroupId, zoneName }) {
+  return createHash("sha1").update(`${organizationId}::${terminalGroupId}::${zoneName}`).digest("hex");
+}
+
+export async function processIikoDeliveryZonesSync(reason = "manual") {
   const settings = await getIntegrationSettings();
   if (!settings.iikoEnabled) return null;
   const client = await getIikoClientOrNull();
@@ -1441,16 +1490,174 @@ export async function processIikoDeliveryZonesSync() {
   const startedAt = Date.now();
   const response = await client.getDeliveryZones({ organizationId: settings.iikoOrganizationId });
 
+  const [branches] = await db.query(
+    `SELECT id, iiko_terminal_group_id
+     FROM branches
+     WHERE iiko_terminal_group_id IS NOT NULL
+       AND iiko_terminal_group_id <> ''`,
+  );
+
+  const branchByTerminalGroupId = new Map();
+  for (const branch of branches) {
+    const terminalGroupId = normalizeIikoTerminalGroupId(branch.iiko_terminal_group_id);
+    if (!terminalGroupId) continue;
+    branchByTerminalGroupId.set(terminalGroupId, Number(branch.id));
+  }
+
+  const mappedBranchIds = [...new Set([...branchByTerminalGroupId.values()])];
+  const deliveryRestrictions = Array.isArray(response?.deliveryRestrictions) ? response.deliveryRestrictions : [];
+
+  const polygonsByExternalId = new Map();
+  let skippedRestrictions = 0;
+
+  for (const organizationRestrictions of deliveryRestrictions) {
+    const organizationId = String(organizationRestrictions?.organizationId || "").trim();
+    const zones = Array.isArray(organizationRestrictions?.deliveryZones) ? organizationRestrictions.deliveryZones : [];
+    const restrictions = Array.isArray(organizationRestrictions?.restrictions) ? organizationRestrictions.restrictions : [];
+
+    const zoneByName = new Map();
+    for (const zone of zones) {
+      const zoneName = normalizeZoneName(zone?.name);
+      if (!zoneName) continue;
+      const normalizedCoordinates = normalizeZoneCoordinates(zone?.coordinates);
+      if (!normalizedCoordinates) continue;
+      zoneByName.set(zoneName, {
+        zoneName,
+        coordinates: normalizedCoordinates,
+      });
+    }
+
+    for (const restriction of restrictions) {
+      const terminalGroupId = normalizeIikoTerminalGroupId(restriction?.terminalGroupId);
+      const zoneName = normalizeZoneName(restriction?.zone);
+      const branchId = branchByTerminalGroupId.get(terminalGroupId);
+      const zone = zoneByName.get(zoneName);
+      if (!branchId || !zone) {
+        skippedRestrictions += 1;
+        continue;
+      }
+
+      const minSumRaw = Number(restriction?.minSum);
+      const minOrderAmount = Number.isFinite(minSumRaw) ? Math.max(0, minSumRaw) : 0;
+      const durationRaw = Number(restriction?.deliveryDurationInMinutes);
+      const deliveryTime = Number.isFinite(durationRaw) ? Math.max(1, Math.trunc(durationRaw)) : 30;
+      const externalId = buildIikoPolygonExternalId({ organizationId, terminalGroupId, zoneName });
+      const existing = polygonsByExternalId.get(externalId);
+
+      if (!existing) {
+        polygonsByExternalId.set(externalId, {
+          externalId,
+          branchId,
+          name: zone.zoneName,
+          iikoTerminalGroupId: terminalGroupId,
+          deliveryTime,
+          minOrderAmount,
+          wkt: coordinatesToWkt(zone.coordinates),
+        });
+        continue;
+      }
+
+      existing.minOrderAmount = Math.min(existing.minOrderAmount, minOrderAmount);
+      existing.deliveryTime = Math.min(existing.deliveryTime, deliveryTime);
+    }
+  }
+
+  const polygonsToSync = [...polygonsByExternalId.values()];
+  let createdCount = 0;
+  let updatedCount = 0;
+  let deactivatedCount = 0;
+
+  const connection = await db.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    if (mappedBranchIds.length > 0) {
+      const placeholders = mappedBranchIds.map(() => "?").join(",");
+      const [deactivatedResult] = await connection.query(
+        `UPDATE delivery_polygons
+         SET is_active = 0
+         WHERE source = 'iiko'
+           AND branch_id IN (${placeholders})
+           AND is_active = 1`,
+        mappedBranchIds,
+      );
+      deactivatedCount = Number(deactivatedResult?.affectedRows || 0);
+    }
+
+    for (const polygon of polygonsToSync) {
+      const [existingRows] = await connection.query(
+        `SELECT id
+         FROM delivery_polygons
+         WHERE source = 'iiko' AND external_id = ?
+         LIMIT 1`,
+        [polygon.externalId],
+      );
+      const existed = existingRows.length > 0;
+
+      await connection.query(
+        `INSERT INTO delivery_polygons
+           (branch_id, name, source, external_id, iiko_terminal_group_id, polygon, delivery_time, min_order_amount, delivery_cost, is_active)
+         VALUES (?, ?, 'iiko', ?, ?, ST_GeomFromText(?, 4326), ?, ?, 0, 1)
+         ON DUPLICATE KEY UPDATE
+           branch_id = VALUES(branch_id),
+           name = VALUES(name),
+           iiko_terminal_group_id = VALUES(iiko_terminal_group_id),
+           polygon = VALUES(polygon),
+           delivery_time = VALUES(delivery_time),
+           min_order_amount = VALUES(min_order_amount),
+           delivery_cost = 0,
+           is_active = 1,
+           is_blocked = 0,
+           blocked_from = NULL,
+           blocked_until = NULL,
+           block_reason = NULL,
+           blocked_by = NULL,
+           blocked_at = NULL`,
+        [polygon.branchId, polygon.name || null, polygon.externalId, polygon.iikoTerminalGroupId, polygon.wkt, polygon.deliveryTime, polygon.minOrderAmount],
+      );
+
+      if (existed) updatedCount += 1;
+      else createdCount += 1;
+    }
+
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+
   await logIntegrationEvent({
     integrationType: INTEGRATION_TYPE.IIKO,
     module: INTEGRATION_MODULE.DELIVERY_ZONES,
     action: "sync_delivery_zones",
     status: "success",
-    responseData: { hasData: Boolean(response), keys: response ? Object.keys(response).slice(0, 20) : [] },
+    requestData: { reason },
+    responseData: {
+      hasData: Boolean(response),
+      keys: response ? Object.keys(response).slice(0, 20) : [],
+      mappedBranches: mappedBranchIds.length,
+      syncedPolygons: polygonsToSync.length,
+      createdCount,
+      updatedCount,
+      deactivatedCount,
+      skippedRestrictions,
+    },
     durationMs: Date.now() - startedAt,
   });
 
-  return response;
+  return {
+    response,
+    stats: {
+      mappedBranches: mappedBranchIds.length,
+      syncedPolygons: polygonsToSync.length,
+      createdCount,
+      updatedCount,
+      deactivatedCount,
+      skippedRestrictions,
+    },
+  };
 }
 
 export async function retryFailedSyncs() {

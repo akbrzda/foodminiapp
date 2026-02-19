@@ -10,6 +10,7 @@ import {
   retryAllFailed,
   retrySingleEntity,
   syncIikoMenuNow,
+  syncIikoDeliveryZonesNow,
   testIikoConnection,
   testPremiumBonusConnection,
   updateAdminIntegrationSettings,
@@ -97,6 +98,18 @@ router.post("/iiko/sync-stoplist", async (req, res, next) => {
       accepted: false,
       reason: "Синхронизация стоп-листа временно отключена. Доступен только ручной sync меню.",
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/iiko/sync-delivery-zones", async (req, res, next) => {
+  try {
+    const result = await syncIikoDeliveryZonesNow();
+    if (!result.accepted) {
+      return res.status(400).json(result);
+    }
+    return res.json(result);
   } catch (error) {
     next(error);
   }

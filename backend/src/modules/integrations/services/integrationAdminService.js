@@ -3,7 +3,7 @@ import { getSettingsList, getSystemSettings, updateSystemSettings } from "../../
 import { getIikoClientOrNull, getIntegrationSettings, getPremiumBonusClientOrNull } from "./integrationConfigService.js";
 import { getSyncLogs } from "../repositories/syncLogRepository.js";
 import menuAdapter from "../adapters/menuAdapter.js";
-import { retryFailedSyncs } from "./syncProcessors.js";
+import { processIikoDeliveryZonesSync, retryFailedSyncs } from "./syncProcessors.js";
 import {
   enqueueIikoOrderSync,
   enqueuePremiumBonusClientSync,
@@ -353,6 +353,19 @@ export async function syncIikoMenuNow({ cityId = null } = {}) {
 
 export async function syncIikoStopListNow({ branchId = null } = {}) {
   return menuAdapter.triggerStopListSync({ reason: "manual", branchId });
+}
+
+export async function syncIikoDeliveryZonesNow() {
+  const settings = await getIntegrationSettings();
+  if (!settings.iikoEnabled) {
+    return { accepted: false, reason: "Интеграция iiko выключена или не настроена" };
+  }
+
+  const result = await processIikoDeliveryZonesSync("manual");
+  return {
+    accepted: true,
+    stats: result?.stats || null,
+  };
 }
 
 export async function getIntegrationSyncStatus() {
