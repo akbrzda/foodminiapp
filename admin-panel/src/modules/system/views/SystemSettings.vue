@@ -218,12 +218,7 @@
             <Field>
               <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Текст сообщения</FieldLabel>
               <FieldContent>
-                <Textarea
-                  v-model="telegramForm.text"
-                  rows="6"
-                  maxlength="4096"
-                  placeholder="Введите приветственный текст для команды /start"
-                />
+                <Textarea v-model="telegramForm.text" rows="6" maxlength="4096" placeholder="Введите приветственный текст для команды /start" />
               </FieldContent>
             </Field>
 
@@ -232,9 +227,7 @@
                 <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Изображение</FieldLabel>
                 <FieldContent>
                   <input ref="telegramFileInput" type="file" accept="image/*" class="hidden" @change="onTelegramFileChange" />
-                  <div
-                    class="flex min-h-24 flex-col items-start justify-center rounded-xl border border-dashed border-border/70 bg-muted/20 p-3"
-                  >
+                  <div class="flex min-h-24 flex-col items-start justify-center rounded-xl border border-dashed border-border/70 bg-muted/20 p-3">
                     <div class="text-xs text-muted-foreground">JPG/PNG/WebP, до 10MB</div>
                     <div v-if="telegramUploadState.error" class="text-xs text-red-600">{{ telegramUploadState.error }}</div>
                     <div v-if="telegramUploadState.loading" class="text-xs text-muted-foreground">Загрузка...</div>
@@ -300,17 +293,12 @@
                   v-if="telegramUploadState.preview || telegramForm.image_url"
                   :src="telegramUploadState.preview || telegramForm.image_url"
                   alt="preview"
-                  class="max-h-64 w-full rounded-lg object-cover"
+                  class="max-h-64 rounded-lg object-cover"
                 />
                 <p class="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
                   {{ telegramForm.text || "Текст приветствия не задан" }}
                 </p>
-                <Button
-                  v-if="telegramForm.button_text && telegramForm.button_url"
-                  type="button"
-                  variant="secondary"
-                  class="pointer-events-none"
-                >
+                <Button v-if="telegramForm.button_text && telegramForm.button_url" type="button" variant="secondary" class="pointer-events-none">
                   {{ telegramForm.button_text }}
                 </Button>
               </CardContent>
