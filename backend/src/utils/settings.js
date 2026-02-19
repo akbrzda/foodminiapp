@@ -3,6 +3,16 @@ import redis from "../config/redis.js";
 
 const SETTINGS_CACHE_KEY = "settings";
 const SETTINGS_CACHE_TTL = 600;
+export const TELEGRAM_START_MESSAGE_DEFAULT = {
+  enabled: true,
+  text: "Привет! Добро пожаловать в Панда Пиццу.",
+  image_url: "",
+  button_type: "web_app",
+  button_text: "Открыть приложение",
+  button_url: "",
+};
+
+const TELEGRAM_START_BUTTON_TYPES = new Set(["url", "web_app"]);
 
 export const SETTINGS_SCHEMA = {
   bonuses_enabled: {
@@ -32,6 +42,13 @@ export const SETTINGS_SCHEMA = {
     description: "Оформление заказов на самовывоз",
     group: "Заказы",
     type: "boolean",
+  },
+  telegram_start_message: {
+    default: TELEGRAM_START_MESSAGE_DEFAULT,
+    label: "Приветственное сообщение /start",
+    description: "Текст, изображение и кнопка для команды /start в Telegram-боте",
+    group: "Telegram",
+    type: "json",
   },
   integration_mode: {
     default: { menu: "local", orders: "local", loyalty: "local" },
@@ -182,6 +199,70 @@ const normalizeString = (value) => {
   return trimmed;
 };
 
+const isValidAbsoluteUrl = (value) => {
+  if (!value) return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" || url.protocol === "http:";
+  } catch (error) {
+    return false;
+  }
+};
+
+const validateTelegramStartMessage = (value) => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return { normalized: null, error: "Ожидался JSON-объект для telegram_start_message" };
+  }
+
+  const enabled = value.enabled === undefined ? true : normalizeBoolean(value.enabled);
+  if (enabled === null) {
+    return { normalized: null, error: "Поле enabled должно быть булевым" };
+  }
+
+  const text = String(value.text || "").trim();
+  if (!text && enabled) {
+    return { normalized: null, error: "Текст приветствия обязателен" };
+  }
+  if (text && text.length > 4096) {
+    return { normalized: null, error: "Текст приветствия не должен превышать 4096 символов" };
+  }
+
+  const imageUrl = String(value.image_url || "").trim();
+  if (imageUrl && !isValidAbsoluteUrl(imageUrl)) {
+    return { normalized: null, error: "Поле image_url должно содержать корректный URL" };
+  }
+
+  const buttonTypeRaw = String(value.button_type || "url").trim().toLowerCase();
+  const buttonType = TELEGRAM_START_BUTTON_TYPES.has(buttonTypeRaw) ? buttonTypeRaw : null;
+  if (!buttonType) {
+    return { normalized: null, error: "button_type должен быть url или web_app" };
+  }
+
+  const buttonText = String(value.button_text || "").trim();
+  const buttonUrl = String(value.button_url || "").trim();
+  if ((buttonText && !buttonUrl) || (!buttonText && buttonUrl)) {
+    return { normalized: null, error: "Для кнопки заполните одновременно button_text и button_url" };
+  }
+  if (buttonUrl && !isValidAbsoluteUrl(buttonUrl)) {
+    return { normalized: null, error: "Поле button_url должно содержать корректный URL" };
+  }
+  if (buttonType === "web_app" && buttonUrl && !buttonUrl.startsWith("https://")) {
+    return { normalized: null, error: "Для кнопки web_app требуется HTTPS-ссылка" };
+  }
+
+  return {
+    normalized: {
+      enabled,
+      text: text || TELEGRAM_START_MESSAGE_DEFAULT.text,
+      image_url: imageUrl,
+      button_type: buttonType,
+      button_text: buttonText,
+      button_url: buttonUrl,
+    },
+    error: null,
+  };
+};
+
 export const getSystemSettings = async () => {
   try {
     const cached = await redis.get(SETTINGS_CACHE_KEY);
@@ -265,6 +346,15 @@ export const updateSystemSettings = async (patch) => {
     } else if (meta.type === "json") {
       if (!value || typeof value !== "object" || Array.isArray(value)) {
         errors[key] = "Ожидался JSON-объект";
+        continue;
+      }
+      if (key === "telegram_start_message") {
+        const { normalized, error } = validateTelegramStartMessage(value);
+        if (error) {
+          errors[key] = error;
+          continue;
+        }
+        updates[key] = normalized;
         continue;
       }
       updates[key] = value;

@@ -16,6 +16,23 @@
                 {{ moduleSaving ? "Сохранение..." : "Сохранить" }}
               </Button>
             </div>
+            <div v-else-if="activeTab === 2" class="flex flex-wrap items-center gap-3">
+              <Button variant="secondary" :disabled="telegramLoading || telegramSaving || telegramTesting" @click="loadTelegramSettings">
+                <Spinner v-if="telegramLoading" class="h-4 w-4" />
+                <RefreshCcw v-else :size="16" />
+                Сбросить
+              </Button>
+              <Button variant="secondary" :disabled="telegramLoading || telegramSaving || telegramTesting" @click="sendTelegramStartTest">
+                <Spinner v-if="telegramTesting" class="h-4 w-4" />
+                <SendHorizontal v-else :size="16" />
+                {{ telegramTesting ? "Отправка..." : "Тест" }}
+              </Button>
+              <Button :disabled="telegramLoading || telegramSaving || telegramTesting" @click="saveTelegramSettings">
+                <Spinner v-if="telegramSaving" class="h-4 w-4" />
+                <Save v-else :size="16" />
+                {{ telegramSaving ? "Сохранение..." : "Сохранить" }}
+              </Button>
+            </div>
           </template>
         </PageHeader>
       </CardContent>
@@ -158,6 +175,149 @@
           </CardContent>
         </Card>
       </TabsContent>
+
+      <TabsContent :value="2" class="space-y-6">
+        <Card v-if="telegramLoading">
+          <CardContent class="space-y-3 pt-6">
+            <Skeleton class="h-10 w-full" />
+            <Skeleton class="h-40 w-full" />
+            <Skeleton class="h-10 w-full" />
+            <Skeleton class="h-24 w-full" />
+          </CardContent>
+        </Card>
+
+        <Card v-else>
+          <CardHeader>
+            <CardTitle>Приветствие команды /start</CardTitle>
+            <CardDescription>Настройка текста, изображения и кнопки в Telegram-боте</CardDescription>
+          </CardHeader>
+          <CardContent class="space-y-6 pt-0">
+            <FieldGroup class="grid gap-4 md:grid-cols-2">
+              <Field>
+                <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Статус</FieldLabel>
+                <FieldContent>
+                  <Select v-model="telegramForm.enabled">
+                    <SelectTrigger class="w-full">
+                      <SelectValue placeholder="Выберите статус" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem :value="true">Включено</SelectItem>
+                      <SelectItem :value="false">Выключено</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </FieldContent>
+              </Field>
+              <Field>
+                <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Telegram ID для теста</FieldLabel>
+                <FieldContent>
+                  <Input v-model="telegramTestId" type="number" placeholder="123456789" />
+                </FieldContent>
+              </Field>
+            </FieldGroup>
+
+            <Field>
+              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Текст сообщения</FieldLabel>
+              <FieldContent>
+                <Textarea
+                  v-model="telegramForm.text"
+                  rows="6"
+                  maxlength="4096"
+                  placeholder="Введите приветственный текст для команды /start"
+                />
+              </FieldContent>
+            </Field>
+
+            <FieldGroup class="grid gap-4 md:grid-cols-[1fr_auto] md:items-end">
+              <Field>
+                <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Изображение</FieldLabel>
+                <FieldContent>
+                  <input ref="telegramFileInput" type="file" accept="image/*" class="hidden" @change="onTelegramFileChange" />
+                  <div
+                    class="flex min-h-24 flex-col items-start justify-center rounded-xl border border-dashed border-border/70 bg-muted/20 p-3"
+                  >
+                    <div class="text-xs text-muted-foreground">JPG/PNG/WebP, до 10MB</div>
+                    <div v-if="telegramUploadState.error" class="text-xs text-red-600">{{ telegramUploadState.error }}</div>
+                    <div v-if="telegramUploadState.loading" class="text-xs text-muted-foreground">Загрузка...</div>
+                    <div v-if="telegramUploadState.preview || telegramForm.image_url" class="mt-3">
+                      <img :src="telegramUploadState.preview || telegramForm.image_url" alt="preview" class="h-24 w-24 rounded-lg object-cover" />
+                    </div>
+                  </div>
+                </FieldContent>
+              </Field>
+              <div class="flex w-full gap-2 md:w-auto">
+                <Button type="button" variant="outline" class="w-full md:w-auto" @click="triggerTelegramFileInput">
+                  <ImagePlus :size="16" />
+                  Загрузить
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  class="w-full md:w-auto"
+                  :disabled="!telegramForm.image_url && !telegramUploadState.preview"
+                  @click="clearTelegramImage"
+                >
+                  <X :size="16" />
+                  Удалить
+                </Button>
+              </div>
+            </FieldGroup>
+
+            <FieldGroup class="grid gap-4 md:grid-cols-3">
+              <Field>
+                <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Тип кнопки</FieldLabel>
+                <FieldContent>
+                  <Select v-model="telegramForm.button_type">
+                    <SelectTrigger class="w-full">
+                      <SelectValue placeholder="Выберите тип" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="url">URL</SelectItem>
+                      <SelectItem value="web_app">Web App</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </FieldContent>
+              </Field>
+              <Field>
+                <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Текст кнопки</FieldLabel>
+                <FieldContent>
+                  <Input v-model="telegramForm.button_text" type="text" maxlength="64" placeholder="Открыть меню" />
+                </FieldContent>
+              </Field>
+              <Field>
+                <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Ссылка кнопки</FieldLabel>
+                <FieldContent>
+                  <Input v-model="telegramForm.button_url" type="url" placeholder="https://..." />
+                </FieldContent>
+              </Field>
+            </FieldGroup>
+
+            <Card class="border-dashed">
+              <CardHeader>
+                <CardTitle class="text-sm">Предпросмотр</CardTitle>
+              </CardHeader>
+              <CardContent class="space-y-3 pt-0">
+                <img
+                  v-if="telegramUploadState.preview || telegramForm.image_url"
+                  :src="telegramUploadState.preview || telegramForm.image_url"
+                  alt="preview"
+                  class="max-h-64 w-full rounded-lg object-cover"
+                />
+                <p class="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+                  {{ telegramForm.text || "Текст приветствия не задан" }}
+                </p>
+                <Button
+                  v-if="telegramForm.button_text && telegramForm.button_url"
+                  type="button"
+                  variant="secondary"
+                  class="pointer-events-none"
+                >
+                  {{ telegramForm.button_text }}
+                </Button>
+              </CardContent>
+            </Card>
+          </CardContent>
+        </Card>
+      </TabsContent>
     </Tabs>
 
     <Dialog v-if="showModal" :open="showModal" @update:open="(value) => (value ? null : closeModal())">
@@ -210,7 +370,7 @@
 <script setup>
 import { devError } from "@/shared/utils/logger";
 import { computed, onMounted, ref } from "vue";
-import { Pencil, Plus, RefreshCcw, Save, Trash2 } from "lucide-vue-next";
+import { ImagePlus, Pencil, Plus, RefreshCcw, Save, SendHorizontal, Trash2, X } from "lucide-vue-next";
 import api from "@/shared/api/client.js";
 import Badge from "@/shared/components/ui/badge/Badge.vue";
 import Button from "@/shared/components/ui/button/Button.vue";
@@ -221,6 +381,7 @@ import CardHeader from "@/shared/components/ui/card/CardHeader.vue";
 import CardTitle from "@/shared/components/ui/card/CardTitle.vue";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/shared/components/ui/dialog/index.js";
 import Input from "@/shared/components/ui/input/Input.vue";
+import Textarea from "@/shared/components/ui/textarea/Textarea.vue";
 import PageHeader from "@/shared/components/PageHeader.vue";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/components/ui/select";
 import Table from "@/shared/components/ui/table/Table.vue";
@@ -242,11 +403,29 @@ const moduleLoading = ref(false);
 const moduleSaving = ref(false);
 const reasons = ref([]);
 const reasonsLoading = ref(false);
-const tabs = ["Модули", "Причины стоп-листа"];
+const tabs = ["Модули", "Причины стоп-листа", "Telegram /start"];
 const activeTab = ref(0);
 const showModal = ref(false);
 const editing = ref(null);
 const savingReason = ref(false);
+const telegramLoading = ref(false);
+const telegramSaving = ref(false);
+const telegramTesting = ref(false);
+const telegramFileInput = ref(null);
+const telegramTestId = ref("");
+const telegramUploadState = ref({
+  loading: false,
+  error: null,
+  preview: null,
+});
+const telegramForm = ref({
+  enabled: true,
+  text: "",
+  image_url: "",
+  button_type: "web_app",
+  button_text: "",
+  button_url: "",
+});
 const formReason = ref({
   name: "",
   sort_order: 0,
@@ -257,6 +436,32 @@ const { showErrorNotification, showSuccessNotification } = useNotifications();
 const modalTitle = computed(() => (editing.value ? "Редактировать причину" : "Новая причина"));
 const modalSubtitle = computed(() => (editing.value ? "Измените параметры" : "Создайте причину стоп-листа"));
 const percentKeys = new Set();
+const primitiveTypes = new Set(["boolean", "string", "number"]);
+
+const normalizeTelegramForm = (value = {}) => {
+  const config = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  const buttonType = String(config.button_type || "web_app").toLowerCase();
+  return {
+    enabled: config.enabled !== false,
+    text: String(config.text || ""),
+    image_url: String(config.image_url || ""),
+    button_type: buttonType === "url" || buttonType === "web_app" ? buttonType : "web_app",
+    button_text: String(config.button_text || ""),
+    button_url: String(config.button_url || ""),
+  };
+};
+
+const applySettingsResponse = (data) => {
+  const settings = data?.settings || {};
+  moduleItems.value = (data?.items || []).filter((item) => item.group !== "Интеграции" && primitiveTypes.has(item.type));
+  hydrateForm(moduleItems.value, moduleForm);
+  telegramForm.value = normalizeTelegramForm(settings.telegram_start_message);
+  telegramUploadState.value = {
+    loading: false,
+    error: null,
+    preview: telegramForm.value.image_url || null,
+  };
+};
 
 const groupSettings = (list) => {
   const groups = new Map();
@@ -297,8 +502,7 @@ const loadModuleSettings = async () => {
   moduleLoading.value = true;
   try {
     const response = await api.get("/api/settings/admin");
-    moduleItems.value = (response.data.items || []).filter((item) => item.group !== "Интеграции");
-    hydrateForm(moduleItems.value, moduleForm);
+    applySettingsResponse(response.data);
   } catch (error) {
     devError("Failed to load settings:", error);
     showErrorNotification("Ошибка при загрузке настроек");
@@ -319,8 +523,7 @@ const saveModuleSettings = async () => {
       }
     }
     const response = await api.put("/api/settings/admin", { settings: payload });
-    moduleItems.value = (response.data.items || []).filter((item) => item.group !== "Интеграции");
-    hydrateForm(moduleItems.value, moduleForm);
+    applySettingsResponse(response.data);
     showSuccessNotification("Настройки сохранены");
   } catch (error) {
     devError("Failed to save settings:", error);
@@ -328,6 +531,55 @@ const saveModuleSettings = async () => {
     showErrorNotification(message);
   } finally {
     moduleSaving.value = false;
+  }
+};
+
+const loadTelegramSettings = async () => {
+  telegramLoading.value = true;
+  try {
+    const response = await api.get("/api/settings/admin");
+    applySettingsResponse(response.data);
+  } catch (error) {
+    devError("Failed to load telegram start settings:", error);
+    showErrorNotification("Ошибка при загрузке настроек Telegram");
+  } finally {
+    telegramLoading.value = false;
+  }
+};
+
+const saveTelegramSettings = async () => {
+  telegramSaving.value = true;
+  try {
+    const payload = normalizeTelegramForm(telegramForm.value);
+    const response = await api.put("/api/settings/admin", {
+      settings: { telegram_start_message: payload },
+    });
+    applySettingsResponse(response.data);
+    showSuccessNotification("Настройки /start сохранены");
+  } catch (error) {
+    devError("Failed to save telegram start settings:", error);
+    const message = error.response?.data?.errors?.telegram_start_message || error.response?.data?.errors?.settings || "Ошибка при сохранении /start";
+    showErrorNotification(message);
+  } finally {
+    telegramSaving.value = false;
+  }
+};
+
+const sendTelegramStartTest = async () => {
+  const telegramId = Number(telegramTestId.value);
+  if (!Number.isFinite(telegramId) || telegramId <= 0) {
+    showErrorNotification("Укажите корректный Telegram ID для теста");
+    return;
+  }
+  telegramTesting.value = true;
+  try {
+    await api.post("/api/settings/admin/telegram-start/test", { telegram_id: telegramId });
+    showSuccessNotification("Тестовое сообщение отправлено");
+  } catch (error) {
+    devError("Failed to send telegram start test:", error);
+    showErrorNotification(error.response?.data?.error || "Не удалось отправить тест");
+  } finally {
+    telegramTesting.value = false;
   }
 };
 
@@ -391,6 +643,48 @@ const deleteReason = async (reason) => {
     devError("Failed to delete reason:", error);
     showErrorNotification(`Ошибка при удалении причины: ${error.response?.data?.error || error.message}`);
   }
+};
+
+const triggerTelegramFileInput = () => {
+  telegramFileInput.value?.click();
+};
+
+const onTelegramFileChange = (event) => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  void handleTelegramFile(file);
+};
+
+const handleTelegramFile = async (file) => {
+  if (!file.type.startsWith("image/")) {
+    telegramUploadState.value = { loading: false, error: "Нужен файл изображения", preview: null };
+    return;
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    telegramUploadState.value = { loading: false, error: "Файл больше 10MB", preview: null };
+    return;
+  }
+
+  telegramUploadState.value = { loading: true, error: null, preview: URL.createObjectURL(file) };
+  const formData = new FormData();
+  formData.append("image", file);
+
+  try {
+    const response = await api.post("/api/uploads/telegram-start/1", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+    const uploadedUrl = response.data?.data?.url || "";
+    telegramForm.value.image_url = uploadedUrl;
+    telegramUploadState.value = { loading: false, error: null, preview: uploadedUrl };
+  } catch (error) {
+    devError("Ошибка загрузки изображения /start:", error);
+    telegramUploadState.value = { loading: false, error: "Не удалось загрузить изображение", preview: null };
+  }
+};
+
+const clearTelegramImage = () => {
+  telegramForm.value.image_url = "";
+  telegramUploadState.value = { loading: false, error: null, preview: null };
 };
 
 onMounted(async () => {

@@ -12,6 +12,7 @@ export const IMAGE_CATEGORIES = {
   MODIFIER_GROUPS: "modifier-groups",
   TAGS: "tags",
   BROADCASTS: "broadcasts",
+  TELEGRAM_START: "telegram-start",
 };
 export function getUploadPath(category, entityId) {
   return path.join(CDN_IMAGES_PATH, category, String(entityId));

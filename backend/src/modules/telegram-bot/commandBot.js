@@ -1,13 +1,12 @@
 import { logger } from "../../utils/logger.js";
+import { getSystemSettings } from "../../utils/settings.js";
+import { sendTelegramStartMessage } from "../../utils/telegram.js";
 
 const POLL_TIMEOUT_SECONDS = 25;
 const RETRY_DELAY_MS = 2000;
 
 export const createTelegramCommandBot = () => {
   const token = process.env.TELEGRAM_BOT_TOKEN;
-  const miniAppUrl = String(process.env.TELEGRAM_MINIAPP_URL || process.env.MINIAPP_URL || "")
-    .trim()
-    .replace(/\/$/, "");
   const enabled = (process.env.TELEGRAM_COMMAND_BOT_ENABLED || "true").toLowerCase() !== "false";
 
   let running = false;
@@ -34,13 +33,6 @@ export const createTelegramCommandBot = () => {
     return result.result;
   };
 
-  const sendText = async (chatId, text) => {
-    await apiRequest("sendMessage", {
-      chat_id: chatId,
-      text,
-    });
-  };
-
   const normalizeCommand = (text) => {
     if (!text || !text.startsWith("/")) return "";
     const [raw] = text.trim().split(/\s+/);
@@ -59,18 +51,8 @@ export const createTelegramCommandBot = () => {
     if (!command) return;
     if (command !== "/start") return;
 
-    const greeting = miniAppUrl
-      ? [
-          "Привет! Добро пожаловать в Панда Пиццу.",
-          "Здесь можно быстро оформить заказ и отследить статус. Получать рассылки с акциями и новинками.",
-          "",
-        ].join("\n")
-      : [
-          "Привет! Добро пожаловать в Панда Пиццу.",
-          "Я на связи и готов помочь с запуском приложения.",
-          "Ссылка на Mini App пока не настроена. Напишите администратору сервиса.",
-        ].join("\n");
-    await sendText(chatId, greeting);
+    const systemSettings = await getSystemSettings();
+    await sendTelegramStartMessage(chatId, systemSettings);
   };
 
   const handleUpdate = async (update) => {
