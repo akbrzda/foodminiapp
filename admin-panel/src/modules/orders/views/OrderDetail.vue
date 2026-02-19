@@ -2,7 +2,13 @@
   <div class="space-y-6">
     <PageHeader title="Детали заказа" description="Управление заказом и составом">
       <template #actions>
-        <BackButton :label="backButtonLabel" @click="goBack" />
+        <div class="flex items-center gap-2">
+          <BackButton :label="backButtonLabel" @click="goBack" />
+          <Button v-if="canDeleteOrder" variant="destructive" size="sm" :disabled="deletingOrder" @click="deleteDialogOpen = true">
+            <Trash2 :size="16" />
+            Удалить заказ
+          </Button>
+        </div>
       </template>
     </PageHeader>
     <Card v-if="!order">
@@ -283,13 +289,28 @@
         </CardContent>
       </Card>
     </div>
+
+    <Dialog v-model:open="deleteDialogOpen">
+      <DialogContent class="w-[calc(100%-1.5rem)] max-w-md">
+        <DialogHeader>
+          <DialogTitle>Удалить заказ #{{ order?.order_number }}?</DialogTitle>
+          <DialogDescription>Действие необратимо. Заказ будет удален из системы.</DialogDescription>
+        </DialogHeader>
+        <DialogFooter class="gap-2">
+          <Button type="button" variant="outline" :disabled="deletingOrder" @click="deleteDialogOpen = false">Отмена</Button>
+          <Button type="button" variant="destructive" :disabled="deletingOrder" @click="deleteOrder">
+            {{ deletingOrder ? "Удаление..." : "Удалить" }}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   </div>
 </template>
 <script setup>
 import { devError } from "@/shared/utils/logger";
 import { ref, computed, onMounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { CircleCheck } from "lucide-vue-next";
+import { CircleCheck, Trash2 } from "lucide-vue-next";
 import api from "@/shared/api/client.js";
 import { formatCurrency, formatDateTime, formatNumber, formatPhone, normalizePhone } from "@/shared/utils/format.js";
 import Badge from "@/shared/components/ui/badge/Badge.vue";
@@ -310,14 +331,20 @@ import TableRow from "@/shared/components/ui/table/TableRow.vue";
 import PageHeader from "@/shared/components/PageHeader.vue";
 import BackButton from "@/shared/components/BackButton.vue";
 import Skeleton from "@/shared/components/ui/skeleton/Skeleton.vue";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/shared/components/ui/dialog/index.js";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
 import { useOrdersStore } from "@/modules/orders/stores/orders.js";
+import { useAuthStore } from "@/shared/stores/auth.js";
 const route = useRoute();
 const router = useRouter();
 const { showErrorNotification, showSuccessNotification } = useNotifications();
 const ordersStore = useOrdersStore();
+const authStore = useAuthStore();
 const order = ref(null);
 const statusUpdate = ref("");
+const deleteDialogOpen = ref(false);
+const deletingOrder = ref(false);
+const canDeleteOrder = computed(() => authStore.role === "admin");
 const orderTimeZone = computed(() => order.value?.city_timezone || "Europe/Moscow");
 const orderTitle = computed(() => {
   if (order.value?.order_number) return `Заказ #${order.value.order_number}`;
@@ -500,6 +527,21 @@ const updateStatus = async () => {
   } catch (error) {
     devError("Failed to update status:", error);
     showErrorNotification("Ошибка при обновлении статуса");
+  }
+};
+const deleteOrder = async () => {
+  if (!order.value?.id || !canDeleteOrder.value || deletingOrder.value) return;
+  deletingOrder.value = true;
+  try {
+    await api.delete(`/api/orders/admin/${order.value.id}`);
+    deleteDialogOpen.value = false;
+    showSuccessNotification("Заказ удален");
+    router.push("/orders");
+  } catch (error) {
+    devError("Failed to delete order:", error);
+    showErrorNotification(error?.response?.data?.error || "Ошибка при удалении заказа");
+  } finally {
+    deletingOrder.value = false;
   }
 };
 const getChangeAmount = (orderData) => {

@@ -14,6 +14,7 @@ import {
   getAdminOrderById,
   updateOrderStatus,
   getOrdersStats,
+  deleteAdminOrder,
 } from "./controllers/adminOrdersController.js";
 
 const router = express.Router();
@@ -60,6 +61,15 @@ router.put(
   async (req, res, next) => {
     await updateOrderStatus(req, res, next, "cancelled");
   },
+);
+
+router.delete(
+  "/admin/:id",
+  authenticateToken,
+  requireRole("admin"),
+  adminOrderMutationLimiter,
+  adminActionLogger("delete_order", "order"),
+  deleteAdminOrder,
 );
 
 router.get("/admin/stats", authenticateToken, requireRole("admin", "manager", "ceo"), getOrdersStats);

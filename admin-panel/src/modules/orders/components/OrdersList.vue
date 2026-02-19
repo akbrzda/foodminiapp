@@ -1,32 +1,44 @@
 <template>
   <section class="flex h-full min-h-0 w-full flex-1 flex-col border-border bg-muted/40 p-3 sm:p-4 lg:w-[42%] lg:min-w-[420px] lg:border-r">
     <!-- Табы и фильтры -->
-    <div class="flex flex-wrap items-center justify-between gap-3">
-      <div class="flex items-center gap-2 border-b border-transparent">
-        <button
-          v-for="tab in tabs"
-          :key="tab.value"
-          type="button"
-          class="relative px-3 py-2 text-sm font-semibold transition-colors"
-          :class="tabButtonClass(tab.value)"
-          @click="$emit('update:activeTab', tab.value)"
-        >
-          <span>{{ tab.label }}</span>
-          <span
-            v-if="tab.badge !== null"
-            class="ml-2 inline-flex min-w-[22px] items-center justify-center rounded-full px-2 py-0.5 text-[11px] font-semibold"
-            :class="tabBadgeClass(tab.value)"
+    <div class="flex items-center gap-1 sm:gap-2">
+      <div class="min-w-0 flex-1">
+        <div class="flex items-center gap-1 border-b border-transparent pr-1 sm:gap-2 sm:pr-2">
+          <button
+            v-for="tab in tabs"
+            :key="tab.value"
+            type="button"
+            class="relative flex min-w-0 items-center px-2 py-1.5 text-xs font-semibold transition-colors sm:px-3 sm:py-2 sm:text-sm"
+            :class="tabButtonClass(tab.value)"
+            @click="$emit('update:activeTab', tab.value)"
           >
-            {{ tab.badge }}
-          </span>
-        </button>
+            <span v-if="tab.value === 'search'" class="sm:hidden">
+              <Search :size="14" />
+            </span>
+            <template v-if="tab.value === 'search'">
+              <span class="hidden sm:inline">Поиск</span>
+            </template>
+            <template v-else>
+              <span class="whitespace-nowrap text-[11px] sm:hidden">{{ tab.label }}</span>
+              <span class="hidden sm:inline">{{ tab.label }}</span>
+            </template>
+            <span
+              v-if="tab.badge !== null"
+              class="ml-1 inline-flex min-w-[18px] items-center justify-center rounded-full px-1.5 py-0 text-[10px] font-semibold sm:ml-2 sm:min-w-[22px] sm:px-2 sm:py-0.5 sm:text-[11px]"
+              :class="tabBadgeClass(tab.value)"
+            >
+              {{ tab.badge }}
+            </span>
+          </button>
+        </div>
       </div>
 
       <DropdownMenu>
         <DropdownMenuTrigger as-child>
-          <Button variant="outline" class="gap-2">
+          <Button variant="outline" class="h-8 shrink-0 gap-1 px-2 text-xs sm:h-10 sm:gap-2 sm:px-3 sm:text-sm">
             {{ orderTypeFilterLabel }}
-            <ChevronDown :size="14" />
+            <ChevronDown :size="12" class="sm:hidden" />
+            <ChevronDown :size="14" class="hidden sm:inline" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">

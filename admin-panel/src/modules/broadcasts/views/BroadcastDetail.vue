@@ -4,7 +4,7 @@
       <CardContent>
         <PageHeader :title="campaign?.name || 'Рассылка'" :description="campaign?.description || 'Детальная статистика'">
           <template #actions>
-            <BackButton variant="secondary" @click="goBack" />
+            <BackButton @click="goBack" />
             <Button variant="secondary" @click="editCampaign">
               <Pencil :size="16" />
               Редактировать

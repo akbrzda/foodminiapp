@@ -714,3 +714,34 @@ export const getOrdersStats = async (req, res, next) => {
     next(error);
   }
 };
+
+/**
+ * Удаление заказа (только admin)
+ */
+export const deleteAdminOrder = async (req, res, next) => {
+  try {
+    const orderId = Number(req.params.id);
+
+    if (!Number.isInteger(orderId) || orderId <= 0) {
+      return res.status(400).json({ error: "Некорректный ID заказа" });
+    }
+
+    const [orders] = await db.query("SELECT id, order_number FROM orders WHERE id = ?", [orderId]);
+    if (orders.length === 0) {
+      return res.status(404).json({ error: "Order not found" });
+    }
+
+    const [result] = await db.query("DELETE FROM orders WHERE id = ?", [orderId]);
+    if ((result?.affectedRows || 0) === 0) {
+      return res.status(404).json({ error: "Order not found" });
+    }
+
+    res.json({
+      success: true,
+      message: `Заказ #${orders[0].order_number} удален`,
+      deleted_order_id: orderId,
+    });
+  } catch (error) {
+    next(error);
+  }
+};

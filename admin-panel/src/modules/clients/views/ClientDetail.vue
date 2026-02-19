@@ -2,11 +2,13 @@
   <div class="space-y-6">
     <PageHeader :title="clientNameForTitle" description="Данные профиля и лояльность">
       <template #actions>
-        <Button variant="destructive" size="sm" :disabled="deletingClient" @click="deleteClient">
-          <Trash2 :size="16" />
-          {{ deletingClient ? "Удаление..." : "Удалить клиента" }}
-        </Button>
-        <BackButton label="Назад к клиентам" @click="goBack" />
+        <div class="flex items-center gap-2">
+          <BackButton label="Назад к клиентам" @click="goBack" />
+          <Button variant="destructive" size="sm" :disabled="deletingClient" @click="deleteClient">
+            <Trash2 :size="16" />
+            {{ deletingClient ? "Удаление..." : "Удалить клиента" }}
+          </Button>
+        </div>
       </template>
     </PageHeader>
     <Card>

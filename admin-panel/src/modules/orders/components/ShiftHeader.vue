@@ -2,7 +2,7 @@
   <header class="sticky top-0 z-30 border-b border-border bg-background/90 backdrop-blur">
     <div class="flex flex-col gap-3 px-3 py-2 sm:px-4 lg:flex-row lg:items-center lg:justify-between lg:gap-6 lg:px-6">
       <div class="min-w-0">
-        <div class="flex items-center gap-3">
+        <div class="flex items-start justify-between gap-3">
           <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary text-sm font-semibold">
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -26,14 +26,26 @@
               <path d="m9 12-2 2" />
             </svg>
           </div>
-          <div class="min-w-0">
-            <div class="text-base font-semibold text-foreground">Текущая смена</div>
-            <div class="truncate text-xs text-muted-foreground">{{ shiftSubtitle }}</div>
+          <div class="flex min-w-0 flex-1 items-start justify-between gap-3">
+            <div class="min-w-0">
+              <div class="text-base font-semibold text-foreground">Текущая смена</div>
+              <div class="truncate text-xs text-muted-foreground">{{ shiftSubtitle }}</div>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              class="h-10 w-10 shrink-0 lg:hidden"
+              aria-label="Открыть настройки смены"
+              @click="mobileSettingsOpen = true"
+            >
+              <Settings :size="18" />
+            </Button>
           </div>
         </div>
       </div>
 
-      <div class="grid w-full grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto] lg:w-auto lg:min-w-[520px]">
+      <div class="hidden w-full grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto] lg:grid lg:w-auto lg:min-w-[520px]">
         <Select v-model="branchModel">
           <SelectTrigger class="w-full">
             <SelectValue placeholder="Выберите филиал" />
@@ -79,13 +91,76 @@
           Админ‑панель
         </Button>
       </div>
+
+      <Dialog v-model:open="mobileSettingsOpen">
+        <DialogContent class="w-[calc(100%-1.5rem)] max-w-md lg:hidden">
+          <DialogHeader>
+            <DialogTitle>Настройки смены</DialogTitle>
+            <DialogDescription>Выберите филиал, настройте тему.</DialogDescription>
+          </DialogHeader>
+
+          <div class="space-y-3 pt-2">
+            <div class="space-y-1.5">
+              <div class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Филиал</div>
+              <Select v-model="branchModel">
+                <SelectTrigger class="w-full">
+                  <SelectValue placeholder="Выберите филиал" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem v-for="branch in branchOptions" :key="branch.id" :value="String(branch.id)">
+                    {{ branch.label }}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div class="space-y-1.5">
+              <div class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Тема</div>
+              <Select v-model="themeModel">
+                <SelectTrigger class="w-full">
+                  <div class="flex items-center gap-2">
+                    <component :is="activeThemeIcon" :size="14" />
+                    <SelectValue />
+                  </div>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="system">
+                    <div class="flex items-center gap-2">
+                      <Monitor :size="14" />
+                      Системный
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="light">
+                    <div class="flex items-center gap-2">
+                      <Sun :size="14" />
+                      Светлый
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="dark">
+                    <div class="flex items-center gap-2">
+                      <Moon :size="14" />
+                      Темный
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <Button type="button" variant="outline" class="w-full" @click="openAdminFromModal">
+              <ExternalLink :size="16" />
+              Админ‑панель
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   </header>
 </template>
 
 <script setup>
-import { computed } from "vue";
-import { ExternalLink, Monitor, Moon, Sun } from "lucide-vue-next";
+import { computed, ref } from "vue";
+import { ExternalLink, Monitor, Moon, Settings, Sun } from "lucide-vue-next";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/shared/components/ui/dialog/index.js";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/components/ui/select";
 import Button from "@/shared/components/ui/button/Button.vue";
 
@@ -100,6 +175,7 @@ const props = defineProps({
 });
 
 const emit = defineEmits(["update:theme", "update:selectedBranchId", "openAdminPanel"]);
+const mobileSettingsOpen = ref(false);
 
 const themeModel = computed({
   get: () => props.theme,
@@ -116,6 +192,11 @@ const activeThemeIcon = computed(() => {
   if (props.theme === "light") return Sun;
   return Monitor;
 });
+
+const openAdminFromModal = () => {
+  mobileSettingsOpen.value = false;
+  emit("openAdminPanel");
+};
 
 const formatShiftDate = (value) => {
   if (!value) return "";

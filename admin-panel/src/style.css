@@ -86,6 +86,21 @@ body {
 a[href^="tel:"] {
   text-decoration: none;
 }
+
+button,
+a,
+[role="button"] {
+  touch-action: manipulation;
+}
+
+@media (max-width: 1023px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
 #app {
   min-height: 100vh;
 }

@@ -4,7 +4,7 @@
       <CardContent>
         <PageHeader :title="pageTitle" :description="pageSubtitle">
           <template #actions>
-            <BackButton variant="secondary" @click="goBack" />
+            <BackButton @click="goBack" />
           </template>
         </PageHeader>
       </CardContent>
