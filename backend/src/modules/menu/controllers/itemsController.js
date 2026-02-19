@@ -268,6 +268,20 @@ export const getAdminItems = async (req, res, next) => {
     `;
 
     const [items] = await db.query(query);
+    const [itemCities] = await db.query(
+      `SELECT item_id, city_id
+       FROM menu_item_cities
+       WHERE is_available = TRUE`,
+    );
+
+    const cityIdsByItemId = new Map();
+    for (const row of itemCities) {
+      const itemId = Number(row.item_id);
+      if (!cityIdsByItemId.has(itemId)) {
+        cityIdsByItemId.set(itemId, []);
+      }
+      cityIdsByItemId.get(itemId).push(Number(row.city_id));
+    }
 
     // Получение категорий и базовых цен для каждого товара
     for (const item of items) {
@@ -312,6 +326,7 @@ export const getAdminItems = async (req, res, next) => {
       );
 
       item.base_price = minPriceRows[0]?.min_price ?? item.legacy_price ?? null;
+      item.city_ids = cityIdsByItemId.get(Number(item.id)) || [];
       delete item.legacy_price;
     }
 

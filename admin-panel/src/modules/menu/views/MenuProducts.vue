@@ -15,7 +15,7 @@
     </Card>
     <Card>
       <CardContent>
-        <div class="grid gap-3 md:grid-cols-4">
+        <div class="grid gap-3 md:grid-cols-5">
           <Input v-model="filters.search" placeholder="Поиск по названию и описанию" />
           <Select v-model="filters.status">
             <SelectTrigger class="w-full">
@@ -35,6 +35,17 @@
               <SelectItem value="all">Все категории</SelectItem>
               <SelectItem v-for="category in categoriesOptions" :key="category.id" :value="String(category.id)">
                 {{ category.name }}
+              </SelectItem>
+            </SelectContent>
+          </Select>
+          <Select v-model="filters.cityId">
+            <SelectTrigger class="w-full">
+              <SelectValue placeholder="Город" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Все города</SelectItem>
+              <SelectItem v-for="city in cityOptions" :key="city.id" :value="String(city.id)">
+                {{ city.name }}
               </SelectItem>
             </SelectContent>
           </Select>
@@ -180,6 +191,7 @@ import { Pencil, Plus, Trash2 } from "lucide-vue-next";
 import api from "@/shared/api/client.js";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
 import { useListContext } from "@/shared/composables/useListContext.js";
+import { useReferenceStore } from "@/shared/stores/reference.js";
 import { formatCurrency } from "@/shared/utils/format.js";
 import Badge from "@/shared/components/ui/badge/Badge.vue";
 import Button from "@/shared/components/ui/button/Button.vue";
@@ -198,6 +210,7 @@ import TableRow from "@/shared/components/ui/table/TableRow.vue";
 import TablePagination from "@/shared/components/TablePagination.vue";
 
 const router = useRouter();
+const referenceStore = useReferenceStore();
 const { showErrorNotification } = useNotifications();
 
 // Навигационный контекст
@@ -211,6 +224,7 @@ const filters = reactive({
   search: "",
   status: "all",
   categoryId: "all",
+  cityId: "all",
 });
 
 const categoriesOptions = computed(() => {
@@ -225,6 +239,10 @@ const categoriesOptions = computed(() => {
   return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name, "ru"));
 });
 
+const cityOptions = computed(() => {
+  return [...referenceStore.cities].sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), "ru"));
+});
+
 const filteredItems = computed(() => {
   const search = String(filters.search || "")
     .trim()
@@ -236,6 +254,11 @@ const filteredItems = computed(() => {
       const selectedCategoryId = Number(filters.categoryId);
       const hasCategory = (item.categories || []).some((category) => Number(category.id) === selectedCategoryId);
       if (!hasCategory) return false;
+    }
+    if (filters.cityId !== "all") {
+      const selectedCityId = Number(filters.cityId);
+      const itemCityIds = Array.isArray(item.city_ids) ? item.city_ids.map((id) => Number(id)) : [];
+      if (!itemCityIds.includes(selectedCityId)) return false;
     }
     if (!search) return true;
     const haystack = `${item.name || ""} ${item.description || ""}`.toLowerCase();
@@ -259,6 +282,7 @@ const resetFilters = () => {
   filters.search = "";
   filters.status = "all";
   filters.categoryId = "all";
+  filters.cityId = "all";
   page.value = 1;
 };
 
@@ -303,6 +327,8 @@ const deleteItem = async (item) => {
 };
 
 onMounted(async () => {
+  await referenceStore.loadCities();
+
   if (shouldRestore.value) {
     const context = restoreContext();
     
@@ -320,7 +346,7 @@ onMounted(async () => {
 });
 
 watch(
-  () => [filters.search, filters.status, filters.categoryId],
+  () => [filters.search, filters.status, filters.categoryId, filters.cityId],
   () => {
     page.value = 1;
   },
