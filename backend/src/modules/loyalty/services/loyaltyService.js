@@ -524,13 +524,13 @@ export async function earnBonuses(order, connection = null, levels = DEFAULT_LOY
   }
 
   if (lockedOrder.bonus_earn_locked) {
-    logInfo(logger, `Начисление за заказ ${order.id} уже заблокировано, пропуск дублирования`, { orderId: order.id });
+    logInfo(`Начисление за заказ ${order.id} уже заблокировано, пропуск дублирования`, { orderId: order.id });
     return null;
   }
 
   const affected = await lockOrderBonusEarn(order.id, { connection });
   if (affected === 0) {
-    logInfo(logger, `Не удалось установить блокировку для заказа ${order.id}`, { orderId: order.id });
+    logInfo(`Не удалось установить блокировку для заказа ${order.id}`, { orderId: order.id });
     return null;
   }
 
@@ -662,7 +662,7 @@ export async function removeEarnedBonuses(order, connection = null, levels = DEF
 export async function redeliveryEarnBonuses(order, connection = null) {
   const lockedOrder = await getOrderBonusLock(order.id, { connection });
   if (!lockedOrder || !lockedOrder.bonus_earn_amount) {
-    logInfo(logger, `Нет сохранённой суммы начисления для заказа ${order.id}`, { orderId: order.id });
+    logInfo(`Нет сохранённой суммы начисления для заказа ${order.id}`, { orderId: order.id });
     return null;
   }
 

@@ -9,6 +9,40 @@ const LEGACY_STORAGE_USER = "admin_user";
 const AUTH_SYNC_KEY = "admin_auth_sync_event";
 const POST_LOGIN_REDIRECT_KEY = "admin_post_login_redirect";
 let crossTabSyncAttached = false;
+const LOGIN_ERROR_MAP = {
+  "Invalid credentials": "Неверный email или пароль.",
+  "Account is disabled": "Аккаунт отключен. Обратитесь к администратору.",
+  "Email and password are required": "Введите email и пароль.",
+};
+
+const getLoginErrorMessage = (error) => {
+  const response = error?.response;
+  const status = response?.status;
+  const backendError = String(response?.data?.error || "").trim();
+  const normalizedCode = String(error?.code || "").toUpperCase();
+  const normalizedMessage = String(error?.message || "").toLowerCase();
+
+  if (!response) {
+    if (normalizedCode === "ECONNABORTED" || normalizedMessage.includes("timeout")) {
+      return "Сервер долго не отвечает. Попробуйте снова.";
+    }
+    return "Сервер недоступен. Проверьте подключение и повторите попытку.";
+  }
+
+  if (LOGIN_ERROR_MAP[backendError]) {
+    return LOGIN_ERROR_MAP[backendError];
+  }
+  if (status === 401) {
+    return "Неверный email или пароль.";
+  }
+  if (status === 403) {
+    return "Доступ запрещен. Обратитесь к администратору.";
+  }
+  if (status >= 500) {
+    return "Ошибка на сервере. Попробуйте позже.";
+  }
+  return backendError || "Не удалось выполнить вход. Попробуйте снова.";
+};
 
 const readSessionToken = () => sessionStorage.getItem(STORAGE_TOKEN) || localStorage.getItem(LEGACY_STORAGE_TOKEN) || "";
 const readSessionUser = () => {
@@ -118,7 +152,7 @@ export const useAuthStore = defineStore("auth", {
         });
         return true;
       } catch (error) {
-        this.error = error.response?.data?.error || "Login failed";
+        this.error = getLoginErrorMessage(error);
         return false;
       } finally {
         this.loading = false;

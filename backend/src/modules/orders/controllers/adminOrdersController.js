@@ -612,33 +612,31 @@ export const updateOrderStatus = async (req, res, next, forcedStatus = null) => 
       }
     }
 
-    // Обработка бонусов
+    // Обработка бонусов выполняется синхронно, чтобы не терять откаты при отмене.
     if (useLocalBonuses) {
-      setImmediate(async () => {
-        try {
-          if (oldStatus === "completed" && status !== "completed" && status !== "cancelled") {
-            await removeEarnedBonuses(orderData, null, loyaltyLevels);
-          }
-
-          if (status === "completed" && oldStatus !== "completed" && orderTotal > 0) {
-            await db.query("UPDATE loyalty_transactions SET status = 'completed' WHERE order_id = ? AND type = 'spend' AND status = 'pending'", [
-              orderId,
-            ]);
-
-            if (orderData.bonus_earn_amount && orderData.bonus_earn_amount > 0) {
-              await redeliveryEarnBonuses(orderData, null, loyaltyLevels);
-            } else {
-              await earnBonuses(orderData, null, loyaltyLevels);
-            }
-          }
-
-          if (status === "cancelled" && oldStatus !== "cancelled") {
-            await cancelOrderBonuses(orderData, null, loyaltyLevels);
-          }
-        } catch (bonusError) {
-          logger.bonus.error(`Failed to process bonus side effects for order ${orderId}`, { error: bonusError.message });
+      try {
+        if (oldStatus === "completed" && status !== "completed" && status !== "cancelled") {
+          await removeEarnedBonuses(orderData, null, loyaltyLevels);
         }
-      });
+
+        if (status === "completed" && oldStatus !== "completed" && orderTotal > 0) {
+          await db.query("UPDATE loyalty_transactions SET status = 'completed' WHERE order_id = ? AND type = 'spend' AND status = 'pending'", [
+            orderId,
+          ]);
+
+          if (orderData.bonus_earn_amount && orderData.bonus_earn_amount > 0) {
+            await redeliveryEarnBonuses(orderData, null, loyaltyLevels);
+          } else {
+            await earnBonuses(orderData, null, loyaltyLevels);
+          }
+        }
+
+        if (status === "cancelled" && oldStatus !== "cancelled") {
+          await cancelOrderBonuses(orderData, null, loyaltyLevels);
+        }
+      } catch (bonusError) {
+        logger.bonus.error(`Failed to process bonus side effects for order ${orderId}`, { error: bonusError.message });
+      }
     }
 
     if (

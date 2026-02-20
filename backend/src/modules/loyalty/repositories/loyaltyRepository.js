@@ -39,30 +39,15 @@ export async function getLoyaltyLevels({ connection = null } = {}) {
 
 export async function getTotalSpentForPeriod(userId, periodDays, { connection = null } = {}) {
   const executor = getExecutor(connection);
-  try {
-    const [totals] = await executor.query(
-      `SELECT COALESCE(SUM(GREATEST(0, total - delivery_cost - bonus_spent)), 0) as total_spent
-       FROM orders
-       WHERE user_id = ?
-         AND status IN ('delivered','completed')
-         AND created_at >= (NOW() - INTERVAL ? DAY)`,
-      [userId, periodDays],
-    );
-    return parseFloat(totals[0]?.total_spent) || 0;
-  } catch (error) {
-    if (String(error?.message || "").includes("bonus_spent")) {
-      const [totals] = await executor.query(
-        `SELECT COALESCE(SUM(GREATEST(0, total - delivery_cost - bonus_used)), 0) as total_spent
-         FROM orders
-         WHERE user_id = ?
-           AND status IN ('delivered','completed')
-           AND created_at >= (NOW() - INTERVAL ? DAY)`,
-        [userId, periodDays],
-      );
-      return parseFloat(totals[0]?.total_spent) || 0;
-    }
-    throw error;
-  }
+  const [totals] = await executor.query(
+    `SELECT COALESCE(SUM(GREATEST(0, total)), 0) as total_spent
+     FROM orders
+     WHERE user_id = ?
+       AND status IN ('delivered','completed')
+       AND created_at >= (NOW() - INTERVAL ? DAY)`,
+    [userId, periodDays],
+  );
+  return parseFloat(totals[0]?.total_spent) || 0;
 }
 
 export async function getExpiringBonuses(userId, days, { connection = null } = {}) {
