@@ -9,6 +9,7 @@ import {
 } from "../../loyalty/services/loyaltyService.js";
 import { getSystemSettings } from "../../../utils/settings.js";
 import { notifyOrderStatusUpdate } from "../../../websocket/runtime.js";
+import { addTelegramNotification } from "../../../queues/config.js";
 
 // Вспомогательные функции для работы с временными зонами
 const getTimeZoneOffset = (date, timeZone) => {
@@ -579,6 +580,24 @@ export const updateOrderStatus = async (req, res, next, forcedStatus = null) => 
         orderId,
         status,
       });
+    }
+
+    // Telegram уведомление персоналу о смене статуса (по системным настройкам)
+    try {
+      if (oldStatus !== status && (status === "completed" || status === "cancelled")) {
+        await addTelegramNotification({
+          type: "status_change",
+          priority: 1,
+          data: {
+            order_number: updatedOrders[0]?.order_number || orderNumber,
+            old_status: oldStatus,
+            new_status: status,
+            city_id: updatedOrders[0]?.city_id || null,
+          },
+        });
+      }
+    } catch (queueError) {
+      logger.error("Failed to queue Telegram status change notification", { error: queueError });
     }
 
     // Telegram уведомление

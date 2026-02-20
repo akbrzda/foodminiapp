@@ -736,9 +736,11 @@ export const createOrder = async (req, res, next) => {
     try {
       const telegramBranchId = order?.branch_id || resolvedBranchId || branch_id || null;
       let branchMeta = null;
+      let userMeta = null;
       if (telegramBranchId) {
         const [branchRows] = await db.query(
-          `SELECT b.name AS branch_name, c.name AS city_name
+          `SELECT b.id AS branch_id, b.city_id, b.name AS branch_name, b.address AS branch_address, b.phone AS branch_phone,
+                  c.name AS city_name, c.timezone AS city_timezone
            FROM branches b
            LEFT JOIN cities c ON c.id = b.city_id
            WHERE b.id = ?
@@ -747,38 +749,73 @@ export const createOrder = async (req, res, next) => {
         );
         branchMeta = branchRows?.[0] || null;
       }
+      const [userRows] = await db.query(
+        `SELECT id, first_name, last_name, phone, telegram_id
+         FROM users
+         WHERE id = ?
+         LIMIT 1`,
+        [req.user.id],
+      );
+      userMeta = userRows?.[0] || null;
+
+      const parsedItems = orderItems.map((item) => ({
+        item_name: item.item_name,
+        variant_name: item.variant_name,
+        quantity: item.quantity,
+        subtotal: item.subtotal,
+        modifiers: (() => {
+          if (!item.modifiers) return [];
+          if (Array.isArray(item.modifiers)) return item.modifiers;
+          if (typeof item.modifiers === "string") {
+            try {
+              return JSON.parse(item.modifiers);
+            } catch (parseError) {
+              return [];
+            }
+          }
+          return [];
+        })(),
+      }));
+
       await addTelegramNotification({
         type: "new_order",
         priority: 1,
         data: {
+          order_id: orderId,
           order_number: orderNumber,
+          status: order?.status || "pending",
+          created_at: order?.created_at || null,
+          desired_time: desired_time || null,
           order_type: order_type,
+          city_id: branchMeta?.city_id || order?.city_id || null,
           city_name: branchMeta?.city_name || null,
+          city_timezone: branchMeta?.city_timezone || null,
+          branch_id: branchMeta?.branch_id || telegramBranchId || null,
           branch_name: branchMeta?.branch_name || null,
+          branch_address: branchMeta?.branch_address || null,
+          branch_phone: branchMeta?.branch_phone || null,
+          user_id: userMeta?.id || req.user.id,
+          user_first_name: userMeta?.first_name || null,
+          user_last_name: userMeta?.last_name || null,
+          user_phone: userMeta?.phone || null,
+          user_telegram_id: userMeta?.telegram_id || null,
+          delivery_address_id: resolvedDeliveryAddressId || null,
+          delivery_latitude: deliveryLatitude,
+          delivery_longitude: deliveryLongitude,
           delivery_street,
           delivery_house,
+          delivery_floor,
           delivery_apartment,
           delivery_entrance,
+          delivery_intercom,
+          delivery_comment,
+          subtotal,
+          delivery_cost: deliveryCost,
+          bonus_spent: bonusUsed,
           total: finalTotal,
-          items: orderItems.map((item) => ({
-            item_name: item.item_name,
-            variant_name: item.variant_name,
-            quantity: item.quantity,
-            subtotal: item.subtotal,
-            modifiers: (() => {
-              if (!item.modifiers) return [];
-              if (Array.isArray(item.modifiers)) return item.modifiers;
-              if (typeof item.modifiers === "string") {
-                try {
-                  return JSON.parse(item.modifiers);
-                } catch (parseError) {
-                  return [];
-                }
-              }
-              return [];
-            })(),
-          })),
+          items: parsedItems,
           payment_method,
+          change_from: payment_method === "cash" && hasChangeFrom ? Number(change_from) : null,
           comment,
         },
       });

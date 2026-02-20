@@ -2,6 +2,7 @@ import db from "../config/database.js";
 import { earnBonuses, cancelOrderBonuses, getLoyaltyLevelsFromDb } from "../modules/loyalty/services/loyaltyService.js";
 import { getSystemSettings } from "../utils/settings.js";
 import { logger } from "../utils/logger.js";
+import { addTelegramNotification } from "../queues/config.js";
 
 const AUTO_STATUS_INTERVAL_MS = 60 * 1000;
 const PROCESS_WINDOW_MINUTES = 5;
@@ -30,7 +31,7 @@ async function rollbackBonuses(order, loyaltyLevels) {
   await cancelOrderBonuses(order, null, loyaltyLevels);
 }
 
-async function notifyStatusChange(orderId, userId, oldStatus, newStatus, orderType, orderNumber, branchId) {
+async function notifyStatusChange(orderId, userId, oldStatus, newStatus, orderType, orderNumber, branchId, cityId) {
   try {
     const { wsServer } = await import("../index.js");
     wsServer.notifyOrderStatusUpdate(orderId, userId, newStatus, oldStatus, branchId || null);
@@ -46,6 +47,22 @@ async function notifyStatusChange(orderId, userId, oldStatus, newStatus, orderTy
     }
   } catch (telegramError) {
     // Telegram errors are non-critical, skip logging
+  }
+  try {
+    if (oldStatus !== newStatus && (newStatus === "completed" || newStatus === "cancelled")) {
+      await addTelegramNotification({
+        type: "status_change",
+        priority: 1,
+        data: {
+          order_number: orderNumber,
+          old_status: oldStatus,
+          new_status: newStatus,
+          city_id: cityId || null,
+        },
+      });
+    }
+  } catch (queueError) {
+    logger.error("Failed to queue Telegram status change notification (auto)", { error: queueError });
   }
 }
 
@@ -85,7 +102,7 @@ async function updateOrderStatus(order, localDate) {
     }
   }
   await logger.order.statusChanged(order.id, order.status, newStatus, "system");
-  await notifyStatusChange(order.id, order.user_id, order.status, newStatus, order.order_type, order.order_number, order.branch_id);
+  await notifyStatusChange(order.id, order.user_id, order.status, newStatus, order.order_type, order.order_number, order.branch_id, order.city_id);
 }
 
 async function processOffset(offsetMinutes, nowUtc) {
@@ -96,7 +113,7 @@ async function processOffset(offsetMinutes, nowUtc) {
   const localDate = buildLocalDateString(localParts);
   const utcMidnight = getUtcMidnightForLocalDate(localParts, offsetMinutes);
   const [orders] = await db.query(
-    `SELECT id, status, user_id, total, subtotal, delivery_cost, bonus_spent, order_number, order_type, branch_id
+    `SELECT id, city_id, status, user_id, total, subtotal, delivery_cost, bonus_spent, order_number, order_type, branch_id
      FROM orders
      WHERE status IN (?)
        AND user_timezone_offset = ?

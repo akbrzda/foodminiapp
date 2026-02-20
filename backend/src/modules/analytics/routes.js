@@ -4,6 +4,9 @@ import { authenticateToken, requireRole } from "../../middleware/auth.js";
 const router = express.Router();
 router.use(authenticateToken);
 router.use(requireRole("admin", "manager", "ceo"));
+
+const DASHBOARD_ALLOWED_ORDER_STATUSES = ["pending", "confirmed", "preparing", "ready", "delivering", "completed"];
+
 router.get("/dashboard", async (req, res, next) => {
   try {
     const { period = "today", city_id, branch_id, date_from, date_to, base_date } = req.query;
@@ -145,8 +148,23 @@ router.get("/dashboard", async (req, res, next) => {
       }
     }
     const dateFilter = "o.created_at >= ? AND o.created_at < ?";
+    const dashboardStatusFilter = ` AND o.status IN (${DASHBOARD_ALLOWED_ORDER_STATUSES.map(() => "?").join(", ")})`;
     const paramsCurrent = [toDateString(range.start), toDateString(range.end), ...filterParams];
     const paramsPrevious = [toDateString(range.compareStart), toDateString(range.compareEnd), ...filterParams];
+    const paramsCurrentWithStatuses = [...paramsCurrent, ...DASHBOARD_ALLOWED_ORDER_STATUSES];
+    const paramsPreviousWithStatuses = [...paramsPrevious, ...DASHBOARD_ALLOWED_ORDER_STATUSES];
+    const [totalOrdersCurrentAll] = await db.query(
+      `SELECT COUNT(*) as total_orders
+      FROM orders o
+      WHERE ${dateFilter}${filterSql}`,
+      paramsCurrent,
+    );
+    const [totalOrdersPreviousAll] = await db.query(
+      `SELECT COUNT(*) as total_orders
+      FROM orders o
+      WHERE ${dateFilter}${filterSql}`,
+      paramsPrevious,
+    );
     const [orderStatsCurrent] = await db.query(
       `SELECT 
         COUNT(*) as total_orders,
@@ -157,31 +175,30 @@ router.get("/dashboard", async (req, res, next) => {
         COUNT(CASE WHEN status = 'preparing' THEN 1 END) as preparing_orders,
         COUNT(CASE WHEN status = 'ready' THEN 1 END) as ready_orders,
         COUNT(CASE WHEN status = 'delivering' THEN 1 END) as delivering_orders,
-        COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_orders,
-        COUNT(CASE WHEN status = 'cancelled' THEN 1 END) as cancelled_orders
+        COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_orders
       FROM orders o
-      WHERE ${dateFilter}${filterSql}`,
-      paramsCurrent,
+      WHERE ${dateFilter}${filterSql}${dashboardStatusFilter}`,
+      paramsCurrentWithStatuses,
     );
     const [orderStatsPrevious] = await db.query(
       `SELECT 
         COUNT(*) as total_orders,
         COALESCE(SUM(total), 0) as total_revenue
       FROM orders o
-      WHERE ${dateFilter}${filterSql}`,
-      paramsPrevious,
+      WHERE ${dateFilter}${filterSql}${dashboardStatusFilter}`,
+      paramsPreviousWithStatuses,
     );
     const [discountsCurrent] = await db.query(
       `SELECT COALESCE(SUM(bonus_spent), 0) as total_discounts
       FROM orders o
-      WHERE ${dateFilter}${filterSql}`,
-      paramsCurrent,
+      WHERE ${dateFilter}${filterSql}${dashboardStatusFilter}`,
+      paramsCurrentWithStatuses,
     );
     const [discountsPrevious] = await db.query(
       `SELECT COALESCE(SUM(bonus_spent), 0) as total_discounts
       FROM orders o
-      WHERE ${dateFilter}${filterSql}`,
-      paramsPrevious,
+      WHERE ${dateFilter}${filterSql}${dashboardStatusFilter}`,
+      paramsPreviousWithStatuses,
     );
     const [customerStatsCurrent] = await db.query(
       `SELECT 
@@ -193,17 +210,17 @@ router.get("/dashboard", async (req, res, next) => {
           o.user_id,
           COUNT(*) as order_count
         FROM orders o
-        WHERE ${dateFilter}${filterSql}
+        WHERE ${dateFilter}${filterSql}${dashboardStatusFilter}
         GROUP BY o.user_id
       ) as customer_type`,
-      paramsCurrent,
+      paramsCurrentWithStatuses,
     );
     const [customerStatsPrevious] = await db.query(
       `SELECT 
         COUNT(DISTINCT o.user_id) as total_customers
       FROM orders o
-      WHERE ${dateFilter}${filterSql}`,
-      paramsPrevious,
+      WHERE ${dateFilter}${filterSql}${dashboardStatusFilter}`,
+      paramsPreviousWithStatuses,
     );
     const compareMetric = (current, previous) => {
       const change = current - previous;
@@ -211,7 +228,7 @@ router.get("/dashboard", async (req, res, next) => {
       return { current, previous, change, percent };
     };
     const comparisons = {
-      orders: compareMetric(orderStatsCurrent[0].total_orders, orderStatsPrevious[0].total_orders),
+      orders: compareMetric(totalOrdersCurrentAll[0].total_orders, totalOrdersPreviousAll[0].total_orders),
       revenue: compareMetric(orderStatsCurrent[0].total_revenue, orderStatsPrevious[0].total_revenue),
       customers: compareMetric(customerStatsCurrent[0].total_customers, customerStatsPrevious[0].total_customers),
       discounts: compareMetric(discountsCurrent[0].total_discounts, discountsPrevious[0].total_discounts),
@@ -222,9 +239,9 @@ router.get("/dashboard", async (req, res, next) => {
         COUNT(*) as count,
         COALESCE(SUM(total), 0) as revenue
       FROM orders o
-      WHERE ${dateFilter}${filterSql}
+      WHERE ${dateFilter}${filterSql}${dashboardStatusFilter}
       GROUP BY order_type`,
-      paramsCurrent,
+      paramsCurrentWithStatuses,
     );
     const [paymentMethods] = await db.query(
       `SELECT 
@@ -232,9 +249,9 @@ router.get("/dashboard", async (req, res, next) => {
         COUNT(*) as count,
         COALESCE(SUM(total), 0) as revenue
       FROM orders o
-      WHERE ${dateFilter}${filterSql}
+      WHERE ${dateFilter}${filterSql}${dashboardStatusFilter}
       GROUP BY payment_method`,
-      paramsCurrent,
+      paramsCurrentWithStatuses,
     );
     const [topItems] = await db.query(
       `SELECT 
@@ -245,11 +262,11 @@ router.get("/dashboard", async (req, res, next) => {
       FROM order_items oi
       JOIN menu_items mi ON oi.item_id = mi.id
       JOIN orders o ON oi.order_id = o.id
-      WHERE ${dateFilter}${filterSql}
+      WHERE ${dateFilter}${filterSql}${dashboardStatusFilter}
       GROUP BY mi.id, mi.name
       ORDER BY revenue DESC
       LIMIT 10`,
-      paramsCurrent,
+      paramsCurrentWithStatuses,
     );
     let groupBy = "day";
     if (period === "today") {
@@ -272,10 +289,10 @@ router.get("/dashboard", async (req, res, next) => {
         COALESCE(SUM(o.total), 0) as revenue,
         COALESCE(AVG(o.total), 0) as avg_order_value
       FROM orders o
-      WHERE ${dateFilter}${filterSql}
+      WHERE ${dateFilter}${filterSql}${dashboardStatusFilter}
       GROUP BY period
       ORDER BY period`,
-      paramsCurrent,
+      paramsCurrentWithStatuses,
     );
     res.json({
       period,
@@ -283,7 +300,10 @@ router.get("/dashboard", async (req, res, next) => {
       date_to: toDateString(addDays(range.end, -1)),
       compare_from: toDateString(range.compareStart),
       compare_to: toDateString(addDays(range.compareEnd, -1)),
-      orders: orderStatsCurrent[0],
+      orders: {
+        ...orderStatsCurrent[0],
+        total_orders: totalOrdersCurrentAll[0].total_orders,
+      },
       discounts: discountsCurrent[0],
       customers: customerStatsCurrent[0],
       comparisons,

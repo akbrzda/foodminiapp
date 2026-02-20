@@ -122,7 +122,18 @@
             <span class="flex items-center gap-1 text-emerald-600"
               ><CheckCircle2 :size="14" /> {{ formatNumber(stats?.orders?.completed_orders || 0) }}</span
             >
-            <span class="flex items-center gap-1 text-red-600"><XCircle :size="14" /> {{ formatNumber(stats?.orders?.cancelled_orders || 0) }}</span>
+            <span class="flex items-center gap-1 text-blue-600"
+              ><Activity :size="14" />
+              {{
+                formatNumber(
+                  (stats?.orders?.pending_orders || 0) +
+                    (stats?.orders?.confirmed_orders || 0) +
+                    (stats?.orders?.preparing_orders || 0) +
+                    (stats?.orders?.ready_orders || 0) +
+                    (stats?.orders?.delivering_orders || 0),
+                )
+              }}</span
+            >
           </div>
         </CardContent>
       </Card>
@@ -188,12 +199,21 @@
           </div>
           <div class="text-3xl font-semibold text-foreground">
             {{
-              formatNumber((stats?.orders?.pending_orders || 0) + (stats?.orders?.preparing_orders || 0) + (stats?.orders?.delivering_orders || 0))
+              formatNumber(
+                (stats?.orders?.pending_orders || 0) +
+                  (stats?.orders?.confirmed_orders || 0) +
+                  (stats?.orders?.preparing_orders || 0) +
+                  (stats?.orders?.ready_orders || 0) +
+                  (stats?.orders?.delivering_orders || 0),
+              )
             }}
           </div>
           <div class="flex flex-col gap-1 text-xs text-muted-foreground">
             <span>Ожидают: {{ formatNumber(stats?.orders?.pending_orders || 0) }}</span>
+            <span>Подтверждены: {{ formatNumber(stats?.orders?.confirmed_orders || 0) }}</span>
             <span>Готовятся: {{ formatNumber(stats?.orders?.preparing_orders || 0) }}</span>
+            <span>Готовы: {{ formatNumber(stats?.orders?.ready_orders || 0) }}</span>
+            <span>В доставке: {{ formatNumber(stats?.orders?.delivering_orders || 0) }}</span>
           </div>
         </CardContent>
       </Card>
@@ -318,7 +338,6 @@ import {
   Truck,
   Users,
   Wallet,
-  XCircle,
   ArrowDownRight,
   ArrowUpRight,
   Minus,

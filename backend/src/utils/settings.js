@@ -12,6 +12,17 @@ export const TELEGRAM_START_MESSAGE_DEFAULT = {
   button_text: "Открыть приложение",
   button_url: "",
 };
+export const TELEGRAM_NEW_ORDER_NOTIFICATION_DEFAULT = {
+  enabled: false,
+  notify_on_new_order: true,
+  notify_on_completed: false,
+  notify_on_cancelled: false,
+  group_id: "",
+  use_city_threads: false,
+  city_thread_ids: {},
+  message_template:
+    "🔔 <b>Новый заказ #{{order_number}}</b>\n\n📍 <b>Тип:</b> {{order_type_label}}\n🏙️ <b>Город:</b> {{city_name}}\n🏪 <b>Филиал:</b> {{branch_name}}\n📫 <b>Адрес:</b> {{delivery_address}}\n💳 <b>Оплата:</b> {{payment_method_label}}\n💰 <b>Сумма:</b> {{total}}₽\n\n📦 <b>Состав заказа:</b>\n{{items_list}}\n\n💬 <b>Комментарий:</b> {{comment}}",
+};
 
 const TELEGRAM_START_BUTTON_TYPES = new Set(["url", "web_app"]);
 
@@ -48,6 +59,13 @@ export const SETTINGS_SCHEMA = {
     default: TELEGRAM_START_MESSAGE_DEFAULT,
     label: "Приветственное сообщение /start",
     description: "Текст, изображение и кнопка для команды /start в Telegram-боте",
+    group: "Telegram",
+    type: "json",
+  },
+  telegram_new_order_notification: {
+    default: TELEGRAM_NEW_ORDER_NOTIFICATION_DEFAULT,
+    label: "Telegram-уведомления по заказам",
+    description: "События уведомлений (новый/завершен/отменен), группа, thread по городам и шаблон нового заказа",
     group: "Telegram",
     type: "json",
   },
@@ -322,6 +340,95 @@ const validateTelegramStartMessage = (value) => {
   };
 };
 
+const validateTelegramNewOrderNotification = (value) => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return { normalized: null, error: "Ожидался JSON-объект для telegram_new_order_notification" };
+  }
+
+  const enabled = value.enabled === undefined ? TELEGRAM_NEW_ORDER_NOTIFICATION_DEFAULT.enabled : normalizeBoolean(value.enabled);
+  if (enabled === null) {
+    return { normalized: null, error: "Поле enabled должно быть булевым" };
+  }
+
+  const notifyOnNewOrder =
+    value.notify_on_new_order === undefined
+      ? TELEGRAM_NEW_ORDER_NOTIFICATION_DEFAULT.notify_on_new_order
+      : normalizeBoolean(value.notify_on_new_order);
+  if (notifyOnNewOrder === null) {
+    return { normalized: null, error: "Поле notify_on_new_order должно быть булевым" };
+  }
+  const notifyOnCompleted =
+    value.notify_on_completed === undefined
+      ? TELEGRAM_NEW_ORDER_NOTIFICATION_DEFAULT.notify_on_completed
+      : normalizeBoolean(value.notify_on_completed);
+  if (notifyOnCompleted === null) {
+    return { normalized: null, error: "Поле notify_on_completed должно быть булевым" };
+  }
+  const notifyOnCancelled =
+    value.notify_on_cancelled === undefined
+      ? TELEGRAM_NEW_ORDER_NOTIFICATION_DEFAULT.notify_on_cancelled
+      : normalizeBoolean(value.notify_on_cancelled);
+  if (notifyOnCancelled === null) {
+    return { normalized: null, error: "Поле notify_on_cancelled должно быть булевым" };
+  }
+  const hasEnabledEvent = notifyOnNewOrder || notifyOnCompleted || notifyOnCancelled;
+
+  const groupIdRaw = String(value.group_id || "").trim();
+  if (enabled && hasEnabledEvent && !groupIdRaw) {
+    return { normalized: null, error: "Укажите group_id для уведомлений по заказам" };
+  }
+  if (groupIdRaw && !/^-?\d+$/.test(groupIdRaw)) {
+    return { normalized: null, error: "Поле group_id должно содержать числовой Telegram chat id" };
+  }
+
+  const useCityThreads = value.use_city_threads === undefined ? false : normalizeBoolean(value.use_city_threads);
+  if (useCityThreads === null) {
+    return { normalized: null, error: "Поле use_city_threads должно быть булевым" };
+  }
+
+  const sourceMap =
+    value.city_thread_ids && typeof value.city_thread_ids === "object" && !Array.isArray(value.city_thread_ids)
+      ? value.city_thread_ids
+      : {};
+  const normalizedThreadMap = {};
+  for (const [cityIdRaw, threadIdRaw] of Object.entries(sourceMap)) {
+    const cityId = Number(cityIdRaw);
+    if (!Number.isInteger(cityId) || cityId <= 0) {
+      return { normalized: null, error: "Ключи city_thread_ids должны быть положительными id города" };
+    }
+    const threadId = Number(threadIdRaw);
+    if (!Number.isInteger(threadId) || threadId <= 0) {
+      return { normalized: null, error: "Все значения city_thread_ids должны быть положительными целыми числами" };
+    }
+    normalizedThreadMap[String(cityId)] = threadId;
+  }
+  if (useCityThreads && Object.keys(normalizedThreadMap).length === 0) {
+    return { normalized: null, error: "Для режима thread по городам добавьте минимум один thread_id" };
+  }
+
+  const messageTemplate = String(value.message_template || "").trim();
+  if (enabled && notifyOnNewOrder && !messageTemplate) {
+    return { normalized: null, error: "Поле message_template обязательно" };
+  }
+  if (messageTemplate.length > 4096) {
+    return { normalized: null, error: "Шаблон сообщения не должен превышать 4096 символов" };
+  }
+
+  return {
+    normalized: {
+      enabled,
+      notify_on_new_order: notifyOnNewOrder,
+      notify_on_completed: notifyOnCompleted,
+      notify_on_cancelled: notifyOnCancelled,
+      group_id: groupIdRaw,
+      use_city_threads: useCityThreads,
+      city_thread_ids: normalizedThreadMap,
+      message_template: messageTemplate || TELEGRAM_NEW_ORDER_NOTIFICATION_DEFAULT.message_template,
+    },
+    error: null,
+  };
+};
+
 export const getSystemSettings = async () => {
   try {
     const cached = await redis.get(SETTINGS_CACHE_KEY);
@@ -409,6 +516,15 @@ export const updateSystemSettings = async (patch) => {
       }
       if (key === "telegram_start_message") {
         const { normalized, error } = validateTelegramStartMessage(value);
+        if (error) {
+          errors[key] = error;
+          continue;
+        }
+        updates[key] = normalized;
+        continue;
+      }
+      if (key === "telegram_new_order_notification") {
+        const { normalized, error } = validateTelegramNewOrderNotification(value);
         if (error) {
           errors[key] = error;
           continue;

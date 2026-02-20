@@ -17,7 +17,7 @@
               </Button>
             </div>
             <div v-else-if="activeTab === 2" class="flex flex-wrap items-center gap-3">
-              <Button variant="secondary" :disabled="telegramLoading || telegramSaving || telegramTesting" @click="loadTelegramSettings">
+              <Button variant="secondary" :disabled="telegramLoading || telegramSaving || telegramTesting" @click="loadTelegramStartSettings">
                 <Spinner v-if="telegramLoading" class="h-4 w-4" />
                 <RefreshCcw v-else :size="16" />
                 Сбросить
@@ -27,7 +27,32 @@
                 <SendHorizontal v-else :size="16" />
                 {{ telegramTesting ? "Отправка..." : "Тест" }}
               </Button>
-              <Button :disabled="telegramLoading || telegramSaving || telegramTesting" @click="saveTelegramSettings">
+              <Button :disabled="telegramLoading || telegramSaving || telegramTesting" @click="saveTelegramStartSettings">
+                <Spinner v-if="telegramSaving" class="h-4 w-4" />
+                <Save v-else :size="16" />
+                {{ telegramSaving ? "Сохранение..." : "Сохранить" }}
+              </Button>
+            </div>
+            <div v-else-if="activeTab === 3" class="flex flex-wrap items-center gap-3">
+              <Button
+                variant="secondary"
+                :disabled="telegramLoading || telegramSaving || telegramOrderTesting || telegramCitiesLoading"
+                @click="loadTelegramOrderSettings"
+              >
+                <Spinner v-if="telegramLoading || telegramCitiesLoading" class="h-4 w-4" />
+                <RefreshCcw v-else :size="16" />
+                Сбросить
+              </Button>
+              <Button
+                variant="secondary"
+                :disabled="telegramLoading || telegramSaving || telegramOrderTesting || telegramCitiesLoading"
+                @click="sendTelegramOrderTest"
+              >
+                <Spinner v-if="telegramOrderTesting" class="h-4 w-4" />
+                <SendHorizontal v-else :size="16" />
+                {{ telegramOrderTesting ? "Отправка..." : "Тест" }}
+              </Button>
+              <Button :disabled="telegramLoading || telegramSaving || telegramOrderTesting || telegramCitiesLoading" @click="saveTelegramOrderSettings">
                 <Spinner v-if="telegramSaving" class="h-4 w-4" />
                 <Save v-else :size="16" />
                 {{ telegramSaving ? "Сохранение..." : "Сохранить" }}
@@ -231,7 +256,9 @@
                     <div class="text-xs text-muted-foreground">JPG/PNG/WebP, до 10MB</div>
                     <div class="text-xs text-muted-foreground">Можно выбрать несколько файлов сразу</div>
                     <div v-if="telegramUploadState.error" class="text-xs text-red-600">{{ telegramUploadState.error }}</div>
-                    <div v-if="telegramUploadState.loading" class="text-xs text-muted-foreground">Загрузка {{ telegramUploadState.completed }} из {{ telegramUploadState.total }}...</div>
+                    <div v-if="telegramUploadState.loading" class="text-xs text-muted-foreground">
+                      Загрузка {{ telegramUploadState.completed }} из {{ telegramUploadState.total }}...
+                    </div>
                     <div v-if="telegramForm.images.length" class="mt-3 grid w-full gap-3">
                       <div
                         v-for="(image, index) in telegramForm.images"
@@ -267,7 +294,13 @@
                             </FieldContent>
                           </Field>
                         </div>
-                        <Button type="button" variant="outline" size="icon" class="justify-self-start md:justify-self-end" @click="removeTelegramImage(index)">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          class="justify-self-start md:justify-self-end"
+                          @click="removeTelegramImage(index)"
+                        >
                           <X :size="16" />
                         </Button>
                       </div>
@@ -317,12 +350,7 @@
                 <CardTitle class="text-sm">Предпросмотр</CardTitle>
               </CardHeader>
               <CardContent class="space-y-3 pt-0">
-                <img
-                  v-if="telegramPreviewImageUrl"
-                  :src="telegramPreviewImageUrl"
-                  alt="preview"
-                  class="max-h-64 rounded-lg object-cover"
-                />
+                <img v-if="telegramPreviewImageUrl" :src="telegramPreviewImageUrl" alt="preview" class="max-h-64 rounded-lg object-cover" />
                 <p v-if="telegramForm.images.length" class="text-xs text-muted-foreground">
                   Фото в ротации: {{ telegramActiveImagesCount }} из {{ telegramForm.images.length }}
                 </p>
@@ -334,6 +362,192 @@
                 </Button>
               </CardContent>
             </Card>
+          </CardContent>
+        </Card>
+      </TabsContent>
+
+      <TabsContent :value="3" class="space-y-6">
+        <Card v-if="telegramLoading || telegramCitiesLoading">
+          <CardContent class="space-y-3 pt-6">
+            <Skeleton class="h-10 w-full" />
+            <Skeleton class="h-40 w-full" />
+            <Skeleton class="h-10 w-full" />
+            <Skeleton class="h-24 w-full" />
+          </CardContent>
+        </Card>
+
+        <Card v-else>
+          <CardHeader>
+            <CardTitle>Telegram-уведомления по заказам</CardTitle>
+            <CardDescription>События, группа, thread по городам и шаблон сообщения о новом заказе</CardDescription>
+          </CardHeader>
+          <CardContent class="space-y-6 pt-0">
+            <FieldGroup class="grid gap-4 md:grid-cols-2">
+              <Field>
+                <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Статус</FieldLabel>
+                <FieldContent>
+                  <Select v-model="telegramOrderNotificationForm.enabled">
+                    <SelectTrigger class="w-full">
+                      <SelectValue placeholder="Выберите статус" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem :value="true">Включено</SelectItem>
+                      <SelectItem :value="false">Выключено</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </FieldContent>
+              </Field>
+              <Field>
+                <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Group ID</FieldLabel>
+                <FieldContent>
+                  <Input v-model="telegramOrderNotificationForm.group_id" type="text" placeholder="-1001234567890" />
+                </FieldContent>
+              </Field>
+            </FieldGroup>
+
+            <FieldGroup class="grid gap-4 md:grid-cols-3">
+              <Field>
+                <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Новый заказ</FieldLabel>
+                <FieldContent>
+                  <Select v-model="telegramOrderNotificationForm.notify_on_new_order">
+                    <SelectTrigger class="w-full">
+                      <SelectValue placeholder="Выберите статус" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem :value="true">Отправлять</SelectItem>
+                      <SelectItem :value="false">Не отправлять</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </FieldContent>
+              </Field>
+              <Field>
+                <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Завершён</FieldLabel>
+                <FieldContent>
+                  <Select v-model="telegramOrderNotificationForm.notify_on_completed">
+                    <SelectTrigger class="w-full">
+                      <SelectValue placeholder="Выберите статус" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem :value="true">Отправлять</SelectItem>
+                      <SelectItem :value="false">Не отправлять</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </FieldContent>
+              </Field>
+              <Field>
+                <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Отменён</FieldLabel>
+                <FieldContent>
+                  <Select v-model="telegramOrderNotificationForm.notify_on_cancelled">
+                    <SelectTrigger class="w-full">
+                      <SelectValue placeholder="Выберите статус" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem :value="true">Отправлять</SelectItem>
+                      <SelectItem :value="false">Не отправлять</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </FieldContent>
+              </Field>
+            </FieldGroup>
+
+            <FieldGroup class="grid gap-4 md:grid-cols-2">
+              <Field>
+                <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Тест: тип события</FieldLabel>
+                <FieldContent>
+                  <Select v-model="telegramOrderTestForm.event_type">
+                    <SelectTrigger class="w-full">
+                      <SelectValue placeholder="Выберите событие" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="new_order">Новый заказ</SelectItem>
+                      <SelectItem value="completed">Завершён</SelectItem>
+                      <SelectItem value="cancelled">Отменён</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </FieldContent>
+              </Field>
+              <Field>
+                <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Тест: город (для thread)</FieldLabel>
+                <FieldContent>
+                  <Select v-model="telegramOrderTestForm.city_id">
+                    <SelectTrigger class="w-full">
+                      <SelectValue placeholder="Без привязки к городу" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">Без привязки к городу</SelectItem>
+                      <SelectItem v-for="city in telegramCities" :key="`test-city-${city.id}`" :value="String(city.id)">
+                        {{ city.name }}
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </FieldContent>
+              </Field>
+            </FieldGroup>
+
+            <Field>
+              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Режим отправки</FieldLabel>
+              <FieldContent>
+                <Select v-model="telegramOrderNotificationForm.use_city_threads">
+                  <SelectTrigger class="w-full">
+                    <SelectValue placeholder="Выберите режим" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem :value="false">Общая группа без thread</SelectItem>
+                    <SelectItem :value="true">Thread по городам</SelectItem>
+                  </SelectContent>
+                </Select>
+              </FieldContent>
+            </Field>
+
+            <Card v-if="telegramOrderNotificationForm.use_city_threads" class="border-dashed">
+              <CardHeader>
+                <CardTitle class="text-sm">Thread ID по городам</CardTitle>
+                <CardDescription>Укажите `message_thread_id` для каждого нужного города</CardDescription>
+              </CardHeader>
+              <CardContent class="space-y-3 pt-0">
+                <div
+                  v-if="telegramCities.length === 0"
+                  class="rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground"
+                >
+                  Города не найдены
+                </div>
+                <div
+                  v-for="city in telegramCities"
+                  :key="city.id"
+                  class="grid gap-3 rounded-xl border border-border/60 bg-background px-4 py-3 md:grid-cols-[1fr_240px] md:items-center"
+                >
+                  <div class="text-sm font-medium text-foreground">{{ city.name }}</div>
+                  <Input
+                    :model-value="telegramOrderNotificationForm.city_thread_ids[String(city.id)] || ''"
+                    type="number"
+                    min="1"
+                    placeholder="Thread ID"
+                    @update:model-value="(value) => updateCityThreadId(city.id, value)"
+                  />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Field>
+              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Шаблон сообщения (новый заказ)</FieldLabel>
+              <FieldContent>
+                <Textarea
+                  v-model="telegramOrderNotificationForm.message_template"
+                  rows="10"
+                  maxlength="4096"
+                  placeholder="Введите шаблон уведомления о новом заказе"
+                />
+              </FieldContent>
+            </Field>
+
+            <div class="rounded-xl border border-border/60 bg-muted/30 px-4 py-3">
+              <div class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Плейсхолдеры</div>
+              <div class="mt-2 flex flex-wrap gap-2">
+                <Badge v-for="placeholder in TELEGRAM_ORDER_PLACEHOLDERS" :key="placeholder" variant="secondary">
+                  {{ placeholder }}
+                </Badge>
+              </div>
+            </div>
           </CardContent>
         </Card>
       </TabsContent>
@@ -388,7 +602,7 @@
 </template>
 <script setup>
 import { devError } from "@/shared/utils/logger";
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { ImagePlus, Pencil, Plus, RefreshCcw, Save, SendHorizontal, Trash2, X } from "lucide-vue-next";
 import api from "@/shared/api/client.js";
 import Badge from "@/shared/components/ui/badge/Badge.vue";
@@ -422,7 +636,7 @@ const moduleLoading = ref(false);
 const moduleSaving = ref(false);
 const reasons = ref([]);
 const reasonsLoading = ref(false);
-const tabs = ["Модули", "Причины стоп-листа", "Telegram /start"];
+const tabs = ["Модули", "Причины стоп-листа", "Приветственное сообщение", "Telegram заказы"];
 const activeTab = ref(0);
 const showModal = ref(false);
 const editing = ref(null);
@@ -430,6 +644,7 @@ const savingReason = ref(false);
 const telegramLoading = ref(false);
 const telegramSaving = ref(false);
 const telegramTesting = ref(false);
+const telegramOrderTesting = ref(false);
 const telegramFileInput = ref(null);
 const telegramTestId = ref("");
 const telegramUploadState = ref({
@@ -438,6 +653,9 @@ const telegramUploadState = ref({
   total: 0,
   completed: 0,
 });
+const telegramCities = ref([]);
+const telegramCitiesLoading = ref(false);
+const telegramSettingsLoaded = ref(false);
 const telegramForm = ref({
   enabled: true,
   text: "",
@@ -446,6 +664,20 @@ const telegramForm = ref({
   button_type: "web_app",
   button_text: "",
   button_url: "",
+});
+const telegramOrderNotificationForm = ref({
+  enabled: false,
+  notify_on_new_order: true,
+  notify_on_completed: false,
+  notify_on_cancelled: false,
+  group_id: "",
+  use_city_threads: false,
+  city_thread_ids: {},
+  message_template: "",
+});
+const telegramOrderTestForm = ref({
+  event_type: "new_order",
+  city_id: "",
 });
 const formReason = ref({
   name: "",
@@ -458,6 +690,49 @@ const modalTitle = computed(() => (editing.value ? "Редактировать �
 const modalSubtitle = computed(() => (editing.value ? "Измените параметры" : "Создайте причину стоп-листа"));
 const percentKeys = new Set();
 const primitiveTypes = new Set(["boolean", "string", "number"]);
+const TELEGRAM_ORDER_PLACEHOLDERS = [
+  "{{order_id}}",
+  "{{order_number}}",
+  "{{order_status}}",
+  "{{order_created_at}}",
+  "{{order_desired_time}}",
+  "{{order_type}}",
+  "{{order_type_label}}",
+  "{{city_id}}",
+  "{{city_name}}",
+  "{{city_timezone}}",
+  "{{branch_id}}",
+  "{{branch_name}}",
+  "{{branch_address}}",
+  "{{branch_phone}}",
+  "{{user_id}}",
+  "{{user_first_name}}",
+  "{{user_last_name}}",
+  "{{user_full_name}}",
+  "{{user_phone}}",
+  "{{user_telegram_id}}",
+  "{{delivery_address}}",
+  "{{delivery_street}}",
+  "{{delivery_house}}",
+  "{{delivery_entrance}}",
+  "{{delivery_floor}}",
+  "{{delivery_apartment}}",
+  "{{delivery_intercom}}",
+  "{{delivery_comment}}",
+  "{{delivery_latitude}}",
+  "{{delivery_longitude}}",
+  "{{payment_method}}",
+  "{{payment_method_label}}",
+  "{{change_from}}",
+  "{{subtotal}}",
+  "{{delivery_cost}}",
+  "{{bonus_spent}}",
+  "{{total}}",
+  "{{items_count}}",
+  "{{items_total_quantity}}",
+  "{{items_list}}",
+  "{{comment}}",
+];
 
 const normalizeTelegramForm = (value = {}) => {
   const config = value && typeof value === "object" && !Array.isArray(value) ? value : {};
@@ -497,11 +772,37 @@ const normalizeTelegramForm = (value = {}) => {
   };
 };
 
+const normalizeTelegramOrderNotificationForm = (value = {}) => {
+  const config = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  const sourceMap =
+    config.city_thread_ids && typeof config.city_thread_ids === "object" && !Array.isArray(config.city_thread_ids) ? config.city_thread_ids : {};
+  const cityThreadIds = Object.entries(sourceMap).reduce((acc, [cityId, threadId]) => {
+    const normalizedCityId = Number(cityId);
+    const normalizedThreadId = Number(threadId);
+    if (!Number.isInteger(normalizedCityId) || normalizedCityId <= 0) return acc;
+    if (!Number.isInteger(normalizedThreadId) || normalizedThreadId <= 0) return acc;
+    acc[String(normalizedCityId)] = normalizedThreadId;
+    return acc;
+  }, {});
+
+  return {
+    enabled: config.enabled === true,
+    notify_on_new_order: config.notify_on_new_order !== false,
+    notify_on_completed: config.notify_on_completed === true,
+    notify_on_cancelled: config.notify_on_cancelled === true,
+    group_id: String(config.group_id || ""),
+    use_city_threads: config.use_city_threads === true,
+    city_thread_ids: cityThreadIds,
+    message_template: String(config.message_template || ""),
+  };
+};
+
 const applySettingsResponse = (data) => {
   const settings = data?.settings || {};
   moduleItems.value = (data?.items || []).filter((item) => item.group !== "Интеграции" && primitiveTypes.has(item.type));
   hydrateForm(moduleItems.value, moduleForm);
   telegramForm.value = normalizeTelegramForm(settings.telegram_start_message);
+  telegramOrderNotificationForm.value = normalizeTelegramOrderNotificationForm(settings.telegram_new_order_notification);
   telegramUploadState.value = {
     loading: false,
     error: null,
@@ -588,8 +889,10 @@ const saveModuleSettings = async () => {
 const loadTelegramSettings = async () => {
   telegramLoading.value = true;
   try {
-    const response = await api.get("/api/settings/admin");
-    applySettingsResponse(response.data);
+    const [settingsResponse, citiesResponse] = await Promise.all([api.get("/api/settings/admin"), api.get("/api/cities/admin/all")]);
+    applySettingsResponse(settingsResponse.data);
+    telegramCities.value = Array.isArray(citiesResponse.data?.cities) ? citiesResponse.data.cities : [];
+    telegramSettingsLoaded.value = true;
   } catch (error) {
     devError("Failed to load telegram start settings:", error);
     showErrorNotification("Ошибка при загрузке настроек Telegram");
@@ -598,22 +901,68 @@ const loadTelegramSettings = async () => {
   }
 };
 
-const saveTelegramSettings = async () => {
+const loadTelegramStartSettings = async () => {
+  await loadTelegramSettings();
+};
+
+const loadTelegramOrderSettings = async () => {
+  await loadTelegramSettings();
+};
+
+const saveTelegramStartSettings = async () => {
   telegramSaving.value = true;
   try {
     const payload = normalizeTelegramForm(telegramForm.value);
     const response = await api.put("/api/settings/admin", {
-      settings: { telegram_start_message: payload },
+      settings: {
+        telegram_start_message: payload,
+      },
     });
     applySettingsResponse(response.data);
     showSuccessNotification("Настройки /start сохранены");
   } catch (error) {
     devError("Failed to save telegram start settings:", error);
-    const message = error.response?.data?.errors?.telegram_start_message || error.response?.data?.errors?.settings || "Ошибка при сохранении /start";
+    const message =
+      error.response?.data?.errors?.telegram_start_message ||
+      error.response?.data?.errors?.settings ||
+      "Ошибка при сохранении /start";
     showErrorNotification(message);
   } finally {
     telegramSaving.value = false;
   }
+};
+
+const saveTelegramOrderSettings = async () => {
+  telegramSaving.value = true;
+  try {
+    const orderNotificationPayload = normalizeTelegramOrderNotificationForm(telegramOrderNotificationForm.value);
+    const response = await api.put("/api/settings/admin", {
+      settings: {
+        telegram_new_order_notification: orderNotificationPayload,
+      },
+    });
+    applySettingsResponse(response.data);
+    showSuccessNotification("Настройки уведомлений по заказам сохранены");
+  } catch (error) {
+    devError("Failed to save telegram order notification settings:", error);
+    const message =
+      error.response?.data?.errors?.telegram_new_order_notification ||
+      error.response?.data?.errors?.settings ||
+      "Ошибка при сохранении уведомлений по заказам";
+    showErrorNotification(message);
+  } finally {
+    telegramSaving.value = false;
+  }
+};
+
+const updateCityThreadId = (cityId, value) => {
+  const normalizedCityId = String(Number(cityId));
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    delete telegramOrderNotificationForm.value.city_thread_ids[normalizedCityId];
+    return;
+  }
+  telegramOrderNotificationForm.value.city_thread_ids[normalizedCityId] = parsed;
 };
 
 const sendTelegramStartTest = async () => {
@@ -631,6 +980,24 @@ const sendTelegramStartTest = async () => {
     showErrorNotification(error.response?.data?.error || "Не удалось отправить тест");
   } finally {
     telegramTesting.value = false;
+  }
+};
+
+const sendTelegramOrderTest = async () => {
+  telegramOrderTesting.value = true;
+  try {
+    const cityIdValue = String(telegramOrderTestForm.value.city_id || "").trim();
+    const payload = {
+      event_type: telegramOrderTestForm.value.event_type,
+      city_id: cityIdValue ? Number(cityIdValue) : null,
+    };
+    await api.post("/api/settings/admin/telegram-orders/test", payload);
+    showSuccessNotification("Тестовое уведомление отправлено");
+  } catch (error) {
+    devError("Failed to send telegram order notification test:", error);
+    showErrorNotification(error.response?.data?.error || "Не удалось отправить тестовое уведомление");
+  } finally {
+    telegramOrderTesting.value = false;
   }
 };
 
@@ -788,4 +1155,18 @@ onMounted(async () => {
     showErrorNotification("Ошибка загрузки настроек системы");
   }
 });
+
+watch(
+  () => activeTab.value,
+  async (value) => {
+    if (value !== 2 && value !== 3) return;
+    if (telegramSettingsLoaded.value) return;
+    telegramCitiesLoading.value = true;
+    try {
+      await loadTelegramSettings();
+    } finally {
+      telegramCitiesLoading.value = false;
+    }
+  },
+);
 </script>
