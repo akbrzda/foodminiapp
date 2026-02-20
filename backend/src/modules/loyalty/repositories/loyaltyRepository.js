@@ -82,7 +82,7 @@ export async function getLoyaltyHistory(userId, limit, offset, { connection = nu
          lt.order_id,
          o.order_number,
          'spend' as type,
-         SUM(lt.amount) as amount,
+         SUM(CASE WHEN lt.status <> 'cancelled' THEN lt.amount ELSE 0 END) as amount,
          CASE
            WHEN SUM(lt.status = 'completed') > 0 THEN 'completed'
            WHEN SUM(lt.status = 'pending') > 0 THEN 'pending'
@@ -97,6 +97,7 @@ export async function getLoyaltyHistory(userId, limit, offset, { connection = nu
        WHERE lt.user_id = ?
          AND lt.type = 'spend'
        GROUP BY lt.order_id
+       HAVING SUM(lt.status <> 'cancelled') > 0
        UNION ALL
        SELECT 
          lt.id,
@@ -112,6 +113,7 @@ export async function getLoyaltyHistory(userId, limit, offset, { connection = nu
        LEFT JOIN orders o ON lt.order_id = o.id
        WHERE lt.user_id = ?
          AND lt.type <> 'spend'
+         AND NOT (lt.type = 'earn' AND lt.order_id IS NULL AND lt.status = 'cancelled' AND lt.description IS NULL)
      ) as transactions
      ORDER BY transactions.created_at DESC
      LIMIT ? OFFSET ?`,
@@ -180,6 +182,22 @@ export async function getOrderLoyaltyTransactions(orderId, { connection = null }
   const [rows] = await executor.query(
     "SELECT id, type, amount, status, related_transaction_id FROM loyalty_transactions WHERE order_id = ?",
     [orderId],
+  );
+  return rows;
+}
+
+export async function getOrphanOrderLoyaltyTransactions(userId, { connection = null, forUpdate = false } = {}) {
+  const executor = getExecutor(connection);
+  const lockSql = forUpdate ? " FOR UPDATE" : "";
+  const [rows] = await executor.query(
+    `SELECT id, type, amount, status, related_transaction_id
+     FROM loyalty_transactions
+     WHERE user_id = ?
+       AND order_id IS NULL
+       AND type IN ('earn', 'spend')
+       AND status IN ('pending', 'completed')
+     ORDER BY id ASC${lockSql}`,
+    [userId],
   );
   return rows;
 }
@@ -363,6 +381,7 @@ export default {
   getLoyaltyLevelHistory,
   getLoyaltyTransaction,
   getOrderLoyaltyTransactions,
+  getOrphanOrderLoyaltyTransactions,
   insertLoyaltyTransaction,
   updateTransactionRemaining,
   updateTransactionStatus,

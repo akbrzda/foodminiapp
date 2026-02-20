@@ -25,6 +25,14 @@ const dbConfig = {
   queueLimit: 0,
 };
 const pool = mysql.createPool(dbConfig);
+
+pool.on("connection", (connection) => {
+  // Единый базовый часовой пояс сессии БД, чтобы избежать двойных сдвигов времени на клиентах.
+  connection.query("SET time_zone = '+00:00'", () => {
+    // Ошибка выставления TZ не должна ломать инициализацию пула.
+  });
+});
+
 export async function testConnection() {
   try {
     const connection = await pool.getConnection();

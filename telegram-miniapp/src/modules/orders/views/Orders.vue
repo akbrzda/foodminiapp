@@ -47,7 +47,7 @@ import { ordersAPI } from "@/shared/api/endpoints.js";
 import { hapticFeedback } from "@/shared/services/telegram.js";
 import { wsService } from "@/shared/services/websocket.js";
 import { formatPrice } from "@/shared/utils/format";
-import { formatRelativeTime, isToday, isYesterday, formatTime, formatDateOnly } from "@/shared/utils/date";
+import { formatCalendarDateTime } from "@/shared/utils/date";
 import { devError } from "@/shared/utils/logger.js";
 const router = useRouter();
 const orders = ref([]);
@@ -105,16 +105,7 @@ function getStatusText(status) {
   };
   return statuses[status] || status;
 }
-function formatDate(dateString) {
-  const date = new Date(dateString);
-  if (isToday(date)) {
-    return `Сегодня, ${formatTime(date)}`;
-  } else if (isYesterday(date)) {
-    return `Вчера, ${formatTime(date)}`;
-  } else {
-    return formatDateOnly(date);
-  }
-}
+const formatDate = (dateString) => formatCalendarDateTime(dateString, { separator: ", " });
 </script>
 <style scoped>
 .orders {

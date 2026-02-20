@@ -16,6 +16,7 @@ import {
   getLoyaltyLevelHistory,
   getLoyaltyTransaction,
   getOrderLoyaltyTransactions,
+  getOrphanOrderLoyaltyTransactions,
   insertLoyaltyTransaction,
   updateTransactionRemaining,
   updateTransactionStatus,
@@ -214,6 +215,7 @@ export async function validateBonusUsage(userId, bonusToUse, orderSubtotal, maxU
 }
 
 export async function getBalanceSummary(userId) {
+  await reconcileOrphanOrderBonuses(userId);
   const snapshot = await getUserLoyaltySnapshot(userId);
   if (!snapshot) {
     throw new Error("Пользователь не найден");
@@ -259,6 +261,7 @@ export async function calculateMaxSpend(userId, orderTotal, deliveryCost) {
 }
 
 export async function getHistory(userId, page, limit) {
+  await reconcileOrphanOrderBonuses(userId);
   const offset = (page - 1) * limit;
   const rows = await getLoyaltyHistory(userId, limit + 1, offset);
   const hasMore = rows.length > limit;
@@ -271,6 +274,7 @@ export async function getHistory(userId, page, limit) {
 }
 
 export async function getLevelsSummary(userId) {
+  await reconcileOrphanOrderBonuses(userId);
   const levels = await getLevelsMap();
   const sortedLevels = getSortedLevels(levels);
   const totalSpent = await getTotalSpentForPeriodRepo(userId, LOYALTY_LEVEL_PERIOD_DAYS);
@@ -290,6 +294,7 @@ export async function getLevelsSummary(userId) {
 }
 
 export async function getAdminUserLoyalty(userId) {
+  await reconcileOrphanOrderBonuses(userId);
   const user = await getUserById(userId);
   if (!user) {
     throw new Error("Пользователь не найден");
@@ -423,6 +428,77 @@ async function restoreEarnAmounts(userId, amount, connection = null) {
       },
       { connection },
     );
+  }
+}
+
+export async function reconcileOrphanOrderBonuses(userId, externalConnection = null) {
+  let connection = externalConnection || null;
+  const ownConnection = !externalConnection;
+  try {
+    if (ownConnection) {
+      connection = await getConnection();
+      await connection.beginTransaction();
+    }
+
+    const snapshot = await getUserLoyaltySnapshot(userId, { connection, forUpdate: true });
+    if (!snapshot) {
+      if (ownConnection) await connection.commit();
+      return null;
+    }
+
+    const transactions = await getOrphanOrderLoyaltyTransactions(userId, { connection, forUpdate: true });
+    if (!transactions.length) {
+      if (ownConnection) await connection.commit();
+      return null;
+    }
+
+    const spentAmount = transactions.filter((tx) => tx.type === "spend").reduce((sum, tx) => sum + (parseFloat(tx.amount) || 0), 0);
+    const earnedAmount = transactions.filter((tx) => tx.type === "earn").reduce((sum, tx) => sum + (parseFloat(tx.amount) || 0), 0);
+
+    for (const tx of transactions) {
+      if (tx.type === "spend" && tx.related_transaction_id) {
+        const related = await getTransactionById(tx.related_transaction_id, { connection, forUpdate: true });
+        if (related) {
+          const currentRemaining = parseFloat(related.remaining_amount) || 0;
+          await updateTransactionRemaining(related.id, currentRemaining + (parseFloat(tx.amount) || 0), { connection });
+        }
+      }
+
+      if (tx.type === "earn") {
+        await updateTransactionStatusAndRemaining(tx.id, "cancelled", 0, { connection });
+      } else {
+        await updateTransactionStatus(tx.id, "cancelled", { connection });
+      }
+    }
+
+    const currentBalance = parseFloat(snapshot.loyalty_balance) || 0;
+    const nextBalance = Math.max(0, currentBalance + spentAmount - earnedAmount);
+    await updateUserBalance(userId, nextBalance, { connection });
+    await invalidateBonusCache(userId);
+
+    if (ownConnection) {
+      await connection.commit();
+    }
+
+    return {
+      fixed: true,
+      spent: spentAmount,
+      earned: earnedAmount,
+      balance_after: nextBalance,
+    };
+  } catch (error) {
+    if (ownConnection && connection) {
+      try {
+        await connection.rollback();
+      } catch {
+        // Игнорируем ошибку rollback.
+      }
+    }
+    throw error;
+  } finally {
+    if (ownConnection && connection) {
+      connection.release();
+    }
   }
 }
 

@@ -154,7 +154,7 @@ router.get("/clients", requireRole("admin", "manager", "ceo"), async (req, res, 
       ) lo ON lo.user_id = u.id
       LEFT JOIN cities c ON c.id = lo.city_id
       ${whereClause}
-      ORDER BY last_order_at DESC, u.created_at DESC
+      ORDER BY u.created_at ASC, u.id ASC
       LIMIT ? OFFSET ?
     `;
     params.push(parseInt(limit), parseInt(offset));

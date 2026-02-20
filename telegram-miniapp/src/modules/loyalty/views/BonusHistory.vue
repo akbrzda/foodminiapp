@@ -164,7 +164,7 @@
                 </div>
                 <div class="transaction-info">
                   <div class="transaction-title">{{ getTransactionTitle(transaction) }}</div>
-                  <div class="transaction-date">{{ formatDate(transaction.created_at) }}</div>
+                  <div class="transaction-date">{{ formatCalendarDateTime(transaction.created_at) }}</div>
                   <div v-if="isActiveEarn(transaction)" class="transaction-expire">Действует до {{ formatDateShort(transaction.expires_at) }}</div>
                   <div v-else-if="transaction.expires_at && new Date(transaction.expires_at) < new Date()" class="transaction-expired">Истек</div>
                 </div>
@@ -188,6 +188,7 @@ import { X, Plus, Minus, Award, Trophy, AlertTriangle, Info } from "lucide-vue-n
 import PageHeader from "@/shared/components/PageHeader.vue";
 import { bonusesAPI } from "@/shared/api/endpoints.js";
 import { formatPrice } from "@/shared/utils/format";
+import { formatCalendarDateTime, formatDate as formatDateByTz } from "@/shared/utils/date";
 import { useLoyaltyStore } from "@/modules/loyalty/stores/loyalty.js";
 import { useSettingsStore } from "@/modules/settings/stores/settings.js";
 import { devError } from "@/shared/utils/logger.js";
@@ -316,25 +317,9 @@ function getTransactionTitle(transaction) {
   return label;
 }
 
-function formatDate(dateString) {
-  const date = new Date(dateString);
-  const now = new Date();
-  const diff = now - date;
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-  if (days === 0) {
-    return "Сегодня в " + date.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
-  } else if (days === 1) {
-    return "Вчера в " + date.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
-  } else if (days < 7) {
-    return `${days} дн. назад`;
-  } else {
-    return date.toLocaleDateString("ru-RU", { day: "numeric", month: "short" });
-  }
-}
-
 function formatDateShort(dateString) {
   if (!dateString) return "";
-  return new Date(dateString).toLocaleDateString("ru-RU", { day: "numeric", month: "short" });
+  return formatDateByTz(new Date(dateString), { day: "numeric", month: "short" });
 }
 </script>
 

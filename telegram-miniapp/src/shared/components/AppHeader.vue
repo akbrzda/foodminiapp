@@ -24,9 +24,9 @@
           </div>
           <div class="sidebar-content">
             <nav class="sidebar-nav">
-              <button class="sidebar-item" @click="navigateTo('/')">
-                <Home :size="20" />
-                <span>Главная</span>
+              <button class="sidebar-item" @click="navigateTo('/profile')">
+                <User :size="20" />
+                <span>Профиль</span>
               </button>
               <button class="sidebar-item" @click="navigateTo('/orders')">
                 <Package :size="20" />
@@ -35,10 +35,6 @@
               <button v-if="bonusesEnabled" class="sidebar-item" @click="navigateTo('/bonus-history')">
                 <Gift :size="20" />
                 <span>Бонусы</span>
-              </button>
-              <button class="sidebar-item" @click="navigateTo('/profile')">
-                <User :size="20" />
-                <span>Профиль</span>
               </button>
               <button class="sidebar-item" @click="navigateTo('/contacts')">
                 <Phone :size="20" />
@@ -314,7 +310,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 12px;
   justify-content: space-between;
-  padding: 0 12px;
+  padding: 12px 12px 0;
   background: var(--color-background);
 }
 .menu-button {
@@ -455,7 +451,7 @@ onBeforeUnmount(() => {
   border: none;
   background: transparent;
   color: var(--color-text-secondary);
-  font-size: var(--font-size-small);
+  font-size: var(--font-size-caption);
   cursor: pointer;
   padding: 0;
   text-align: right;

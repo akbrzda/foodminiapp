@@ -717,6 +717,7 @@ export const getOrdersStats = async (req, res, next) => {
  * Удаление заказа (только admin)
  */
 export const deleteAdminOrder = async (req, res, next) => {
+  let connection = null;
   try {
     const orderId = Number(req.params.id);
 
@@ -724,22 +725,62 @@ export const deleteAdminOrder = async (req, res, next) => {
       return res.status(400).json({ error: "Некорректный ID заказа" });
     }
 
-    const [orders] = await db.query("SELECT id, order_number FROM orders WHERE id = ?", [orderId]);
+    connection = await db.getConnection();
+    await connection.beginTransaction();
+
+    const [orders] = await connection.query(
+      "SELECT id, order_number, status, user_id, total, subtotal, delivery_cost, bonus_spent, bonus_earn_amount FROM orders WHERE id = ? FOR UPDATE",
+      [orderId],
+    );
     if (orders.length === 0) {
+      await connection.rollback();
       return res.status(404).json({ error: "Order not found" });
     }
 
-    const [result] = await db.query("DELETE FROM orders WHERE id = ?", [orderId]);
+    const order = orders[0];
+    const settings = await getSystemSettings();
+    const useLocalBonuses = settings.bonuses_enabled && !settings.premiumbonus_enabled;
+
+    if (useLocalBonuses) {
+      const loyaltyLevels = await getLoyaltyLevelsFromDb(connection);
+      const orderData = {
+        id: order.id,
+        user_id: order.user_id,
+        order_number: order.order_number,
+        total: parseFloat(order.total) || 0,
+        subtotal: parseFloat(order.subtotal) || 0,
+        delivery_cost: parseFloat(order.delivery_cost) || 0,
+        bonus_spent: parseFloat(order.bonus_spent) || 0,
+        bonus_earn_amount: parseFloat(order.bonus_earn_amount) || 0,
+      };
+      await cancelOrderBonuses(orderData, connection, loyaltyLevels);
+    }
+
+    const [result] = await connection.query("DELETE FROM orders WHERE id = ?", [orderId]);
     if ((result?.affectedRows || 0) === 0) {
+      await connection.rollback();
       return res.status(404).json({ error: "Order not found" });
     }
+
+    await connection.commit();
 
     res.json({
       success: true,
-      message: `Заказ #${orders[0].order_number} удален`,
+      message: `Заказ #${order.order_number} удален`,
       deleted_order_id: orderId,
     });
   } catch (error) {
+    if (connection) {
+      try {
+        await connection.rollback();
+      } catch {
+        // Игнорируем ошибку rollback.
+      }
+    }
     next(error);
+  } finally {
+    if (connection) {
+      connection.release();
+    }
   }
 };

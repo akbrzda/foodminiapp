@@ -19,7 +19,7 @@
         </div>
       </template>
     </div>
- <!--   <div v-if="changelogLoading" class="release-banner release-banner-skeleton">
+    <!--   <div v-if="changelogLoading" class="release-banner release-banner-skeleton">
       <div class="skeleton release-skeleton-title"></div>
       <div class="skeleton release-skeleton-line"></div>
     </div>
@@ -928,7 +928,7 @@ function closeReleaseDialog() {
   color: var(--color-text-secondary);
 }
 .location-bar {
-  padding: 12px;
+  padding: 12px 12px 0;
   background: var(--color-background);
 }
 .release-banner {

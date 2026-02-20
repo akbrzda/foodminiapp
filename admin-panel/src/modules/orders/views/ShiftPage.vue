@@ -133,6 +133,8 @@ let searchTimer = null;
 let shiftTimer = null;
 let wsReloadTimer = null;
 let viewportResizeHandler = null;
+const LOCAL_STATUS_ECHO_TTL_MS = 7000;
+const localStatusUpdates = new Map();
 
 // Состояние карты
 const orderRefs = new Map();
@@ -264,6 +266,35 @@ const setOrderRef = (orderId, element) => {
   orderRefs.set(orderId, element);
 };
 
+const makeOrderStatusKey = (orderId, status) => `${String(orderId)}:${String(status || "")}`;
+
+const rememberLocalStatusUpdate = (orderId, status) => {
+  const key = makeOrderStatusKey(orderId, status);
+  const expiresAt = Date.now() + LOCAL_STATUS_ECHO_TTL_MS;
+  localStatusUpdates.set(key, expiresAt);
+};
+
+const isLocalStatusEcho = (orderId, status) => {
+  const key = makeOrderStatusKey(orderId, status);
+  const expiresAt = localStatusUpdates.get(key);
+  if (!expiresAt) return false;
+  if (expiresAt < Date.now()) {
+    localStatusUpdates.delete(key);
+    return false;
+  }
+  localStatusUpdates.delete(key);
+  return true;
+};
+
+const cleanupLocalStatusEchoes = () => {
+  const now = Date.now();
+  for (const [key, expiresAt] of localStatusUpdates.entries()) {
+    if (expiresAt < now) {
+      localStatusUpdates.delete(key);
+    }
+  }
+};
+
 // Функции управления заказами
 const parseOrderDate = (value) => {
   if (!value) return null;
@@ -330,8 +361,10 @@ const changeStatus = async (order) => {
     const response = await api.put(`/api/orders/admin/${order.id}/status`, { status: next.status });
     const updated = response.data?.order;
     if (updated?.id) {
+      rememberLocalStatusUpdate(updated.id, updated.status);
       updateOrderStatus(updated.id, updated.status);
     } else {
+      rememberLocalStatusUpdate(order.id, next.status);
       updateOrderStatus(order.id, next.status);
     }
     showSuccessNotification(`Статус заказа #${order.order_number} обновлен`);
@@ -357,6 +390,7 @@ const confirmCancel = async () => {
   cancelDialog.value.loading = true;
   try {
     await api.put(`/api/orders/admin/${cancelDialog.value.order.id}/cancel`);
+    rememberLocalStatusUpdate(cancelDialog.value.order.id, "cancelled");
     updateOrderStatus(cancelDialog.value.order.id, "cancelled");
     showSuccessNotification(`Заказ #${cancelDialog.value.order.order_number} отменен`);
     cancelDialog.value.open = false;
@@ -640,6 +674,7 @@ const scheduleWsOrdersReload = () => {
 };
 
 const handleOrderEvent = (payload) => {
+  cleanupLocalStatusEchoes();
   if (!payload) return;
   if (payload.type === "new-order") {
     const order = payload.data;
@@ -677,7 +712,9 @@ const handleOrderEvent = (payload) => {
     const exists = orders.value.some((order) => String(order.id) === orderIdKey);
     if (!exists) return;
     orders.value = orders.value.map((order) => (String(order.id) === orderIdKey ? { ...order, status: newStatus } : order));
-    showSuccessNotification(`Статус заказа #${orderIdKey} обновлен`);
+    if (!isLocalStatusEcho(orderIdKey, newStatus)) {
+      showSuccessNotification(`Статус заказа #${orderIdKey} обновлен`);
+    }
     if (String(expandedOrderId.value || "") === orderIdKey) {
       expandedOrderId.value = null;
       clearOrderMap();
@@ -782,6 +819,7 @@ watch(
 );
 
 onBeforeUnmount(() => {
+  localStatusUpdates.clear();
   if (viewportResizeHandler) {
     window.removeEventListener("resize", viewportResizeHandler);
     viewportResizeHandler = null;

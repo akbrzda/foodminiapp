@@ -1,11 +1,69 @@
-const TIMEZONE_OFFSET = 6 * 60;
+const APP_LOCALE = "ru-KZ";
+const FALLBACK_TIME_ZONE = "UTC";
+
 export function getCurrentTime() {
   return new Date();
 }
+
+function getDeviceTimeZone() {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return typeof tz === "string" && tz.trim() ? tz.trim() : "";
+  } catch {
+    return "";
+  }
+}
+
+function getSelectedCityTimeZone() {
+  try {
+    if (typeof localStorage === "undefined") return "";
+    const raw = localStorage.getItem("selectedCity");
+    if (!raw) return "";
+    const city = JSON.parse(raw);
+    const tz = String(city?.timezone || "").trim();
+    return tz || "";
+  } catch {
+    return "";
+  }
+}
+
+function normalizeTimeZone(candidate) {
+  const value = String(candidate || "").trim();
+  if (!value) return "";
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: value }).format(new Date());
+    return value;
+  } catch {
+    return "";
+  }
+}
+
+export function getAppTimeZone() {
+  const cityTz = normalizeTimeZone(getSelectedCityTimeZone());
+  if (cityTz) return cityTz;
+  const deviceTz = normalizeTimeZone(getDeviceTimeZone());
+  if (deviceTz) return deviceTz;
+  return FALLBACK_TIME_ZONE;
+}
+
+function getDateKeyInAppTimeZone(date) {
+  const d = typeof date === "string" ? new Date(date) : date;
+  if (!(d instanceof Date) || Number.isNaN(d.getTime())) return "";
+  const timeZone = getAppTimeZone();
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  return formatter.format(d);
+}
+
 export function formatDate(date, options = {}) {
   const d = typeof date === "string" ? new Date(date) : date;
-  return new Intl.DateTimeFormat("ru-KZ", {
-    timeZone: "Asia/Almaty",
+  const timeZone = getAppTimeZone();
+  return new Intl.DateTimeFormat(APP_LOCALE, {
+    timeZone,
     ...options,
   }).format(d);
 }
@@ -31,6 +89,21 @@ export function formatDateOnly(date) {
     day: "numeric",
   });
 }
+
+export function formatCalendarDateTime(
+  date,
+  {
+    todayPrefix = "Сегодня",
+    yesterdayPrefix = "Вчера",
+    separator = " в ",
+  } = {},
+) {
+  const d = typeof date === "string" ? new Date(date) : date;
+  if (!(d instanceof Date) || Number.isNaN(d.getTime())) return "";
+  if (isToday(d)) return `${todayPrefix}${separator}${formatTime(d)}`;
+  if (isYesterday(d)) return `${yesterdayPrefix}${separator}${formatTime(d)}`;
+  return formatDateOnly(d);
+}
 export function formatRelativeTime(date) {
   const now = new Date();
   const d = typeof date === "string" ? new Date(date) : date;
@@ -45,13 +118,14 @@ export function formatRelativeTime(date) {
   return formatDateOnly(d);
 }
 export function isToday(date) {
-  const d = typeof date === "string" ? new Date(date) : date;
-  const today = new Date();
-  return d.getDate() === today.getDate() && d.getMonth() === today.getMonth() && d.getFullYear() === today.getFullYear();
+  const currentKey = getDateKeyInAppTimeZone(getCurrentTime());
+  const dateKey = getDateKeyInAppTimeZone(date);
+  return Boolean(currentKey) && currentKey === dateKey;
 }
 export function isYesterday(date) {
-  const d = typeof date === "string" ? new Date(date) : date;
-  const yesterday = new Date();
+  const yesterday = new Date(getCurrentTime());
   yesterday.setDate(yesterday.getDate() - 1);
-  return d.getDate() === yesterday.getDate() && d.getMonth() === yesterday.getMonth() && d.getFullYear() === yesterday.getFullYear();
+  const yesterdayKey = getDateKeyInAppTimeZone(yesterday);
+  const dateKey = getDateKeyInAppTimeZone(date);
+  return Boolean(yesterdayKey) && yesterdayKey === dateKey;
 }
