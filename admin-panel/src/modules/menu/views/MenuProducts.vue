@@ -15,7 +15,7 @@
     </Card>
     <Card>
       <CardContent>
-        <div class="grid gap-3 md:grid-cols-5">
+        <div class="grid gap-3 md:grid-cols-6">
           <Input v-model="filters.search" placeholder="Поиск по названию и описанию" />
           <Select v-model="filters.status">
             <SelectTrigger class="w-full">
@@ -47,6 +47,15 @@
               <SelectItem v-for="city in cityOptions" :key="city.id" :value="String(city.id)">
                 {{ city.name }}
               </SelectItem>
+            </SelectContent>
+          </Select>
+          <Select v-model="filters.source">
+            <SelectTrigger class="w-full">
+              <SelectValue placeholder="Источник блюд" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="local">Локальное</SelectItem>
+              <SelectItem value="iiko">iiko</SelectItem>
             </SelectContent>
           </Select>
           <Button variant="outline" @click="resetFilters">Сбросить фильтры</Button>
@@ -220,11 +229,14 @@ const items = ref([]);
 const isLoading = ref(false);
 const page = ref(1);
 const pageSize = ref(20);
+const defaultSource = ref("local");
+const isSourceWatcherReady = ref(false);
 const filters = reactive({
   search: "",
   status: "all",
   categoryId: "all",
   cityId: "all",
+  source: "",
 });
 
 const categoriesOptions = computed(() => {
@@ -279,10 +291,12 @@ const normalizeImageUrl = (url) => {
 };
 
 const resetFilters = () => {
+  const nextSource = defaultSource.value || "local";
   filters.search = "";
   filters.status = "all";
   filters.categoryId = "all";
   filters.cityId = "all";
+  filters.source = nextSource;
   page.value = 1;
 };
 
@@ -294,8 +308,26 @@ const onPageSizeChange = (value) => {
 const loadItems = async ({ preservePage = false } = {}) => {
   isLoading.value = true;
   try {
-    const response = await api.get("/api/menu/admin/products");
+    const params = {};
+    if (filters.source === "local" || filters.source === "iiko") {
+      params.source = filters.source;
+    }
+    const response = await api.get("/api/menu/admin/products", { params });
     items.value = response.data.items || [];
+    const responseDefaultSource = String(response.data?.meta?.default_source || "")
+      .trim()
+      .toLowerCase();
+    if (responseDefaultSource === "local" || responseDefaultSource === "iiko") {
+      defaultSource.value = responseDefaultSource;
+    }
+    const responseSource = String(response.data?.meta?.source || "")
+      .trim()
+      .toLowerCase();
+    if (!filters.source && (responseSource === "local" || responseSource === "iiko")) {
+      filters.source = responseSource;
+    } else if (!filters.source) {
+      filters.source = defaultSource.value;
+    }
     if (!preservePage) {
       page.value = 1;
     }
@@ -343,12 +375,23 @@ onMounted(async () => {
   } else {
     await loadItems();
   }
+  isSourceWatcherReady.value = true;
 });
 
 watch(
   () => [filters.search, filters.status, filters.categoryId, filters.cityId],
   () => {
     page.value = 1;
+  },
+);
+watch(
+  () => filters.source,
+  async (nextSource, prevSource) => {
+    if (!isSourceWatcherReady.value) return;
+    if (nextSource !== "local" && nextSource !== "iiko") return;
+    if (nextSource === prevSource) return;
+    page.value = 1;
+    await loadItems({ preservePage: true });
   },
 );
 </script>

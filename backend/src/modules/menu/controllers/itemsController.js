@@ -238,7 +238,16 @@ export const createItem = async (req, res, next) => {
 export const getAdminItems = async (req, res, next) => {
   try {
     const integration = await getIntegrationSettings();
-    const onlyIiko = integration.iikoEnabled;
+    const allowedSources = new Set(["local", "iiko"]);
+    const defaultSource = integration.iikoEnabled ? "iiko" : "local";
+    const requestedSource = String(req.query.source || "")
+      .trim()
+      .toLowerCase();
+    const source = allowedSources.has(requestedSource) ? requestedSource : defaultSource;
+    const sourceWhere =
+      source === "iiko"
+        ? "WHERE COALESCE(NULLIF(TRIM(mi.iiko_item_id), ''), NULL) IS NOT NULL"
+        : "WHERE COALESCE(NULLIF(TRIM(mi.iiko_item_id), ''), NULL) IS NULL";
 
     let query = `
       SELECT 
@@ -263,7 +272,7 @@ export const getAdminItems = async (req, res, next) => {
         mi.created_at, 
         mi.updated_at
       FROM menu_items mi
-      ${onlyIiko ? "WHERE mi.iiko_item_id IS NOT NULL" : ""}
+      ${sourceWhere}
       ORDER BY mi.sort_order, mi.name
     `;
 
@@ -330,7 +339,13 @@ export const getAdminItems = async (req, res, next) => {
       delete item.legacy_price;
     }
 
-    res.json({ items });
+    res.json({
+      items,
+      meta: {
+        source,
+        default_source: defaultSource,
+      },
+    });
   } catch (error) {
     next(error);
   }

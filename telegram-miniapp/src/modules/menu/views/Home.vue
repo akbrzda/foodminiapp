@@ -71,13 +71,6 @@
           </button>
         </div>
       </div>
-      <div v-if="availableTags.length > 0" class="tags-filter">
-        <button :class="['tag-pill', { active: selectedTagId === null }]" @click="selectTag(null)">Все</button>
-        <button v-for="tag in availableTags" :key="tag.id" :class="['tag-pill', { active: selectedTagId === tag.id }]" @click="selectTag(tag.id)">
-          <span class="tag-icon" v-if="tag.icon">{{ tag.icon }}</span>
-          {{ tag.name }}
-        </button>
-      </div>
       <div class="menu-content menu-skeleton" v-if="menuStore.loading">
         <div class="category-section">
           <div class="skeleton skeleton-title"></div>
@@ -101,6 +94,17 @@
       <div class="menu-content" v-else-if="menuStore.categories.length">
         <div v-for="category in menuStore.categories" :key="category.id" :id="`category-${category.id}`" class="category-section">
           <h2 class="category-title">{{ category.name }}</h2>
+          <div v-if="getAvailableTagsByCategory(category.id).length > 0" class="tags-filter category-tags-filter">
+            <button
+              v-for="tag in getAvailableTagsByCategory(category.id)"
+              :key="tag.id"
+              :class="['tag-pill', { active: isTagSelected(category.id, tag.id) }]"
+              @click="toggleTag(category.id, tag.id)"
+            >
+              <span class="tag-icon" v-if="tag.icon">{{ tag.icon }}</span>
+              {{ tag.name }}
+            </button>
+          </div>
           <div class="items">
             <div
               v-for="item in getItemsByCategory(category.id)"
@@ -238,7 +242,7 @@ const showMenu = ref(false);
 const activeCategory = ref(null);
 const isScrolling = ref(false);
 const activeOrders = ref([]);
-const selectedTagId = ref(null);
+const selectedTagsByCategory = ref({});
 const changelogLoading = ref(false);
 const releaseDetailsLoading = ref(false);
 const latestRelease = ref(null);
@@ -499,7 +503,7 @@ async function loadMenuInternal({ force = false } = {}) {
       categories,
       items: allItems,
     });
-    selectedTagId.value = null;
+    selectedTagsByCategory.value = {};
     cartStore.refreshPricesFromMenu(allItems);
     if (categories.length > 0) {
       activeCategory.value = categories[0].id;
@@ -524,8 +528,9 @@ function setupMenuRealtimeSync() {
 }
 function getItemsByCategory(categoryId) {
   const items = menuStore.getItemsByCategory(categoryId);
-  if (selectedTagId.value === null) return items;
-  return items.filter((item) => item.tags && item.tags.some((tag) => tag.id === selectedTagId.value));
+  const selectedTagIds = getSelectedTagIdsByCategory(categoryId);
+  if (selectedTagIds.length === 0) return items;
+  return items.filter((item) => item.tags && item.tags.some((tag) => selectedTagIds.includes(String(tag.id))));
 }
 function hasRequiredOptions(item) {
   return (item.variants && item.variants.length > 0) || (item.modifier_groups && item.modifier_groups.some((group) => group.is_required));
@@ -685,9 +690,10 @@ function openItem(item) {
   hapticFeedback("light");
   router.push(`/item/${item.id}`);
 }
-const availableTags = computed(() => {
+function getAvailableTagsByCategory(categoryId) {
+  const items = menuStore.getItemsByCategory(categoryId) || [];
   const tagsMap = new Map();
-  menuStore.items.forEach((item) => {
+  items.forEach((item) => {
     if (Array.isArray(item.tags)) {
       item.tags.forEach((tag) => {
         if (!tagsMap.has(tag.id)) {
@@ -697,9 +703,25 @@ const availableTags = computed(() => {
     }
   });
   return Array.from(tagsMap.values()).sort((a, b) => a.name.localeCompare(b.name));
-});
-function selectTag(tagId) {
-  selectedTagId.value = tagId;
+}
+function getSelectedTagIdsByCategory(categoryId) {
+  const value = selectedTagsByCategory.value[String(categoryId)];
+  if (!Array.isArray(value)) return [];
+  return value.map((tagId) => String(tagId));
+}
+function isTagSelected(categoryId, tagId) {
+  return getSelectedTagIdsByCategory(categoryId).includes(String(tagId));
+}
+function toggleTag(categoryId, tagId) {
+  const key = String(categoryId);
+  const nextTagId = String(tagId);
+  const current = getSelectedTagIdsByCategory(categoryId);
+  const exists = current.includes(nextTagId);
+  const next = exists ? current.filter((id) => id !== nextTagId) : [...current, nextTagId];
+  selectedTagsByCategory.value = {
+    ...selectedTagsByCategory.value,
+    [key]: next,
+  };
 }
 function isItemUnavailable(item) {
   if (item.in_stop_list) return true;
@@ -1285,6 +1307,9 @@ function closeReleaseDialog() {
   padding: 8px 12px 4px;
   overflow-x: auto;
   scrollbar-width: none;
+}
+.category-tags-filter {
+  padding: 0 0 8px;
 }
 .tags-filter::-webkit-scrollbar {
   display: none;
