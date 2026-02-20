@@ -8,7 +8,7 @@
     <Card>
       <CardContent>
         <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-12">
-          <div class="min-w-0 sm:col-span-2 xl:col-span-4">
+          <div class="min-w-0 sm:col-span-2 xl:col-span-3">
             <Field>
               <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Поиск</FieldLabel>
               <FieldContent>
@@ -74,7 +74,7 @@
               </FieldContent>
             </Field>
           </div>
-          <div class="min-w-0 sm:col-span-2 xl:col-span-2">
+          <div class="min-w-0 sm:col-span-2 xl:col-span-3">
             <Field>
               <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Период</FieldLabel>
               <FieldContent>
@@ -290,15 +290,16 @@ const recentOrderIds = ref(new Set());
 const loadTimer = ref(null);
 const isRangeOpen = ref(false);
 const calendarMonths = ref(window.innerWidth < 1024 ? 1 : 2);
+const timeZone = getLocalTimeZone();
+const getTodayDateString = () => today(timeZone).toString();
 const filters = reactive({
   city_id: "",
   status: "",
   order_type: "",
-  date_from: "",
-  date_to: "",
+  date_from: getTodayDateString(),
+  date_to: getTodayDateString(),
   search: "",
 });
-const timeZone = getLocalTimeZone();
 const rangeFormatter = new DateFormatter("ru-RU", { dateStyle: "medium" });
 const normalizeRangeValues = (value) => {
   const dates = Array.isArray(value) ? value : value ? [value] : [];
@@ -383,8 +384,8 @@ const resetFilters = () => {
     city_id: "",
     status: "",
     order_type: "",
-    date_from: "",
-    date_to: "",
+    date_from: getTodayDateString(),
+    date_to: getTodayDateString(),
     search: "",
   });
   scheduleLoad();
@@ -478,7 +479,7 @@ watch(
   (payload) => {
     if (!payload) return;
     if (payload.type === "new-order") {
-      orders.value.unshift(payload.data);
+      orders.value = [...orders.value, payload.data].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
       const next = new Set(recentOrderIds.value);
       next.add(payload.data.id);
       recentOrderIds.value = next;

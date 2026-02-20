@@ -130,12 +130,12 @@ export const getAdminOrders = async (req, res, next) => {
     }
 
     if (date_from) {
-      query += " AND o.created_at >= ?";
+      query += " AND DATE(o.created_at) >= ?";
       params.push(date_from);
     }
 
     if (date_to) {
-      query += " AND o.created_at <= ?";
+      query += " AND DATE(o.created_at) <= ?";
       params.push(date_to);
     }
 
@@ -144,7 +144,7 @@ export const getAdminOrders = async (req, res, next) => {
       params.push(`%${search}%`, `%${search}%`);
     }
 
-    query += " ORDER BY o.created_at DESC LIMIT ? OFFSET ?";
+    query += " ORDER BY o.created_at ASC, o.id ASC LIMIT ? OFFSET ?";
     params.push(parseInt(limit), parseInt(offset));
 
     const [orders] = await db.query(query, params);
@@ -334,12 +334,12 @@ export const getOrdersCount = async (req, res, next) => {
     }
 
     if (date_from) {
-      query += " AND o.created_at >= ?";
+      query += " AND DATE(o.created_at) >= ?";
       params.push(date_from);
     }
 
     if (date_to) {
-      query += " AND o.created_at <= ?";
+      query += " AND DATE(o.created_at) <= ?";
       params.push(date_to);
     }
 
