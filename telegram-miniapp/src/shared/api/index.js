@@ -35,10 +35,6 @@ const refreshToken = async () => {
 };
 api.interceptors.request.use(
   (config) => {
-    const authStore = useAuthStore();
-    if (authStore.token) {
-      config.headers.Authorization = `Bearer ${authStore.token}`;
-    }
     return config;
   },
   (error) => {
@@ -63,10 +59,7 @@ api.interceptors.response.use(
         originalRequest._retry = true;
         try {
           const data = await refreshToken();
-          if (data?.token) {
-            authStore.setToken(data.token);
-            originalRequest.headers = originalRequest.headers || {};
-            originalRequest.headers.Authorization = `Bearer ${data.token}`;
+          if (data?.ok) {
             return api(originalRequest);
           }
         } catch (refreshError) {

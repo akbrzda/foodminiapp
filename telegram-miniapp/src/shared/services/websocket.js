@@ -14,14 +14,13 @@ class WebSocketService {
     this.listeners = new Map();
     this.isConnecting = false;
   }
-  async requestTicket(token) {
+  async requestTicket() {
     const apiBase = normalizeApiBase(import.meta.env.VITE_API_URL);
     const response = await fetch(`${apiBase}/api/auth/ws-ticket`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json; charset=utf-8",
         Accept: "application/json; charset=utf-8",
-        Authorization: `Bearer ${token}`,
       },
       credentials: "include",
     });
@@ -34,11 +33,8 @@ class WebSocketService {
     }
     return payload.ticket;
   }
-  async connect(token) {
+  async connect() {
     if (this.ws?.readyState === WebSocket.OPEN || this.isConnecting) {
-      return;
-    }
-    if (!token) {
       return;
     }
     this.isConnecting = true;
@@ -59,7 +55,7 @@ class WebSocketService {
       // если URL некорректный, оставляем как есть
     }
     try {
-      const ticket = await this.requestTicket(token);
+      const ticket = await this.requestTicket();
       this.ws = new WebSocket(`${wsUrl}?ticket=${encodeURIComponent(ticket)}`);
       this.ws.onopen = () => {
         devLog("WebSocket подключен");
@@ -87,15 +83,15 @@ class WebSocketService {
         devLog("WebSocket отключен");
         this.isConnecting = false;
         this.emit("disconnected");
-        this.scheduleReconnect(token);
+        this.scheduleReconnect();
       };
     } catch (error) {
       console.error("Не удалось создать WebSocket:", error);
       this.isConnecting = false;
-      this.scheduleReconnect(token);
+      this.scheduleReconnect();
     }
   }
-  scheduleReconnect(token) {
+  scheduleReconnect() {
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
       console.error("Достигнут максимум попыток переподключения");
       this.emit("max-reconnect-attempts");
@@ -104,7 +100,7 @@ class WebSocketService {
     this.reconnectAttempts++;
     devLog(`Переподключение через ${this.reconnectDelay}мс (попытка ${this.reconnectAttempts})`);
     setTimeout(() => {
-      this.connect(token);
+      this.connect();
     }, this.reconnectDelay);
   }
   disconnect() {

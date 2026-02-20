@@ -317,7 +317,7 @@ router.post("/users", requireRole("admin", "ceo"), async (req, res, next) => {
       }
       managerBranchIds = branch_ids;
     }
-    const passwordHash = await bcrypt.hash(password, 10);
+    const passwordHash = await bcrypt.hash(password, 12);
     if (req.user.role === "ceo" && eruda_enabled !== undefined) {
       return res.status(403).json({ error: "CEO не может включать Eruda" });
     }
@@ -373,7 +373,7 @@ router.put("/users/:id", requireRole("admin", "ceo"), async (req, res, next) => 
       values.push(email);
     }
     if (password !== undefined && password !== "") {
-      const passwordHash = await bcrypt.hash(password, 10);
+      const passwordHash = await bcrypt.hash(password, 12);
       updates.push("password_hash = ?");
       values.push(passwordHash);
     }

@@ -2,6 +2,7 @@ import axios from "axios";
 import { useAuthStore } from "@/shared/stores/auth.js";
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || "http://localhost:3000",
+  withCredentials: true,
   headers: {
     "Content-Type": "application/json",
   },
@@ -35,10 +36,6 @@ const refreshToken = async () => {
   return refreshPromise;
 };
 api.interceptors.request.use((config) => {
-  const authStore = useAuthStore();
-  if (authStore.token) {
-    config.headers.Authorization = `Bearer ${authStore.token}`;
-  }
   return config;
 });
 api.interceptors.response.use(
@@ -52,10 +49,7 @@ api.interceptors.response.use(
       originalRequest._retry = true;
       try {
         const data = await refreshToken();
-        if (data?.token) {
-          authStore.applySession(data.token, authStore.user);
-          originalRequest.headers = originalRequest.headers || {};
-          originalRequest.headers.Authorization = `Bearer ${data.token}`;
+        if (data?.ok) {
           return api(originalRequest);
         }
       } catch (refreshError) {

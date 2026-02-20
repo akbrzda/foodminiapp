@@ -4,13 +4,51 @@
       <CardContent>
         <PageHeader title="Категории меню" description="Создание и настройка категорий">
           <template #actions>
-            <Badge variant="secondary">Всего: {{ categories.length }}</Badge>
+            <Badge variant="secondary">Показано: {{ paginatedCategories.length }} / {{ filteredCategories.length }}</Badge>
             <Button class="w-full md:w-auto" @click="openModal()">
               <Plus :size="16" />
               Добавить категорию
             </Button>
           </template>
         </PageHeader>
+      </CardContent>
+    </Card>
+    <Card>
+      <CardContent>
+        <div class="grid gap-3 md:grid-cols-5">
+          <Input v-model="filters.search" placeholder="Поиск по названию и описанию" />
+          <Select v-model="filters.status">
+            <SelectTrigger class="w-full">
+              <SelectValue placeholder="Статус" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Все статусы</SelectItem>
+              <SelectItem value="active">Только активные</SelectItem>
+              <SelectItem value="hidden">Только скрытые</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select v-model="filters.cityId">
+            <SelectTrigger class="w-full">
+              <SelectValue placeholder="Город" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Все города</SelectItem>
+              <SelectItem v-for="city in cityOptions" :key="city.id" :value="String(city.id)">
+                {{ city.name }}
+              </SelectItem>
+            </SelectContent>
+          </Select>
+          <Select v-model="filters.source">
+            <SelectTrigger class="w-full">
+              <SelectValue placeholder="Источник категорий" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="local">Локальное</SelectItem>
+              <SelectItem value="iiko">iiko</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button variant="outline" @click="resetFilters">Сбросить фильтры</Button>
+        </div>
       </CardContent>
     </Card>
     <Card>
@@ -45,7 +83,7 @@
                 </Button>
               </div>
             </div>
-            <div v-if="categories.length === 0" class="py-8 text-center text-sm text-muted-foreground">Категории не найдены</div>
+            <div v-if="filteredCategories.length === 0" class="py-8 text-center text-sm text-muted-foreground">По заданным фильтрам ничего не найдено</div>
           </template>
         </div>
         <div class="hidden md:block">
@@ -95,8 +133,8 @@
                     </div>
                   </TableCell>
                 </TableRow>
-                <TableRow v-if="categories.length === 0">
-                  <TableCell colspan="4" class="py-8 text-center text-sm text-muted-foreground">Категории не найдены</TableCell>
+                <TableRow v-if="filteredCategories.length === 0">
+                  <TableCell colspan="4" class="py-8 text-center text-sm text-muted-foreground">По заданным фильтрам ничего не найдено</TableCell>
                 </TableRow>
               </template>
             </TableBody>
@@ -105,7 +143,7 @@
       </CardContent>
     </Card>
     <TablePagination
-      :total="categories.length"
+      :total="filteredCategories.length"
       :page="page"
       :page-size="pageSize"
       @update:page="page = $event"
@@ -203,7 +241,7 @@
 </template>
 <script setup>
 import { devError } from "@/shared/utils/logger";
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onMounted, reactive, ref, watch } from "vue";
 import { Pencil, Plus, Save, Trash2, UploadCloud } from "lucide-vue-next";
 import api from "@/shared/api/client.js";
 import { useListContext } from "@/shared/composables/useListContext.js";
@@ -238,6 +276,14 @@ const categories = ref([]);
 const isLoading = ref(false);
 const page = ref(1);
 const pageSize = ref(20);
+const defaultSource = ref("local");
+const isSourceWatcherReady = ref(false);
+const filters = reactive({
+  search: "",
+  status: "all",
+  cityId: "all",
+  source: "",
+});
 const showModal = ref(false);
 const editing = ref(null);
 const saving = ref(false);
@@ -253,9 +299,29 @@ const form = ref({
 });
 const modalTitle = computed(() => (editing.value ? "Редактировать категорию" : "Новая категория"));
 const modalSubtitle = computed(() => (editing.value ? "Измените параметры категории" : "Создайте категорию меню"));
+const cityOptions = computed(() => {
+  return [...referenceStore.cities].sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), "ru"));
+});
+const filteredCategories = computed(() => {
+  const search = String(filters.search || "")
+    .trim()
+    .toLowerCase();
+  return categories.value.filter((category) => {
+    if (filters.status === "active" && !category.is_active) return false;
+    if (filters.status === "hidden" && category.is_active) return false;
+    if (filters.cityId !== "all") {
+      const selectedCityId = Number(filters.cityId);
+      const categoryCityIds = Array.isArray(category.city_ids) ? category.city_ids.map((id) => Number(id)) : [];
+      if (!categoryCityIds.includes(selectedCityId)) return false;
+    }
+    if (!search) return true;
+    const haystack = `${category.name || ""} ${category.description || ""}`.toLowerCase();
+    return haystack.includes(search);
+  });
+});
 const paginatedCategories = computed(() => {
   const start = (page.value - 1) * pageSize.value;
-  return categories.value.slice(start, start + pageSize.value);
+  return filteredCategories.value.slice(start, start + pageSize.value);
 });
 const modalNameTitle = computed(() => {
   if (!showModal.value) return null;
@@ -271,8 +337,26 @@ const updateDocumentTitle = (baseTitle) => {
 const loadCategories = async ({ preservePage = false } = {}) => {
   isLoading.value = true;
   try {
-    const response = await api.get("/api/menu/admin/all-categories");
+    const params = {};
+    if (filters.source === "local" || filters.source === "iiko") {
+      params.source = filters.source;
+    }
+    const response = await api.get("/api/menu/admin/all-categories", { params });
     categories.value = response.data.categories || [];
+    const responseDefaultSource = String(response.data?.meta?.default_source || "")
+      .trim()
+      .toLowerCase();
+    if (responseDefaultSource === "local" || responseDefaultSource === "iiko") {
+      defaultSource.value = responseDefaultSource;
+    }
+    const responseSource = String(response.data?.meta?.source || "")
+      .trim()
+      .toLowerCase();
+    if (!filters.source && (responseSource === "local" || responseSource === "iiko")) {
+      filters.source = responseSource;
+    } else if (!filters.source) {
+      filters.source = defaultSource.value;
+    }
     if (!preservePage) {
       page.value = 1;
     }
@@ -285,6 +369,14 @@ const loadCategories = async ({ preservePage = false } = {}) => {
 };
 const onPageSizeChange = (value) => {
   pageSize.value = value;
+  page.value = 1;
+};
+const resetFilters = () => {
+  const nextSource = defaultSource.value || "local";
+  filters.search = "";
+  filters.status = "all";
+  filters.cityId = "all";
+  filters.source = nextSource;
   page.value = 1;
 };
 const openModal = async (category = null) => {
@@ -401,14 +493,17 @@ onMounted(async () => {
     if (shouldRestore.value) {
       const context = restoreContext();
       if (context) {
+        Object.assign(filters, context.filters || {});
         if (context.page) page.value = context.page;
         if (context.pageSize) pageSize.value = context.pageSize;
         await loadCategories({ preservePage: true });
+        isSourceWatcherReady.value = true;
         restoreScroll(context.scroll);
         return;
       }
     }
     await loadCategories();
+    isSourceWatcherReady.value = true;
   } catch (error) {
     devError("Ошибка загрузки категорий:", error);
     showErrorNotification("Ошибка загрузки категорий");
@@ -424,7 +519,23 @@ watch(
 watch(
   () => [page.value, pageSize.value],
   () => {
-    saveContext({}, { page: page.value, pageSize: pageSize.value });
+    saveContext(filters, { page: page.value, pageSize: pageSize.value });
+  },
+);
+watch(
+  () => [filters.search, filters.status, filters.cityId],
+  () => {
+    page.value = 1;
+  },
+);
+watch(
+  () => filters.source,
+  async (nextSource, prevSource) => {
+    if (!isSourceWatcherReady.value) return;
+    if (nextSource !== "local" && nextSource !== "iiko") return;
+    if (nextSource === prevSource) return;
+    page.value = 1;
+    await loadCategories({ preservePage: true });
   },
 );
 </script>

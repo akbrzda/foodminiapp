@@ -1,7 +1,7 @@
 import jwt from "jsonwebtoken";
 import { isBlacklisted } from "./tokenBlacklist.js";
 import { logger } from "../utils/logger.js";
-import { JWT_ISSUER, JWT_ACCESS_AUDIENCES, extractBearerToken } from "../config/auth.js";
+import { JWT_ISSUER, JWT_ACCESS_AUDIENCES, extractBearerToken, getJwtSecret } from "../config/auth.js";
 
 const normalizeCityIds = (value) => {
   if (Array.isArray(value)) {
@@ -50,7 +50,7 @@ export const authenticateToken = async (req, res, next) => {
     }
 
     // Верифицируем токен
-    const user = jwt.verify(token, process.env.JWT_SECRET, {
+    const user = jwt.verify(token, getJwtSecret(), {
       algorithms: ["HS256"],
       issuer: JWT_ISSUER,
       audience: JWT_ACCESS_AUDIENCES,

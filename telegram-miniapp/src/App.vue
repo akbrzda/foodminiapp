@@ -141,8 +141,8 @@ onUnmounted(() => {
   detachRuntimeLayoutClasses();
 });
 function setupWebSocket() {
-  if (authStore.token) {
-    wsService.connect(authStore.token);
+  if (authStore.isAuthenticated) {
+    wsService.connect();
   }
   if (!appOrderStatusHandler) {
     appOrderStatusHandler = (data) => {
@@ -158,10 +158,10 @@ function setupWebSocket() {
   }
   if (!stopAuthTokenWatch) {
     stopAuthTokenWatch = watch(
-      () => authStore.token,
-      (token) => {
-        if (token) {
-          wsService.connect(token);
+      () => authStore.isAuthenticated,
+      (isAuthenticated) => {
+        if (isAuthenticated) {
+          wsService.connect();
         } else {
           wsService.disconnect();
         }

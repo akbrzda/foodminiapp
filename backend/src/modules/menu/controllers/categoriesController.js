@@ -47,17 +47,47 @@ async function invalidateMenuCacheByCity(cityId) {
 export const getAllCategories = async (req, res, next) => {
   try {
     const integration = await getIntegrationSettings();
-    const onlyIiko = integration.iikoEnabled;
+    const allowedSources = new Set(["local", "iiko"]);
+    const defaultSource = integration.iikoEnabled ? "iiko" : "local";
+    const requestedSource = String(req.query.source || "")
+      .trim()
+      .toLowerCase();
+    const source = allowedSources.has(requestedSource) ? requestedSource : defaultSource;
+    const sourceWhere =
+      source === "iiko"
+        ? "WHERE COALESCE(NULLIF(TRIM(mc.iiko_category_id), ''), NULL) IS NOT NULL"
+        : "WHERE COALESCE(NULLIF(TRIM(mc.iiko_category_id), ''), NULL) IS NULL";
 
-    const [categories] = await db.query(
-      `SELECT id, name, description, image_url, sort_order, 
-              is_active, created_at, updated_at
-       FROM menu_categories
-       ${onlyIiko ? "WHERE iiko_category_id IS NOT NULL" : ""}
-       ORDER BY sort_order, name`,
+    const [rows] = await db.query(
+      `SELECT mc.id, mc.name, mc.description, mc.image_url, mc.sort_order,
+              mc.is_active, mc.created_at, mc.updated_at,
+              GROUP_CONCAT(CASE WHEN mcc.is_active = TRUE THEN mcc.city_id END ORDER BY mcc.city_id SEPARATOR ',') AS city_ids_raw
+       FROM menu_categories mc
+       LEFT JOIN menu_category_cities mcc ON mcc.category_id = mc.id
+       ${sourceWhere}
+       GROUP BY mc.id, mc.name, mc.description, mc.image_url, mc.sort_order, mc.is_active, mc.created_at, mc.updated_at
+       ORDER BY mc.sort_order, mc.name`,
     );
 
-    res.json({ categories });
+    const categories = rows.map((row) => {
+      const cityIds = String(row.city_ids_raw || "")
+        .split(",")
+        .map((id) => Number(id))
+        .filter((id) => Number.isInteger(id));
+      const { city_ids_raw, ...category } = row;
+      return {
+        ...category,
+        city_ids: cityIds,
+      };
+    });
+
+    res.json({
+      categories,
+      meta: {
+        source,
+        default_source: defaultSource,
+      },
+    });
   } catch (error) {
     next(error);
   }

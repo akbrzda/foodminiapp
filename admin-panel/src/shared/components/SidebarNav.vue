@@ -1,5 +1,5 @@
 <template>
-  <aside :class="asideClasses">
+  <aside v-bind="$attrs" :class="asideClasses">
     <div class="flex h-full flex-col">
       <button
         v-if="isOpen"
@@ -203,6 +203,10 @@ import {
   DropdownMenuTrigger,
 } from "@/shared/components/ui/dropdown-menu";
 import Skeleton from "@/shared/components/ui/skeleton/Skeleton.vue";
+
+defineOptions({
+  inheritAttrs: false,
+});
 
 const props = defineProps({
   isOpen: { type: Boolean, default: false },

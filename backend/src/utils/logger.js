@@ -114,14 +114,14 @@ export const logger = {
     statusChanged: (orderId, oldStatus, newStatus, changedBy) =>
       logSystem("info", "order", `Order ${orderId} status changed: ${oldStatus} → ${newStatus}`, { orderId, oldStatus, newStatus, changedBy }),
     cancelled: (orderId, reason, cancelledBy) =>
-      logSystem("warning", "order", `Order ${orderId} cancelled: ${reason}`, { orderId, reason, cancelledBy }),
+      logSystem("warn", "order", `Order ${orderId} cancelled: ${reason}`, { orderId, reason, cancelledBy }),
     error: (orderId, error) => logSystem("error", "order", `Order ${orderId} error: ${error}`, { orderId, error }),
   },
   auth: {
     login: (userId, role, ip) => logSystem("info", "auth", `User logged in`, { userId, role, ip }),
-    loginFailed: (identifier, reason, ip) => logSystem("warning", "auth", `Login failed: ${reason}`, { identifier, reason, ip }),
+    loginFailed: (identifier, reason, ip) => logSystem("warn", "auth", `Login failed: ${reason}`, { identifier, reason, ip }),
     tokenExpired: (userId) => logSystem("info", "auth", `Token expired for user ${userId}`, { userId }),
-    unauthorized: (path, ip) => logSystem("warning", "auth", `Unauthorized access attempt to ${path}`, { path, ip }),
+    unauthorized: (path, ip) => logSystem("warn", "auth", `Unauthorized access attempt to ${path}`, { path, ip }),
   },
   bonus: {
     earned: (userId, amount, orderId) => logSystem("info", "bonus", `User ${userId} earned ${amount} bonuses`, { userId, amount, orderId }),

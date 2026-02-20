@@ -96,8 +96,7 @@ export const useOrdersStore = defineStore("orders", {
     async connectWebSocket() {
       if (this.ws || this.connecting) return;
       const authStore = useAuthStore();
-      const token = authStore.token;
-      if (!token) return;
+      if (!authStore.isAuthenticated) return;
       this.connecting = true;
       const apiBase = api.defaults.baseURL || "http://localhost:3000";
       const wsBase = import.meta.env.VITE_WS_URL || apiBase;

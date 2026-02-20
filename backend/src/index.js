@@ -10,6 +10,7 @@ import { testConnection } from "./config/database.js";
 import { testRedisConnection } from "./config/redis.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
 import { apiLimiter } from "./middleware/rateLimiter.js";
+import { hppMiddleware } from "./middleware/hpp.js";
 import { router as authRoutes } from "./modules/auth/index.js";
 import { router as deliveryRoutes } from "./modules/delivery/index.js";
 import { router as usersRoutes } from "./modules/users/index.js";
@@ -43,13 +44,14 @@ const PORT = process.env.PORT || 3000;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const rawCorsOrigins = process.env.CORS_ORIGINS || "";
-const defaultProductionOrigins = ["https://app.panda.akbrzda.ru", "https://admin.panda.akbrzda.ru"];
+const defaultProductionOrigins = ["https://app.panda.akbrzda.ru", "https://panda.akbrzda.ru"];
+const defaultDevelopmentOrigins = ["http://localhost:5173", "http://localhost:5174", "http://localhost:4173"];
 const corsOrigins = [
   ...rawCorsOrigins
     .split(",")
     .map((origin) => origin.trim())
     .filter(Boolean),
-  ...(process.env.NODE_ENV === "production" ? defaultProductionOrigins : []),
+  ...(process.env.NODE_ENV === "production" ? defaultProductionOrigins : defaultDevelopmentOrigins),
 ]
   .map((origin) => origin.trim())
   .filter(Boolean)
@@ -67,7 +69,7 @@ const getOriginHost = (value) => {
   }
 };
 const isOriginAllowed = (origin) => {
-  if (corsOrigins.length === 0) return true;
+  if (corsOrigins.length === 0) return false;
   const normalizedOrigin = normalizeOrigin(origin);
   const originHost = getOriginHost(normalizedOrigin);
   return corsOrigins.some((allowed) => {
@@ -145,9 +147,10 @@ if (process.env.NODE_ENV === "production") {
 app.use(cors(corsOptions));
 app.options(/.*/, cors(corsOptions));
 app.use(cookieParser());
+app.use(hppMiddleware);
 // strict=false позволяет корректно обработать payload `null` на /auth/refresh
 // и вернуть контролируемый 401 вместо SyntaxError от body-parser.
-app.use(express.json({ charset: "utf-8", limit: "2mb", strict: false }));
+app.use(express.json({ charset: "utf-8", limit: "10kb", strict: false }));
 app.use(express.urlencoded({ extended: true, charset: "utf-8", limit: "2mb" }));
 
 // Глобальный rate limiter

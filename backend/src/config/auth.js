@@ -6,6 +6,7 @@ export const JWT_AUDIENCE_REFRESH_ADMIN = "miniapp-admin-refresh";
 
 export const JWT_ACCESS_AUDIENCES = [JWT_AUDIENCE_CLIENT, JWT_AUDIENCE_ADMIN];
 export const JWT_REFRESH_AUDIENCES = [JWT_AUDIENCE_REFRESH_CLIENT, JWT_AUDIENCE_REFRESH_ADMIN];
+const MIN_JWT_SECRET_LENGTH = 64;
 const COOKIE_SAMESITE_VALUES = new Set(["strict", "lax", "none"]);
 const normalizeSameSite = (value) => {
   const normalized = String(value || "")
@@ -59,3 +60,18 @@ export const extractBearerToken = (authorizationHeader) => {
 export const getAuthCookieOptions = (maxAge) => getResolvedCookieOptions(maxAge);
 
 export const getClearAuthCookieOptions = () => getResolvedClearCookieOptions();
+
+export const getJwtSecret = () => {
+  const secret = String(process.env.JWT_SECRET || "").trim();
+  if (!secret) {
+    throw new Error("JWT_SECRET must be set in environment variables");
+  }
+  const isProduction = String(process.env.NODE_ENV || "").trim().toLowerCase() === "production";
+  if (isProduction && secret.length < MIN_JWT_SECRET_LENGTH) {
+    throw new Error(`JWT_SECRET must be at least ${MIN_JWT_SECRET_LENGTH} characters`);
+  }
+  if (!isProduction && secret.length < MIN_JWT_SECRET_LENGTH) {
+    console.warn(`[security] JWT_SECRET is shorter than ${MIN_JWT_SECRET_LENGTH} characters (dev mode).`);
+  }
+  return secret;
+};

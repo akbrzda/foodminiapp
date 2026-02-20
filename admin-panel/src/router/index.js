@@ -420,15 +420,17 @@ const router = createRouter({
     { path: "/:pathMatch(.*)*", name: "not-found", component: NotFound },
   ],
 });
-router.beforeEach((to, from) => {
+router.beforeEach(async (to, from) => {
   const authStore = useAuthStore();
-  const tokenValid = authStore.validateToken();
+  if (!authStore.sessionChecked) {
+    await authStore.restoreSession();
+  }
 
   // Проверка авторизации
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
     return { name: "login", query: { redirect: to.fullPath } };
   }
-  if (to.meta.public && tokenValid && authStore.isAuthenticated && to.name === "login") {
+  if (to.meta.public && authStore.isAuthenticated && to.name === "login") {
     return { name: "orders" };
   }
   if (to.meta.roles && authStore.role && !to.meta.roles.includes(authStore.role)) {

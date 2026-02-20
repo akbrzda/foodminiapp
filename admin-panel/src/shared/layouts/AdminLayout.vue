@@ -67,7 +67,7 @@ const handleSidebarToggle = () => {
 onMounted(() => {
   updateIsMobile();
   window.addEventListener("resize", updateIsMobile);
-  if (authStore.token) {
+  if (authStore.isAuthenticated) {
     ordersStore.refreshNewOrdersCount();
     ordersStore.connectWebSocket();
   }
@@ -92,9 +92,9 @@ watch(isMobile, (mobile) => {
   }
 });
 watch(
-  () => authStore.token,
-  (token) => {
-    if (token) {
+  () => authStore.isAuthenticated,
+  (isAuthenticated) => {
+    if (isAuthenticated) {
       ordersStore.refreshNewOrdersCount();
       ordersStore.connectWebSocket();
     } else {
