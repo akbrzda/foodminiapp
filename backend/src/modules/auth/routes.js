@@ -25,7 +25,7 @@ import { grantRegistrationBonus } from "../loyalty/services/loyaltyService.js";
 import { addToBlacklist, isBlacklisted } from "../../middleware/tokenBlacklist.js";
 import { authenticateToken } from "../../middleware/auth.js";
 import { logger } from "../../utils/logger.js";
-import { authLimiter, createLimiter, strictAuthLimiter, telegramAuthLimiter } from "../../middleware/rateLimiter.js";
+import { authLimiter, createLimiter, refreshLimiter, strictAuthLimiter, telegramAuthLimiter } from "../../middleware/rateLimiter.js";
 
 const router = express.Router();
 const CLIENT_ACCESS_TOKEN_TTL = "15m";
@@ -397,7 +397,7 @@ router.post("/ws-ticket", authenticateToken, createLimiter, async (req, res, nex
   }
 });
 
-router.post("/refresh", authLimiter, async (req, res) => {
+router.post("/refresh", refreshLimiter, async (req, res) => {
   try {
     const refreshToken = req.cookies?.refresh_token;
     if (!refreshToken) {

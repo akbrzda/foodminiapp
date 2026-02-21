@@ -15,6 +15,10 @@ const isAuthErrorResponse = (error) => {
   const message = String(error?.response?.data?.error || "").trim();
   if (status === 401 && AUTH_ERRORS.has(message)) return true;
   if (status === 403 && message === "Invalid or expired token") return true;
+  const normalizedMessage = message.toLowerCase();
+  if (status === 429 && normalizedMessage.includes("слишком много попыток")) {
+    return true;
+  }
   return false;
 };
 
