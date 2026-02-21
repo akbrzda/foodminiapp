@@ -120,14 +120,11 @@ export const useAuthStore = defineStore("auth", {
         return true;
       }
       try {
-        const response = await api.get("/api/auth/session", {
-          validateStatus: (status) => status === 200 || status === 401,
-        });
-        if (response.status === 200 && response.data?.user) {
+        const response = await api.get("/api/auth/session");
+        if (response.data?.user) {
           this.applySession(response.data.user);
           return true;
         }
-        this.applySession(null);
       } catch {
         this.applySession(null);
       }
