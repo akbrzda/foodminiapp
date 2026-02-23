@@ -289,6 +289,7 @@ const pageSize = ref(20);
 const recentOrderIds = ref(new Set());
 const loadTimer = ref(null);
 const isRangeOpen = ref(false);
+const rangeSelectionStep = ref("start");
 const calendarMonths = ref(window.innerWidth < 1024 ? 1 : 2);
 const timeZone = getLocalTimeZone();
 const getTodayDateString = () => today(timeZone).toString();
@@ -307,6 +308,7 @@ const normalizeRangeValues = (value) => {
   const trimmed = dates.slice(-2);
   return trimmed.sort((a, b) => a.compare(b));
 };
+const toDateKeySet = (values) => new Set(values.map((item) => item.toString()));
 const calendarRange = computed({
   get() {
     const values = [];
@@ -314,17 +316,44 @@ const calendarRange = computed({
     if (filters.date_to) values.push(parseDate(filters.date_to));
     return values.length ? values : undefined;
   },
-  set(value) {
-    const normalized = normalizeRangeValues(value);
-    filters.date_from = normalized[0]?.toString() || "";
-    filters.date_to = normalized[1]?.toString() || "";
-  },
 });
 const handleRangeUpdate = (value) => {
-  calendarRange.value = value;
+  const normalized = normalizeRangeValues(value);
+  const currentSelection = normalizeRangeValues(calendarRange.value);
+
+  if (!normalized.length) {
+    filters.date_from = "";
+    filters.date_to = "";
+    rangeSelectionStep.value = "start";
+    return;
+  }
+
+  const currentSet = toDateKeySet(currentSelection);
+  const addedDates = normalized.filter((item) => !currentSet.has(item.toString()));
+  const lastSelectedDate = addedDates[addedDates.length - 1] || normalized[normalized.length - 1];
+
+  if (!lastSelectedDate) return;
+
+  if (rangeSelectionStep.value === "start") {
+    filters.date_from = lastSelectedDate.toString();
+    filters.date_to = "";
+    rangeSelectionStep.value = "end";
+    return;
+  }
+
+  const startDate = filters.date_from ? parseDate(filters.date_from) : lastSelectedDate;
+  if (lastSelectedDate.compare(startDate) < 0) {
+    filters.date_from = lastSelectedDate.toString();
+    filters.date_to = startDate.toString();
+  } else {
+    filters.date_from = startDate.toString();
+    filters.date_to = lastSelectedDate.toString();
+  }
+
   if (filters.date_from && filters.date_to) {
     isRangeOpen.value = false;
   }
+  rangeSelectionStep.value = "start";
 };
 const rangeLabel = computed(() => {
   if (filters.date_from && filters.date_to) {
@@ -348,6 +377,7 @@ const isFutureDateDisabled = (date) => date.compare(today(timeZone)) > 0;
 const clearDateRange = () => {
   filters.date_from = "";
   filters.date_to = "";
+  rangeSelectionStep.value = "start";
 };
 const updateCalendarMonths = () => {
   calendarMonths.value = window.innerWidth < 1024 ? 1 : 2;
@@ -474,6 +504,11 @@ watch(
   },
   { deep: true },
 );
+watch(isRangeOpen, (isOpen) => {
+  if (isOpen) {
+    rangeSelectionStep.value = "start";
+  }
+});
 watch(
   () => ordersStore.lastEvent,
   (payload) => {

@@ -974,7 +974,6 @@ watch(
 }
 
 .form-section {
-  margin-top: -32px;
   background: var(--color-background);
   border-radius: var(--border-radius-xl);
   padding: 12px;
