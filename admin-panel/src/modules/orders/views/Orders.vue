@@ -88,16 +88,46 @@
                       <CalendarIcon class="text-muted-foreground" :size="16" />
                     </button>
                   </PopoverTrigger>
-                  <PopoverContent class="w-[calc(100vw-2rem)] max-w-md p-0 sm:w-auto" align="start">
+                  <PopoverContent class="w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] p-0 sm:w-auto sm:max-w-[calc(100vw-4rem)]" align="start">
                     <div class="space-y-3 p-3">
-                      <Calendar
-                        :model-value="calendarRange"
-                        :number-of-months="calendarMonths"
-                        :is-date-disabled="isFutureDateDisabled"
-                        locale="ru-RU"
-                        multiple
-                        @update:modelValue="handleRangeUpdate"
-                      />
+                      <div class="overflow-x-auto pb-1">
+                        <CalendarRoot
+                          v-slot="{ grid, weekDays }"
+                          :model-value="calendarRange"
+                          :number-of-months="calendarMonths"
+                          :is-date-disabled="isFutureDateDisabled"
+                          locale="ru-RU"
+                          multiple
+                          @update:model-value="handleRangeUpdate"
+                        >
+                          <CalendarHeader>
+                            <CalendarPrevButton />
+                            <CalendarHeading />
+                            <CalendarNextButton />
+                          </CalendarHeader>
+
+                          <div class="mt-4 flex flex-col gap-y-4 sm:flex-row sm:gap-x-4 sm:gap-y-0">
+                            <CalendarGrid v-for="month in grid" :key="month.value.toString()">
+                              <CalendarGridHead>
+                                <CalendarGridRow>
+                                  <CalendarHeadCell v-for="day in weekDays" :key="day">
+                                    {{ day }}
+                                  </CalendarHeadCell>
+                                </CalendarGridRow>
+                              </CalendarGridHead>
+                              <CalendarGridBody>
+                                <CalendarGridRow v-for="(weekDates, index) in month.rows" :key="`weekDate-${index}`" class="mt-2 w-full">
+                                  <CalendarCell v-for="weekDate in weekDates" :key="weekDate.toString()" :date="weekDate">
+                                    <CalendarCellTrigger :day="weekDate" :month="month.value" :class="getCalendarDayClass(weekDate)">
+                                      {{ weekDate.day }}
+                                    </CalendarCellTrigger>
+                                  </CalendarCell>
+                                </CalendarGridRow>
+                              </CalendarGridBody>
+                            </CalendarGrid>
+                          </div>
+                        </CalendarRoot>
+                      </div>
                       <div class="flex items-center justify-between text-xs text-muted-foreground">
                         <span>{{ rangeHelperLabel }}</span>
                         <button type="button" class="text-primary hover:underline" @click="clearDateRange">Очистить</button>
@@ -263,7 +293,20 @@ import Card from "@/shared/components/ui/card/Card.vue";
 import CardContent from "@/shared/components/ui/card/CardContent.vue";
 import PageHeader from "@/shared/components/PageHeader.vue";
 import Input from "@/shared/components/ui/input/Input.vue";
-import { Calendar } from "@/shared/components/ui/calendar";
+import { CalendarRoot } from "reka-ui";
+import {
+  CalendarCell,
+  CalendarCellTrigger,
+  CalendarGrid,
+  CalendarGridBody,
+  CalendarGridHead,
+  CalendarGridRow,
+  CalendarHeadCell,
+  CalendarHeader,
+  CalendarHeading,
+  CalendarNextButton,
+  CalendarPrevButton,
+} from "@/shared/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/shared/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/components/ui/select";
 import Table from "@/shared/components/ui/table/Table.vue";
@@ -290,7 +333,8 @@ const recentOrderIds = ref(new Set());
 const loadTimer = ref(null);
 const isRangeOpen = ref(false);
 const rangeSelectionStep = ref("start");
-const calendarMonths = ref(window.innerWidth < 1024 ? 1 : 2);
+const getCalendarMonthCount = () => (window.innerWidth < 1280 ? 1 : 2);
+const calendarMonths = ref(getCalendarMonthCount());
 const timeZone = getLocalTimeZone();
 const getTodayDateString = () => today(timeZone).toString();
 const filters = reactive({
@@ -309,6 +353,41 @@ const normalizeRangeValues = (value) => {
   return trimmed.sort((a, b) => a.compare(b));
 };
 const toDateKeySet = (values) => new Set(values.map((item) => item.toString()));
+const parseFilterDate = (value) => (value ? parseDate(value) : null);
+const isSameCalendarDate = (left, right) => Boolean(left && right && left.compare(right) === 0);
+const isDayInSelectedRange = (day) => {
+  const start = parseFilterDate(filters.date_from);
+  const end = parseFilterDate(filters.date_to);
+  if (!start || !end) return false;
+  return day.compare(start) > 0 && day.compare(end) < 0;
+};
+const isRangeStartDay = (day) => {
+  const start = parseFilterDate(filters.date_from);
+  return isSameCalendarDate(day, start);
+};
+const isRangeEndDay = (day) => {
+  const end = parseFilterDate(filters.date_to);
+  return isSameCalendarDate(day, end);
+};
+const getCalendarDayClass = (day) => {
+  const isStart = isRangeStartDay(day);
+  const isEnd = isRangeEndDay(day);
+  const isBetween = isDayInSelectedRange(day);
+
+  if (isStart && isEnd) {
+    return "bg-primary text-primary-foreground hover:bg-primary focus:bg-primary rounded-md";
+  }
+  if (isStart) {
+    return "bg-primary text-primary-foreground hover:bg-primary focus:bg-primary rounded-r-none";
+  }
+  if (isEnd) {
+    return "bg-primary text-primary-foreground hover:bg-primary focus:bg-primary rounded-l-none";
+  }
+  if (isBetween) {
+    return "bg-primary/20 text-foreground hover:bg-primary/25 focus:bg-primary/25 rounded-none";
+  }
+  return "";
+};
 const calendarRange = computed({
   get() {
     const values = [];
@@ -322,6 +401,12 @@ const handleRangeUpdate = (value) => {
   const currentSelection = normalizeRangeValues(calendarRange.value);
 
   if (!normalized.length) {
+    if (rangeSelectionStep.value === "end" && filters.date_from && !filters.date_to) {
+      filters.date_to = filters.date_from;
+      isRangeOpen.value = false;
+      rangeSelectionStep.value = "start";
+      return;
+    }
     filters.date_from = "";
     filters.date_to = "";
     rangeSelectionStep.value = "start";
@@ -380,7 +465,7 @@ const clearDateRange = () => {
   rangeSelectionStep.value = "start";
 };
 const updateCalendarMonths = () => {
-  calendarMonths.value = window.innerWidth < 1024 ? 1 : 2;
+  calendarMonths.value = getCalendarMonthCount();
 };
 const paginatedOrders = computed(() => {
   const start = (page.value - 1) * pageSize.value;

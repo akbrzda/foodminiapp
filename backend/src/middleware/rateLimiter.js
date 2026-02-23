@@ -1,5 +1,6 @@
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import redis from "../config/redis.js";
+import { logger } from "../utils/logger.js";
 
 // Базовый rate limiter для общих API запросов
 export const apiLimiter = rateLimit({
@@ -72,11 +73,12 @@ export const redisRateLimiter = (options = {}) => {
     failOpen = false,
     fallbackStatus = 503,
     fallbackMessage = "Сервис временно недоступен",
+    keyGenerator = (req) => req.user?.id || ipKeyGenerator(req),
   } = options;
 
   return async (req, res, next) => {
     try {
-      const identifier = req.user?.id || req.ip;
+      const identifier = keyGenerator(req);
       const key = `${prefix}:${identifier}`;
 
       const current = await redis.incr(key);
@@ -113,3 +115,70 @@ export const strictAuthLimiter = redisRateLimiter({
   fallbackStatus: 503,
   fallbackMessage: "Авторизация временно недоступна, попробуйте позже",
 });
+
+// Строгий limiter для чувствительных защищенных маршрутов
+export const sensitiveRouteLimiter = redisRateLimiter({
+  prefix: "sensitive_routes",
+  windowMs: 60 * 1000, // 1 минута
+  max: 60, // 60 запросов на IP в минуту к защищенным маршрутам
+  message: "Слишком много запросов к защищенным маршрутам. Попробуйте позже",
+  failOpen: true,
+  keyGenerator: (req) => ipKeyGenerator(req),
+});
+
+// Временная блокировка IP при массовых 401/403 на защищенных маршрутах
+export const unauthorizedBanShield = (options = {}) => {
+  const {
+    strikeWindowMs = 5 * 60 * 1000, // 5 минут
+    maxStrikes = 15, // 15 неуспешных попыток
+    banMs = 30 * 60 * 1000, // 30 минут
+  } = options;
+
+  return async (req, res, next) => {
+    const ip = ipKeyGenerator(req);
+    const banKey = `auth_shield:ban:${ip}`;
+
+    try {
+      const ttl = await redis.ttl(banKey);
+      if (ttl > 0) {
+        res.setHeader("Retry-After", String(ttl));
+        return res.status(429).json({
+          error: "IP временно заблокирован из-за большого числа неуспешных попыток авторизации",
+          retry_after_seconds: ttl,
+        });
+      }
+    } catch (error) {
+      logger.system.warn("Ошибка проверки временной блокировки IP", { ip, error: error.message });
+    }
+
+    res.on("finish", async () => {
+      if (![401, 403].includes(res.statusCode)) return;
+
+      const strikesKey = `auth_shield:strikes:${ip}`;
+      try {
+        const strikes = await redis.incr(strikesKey);
+        if (strikes === 1) {
+          await redis.expire(strikesKey, Math.ceil(strikeWindowMs / 1000));
+        }
+
+        if (strikes >= maxStrikes) {
+          await redis.set(banKey, "1", "EX", Math.ceil(banMs / 1000));
+          await redis.del(strikesKey);
+          logger.system.warn("IP заблокирован из-за подозрительной активности", {
+            ip,
+            path: req.originalUrl,
+            ban_seconds: Math.ceil(banMs / 1000),
+          });
+        }
+      } catch (error) {
+        logger.system.warn("Ошибка фиксации неуспешной попытки авторизации", {
+          ip,
+          path: req.originalUrl,
+          error: error.message,
+        });
+      }
+    });
+
+    return next();
+  };
+};

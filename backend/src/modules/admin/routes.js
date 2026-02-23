@@ -1,11 +1,55 @@
 import express from "express";
 import bcrypt from "bcrypt";
 import db from "../../config/database.js";
+import redis from "../../config/redis.js";
 import { authenticateToken, requireRole } from "../../middleware/auth.js";
 import { telegramQueue, imageQueue, getQueueStats, getFailedJobs, retryFailedJobs, cleanQueue } from "../../queues/config.js";
 import { getSystemSettings } from "../../utils/settings.js";
+import { logger } from "../../utils/logger.js";
 const router = express.Router();
 router.use(authenticateToken);
+const ADMIN_LOGIN_ATTEMPTS_PREFIX = "auth:admin:attempts";
+const AUTH_SHIELD_STRIKES_PREFIX = "auth_shield:strikes";
+const AUTH_SHIELD_BAN_PREFIX = "auth_shield:ban";
+
+const getRequestIp = (req) => req?.ip || req?.connection?.remoteAddress || null;
+const getRequestUserAgent = (req) => req?.get?.("user-agent") || null;
+
+const scanKeys = async (pattern) => {
+  const keys = [];
+  let cursor = "0";
+  do {
+    const [nextCursor, chunk] = await redis.scan(cursor, "MATCH", pattern, "COUNT", 100);
+    cursor = nextCursor;
+    if (Array.isArray(chunk) && chunk.length > 0) {
+      keys.push(...chunk);
+    }
+  } while (cursor !== "0");
+  return keys;
+};
+
+const parseAttemptKeyIp = (key, email) => {
+  const suffix = `${email}:`;
+  const index = key.indexOf(suffix);
+  if (index === -1) return null;
+  return key.slice(index + suffix.length) || null;
+};
+
+const logSecurityResetAction = async ({ actorId, targetUserId, resetType, description, req }) => {
+  try {
+    await db.query(
+      `INSERT INTO admin_action_logs (admin_user_id, action, entity_type, entity_id, description, ip_address, user_agent)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [actorId, "auth_limits_reset", "admin_user", targetUserId, `${description} (тип: ${resetType})`, getRequestIp(req), getRequestUserAgent(req)],
+    );
+  } catch (error) {
+    logger.system.warn("Не удалось записать событие сброса лимитов в admin_action_logs", {
+      actor_id: actorId,
+      target_user_id: targetUserId,
+      error: error.message,
+    });
+  }
+};
 const getManagerCityIds = (req) => {
   if (req.user?.role !== "manager") return null;
   if (!Array.isArray(req.user.cities)) return [];
@@ -108,6 +152,138 @@ router.get("/users/:id", requireRole("admin", "ceo"), async (req, res, next) => 
       user.branches = [];
     }
     res.json({ user });
+  } catch (error) {
+    next(error);
+  }
+});
+router.get("/users/:id/security", requireRole("admin"), async (req, res, next) => {
+  try {
+    const userId = Number(req.params.id);
+    if (!Number.isInteger(userId) || userId <= 0) {
+      return res.status(400).json({ error: "Invalid user id" });
+    }
+
+    const [users] = await db.query("SELECT id, email FROM admin_users WHERE id = ? LIMIT 1", [userId]);
+    if (users.length === 0) {
+      return res.status(404).json({ error: "User not found" });
+    }
+    const user = users[0];
+
+    const attemptKeys = await scanKeys(`${ADMIN_LOGIN_ATTEMPTS_PREFIX}:${user.email}:*`);
+    const attemptsByIp = [];
+    for (const key of attemptKeys) {
+      const ip = parseAttemptKeyIp(key, user.email);
+      if (!ip) continue;
+      const [attemptsValue, attemptsTtl, strikesValue, strikesTtl, banTtl] = await Promise.all([
+        redis.get(key),
+        redis.ttl(key),
+        redis.get(`${AUTH_SHIELD_STRIKES_PREFIX}:${ip}`),
+        redis.ttl(`${AUTH_SHIELD_STRIKES_PREFIX}:${ip}`),
+        redis.ttl(`${AUTH_SHIELD_BAN_PREFIX}:${ip}`),
+      ]);
+      attemptsByIp.push({
+        ip,
+        login_attempts: Number(attemptsValue || 0),
+        login_attempts_ttl_seconds: attemptsTtl > 0 ? attemptsTtl : 0,
+        shield_strikes: Number(strikesValue || 0),
+        shield_strikes_ttl_seconds: strikesTtl > 0 ? strikesTtl : 0,
+        is_banned: banTtl > 0,
+        ban_ttl_seconds: banTtl > 0 ? banTtl : 0,
+      });
+    }
+
+    const [authLogs] = await db.query(
+      `SELECT id, action, description, ip_address, created_at
+       FROM admin_action_logs
+       WHERE admin_user_id = ?
+         AND entity_type = 'auth'
+       ORDER BY created_at DESC
+       LIMIT 30`,
+      [userId],
+    );
+
+    res.json({
+      user: { id: user.id, email: user.email },
+      limits: {
+        attempts_by_ip: attemptsByIp.sort((a, b) => b.login_attempts - a.login_attempts),
+      },
+      auth_logs: authLogs || [],
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+router.post("/users/:id/security/reset", requireRole("admin"), async (req, res, next) => {
+  try {
+    const userId = Number(req.params.id);
+    const ip = typeof req.body?.ip === "string" ? req.body.ip.trim() : "";
+    const resetType = ["attempts", "ban", "all"].includes(req.body?.type) ? req.body.type : "all";
+
+    if (!Number.isInteger(userId) || userId <= 0) {
+      return res.status(400).json({ error: "Invalid user id" });
+    }
+
+    const [users] = await db.query("SELECT id, email FROM admin_users WHERE id = ? LIMIT 1", [userId]);
+    if (users.length === 0) {
+      return res.status(404).json({ error: "User not found" });
+    }
+    const user = users[0];
+
+    let deletedAttempts = 0;
+    let deletedStrikes = 0;
+    let deletedBans = 0;
+    const touchedIps = new Set();
+
+    if (ip) {
+      touchedIps.add(ip);
+      if (resetType === "attempts" || resetType === "all") {
+        const attemptsKey = `${ADMIN_LOGIN_ATTEMPTS_PREFIX}:${user.email}:${ip}`;
+        deletedAttempts += await redis.del(attemptsKey);
+        const strikesKey = `${AUTH_SHIELD_STRIKES_PREFIX}:${ip}`;
+        deletedStrikes += await redis.del(strikesKey);
+      }
+      if (resetType === "ban" || resetType === "all") {
+        const banKey = `${AUTH_SHIELD_BAN_PREFIX}:${ip}`;
+        deletedBans += await redis.del(banKey);
+      }
+    } else {
+      const attemptKeys = await scanKeys(`${ADMIN_LOGIN_ATTEMPTS_PREFIX}:${user.email}:*`);
+      for (const key of attemptKeys) {
+        const keyIp = parseAttemptKeyIp(key, user.email);
+        if (keyIp) touchedIps.add(keyIp);
+      }
+      if (attemptKeys.length > 0 && (resetType === "attempts" || resetType === "all")) {
+        deletedAttempts += await redis.del(...attemptKeys);
+      }
+      for (const keyIp of touchedIps) {
+        if (resetType === "attempts" || resetType === "all") {
+          deletedStrikes += await redis.del(`${AUTH_SHIELD_STRIKES_PREFIX}:${keyIp}`);
+        }
+        if (resetType === "ban" || resetType === "all") {
+          deletedBans += await redis.del(`${AUTH_SHIELD_BAN_PREFIX}:${keyIp}`);
+        }
+      }
+    }
+
+    await logSecurityResetAction({
+      actorId: req.user.id,
+      targetUserId: user.id,
+      resetType,
+      description: ip
+        ? `Сброс auth-лимитов для пользователя ${user.email} по IP ${ip}`
+        : `Сброс auth-лимитов для пользователя ${user.email} по всем IP`,
+      req,
+    });
+
+    res.json({
+      message: "Лимиты авторизации успешно сброшены",
+      result: {
+        deleted_login_attempt_keys: deletedAttempts,
+        deleted_shield_strike_keys: deletedStrikes,
+        deleted_shield_ban_keys: deletedBans,
+        affected_ips: Array.from(touchedIps),
+      },
+    });
   } catch (error) {
     next(error);
   }

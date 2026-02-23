@@ -9,7 +9,7 @@ import cookieParser from "cookie-parser";
 import { testConnection } from "./config/database.js";
 import { testRedisConnection } from "./config/redis.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
-import { apiLimiter } from "./middleware/rateLimiter.js";
+import { apiLimiter, sensitiveRouteLimiter, unauthorizedBanShield } from "./middleware/rateLimiter.js";
 import { hppMiddleware } from "./middleware/hpp.js";
 import { router as authRoutes } from "./modules/auth/index.js";
 import { router as deliveryRoutes } from "./modules/delivery/index.js";
@@ -155,6 +155,11 @@ app.use(express.urlencoded({ extended: true, charset: "utf-8", limit: "2mb" }));
 
 // Глобальный rate limiter
 app.use("/api/", apiLimiter);
+app.use(
+  ["/api/admin", "/api/analytics", "/api/orders/admin", "/api/auth/session", "/api/auth/ws-ticket"],
+  sensitiveRouteLimiter,
+  unauthorizedBanShield(),
+);
 app.use((req, res, next) => {
   res.setHeader("Content-Type", "application/json; charset=utf-8");
   next();

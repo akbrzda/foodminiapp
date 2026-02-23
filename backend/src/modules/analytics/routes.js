@@ -153,18 +153,6 @@ router.get("/dashboard", async (req, res, next) => {
     const paramsPrevious = [toDateString(range.compareStart), toDateString(range.compareEnd), ...filterParams];
     const paramsCurrentWithStatuses = [...paramsCurrent, ...DASHBOARD_ALLOWED_ORDER_STATUSES];
     const paramsPreviousWithStatuses = [...paramsPrevious, ...DASHBOARD_ALLOWED_ORDER_STATUSES];
-    const [totalOrdersCurrentAll] = await db.query(
-      `SELECT COUNT(*) as total_orders
-      FROM orders o
-      WHERE ${dateFilter}${filterSql}`,
-      paramsCurrent,
-    );
-    const [totalOrdersPreviousAll] = await db.query(
-      `SELECT COUNT(*) as total_orders
-      FROM orders o
-      WHERE ${dateFilter}${filterSql}`,
-      paramsPrevious,
-    );
     const [orderStatsCurrent] = await db.query(
       `SELECT 
         COUNT(*) as total_orders,
@@ -222,13 +210,22 @@ router.get("/dashboard", async (req, res, next) => {
       WHERE ${dateFilter}${filterSql}${dashboardStatusFilter}`,
       paramsPreviousWithStatuses,
     );
-    const compareMetric = (current, previous) => {
+    const compareMetric = (currentRaw, previousRaw) => {
+      const current = Number(currentRaw) || 0;
+      const previous = Number(previousRaw) || 0;
       const change = current - previous;
-      const percent = previous === 0 ? null : (change / previous) * 100;
+
+      let percent = 0;
+      if (previous === 0) {
+        percent = current === 0 ? 0 : 100;
+      } else {
+        percent = (change / previous) * 100;
+      }
+
       return { current, previous, change, percent };
     };
     const comparisons = {
-      orders: compareMetric(totalOrdersCurrentAll[0].total_orders, totalOrdersPreviousAll[0].total_orders),
+      orders: compareMetric(orderStatsCurrent[0].total_orders, orderStatsPrevious[0].total_orders),
       revenue: compareMetric(orderStatsCurrent[0].total_revenue, orderStatsPrevious[0].total_revenue),
       customers: compareMetric(customerStatsCurrent[0].total_customers, customerStatsPrevious[0].total_customers),
       discounts: compareMetric(discountsCurrent[0].total_discounts, discountsPrevious[0].total_discounts),
@@ -302,7 +299,7 @@ router.get("/dashboard", async (req, res, next) => {
       compare_to: toDateString(addDays(range.compareEnd, -1)),
       orders: {
         ...orderStatsCurrent[0],
-        total_orders: totalOrdersCurrentAll[0].total_orders,
+        total_orders: orderStatsCurrent[0].total_orders,
       },
       discounts: discountsCurrent[0],
       customers: customerStatsCurrent[0],

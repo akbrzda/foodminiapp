@@ -41,6 +41,7 @@ const WS_TICKET_TTL_SECONDS = 45;
 const TELEGRAM_AUTH_MAX_AGE_SECONDS = 10 * 60;
 const ADMIN_LOGIN_BLOCK_LIMIT = 5;
 const ADMIN_LOGIN_BLOCK_WINDOW_SECONDS = 15 * 60;
+const ADMIN_AUTH_LOG_ENTITY_TYPE = "auth";
 
 const getRequiredBotToken = () => {
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
@@ -101,6 +102,24 @@ const registerAdminLoginFailure = async (email, ip) => {
 const clearAdminLoginFailures = async (email, ip) => {
   const key = buildAdminLoginAttemptKey(email, ip);
   await redis.del(key);
+};
+const getRequestIp = (req) => req?.ip || req?.connection?.remoteAddress || null;
+const getRequestUserAgent = (req) => req?.get?.("user-agent") || null;
+const logAdminAuthAction = async ({ adminUserId, action, description, req }) => {
+  if (!adminUserId || !action) return;
+  try {
+    await db.query(
+      `INSERT INTO admin_action_logs (admin_user_id, action, entity_type, entity_id, description, ip_address, user_agent)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [adminUserId, action, ADMIN_AUTH_LOG_ENTITY_TYPE, adminUserId, description || null, getRequestIp(req), getRequestUserAgent(req)],
+    );
+  } catch (error) {
+    logger.system.warn("Не удалось записать auth-событие в admin_action_logs", {
+      admin_user_id: adminUserId,
+      action,
+      error: error.message,
+    });
+  }
 };
 
 // Применяем rate limiting на все auth endpoints
@@ -273,6 +292,15 @@ router.post("/admin/login", authLimiter, strictAuthLimiter, async (req, res, nex
       const attempts = await getAdminLoginAttempts(email, req.ip);
       if (attempts >= ADMIN_LOGIN_BLOCK_LIMIT) {
         await logger.auth.loginFailed(email, "Too many failed attempts", req.ip);
+        const [admins] = await db.query("SELECT id FROM admin_users WHERE email = ? LIMIT 1", [email]);
+        if (admins.length > 0) {
+          await logAdminAuthAction({
+            adminUserId: admins[0].id,
+            action: "auth_login_blocked",
+            description: "Вход заблокирован из-за превышения лимита неудачных попыток",
+            req,
+          });
+        }
         return res.status(429).json({ error: "Слишком много неудачных попыток. Попробуйте позже" });
       }
     }
@@ -298,6 +326,12 @@ router.post("/admin/login", authLimiter, strictAuthLimiter, async (req, res, nex
     if (!user.is_active) {
       await registerAdminLoginFailure(email, req.ip);
       await logger.auth.loginFailed(email, "Account disabled", req.ip);
+      await logAdminAuthAction({
+        adminUserId: user.id,
+        action: "auth_login_failed_disabled",
+        description: "Неудачная попытка входа: аккаунт отключен",
+        req,
+      });
       return res.status(403).json({ error: "Account is disabled" });
     }
 
@@ -306,6 +340,12 @@ router.post("/admin/login", authLimiter, strictAuthLimiter, async (req, res, nex
     if (!isValidPassword) {
       await registerAdminLoginFailure(email, req.ip);
       await logger.auth.loginFailed(email, "Invalid password", req.ip);
+      await logAdminAuthAction({
+        adminUserId: user.id,
+        action: "auth_login_failed_password",
+        description: "Неудачная попытка входа: неверный пароль",
+        req,
+      });
       return res.status(401).json({ error: "Invalid credentials" });
     }
     await clearAdminLoginFailures(email, req.ip);
@@ -346,6 +386,12 @@ router.post("/admin/login", authLimiter, strictAuthLimiter, async (req, res, nex
 
     // Логируем успешный вход
     await logger.auth.login(user.id, user.role, req.ip);
+    await logAdminAuthAction({
+      adminUserId: user.id,
+      action: "auth_login_success",
+      description: "Успешный вход в админ-панель",
+      req,
+    });
 
     delete user.password_hash;
 
@@ -388,6 +434,14 @@ router.post("/ws-ticket", authenticateToken, createLimiter, async (req, res, nex
       issued_at: Date.now(),
     });
     await redis.set(redisKey, payload, "EX", WS_TICKET_TTL_SECONDS);
+    if (req.user?.type === "admin") {
+      await logAdminAuthAction({
+        adminUserId: req.user.id,
+        action: "auth_ws_ticket_issued",
+        description: "Выдан WS ticket для админ-сессии",
+        req,
+      });
+    }
     res.json({
       ticket,
       expires_in: WS_TICKET_TTL_SECONDS,
@@ -479,6 +533,12 @@ router.post("/refresh", refreshLimiter, async (req, res) => {
       nextRefreshToken = signRefreshToken(payload, JWT_AUDIENCE_REFRESH_ADMIN, ADMIN_REFRESH_TOKEN_TTL);
       accessMaxAge = ADMIN_ACCESS_TOKEN_COOKIE_MAX_AGE;
       refreshMaxAge = ADMIN_REFRESH_TOKEN_COOKIE_MAX_AGE;
+      await logAdminAuthAction({
+        adminUserId: admin.id,
+        action: "auth_refresh_success",
+        description: "Успешное обновление админ-сессии",
+        req,
+      });
     } else {
       return res.status(403).json({ error: "Invalid refresh token payload" });
     }
@@ -542,6 +602,7 @@ router.post("/logout", async (req, res, next) => {
     // Получаем токен
     const token = req.cookies?.access_token || extractBearerToken(req.headers["authorization"]);
     const refreshToken = req.cookies?.refresh_token;
+    let logoutAdminUserId = null;
 
     if (token) {
       try {
@@ -551,6 +612,9 @@ router.post("/logout", async (req, res, next) => {
           issuer: JWT_ISSUER,
           audience: JWT_ACCESS_AUDIENCES,
         });
+        if (decoded?.type === "admin" && decoded?.id) {
+          logoutAdminUserId = decoded.id;
+        }
         const expiresIn = decoded.exp - Math.floor(Date.now() / 1000);
         await addToBlacklist(token, expiresIn > 0 ? expiresIn : 1);
       } catch (tokenError) {
@@ -574,6 +638,15 @@ router.post("/logout", async (req, res, next) => {
     const clearOptions = getClearAuthCookieOptions();
     res.clearCookie("access_token", clearOptions);
     res.clearCookie("refresh_token", clearOptions);
+
+    if (logoutAdminUserId) {
+      await logAdminAuthAction({
+        adminUserId: logoutAdminUserId,
+        action: "auth_logout",
+        description: "Выход из админ-сессии",
+        req,
+      });
+    }
 
     res.json({ message: "Logout successful" });
   } catch (error) {

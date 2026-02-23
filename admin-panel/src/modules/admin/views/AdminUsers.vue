@@ -100,6 +100,9 @@
                 <span v-else class="text-xs text-muted-foreground">Полный доступ по роли</span>
               </div>
               <div class="mt-3 flex justify-end gap-2">
+                <Button v-if="authStore.role === 'admin'" variant="ghost" size="icon" @click="openSecurityModal(user)">
+                  <Shield :size="16" />
+                </Button>
                 <Button v-if="!(authStore.role === 'ceo' && user.role === 'admin')" variant="ghost" size="icon" @click="openModal(user)">
                   <Pencil :size="16" />
                 </Button>
@@ -179,6 +182,9 @@
                   </TableCell>
                   <TableCell class="text-right">
                     <div class="flex justify-end gap-2">
+                      <Button v-if="authStore.role === 'admin'" variant="ghost" size="icon" @click="openSecurityModal(user)">
+                        <Shield :size="16" />
+                      </Button>
                       <Button
                         v-if="!(authStore.role === 'ceo' && user.role === 'admin')"
                         variant="ghost"
@@ -328,12 +334,85 @@
         </form>
       </DialogContent>
     </Dialog>
+    <Dialog v-if="showSecurityModal" :open="showSecurityModal" @update:open="(value) => (value ? null : closeSecurityModal())">
+      <DialogContent class="w-full max-w-3xl">
+        <DialogHeader>
+          <DialogTitle>Безопасность пользователя</DialogTitle>
+          <DialogDescription>
+            {{ securityUser?.first_name }} {{ securityUser?.last_name }} · {{ securityUser?.email }}
+          </DialogDescription>
+        </DialogHeader>
+        <div class="space-y-4">
+          <div class="flex flex-wrap justify-end gap-2">
+            <Button variant="outline" :disabled="securityLoading" @click="loadSecurityData">
+              <RefreshCcw :size="16" />
+              Обновить
+            </Button>
+            <Button variant="destructive" :disabled="securityLoading || securityResetLoading" @click="resetSecurityLimits()">
+              <RotateCcw :size="16" />
+              Сбросить все лимиты
+            </Button>
+          </div>
+
+          <Card>
+            <CardContent class="space-y-3">
+              <div class="text-sm font-semibold text-foreground">Лимиты по IP</div>
+              <div v-if="securityLoading" class="space-y-2">
+                <Skeleton class="h-10 w-full" />
+                <Skeleton class="h-10 w-full" />
+              </div>
+              <div v-else-if="securityLimits.length === 0" class="text-sm text-muted-foreground">Активных лимитов по IP не найдено</div>
+              <div v-else class="space-y-2">
+                <div v-for="item in securityLimits" :key="item.ip" class="rounded-lg border border-border p-3">
+                  <div class="flex flex-wrap items-center justify-between gap-2">
+                    <div class="text-sm font-medium text-foreground">{{ item.ip }}</div>
+                    <div class="flex flex-wrap items-center gap-2">
+                      <Badge variant="outline">Попытки: {{ item.login_attempts }}</Badge>
+                      <Badge variant="outline">Strikes: {{ item.shield_strikes }}</Badge>
+                      <Badge v-if="item.is_banned" variant="secondary" class="bg-red-100 text-red-700 border-transparent">
+                        Бан: {{ item.ban_ttl_seconds }}с
+                      </Badge>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        :disabled="securityResetLoading"
+                        @click="resetSecurityLimits(item.ip)"
+                      >
+                        Сбросить IP
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent class="space-y-3">
+              <div class="text-sm font-semibold text-foreground">Последние auth-события</div>
+              <div v-if="securityLoading" class="space-y-2">
+                <Skeleton class="h-8 w-full" />
+                <Skeleton class="h-8 w-full" />
+              </div>
+              <div v-else-if="securityLogs.length === 0" class="text-sm text-muted-foreground">События пока отсутствуют</div>
+              <div v-else class="space-y-2">
+                <div v-for="log in securityLogs" :key="log.id" class="rounded-lg border border-border p-3 text-sm">
+                  <div class="font-medium text-foreground">{{ log.action }}</div>
+                  <div class="text-xs text-muted-foreground">{{ formatDateTime(log.created_at) }} · IP: {{ log.ip_address || "—" }}</div>
+                  <div v-if="log.description" class="text-xs text-muted-foreground mt-1">{{ log.description }}</div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </DialogContent>
+    </Dialog>
   </div>
 </template>
 <script setup>
 import { devError } from "@/shared/utils/logger";
 import { computed, onMounted, ref, watch } from "vue";
-import { Pencil, Plus, Save, Trash2 } from "lucide-vue-next";
+import { Pencil, Plus, RefreshCcw, RotateCcw, Save, Shield, Trash2 } from "lucide-vue-next";
 import api from "@/shared/api/client.js";
 import { useReferenceStore } from "@/shared/stores/reference.js";
 import { useAuthStore } from "@/shared/stores/auth.js";
@@ -357,7 +436,7 @@ import { Field, FieldContent, FieldGroup, FieldLabel } from "@/shared/components
 import { Label } from "@/shared/components/ui/label";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
 import { useListContext } from "@/shared/composables/useListContext.js";
-import { normalizeBoolean } from "@/shared/utils/format.js";
+import { formatDateTime, normalizeBoolean } from "@/shared/utils/format.js";
 const referenceStore = useReferenceStore();
 const authStore = useAuthStore();
 const { showErrorNotification } = useNotifications();
@@ -367,7 +446,13 @@ const isLoading = ref(false);
 const page = ref(1);
 const pageSize = ref(20);
 const showModal = ref(false);
+const showSecurityModal = ref(false);
 const editing = ref(null);
+const securityUser = ref(null);
+const securityLoading = ref(false);
+const securityResetLoading = ref(false);
+const securityLimits = ref([]);
+const securityLogs = ref([]);
 const filters = ref({
   role: "",
   is_active: "",
@@ -476,6 +561,48 @@ const openModal = (user = null) => {
 const closeModal = () => {
   showModal.value = false;
   editing.value = null;
+};
+const openSecurityModal = async (user) => {
+  if (authStore.role !== "admin") return;
+  securityUser.value = user;
+  showSecurityModal.value = true;
+  await loadSecurityData();
+};
+const closeSecurityModal = () => {
+  showSecurityModal.value = false;
+  securityUser.value = null;
+  securityLimits.value = [];
+  securityLogs.value = [];
+};
+const loadSecurityData = async () => {
+  if (!securityUser.value?.id || authStore.role !== "admin") return;
+  securityLoading.value = true;
+  try {
+    const response = await api.get(`/api/admin/users/${securityUser.value.id}/security`);
+    securityLimits.value = response.data?.limits?.attempts_by_ip || [];
+    securityLogs.value = response.data?.auth_logs || [];
+  } catch (error) {
+    devError("Ошибка загрузки данных безопасности пользователя:", error);
+    showErrorNotification(error.response?.data?.error || "Ошибка загрузки данных безопасности");
+  } finally {
+    securityLoading.value = false;
+  }
+};
+const resetSecurityLimits = async (ip = "") => {
+  if (!securityUser.value?.id || authStore.role !== "admin") return;
+  securityResetLoading.value = true;
+  try {
+    await api.post(`/api/admin/users/${securityUser.value.id}/security/reset`, {
+      type: "all",
+      ip: ip || undefined,
+    });
+    await loadSecurityData();
+  } catch (error) {
+    devError("Ошибка сброса лимитов безопасности:", error);
+    showErrorNotification(error.response?.data?.error || "Ошибка сброса лимитов");
+  } finally {
+    securityResetLoading.value = false;
+  }
 };
 const submitUser = async () => {
   try {

@@ -43,16 +43,18 @@
                           {{ customRangeLabel }}
                         </Button>
                       </PopoverTrigger>
-                      <PopoverContent class="w-[calc(100vw-2rem)] max-w-md p-0 sm:w-auto" align="start">
+                      <PopoverContent class="w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] p-0 sm:w-auto sm:max-w-[calc(100vw-4rem)]" align="start">
                         <div class="space-y-3 p-3">
-                          <CalendarView
-                            :model-value="calendarRange"
-                            :number-of-months="calendarMonths"
-                            :is-date-disabled="isFutureDateDisabled"
-                            locale="ru-RU"
-                            multiple
-                            @update:modelValue="handleRangeUpdate"
-                          />
+                          <div class="overflow-x-auto pb-1">
+                            <CalendarView
+                              :model-value="calendarRange"
+                              :number-of-months="calendarMonths"
+                              :is-date-disabled="isFutureDateDisabled"
+                              locale="ru-RU"
+                              multiple
+                              @update:modelValue="handleRangeUpdate"
+                            />
+                          </div>
                           <div class="flex items-center justify-between text-xs text-muted-foreground">
                             <span>{{ rangeHelperLabel }}</span>
                             <button type="button" class="text-primary hover:underline" @click="clearDateRange">Очистить</button>
@@ -390,7 +392,8 @@ const filters = ref({
   branch_id: "",
 });
 const isRangeOpen = ref(false);
-const calendarMonths = ref(window.innerWidth < 1024 ? 1 : 2);
+const getCalendarMonthCount = () => (window.innerWidth < 1280 ? 1 : 2);
+const calendarMonths = ref(getCalendarMonthCount());
 const timeZone = getLocalTimeZone();
 const rangeFormatter = new DateFormatter("ru-RU", { dateStyle: "medium" });
 const normalizeRangeValues = (value) => {
@@ -441,7 +444,7 @@ const clearDateRange = () => {
   filters.value.date_to = "";
 };
 const updateCalendarMonths = () => {
-  calendarMonths.value = window.innerWidth < 1024 ? 1 : 2;
+  calendarMonths.value = getCalendarMonthCount();
 };
 const chartTabs = ["Выручка", "Заказы", "Средний чек"];
 const isCustomPeriod = computed(() => filters.value.period === "custom");
