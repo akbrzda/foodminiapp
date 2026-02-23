@@ -86,15 +86,6 @@
         <FloatingField v-model="deliveryDetails.doorCode" label="Домофон" placeholder="Домофон" :control-class="['detail-input', 'mini-field']" />
       </div>
 
-      <FloatingField
-        v-model="deliveryDetails.comment"
-        class="floating-textarea"
-        as="textarea"
-        label="Комментарий"
-        placeholder="Комментарий курьеру"
-        :rows="3"
-        :control-class="['detail-textarea', 'mini-textarea']"
-      />
       <button class="primary-btn" @click="confirmAddress">Сохранить адрес</button>
     </div>
   </div>
@@ -856,7 +847,6 @@ watch([deliveryStreet, deliveryHouse], ([street, house]) => {
     deliveryDetails.entrance = "";
     deliveryDetails.floor = "";
     deliveryDetails.doorCode = "";
-    deliveryDetails.comment = "";
     lastAddress.value = signature;
   }
 });

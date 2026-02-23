@@ -97,16 +97,13 @@
                 <span class="text-muted-foreground">Код двери</span>
                 <span>{{ order.delivery_intercom }}</span>
               </div>
-              <div v-if="order.delivery_comment" class="rounded-md border border-border/60 bg-muted/40 p-3 text-xs text-muted-foreground">
-                {{ order.delivery_comment }}
-              </div>
             </div>
             <div v-else class="flex items-center justify-between">
               <span class="text-muted-foreground">Адрес филиала</span>
               <span>{{ order.branch_address || "—" }}</span>
             </div>
-            <div v-if="order.comment" class="rounded-md border border-border/60 bg-muted/40 p-3 text-xs text-muted-foreground">
-              {{ order.comment }}
+            <div v-if="orderComment" class="rounded-md border border-border/60 bg-muted/40 p-3 text-xs text-muted-foreground">
+              {{ orderComment }}
             </div>
           </CardContent>
         </Card>
@@ -346,6 +343,10 @@ const deleteDialogOpen = ref(false);
 const deletingOrder = ref(false);
 const canDeleteOrder = computed(() => authStore.role === "admin");
 const orderTimeZone = computed(() => order.value?.city_timezone || "Europe/Moscow");
+const orderComment = computed(() => {
+  const value = order.value?.comment || "";
+  return String(value).trim();
+});
 const orderTitle = computed(() => {
   if (order.value?.order_number) return `Заказ #${order.value.order_number}`;
   return `Заказ #${route.params.id}`;

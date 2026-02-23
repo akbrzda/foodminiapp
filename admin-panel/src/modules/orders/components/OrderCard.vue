@@ -21,9 +21,9 @@
           </a>
           <span v-else>—</span>
         </div>
-        <div v-if="order.delivery_comment || order.comment" class="flex items-center gap-2 text-sm text-muted-foreground">
+        <div v-if="orderComment" class="flex items-center gap-2 text-sm text-muted-foreground">
           <MessageSquare :size="14" />
-          <span>{{ order.delivery_comment || order.comment }}</span>
+          <span>{{ orderComment }}</span>
         </div>
         <div class="flex items-center gap-2 text-sm text-muted-foreground">
           <CreditCard :size="14" />
@@ -146,6 +146,10 @@ const getPaymentSummary = (order) => {
 };
 
 const discountAmount = computed(() => Math.max(0, Number(props.order.bonus_spent) || 0));
+const orderComment = computed(() => {
+  const value = props.order.comment || "";
+  return String(value).trim();
+});
 const changeFromAmount = computed(() => {
   if (props.order.payment_method !== "cash") return 0;
   return Math.max(0, Number(props.order.change_from) || 0);

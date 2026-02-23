@@ -87,13 +87,9 @@
             <span class="label">Код двери:</span>
             <span>{{ order.delivery_intercom }}</span>
           </div>
-          <div class="info-row" v-if="order.delivery_comment">
-            <span class="label">Комментарий к адресу:</span>
-            <span>{{ order.delivery_comment }}</span>
-          </div>
-          <div class="info-row" v-if="order.comment">
-            <span class="label">Комментарий к заказу:</span>
-            <span>{{ order.comment }}</span>
+          <div class="info-row" v-if="getOrderComment(order)">
+            <span class="label">Комментарий:</span>
+            <span>{{ getOrderComment(order) }}</span>
           </div>
         </div>
       </div>
@@ -108,9 +104,9 @@
             <span class="label">Адрес:</span>
             <span>{{ order.branch_address }}</span>
           </div>
-          <div class="info-row" v-if="order.comment">
-            <span class="label">Комментарий к заказу:</span>
-            <span>{{ order.comment }}</span>
+          <div class="info-row" v-if="getOrderComment(order)">
+            <span class="label">Комментарий:</span>
+            <span>{{ getOrderComment(order) }}</span>
           </div>
         </div>
       </div>
@@ -284,6 +280,11 @@ function formatDeliveryAddress(orderData) {
     .map((value) => (value ? String(value).trim() : ""))
     .filter(Boolean);
   return parts.join(", ");
+}
+function getOrderComment(orderData) {
+  if (!orderData) return "";
+  const value = orderData.comment || "";
+  return String(value).trim();
 }
 function getChangeAmount(orderData) {
   if (!orderData) return 0;

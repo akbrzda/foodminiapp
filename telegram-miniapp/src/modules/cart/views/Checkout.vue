@@ -51,16 +51,6 @@
               <FloatingField v-model="deliveryDetails.doorCode" label="Код на двери" placeholder="Код на двери" :control-class="'mini-field'" />
             </div>
           </div>
-          <div class="form-group">
-            <FloatingField
-              v-model="deliveryDetails.comment"
-              as="textarea"
-              label="Комментарий"
-              placeholder="Комментарий к адресу"
-              :rows="3"
-              :control-class="'mini-textarea'"
-            />
-          </div>
         </div>
         <div v-if="addressValidated && !inDeliveryZone" class="error-message">
           <p>Адрес не входит в зону доставки</p>
@@ -228,7 +218,7 @@ const changeFrom = ref(null);
 const paymentError = ref("");
 const cashChangeMode = ref("none");
 const quickChangeOptions = [1000, 2000, 5000];
-const orderComment = ref("");
+const orderComment = ref(locationStore.deliveryDetails?.comment || "");
 const deliveryTariffs = computed(() => locationStore.deliveryZone?.tariffs || []);
 const submitting = ref(false);
 const deliveryTime = ref(0);
@@ -448,6 +438,21 @@ watch(
       }
     }
     await refreshCartPricesForOrderType();
+  },
+);
+watch(
+  () => orderComment.value,
+  (value) => {
+    deliveryDetails.value.comment = value;
+    locationStore.setDeliveryDetails({ ...deliveryDetails.value });
+  },
+);
+watch(
+  () => deliveryDetails.value.comment,
+  (value) => {
+    if (orderComment.value !== value) {
+      orderComment.value = value || "";
+    }
   },
 );
 watch(
@@ -735,7 +740,6 @@ async function submitOrder() {
       orderData.delivery_floor = deliveryDetails.value.floor;
       orderData.delivery_apartment = deliveryDetails.value.apartment;
       orderData.delivery_intercom = deliveryDetails.value.doorCode;
-      orderData.delivery_comment = deliveryDetails.value.comment;
     } else {
       orderData.branch_id = selectedBranch.value.id;
     }

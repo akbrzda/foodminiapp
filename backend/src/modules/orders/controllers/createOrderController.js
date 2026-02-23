@@ -324,10 +324,10 @@ export const createOrder = async (req, res, next) => {
       delivery_floor,
       delivery_apartment,
       delivery_intercom,
-      delivery_comment,
       delivery_latitude,
       delivery_longitude,
     } = req.body;
+    const normalizedComment = typeof comment === "string" && comment.trim() ? comment.trim() : null;
 
     // Валидация основных полей
     if (!city_id || !order_type || !items || !Array.isArray(items) || items.length === 0) {
@@ -587,7 +587,7 @@ export const createOrder = async (req, res, next) => {
           delivery_entrance || null,
           delivery_apartment || null,
           delivery_intercom || null,
-          delivery_comment || null,
+          normalizedComment,
           deliveryLatitude,
           deliveryLongitude,
           0,
@@ -602,10 +602,10 @@ export const createOrder = async (req, res, next) => {
        (order_number, user_id, city_id, branch_id, order_type, status, 
         iiko_sync_status, pb_sync_status,
         delivery_address_id, delivery_latitude, delivery_longitude, delivery_street, delivery_house, delivery_entrance, delivery_floor,
-        delivery_apartment, delivery_intercom, delivery_comment, 
+        delivery_apartment, delivery_intercom, 
         payment_method, change_from, subtotal, delivery_cost, bonus_spent, total, 
         comment, desired_time, user_timezone_offset)
-       VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         orderNumber,
         req.user.id,
@@ -623,14 +623,13 @@ export const createOrder = async (req, res, next) => {
         delivery_floor || null,
         delivery_apartment || null,
         delivery_intercom || null,
-        delivery_comment || null,
         payment_method,
         payment_method === "cash" && hasChangeFrom ? Number(change_from) : null,
         subtotal,
         deliveryCost,
         bonusUsed,
         finalTotal,
-        comment || null,
+        normalizedComment,
         desired_time || null,
         normalizedTimezoneOffset,
       ],
@@ -808,7 +807,6 @@ export const createOrder = async (req, res, next) => {
           delivery_apartment,
           delivery_entrance,
           delivery_intercom,
-          delivery_comment,
           subtotal,
           delivery_cost: deliveryCost,
           bonus_spent: bonusUsed,
@@ -816,7 +814,7 @@ export const createOrder = async (req, res, next) => {
           items: parsedItems,
           payment_method,
           change_from: payment_method === "cash" && hasChangeFrom ? Number(change_from) : null,
-          comment,
+          comment: normalizedComment,
         },
       });
     } catch (queueError) {

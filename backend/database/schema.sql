@@ -421,7 +421,6 @@ CREATE TABLE `orders` (
   `delivery_floor` varchar(10) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `delivery_apartment` varchar(10) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `delivery_intercom` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `delivery_comment` text COLLATE utf8mb4_unicode_ci,
   `payment_method` enum('cash','card') COLLATE utf8mb4_unicode_ci NOT NULL,
   `change_from` decimal(10,2) DEFAULT NULL,
   `subtotal` decimal(10,2) NOT NULL,

@@ -718,7 +718,6 @@ const TELEGRAM_ORDER_PLACEHOLDERS = [
   "{{delivery_floor}}",
   "{{delivery_apartment}}",
   "{{delivery_intercom}}",
-  "{{delivery_comment}}",
   "{{delivery_latitude}}",
   "{{delivery_longitude}}",
   "{{payment_method}}",

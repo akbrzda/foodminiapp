@@ -179,7 +179,6 @@ function formatNewOrderMessageFromTemplate(orderData, config) {
     delivery_floor: isDelivery ? orderData.delivery_floor || "" : "",
     delivery_apartment: isDelivery ? orderData.delivery_apartment || "" : "",
     delivery_intercom: isDelivery ? orderData.delivery_intercom || "" : "",
-    delivery_comment: isDelivery ? orderData.delivery_comment || "" : "",
     delivery_latitude: isDelivery ? orderData.delivery_latitude ?? "" : "",
     delivery_longitude: isDelivery ? orderData.delivery_longitude ?? "" : "",
     payment_method: orderData.payment_method || "",
