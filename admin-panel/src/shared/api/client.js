@@ -8,7 +8,22 @@ const api = axios.create({
   },
 });
 let refreshPromise = null;
-const AUTH_ERRORS = new Set(["Authentication required", "Token has been revoked", "Invalid or expired token", "Refresh token required"]);
+const AUTH_ERRORS = new Set([
+  "Authentication required",
+  "Token has been revoked",
+  "Invalid or expired token",
+  "Refresh token required",
+  "Refresh token has been revoked",
+  "Invalid or expired refresh token",
+  "Invalid refresh token payload",
+  "User account not found",
+  "Admin account not found or inactive",
+]);
+
+const isUnauthorizedStatus = (error) => {
+  const status = error?.response?.status;
+  return status === 401 || status === 403;
+};
 
 const isAuthErrorResponse = (error) => {
   const status = error?.response?.status;
@@ -57,7 +72,8 @@ api.interceptors.response.use(
           return api(originalRequest);
         }
       } catch (refreshError) {
-        if (isAuthErrorResponse(refreshError)) {
+        // Любой 401/403 на refresh означает, что сессию безопасно продолжать нельзя.
+        if (isUnauthorizedStatus(refreshError) || isAuthErrorResponse(refreshError)) {
           authStore.logout({ redirect: true });
         }
       }
