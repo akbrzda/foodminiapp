@@ -16,7 +16,7 @@
       <div v-else class="orders-list">
         <div v-for="order in orders" :key="order.id" class="order-card" @click="openOrder(order.id)">
           <div class="order-header">
-            <div class="order-number">#{{ order.order_number }}</div>
+            <div class="order-number">Заказ {{ order.order_number }}</div>
             <div :class="['order-status', `status-${order.status}`]">
               {{ getStatusText(order.status) }}
             </div>
@@ -25,13 +25,12 @@
             {{ formatDate(order.created_at) }}
           </div>
           <div class="order-details">
-            <div>{{ order.items_count }} позиций</div>
+            <div class="order-type">
+              <Truck v-if="order.order_type === 'delivery'" :size="16" />
+              <Store v-else :size="16" />
+              {{ order.order_type === "delivery" ? "Доставка" : "Самовывоз" }}
+            </div>
             <div class="order-total">{{ formatPrice(order.total_amount) }} ₽</div>
-          </div>
-          <div class="order-type">
-            <Truck v-if="order.order_type === 'delivery'" :size="16" />
-            <Store v-else :size="16" />
-            {{ order.order_type === "delivery" ? "Доставка" : "Самовывоз" }}
           </div>
         </div>
       </div>
@@ -129,7 +128,7 @@ const formatDate = (dateString) => formatCalendarDateTime(dateString, { separato
   margin-bottom: 24px;
 }
 .order-card {
-  padding: 16px;
+  padding: 12px;
   background: var(--color-background);
   border-radius: var(--border-radius-md);
   margin-bottom: 8px;
@@ -144,7 +143,6 @@ const formatDate = (dateString) => formatCalendarDateTime(dateString, { separato
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 8px;
 }
 .order-number {
   font-weight: var(--font-weight-semibold);
@@ -188,13 +186,12 @@ const formatDate = (dateString) => formatCalendarDateTime(dateString, { separato
 .order-date {
   font-size: var(--font-size-caption);
   color: var(--color-text-secondary);
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 .order-details {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 8px;
 }
 .order-total {
   font-weight: var(--font-weight-bold);

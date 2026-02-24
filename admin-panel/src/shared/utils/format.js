@@ -7,6 +7,23 @@ export function formatCurrency(value) {
     maximumFractionDigits: 2,
   }).format(number);
 }
+
+export function normalizePaymentMethodKey(value) {
+  const key = String(value || "")
+    .trim()
+    .toLowerCase();
+  if (!key) return "";
+  if (["cash", "наличные", "cash_payment", "cash_on_delivery"].includes(key)) return "cash";
+  if (["card", "карта", "cashless", "card_payment", "online", "sbp", "terminal"].includes(key)) return "card";
+  return key;
+}
+
+export function formatPaymentMethod(value, fallback = "—") {
+  const key = normalizePaymentMethodKey(value);
+  if (key === "cash") return "Наличные";
+  if (key === "card") return "Карта";
+  return fallback;
+}
 export function formatNumber(value) {
   const number = Number(value || 0);
   return new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(number);

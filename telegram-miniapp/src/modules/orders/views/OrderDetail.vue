@@ -26,10 +26,13 @@
     </div>
     <div v-else-if="order" class="order-content page-container">
       <div class="status-card">
+        <div class="order-info">
+          <span class="order-number">Заказ {{ order.order_number }}</span>
+          <div class="order-date">{{ formatDate(order.created_at) }}</div>
+        </div>
         <div :class="['status-badge', `status-${order.status}`]">
           {{ getStatusText(order.status) }}
         </div>
-        <div class="order-date">{{ formatDate(order.created_at) }}</div>
       </div>
       <div class="section">
         <h3>Состав заказа</h3>
@@ -53,78 +56,25 @@
         <div v-else class="empty-state">Заказ пуст</div>
       </div>
       <div class="section" v-if="order.order_type === 'delivery'">
-        <h3>Адрес доставки</h3>
+        <h3>Доставка по адресу:</h3>
         <div class="delivery-info">
           <div class="info-row" v-if="formatDeliveryAddress(order)">
-            <span class="label">Адрес:</span>
-            <span>{{ formatDeliveryAddress(order) }}</span>
-          </div>
-          <div class="info-row">
-            <span class="label">Город:</span>
-            <span>{{ order.city_name }}</span>
-          </div>
-          <div class="info-row" v-if="order.delivery_street">
-            <span class="label">Улица:</span>
-            <span>{{ order.delivery_street }}</span>
-          </div>
-          <div class="info-row" v-if="order.delivery_house">
-            <span class="label">Дом:</span>
-            <span>{{ order.delivery_house }}</span>
-          </div>
-          <div class="info-row" v-if="order.delivery_apartment">
-            <span class="label">Квартира:</span>
-            <span>{{ order.delivery_apartment }}</span>
-          </div>
-          <div class="info-row" v-if="order.delivery_entrance">
-            <span class="label">Подъезд:</span>
-            <span>{{ order.delivery_entrance }}</span>
-          </div>
-          <div class="info-row" v-if="order.delivery_floor">
-            <span class="label">Этаж:</span>
-            <span>{{ order.delivery_floor }}</span>
-          </div>
-          <div class="info-row" v-if="order.delivery_intercom">
-            <span class="label">Код двери:</span>
-            <span>{{ order.delivery_intercom }}</span>
-          </div>
-          <div class="info-row" v-if="getOrderComment(order)">
-            <span class="label">Комментарий:</span>
-            <span>{{ getOrderComment(order) }}</span>
+            <span>{{ order.city_name }}, {{ formatDeliveryAddress(order) }}</span>
           </div>
         </div>
       </div>
       <div class="section" v-else>
-        <h3>Самовывоз</h3>
+        <h3>Самовывоз с филиала:</h3>
         <div class="pickup-info">
-          <div class="info-row">
-            <span class="label">Филиал:</span>
-            <span>{{ order.branch_name }}</span>
-          </div>
           <div class="info-row" v-if="order.branch_address">
-            <span class="label">Адрес:</span>
             <span>{{ order.branch_address }}</span>
           </div>
-          <div class="info-row" v-if="getOrderComment(order)">
-            <span class="label">Комментарий:</span>
-            <span>{{ getOrderComment(order) }}</span>
-          </div>
-        </div>
-      </div>
-      <div class="section" v-if="order.payment_method === 'cash' && order.change_from">
-        <h3>Оплата</h3>
-        <div class="info-row">
-          <span class="label">Сдача с:</span>
-          <span>{{ formatPrice(order.change_from) }} ₽</span>
-        </div>
-        <div class="info-row">
-          <span class="label">Сдача:</span>
-          <span>{{ formatPrice(getChangeAmount(order)) }} ₽</span>
         </div>
       </div>
       <div class="section">
         <h3>Итого</h3>
         <div class="total-row">
-          <span>Сумма без скидок</span>
+          <span>Сумма заказа</span>
           <span>{{ formatPrice(order.subtotal) }} ₽</span>
         </div>
         <div class="total-row" v-if="order.delivery_cost > 0">
@@ -138,6 +88,10 @@
         <div class="total-row" v-if="order.bonuses_earned > 0">
           <span>Начислено бонусов</span>
           <span class="bonus-earned">{{ formatPrice(order.bonuses_earned) }} бонусов</span>
+        </div>
+        <div class="total-row">
+          <span>Оплата</span>
+          <span>{{ formatPaymentMethod(order.payment_method) }}</span>
         </div>
         <div class="total-row final">
           <span>К оплате</span>
@@ -156,12 +110,11 @@
 <script setup>
 import { computed, ref, onMounted, onUnmounted } from "vue";
 import { RefreshCw } from "lucide-vue-next";
-import PageHeader from "@/shared/components/PageHeader.vue";
 import { useRoute, useRouter } from "vue-router";
 import { useCartStore } from "@/modules/cart/stores/cart.js";
 import { useSettingsStore } from "@/modules/settings/stores/settings.js";
 import { ordersAPI } from "@/shared/api/endpoints.js";
-import { formatPrice } from "@/shared/utils/format";
+import { formatPaymentMethod, formatPrice } from "@/shared/utils/format";
 import { hapticFeedback } from "@/shared/services/telegram.js";
 import { wsService } from "@/shared/services/websocket.js";
 import { devError } from "@/shared/utils/logger.js";
@@ -245,7 +198,7 @@ async function repeatOrder() {
 function getStatusText(status) {
   const isDelivery = order.value?.order_type === "delivery";
   const deliveryStatuses = {
-    pending: "Ожидает подтверждения",
+    pending: "Ожидает",
     confirmed: "Подтвержден",
     preparing: "Готовится",
     ready: "Готов",
@@ -254,7 +207,7 @@ function getStatusText(status) {
     cancelled: "Отменен",
   };
   const pickupStatuses = {
-    pending: "Ожидает подтверждения",
+    pending: "Ожидает",
     confirmed: "Подтвержден",
     preparing: "Готовится",
     ready: "Готов к выдаче",
@@ -276,9 +229,7 @@ function formatDate(dateString) {
 }
 function formatDeliveryAddress(orderData) {
   if (!orderData) return "";
-  const parts = [orderData.delivery_street, orderData.delivery_house, orderData.delivery_apartment]
-    .map((value) => (value ? String(value).trim() : ""))
-    .filter(Boolean);
+  const parts = [orderData.delivery_street, orderData.delivery_house].map((value) => (value ? String(value).trim() : "")).filter(Boolean);
   return parts.join(", ");
 }
 function getOrderComment(orderData) {
@@ -319,20 +270,22 @@ function getChangeAmount(orderData) {
   margin-bottom: 0;
 }
 .status-card {
-  padding: 20px;
+  padding: 12px;
   background: var(--color-background);
   border-radius: var(--border-radius-md);
-  text-align: center;
   margin-bottom: 8px;
   border: 1px solid var(--color-border);
+  display: flex;
+  justify-content: space-between;
 }
 .status-badge {
   display: inline-block;
-  padding: 8px 16px;
+  padding: 6px 12px;
   border-radius: 20px;
-  font-size: var(--font-size-caption);
+  font-size: var(--font-size-small);
   font-weight: var(--font-weight-bold);
   margin-bottom: 8px;
+  height: 100%;
 }
 .status-pending {
   background: #fff3cd;
@@ -362,12 +315,22 @@ function getChangeAmount(orderData) {
   background: var(--color-error);
   color: var(--color-background);
 }
+.order-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.order-number {
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-body);
+  color: var(--color-text-primary);
+}
 .order-date {
   font-size: var(--font-size-caption);
   color: var(--color-text-secondary);
 }
 .section {
-  padding: 16px;
+  padding: 12px;
   background: var(--color-background);
   border-radius: var(--border-radius-md);
   margin-bottom: 8px;
@@ -414,8 +377,6 @@ function getChangeAmount(orderData) {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  padding: 12px;
-  background: var(--color-background-secondary);
   border-radius: var(--border-radius-sm);
 }
 .item-info {

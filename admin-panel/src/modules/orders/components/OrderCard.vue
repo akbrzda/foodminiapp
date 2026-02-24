@@ -60,7 +60,7 @@ import { computed } from "vue";
 import { Clock, CreditCard, MapPin, MessageSquare, Phone, Store } from "lucide-vue-next";
 import Badge from "@/shared/components/ui/badge/Badge.vue";
 import Button from "@/shared/components/ui/button/Button.vue";
-import { formatCurrency, formatPhone, normalizePhone } from "@/shared/utils/format.js";
+import { formatCurrency, formatPaymentMethod, formatPhone, normalizePaymentMethodKey, normalizePhone } from "@/shared/utils/format.js";
 import OrderItemsList from "./OrderItemsList.vue";
 
 const props = defineProps({
@@ -136,11 +136,12 @@ const getOrderLocation = (order) => {
 
 // Информация об оплате
 const getPaymentSummary = (order) => {
-  const method = order.payment_method === "cash" ? "наличными" : "картой";
+  const paymentMethodKey = normalizePaymentMethodKey(order.payment_method);
+  const method = paymentMethodKey === "cash" ? "наличными" : paymentMethodKey === "card" ? "картой" : formatPaymentMethod(order.payment_method).toLowerCase();
   const itemsCount = order.items?.length || 0;
   const total = Number(order.total) || 0;
   const changeFromAmount = Number(order.change_from) || 0;
-  const hasChange = order.payment_method === "cash" && changeFromAmount > 0;
+  const hasChange = paymentMethodKey === "cash" && changeFromAmount > 0;
   const changePart = hasChange ? `, сдача ${formatCurrency(Math.max(0, changeFromAmount - total))} (с ${formatCurrency(changeFromAmount)})` : "";
   return `К оплате: ${formatCurrency(order.total)} ${method} (${itemsCount}шт)${changePart}`;
 };
@@ -151,7 +152,7 @@ const orderComment = computed(() => {
   return String(value).trim();
 });
 const changeFromAmount = computed(() => {
-  if (props.order.payment_method !== "cash") return 0;
+  if (normalizePaymentMethodKey(props.order.payment_method) !== "cash") return 0;
   return Math.max(0, Number(props.order.change_from) || 0);
 });
 const changeAmount = computed(() => Math.max(0, changeFromAmount.value - (Number(props.order.total) || 0)));

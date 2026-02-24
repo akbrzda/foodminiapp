@@ -6,6 +6,7 @@ import { authenticateToken, requireRole } from "../../middleware/auth.js";
 import { telegramQueue, imageQueue, getQueueStats, getFailedJobs, retryFailedJobs, cleanQueue } from "../../queues/config.js";
 import { getSystemSettings } from "../../utils/settings.js";
 import { logger } from "../../utils/logger.js";
+import { decryptUserData, encryptEmail, encryptPhone } from "../../utils/encryption.js";
 const router = express.Router();
 router.use(authenticateToken);
 const ADMIN_LOGIN_ATTEMPTS_PREFIX = "auth:admin:attempts";
@@ -335,7 +336,8 @@ router.get("/clients", requireRole("admin", "manager", "ceo"), async (req, res, 
     `;
     params.push(parseInt(limit), parseInt(offset));
     const [clients] = await db.query(query, params);
-    res.json({ clients });
+    const decryptedClients = clients.map((client) => decryptUserData(client));
+    res.json({ clients: decryptedClients });
   } catch (error) {
     next(error);
   }
@@ -368,7 +370,8 @@ router.get("/clients/:id", requireRole("admin", "manager", "ceo"), async (req, r
     if (users.length === 0) {
       return res.status(404).json({ error: "User not found" });
     }
-    res.json({ user: users[0] });
+    const decryptedUser = decryptUserData(users[0]);
+    res.json({ user: decryptedUser });
   } catch (error) {
     next(error);
   }
@@ -385,11 +388,13 @@ router.put("/clients/:id", requireRole("admin", "manager", "ceo"), async (req, r
     if (users.length === 0) {
       return res.status(404).json({ error: "User not found" });
     }
+    const encryptedPhone = phone ? encryptPhone(phone) : null;
+    const encryptedEmail = email ? encryptEmail(email) : null;
     await db.query("UPDATE users SET phone = ?, first_name = ?, last_name = ?, email = ? WHERE id = ?", [
-      phone || null,
+      encryptedPhone,
       first_name || null,
       last_name || null,
-      email || null,
+      encryptedEmail,
       userId,
     ]);
     const [updated] = await db.query(
@@ -403,7 +408,8 @@ router.put("/clients/:id", requireRole("admin", "manager", "ceo"), async (req, r
        WHERE u.id = ?`,
       [userId],
     );
-    res.json({ user: updated[0] });
+    const decryptedUser = decryptUserData(updated[0]);
+    res.json({ user: decryptedUser });
   } catch (error) {
     next(error);
   }

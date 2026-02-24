@@ -30,13 +30,6 @@
             <div class="skeleton skeleton-line skeleton-w-52 skeleton-h-22"></div>
             <div class="skeleton skeleton-line skeleton-w-100 skeleton-h-8 skeleton-rounded-full"></div>
             <div class="skeleton skeleton-line skeleton-w-80"></div>
-            <div class="next-level-card">
-              <div class="skeleton skeleton-circle skeleton-circle-sm"></div>
-              <div class="next-level-info">
-                <div class="skeleton skeleton-line skeleton-w-48"></div>
-                <div class="skeleton skeleton-line skeleton-w-72"></div>
-              </div>
-            </div>
           </div>
           <div class="history-section">
             <h3>История операций</h3>
@@ -95,20 +88,6 @@
               До обновления статуса — {{ formatPrice(amountToNextLevel) }} ₽ за последние {{ levelCalculationDays }} дней
             </div>
             <div class="progress-caption" v-else>У вас максимальный статус</div>
-
-            <div v-if="nextLevel" class="next-level-card">
-              <div class="next-level-icon dimmed">
-                <Trophy :size="18" />
-              </div>
-              <div class="next-level-info">
-                <div class="next-level-name">{{ nextLevel.name }}</div>
-                <div class="next-level-benefits">
-                  <span>Начисление: {{ Math.round(nextLevel.rate * 100) }}%</span>
-                  <span>•</span>
-                  <span>Списание до: {{ Math.round((nextLevel.redeemPercent ?? loyaltyStore.fallbackRedeemPercent) * 100) }}%</span>
-                </div>
-              </div>
-            </div>
           </div>
 
           <div v-if="levelsPopup.open" class="level-popup">
@@ -133,14 +112,6 @@
           </div>
 
           <div v-if="expiringBonuses.length > 0" class="expiring-section">
-            <div class="expiring-alert">
-              <div class="expiring-icon">
-                <AlertTriangle :size="16" />
-              </div>
-              <div class="expiring-text">
-                <strong>{{ formatPrice(totalExpiring) }} бонусов</strong> сгорят в ближайшие {{ expiringDaysThreshold }} дней
-              </div>
-            </div>
             <div class="expiring-list">
               <div v-for="bonus in expiringBonuses" :key="bonus.id" class="expiring-item">
                 <span class="expiring-amount">{{ formatPrice(bonus.amount) }} ₽</span>
@@ -342,7 +313,7 @@ function formatDateShort(dateString) {
   font-weight: var(--font-weight-semibold);
 }
 .loyalty-card {
-  padding: 20px;
+  padding: 12px;
   background: var(--color-primary);
   border-radius: var(--border-radius-lg);
   border: 1px solid var(--color-primary);
@@ -445,7 +416,7 @@ function formatDateShort(dateString) {
 .progress-card {
   background: var(--color-background);
   border-radius: var(--border-radius-md);
-  padding: 16px;
+  padding: 12px;
   border: 1px solid var(--color-border);
   margin-bottom: 20px;
 }
@@ -476,7 +447,6 @@ function formatDateShort(dateString) {
 .progress-caption {
   font-size: var(--font-size-caption);
   color: var(--color-text-secondary);
-  margin-bottom: 16px;
 }
 
 /* Карточка следующего уровня */
@@ -521,16 +491,6 @@ function formatDateShort(dateString) {
 /* Секция истекающих бонусов */
 .expiring-section {
   margin-bottom: 20px;
-}
-
-.expiring-alert {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 16px;
-  background: #fff3cd;
-  border-radius: var(--border-radius-md);
-  margin-bottom: 12px;
 }
 
 .expiring-icon {
@@ -702,7 +662,7 @@ function formatDateShort(dateString) {
   background: var(--color-background);
   border-radius: var(--border-radius-lg);
   box-shadow: var(--shadow-md);
-  padding: 16px;
+  padding: 12px;
 }
 .modal-header {
   display: flex;
@@ -739,9 +699,9 @@ function formatDateShort(dateString) {
 }
 .transaction-item {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 12px;
-  padding: 16px;
+  padding: 12px;
   background: var(--color-background);
   border-radius: var(--border-radius-md);
   border: 1px solid var(--color-border);

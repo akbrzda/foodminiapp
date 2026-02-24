@@ -976,7 +976,7 @@ async function submitOrder() {
   gap: 12px;
 }
 .branch-card {
-  padding: 16px;
+  padding: 12px;
   background: var(--color-background);
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius-md);

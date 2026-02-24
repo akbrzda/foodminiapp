@@ -283,12 +283,12 @@
           >
             <div class="flex items-center gap-3">
               <div class="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary">
-                <Banknote v-if="method.payment_method === 'cash'" :size="18" />
+                <Banknote v-if="normalizePaymentMethodKey(method.payment_method) === 'cash'" :size="18" />
                 <CreditCard v-else :size="18" />
               </div>
               <div>
                 <p class="text-sm font-medium text-foreground">
-                  {{ method.payment_method === "cash" ? "Наличные" : "Карта" }}
+                  {{ formatPaymentMethod(method.payment_method) }}
                 </p>
                 <p class="text-xs text-muted-foreground">{{ formatNumber(method.count) }} заказов</p>
               </div>
@@ -349,7 +349,7 @@ import api from "@/shared/api/client.js";
 import { useReferenceStore } from "@/shared/stores/reference.js";
 import { useAuthStore } from "@/shared/stores/auth.js";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
-import { formatCurrency, formatNumber } from "@/shared/utils/format.js";
+import { formatCurrency, formatNumber, formatPaymentMethod, normalizePaymentMethodKey } from "@/shared/utils/format.js";
 import Button from "@/shared/components/ui/button/Button.vue";
 import Card from "@/shared/components/ui/card/Card.vue";
 import CardContent from "@/shared/components/ui/card/CardContent.vue";

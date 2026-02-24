@@ -11,6 +11,24 @@ export function formatPrice(value) {
     .replace(/\.00$/, "")
     .replace(/(\.\d)0$/, "$1");
 }
+
+export function normalizePaymentMethodKey(value) {
+  const key = String(value || "")
+    .trim()
+    .toLowerCase();
+  if (!key) return "";
+  if (["cash", "наличные", "cash_payment", "cash_on_delivery"].includes(key)) return "cash";
+  if (["card", "карта", "cashless", "card_payment", "online", "sbp", "terminal"].includes(key)) return "card";
+  return key;
+}
+
+export function formatPaymentMethod(value, fallback = "—") {
+  const key = normalizePaymentMethodKey(value);
+  if (key === "cash") return "Наличными";
+  if (key === "card") return "Картой";
+  return fallback;
+}
+
 export function normalizeImageUrl(url) {
   if (!url) return null;
   if (/^data:/i.test(url)) return url;

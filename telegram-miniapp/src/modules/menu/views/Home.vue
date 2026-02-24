@@ -728,7 +728,7 @@ function goToCart() {
 }
 .active-order {
   min-width: 320px;
-  padding: 16px;
+  padding: 12px;
   background: var(--color-background-secondary);
   border-radius: var(--border-radius-lg);
   display: flex;
@@ -894,7 +894,7 @@ function goToCart() {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px;
+  padding: 12px;
   background: var(--color-background);
   border-radius: var(--border-radius-md);
   box-shadow: var(--shadow-sm);

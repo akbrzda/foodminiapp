@@ -281,7 +281,7 @@ import { ref, computed, onMounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { CircleCheck, Trash2 } from "lucide-vue-next";
 import api from "@/shared/api/client.js";
-import { formatCurrency, formatDateTime, formatNumber, formatPhone, normalizePhone } from "@/shared/utils/format.js";
+import { formatCurrency, formatDateTime, formatNumber, formatPaymentMethod, formatPhone, normalizePhone } from "@/shared/utils/format.js";
 import Badge from "@/shared/components/ui/badge/Badge.vue";
 import Button from "@/shared/components/ui/button/Button.vue";
 import Card from "@/shared/components/ui/card/Card.vue";
@@ -318,9 +318,7 @@ const deletingOrder = ref(false);
 const canDeleteOrder = computed(() => authStore.role === "admin");
 const orderTimeZone = computed(() => order.value?.city_timezone || "Europe/Moscow");
 const paymentMethodLabel = computed(() => {
-  if (order.value?.payment_method === "cash") return "Наличные";
-  if (order.value?.payment_method === "card") return "Карта";
-  return "—";
+  return formatPaymentMethod(order.value?.payment_method);
 });
 const deliveryOrPickupTimeLabel = computed(() => (order.value?.order_type === "delivery" ? "Время доставки" : "Время выдачи"));
 const customerName = computed(() => {
