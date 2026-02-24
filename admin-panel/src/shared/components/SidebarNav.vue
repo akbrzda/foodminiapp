@@ -38,15 +38,10 @@
           <p class="truncate text-base font-semibold text-foreground">Panda Pizza</p>
           <p class="text-xs text-muted-foreground">
             Админ-панель |
-            <button
-              type="button"
-              class="text-left text-xs text-muted-foreground transition hover:bg-accent/30 hover:text-foreground"
-              :title="`Версия ${sidebarVersion}`"
-              @click="openChangelogModal"
-            >
+            <span :title="`Версия ${sidebarVersion}`">
               <span v-if="!isCollapsed">v{{ sidebarVersion }}</span>
               <span v-else>v</span>
-            </button>
+            </span>
           </p>
         </div>
       </div>
@@ -114,55 +109,6 @@
       </div>
     </div>
   </aside>
-  <Dialog v-model:open="versionModalOpen">
-    <DialogContent class="max-w-2xl">
-      <DialogHeader>
-        <DialogTitle>Что нового</DialogTitle>
-        <DialogDescription>История релизов и изменений продукта</DialogDescription>
-      </DialogHeader>
-      <div v-if="changelogLoading" class="space-y-2">
-        <Skeleton class="h-12 w-full" />
-        <Skeleton class="h-12 w-full" />
-        <Skeleton class="h-12 w-full" />
-      </div>
-      <div v-else-if="changelogReleases.length" class="max-h-[60vh] space-y-2 overflow-y-auto pr-1">
-        <div v-for="release in changelogReleases" :key="release.id" class="rounded-lg border border-border/60 bg-muted/20">
-          <button type="button" class="flex w-full items-center justify-between gap-3 px-3 py-2 text-left" @click="toggleRelease(release)">
-            <div class="min-w-0">
-              <div class="text-xs text-muted-foreground">v{{ release.version }} · {{ formatReleaseDate(release.published_at) }}</div>
-              <div class="truncate text-sm font-medium text-foreground">{{ release.title }}</div>
-            </div>
-            <ChevronDown
-              :size="16"
-              class="shrink-0 text-muted-foreground transition-transform"
-              :class="expandedReleaseId === release.id ? 'rotate-180' : ''"
-            />
-          </button>
-          <div v-if="expandedReleaseId === release.id" class="border-t border-border/60 px-3 py-2">
-            <div v-if="releaseDetailsLoadingId === release.id" class="space-y-2">
-              <Skeleton class="h-4 w-full" />
-              <Skeleton class="h-4 w-5/6" />
-            </div>
-            <template v-else>
-              <div v-if="releaseDetailsMap[release.id]?.description" class="mb-2 text-sm text-muted-foreground">
-                {{ releaseDetailsMap[release.id].description }}
-              </div>
-              <div v-if="releaseDetailsMap[release.id]?.items?.length" class="space-y-1">
-                <div v-for="item in releaseDetailsMap[release.id].items" :key="item.id" class="flex gap-2 text-sm">
-                  <span class="rounded-full border border-border/70 bg-background px-2 py-0.5 text-[11px] text-muted-foreground">
-                    {{ getItemTypeLabel(item.item_type) }}
-                  </span>
-                  <span class="text-foreground">{{ item.title }}</span>
-                </div>
-              </div>
-              <div v-else class="text-sm text-muted-foreground">Пункты релиза не заполнены</div>
-            </template>
-          </div>
-        </div>
-      </div>
-      <div v-else class="text-sm text-muted-foreground">Опубликованных релизов пока нет</div>
-    </DialogContent>
-  </Dialog>
 </template>
 <script setup>
 import { computed, onMounted, ref } from "vue";
@@ -172,7 +118,6 @@ import { useOrdersStore } from "@/modules/orders/stores/orders.js";
 import api from "@/shared/api/client.js";
 import {
   Building2,
-  ChevronDown,
   ChevronsUpDown,
   ClipboardList,
   FileText,
@@ -193,7 +138,6 @@ import {
   X,
 } from "lucide-vue-next";
 import { Avatar, AvatarFallback } from "@/shared/components/ui/avatar";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/shared/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -202,7 +146,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/shared/components/ui/dropdown-menu";
-import Skeleton from "@/shared/components/ui/skeleton/Skeleton.vue";
 
 defineOptions({
   inheritAttrs: false,
@@ -217,12 +160,6 @@ const emit = defineEmits(["navigate", "close"]);
 const authStore = useAuthStore();
 const ordersStore = useOrdersStore();
 const sidebarVersion = ref("—");
-const versionModalOpen = ref(false);
-const changelogLoading = ref(false);
-const changelogReleases = ref([]);
-const expandedReleaseId = ref(null);
-const releaseDetailsLoadingId = ref(null);
-const releaseDetailsMap = ref({});
 const isManager = computed(() => authStore.role === "manager");
 const newOrdersCount = computed(() => ordersStore.newOrdersCount);
 const initials = computed(() => {
@@ -296,78 +233,12 @@ const handleClose = () => {
   emit("close");
 };
 
-const formatReleaseDate = (value) => {
-  if (!value) return "Без даты";
-  return new Intl.DateTimeFormat("ru-RU", { dateStyle: "medium" }).format(new Date(value));
-};
-
-const getItemTypeLabel = (itemType) => {
-  if (itemType === "fix") return "Исправление";
-  if (itemType === "breaking") return "Важно";
-  if (itemType === "internal") return "Сервисное";
-  return "Новое";
-};
-
 const loadSidebarVersion = async () => {
-  try {
-    const latestResponse = await api.get("/api/changelog/latest");
-    const latestVersion = latestResponse.data?.release?.version;
-    if (latestVersion) {
-      sidebarVersion.value = latestVersion;
-      return;
-    }
-  } catch (error) {
-    // ignore and fallback to /api version
-  }
-
   try {
     const apiInfoResponse = await api.get("/api");
     sidebarVersion.value = apiInfoResponse.data?.version || "—";
   } catch (error) {
     sidebarVersion.value = "—";
-  }
-};
-
-const openChangelogModal = async () => {
-  versionModalOpen.value = true;
-  if (changelogReleases.value.length > 0 || changelogLoading.value) return;
-  changelogLoading.value = true;
-  try {
-    const response = await api.get("/api/changelog/releases", { params: { page: 1, limit: 20 } });
-    changelogReleases.value = response.data?.items || [];
-  } catch (error) {
-    changelogReleases.value = [];
-  } finally {
-    changelogLoading.value = false;
-  }
-};
-
-const toggleRelease = async (release) => {
-  if (expandedReleaseId.value === release.id) {
-    expandedReleaseId.value = null;
-    return;
-  }
-
-  expandedReleaseId.value = release.id;
-
-  if (releaseDetailsMap.value[release.id] || releaseDetailsLoadingId.value === release.id) {
-    return;
-  }
-
-  releaseDetailsLoadingId.value = release.id;
-  try {
-    const response = await api.get(`/api/changelog/releases/${release.id}`);
-    releaseDetailsMap.value = {
-      ...releaseDetailsMap.value,
-      [release.id]: response.data?.release || null,
-    };
-  } catch (error) {
-    releaseDetailsMap.value = {
-      ...releaseDetailsMap.value,
-      [release.id]: null,
-    };
-  } finally {
-    releaseDetailsLoadingId.value = null;
   }
 };
 
