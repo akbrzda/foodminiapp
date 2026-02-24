@@ -87,6 +87,25 @@
         >
           Перейти к оформлению
         </button>
+        <div class="upsell-section" v-if="cartStore.items.length > 0">
+          <div class="upsell-title">Рекомендуем</div>
+          <div v-if="isUpsellLoading" class="upsell-carousel">
+            <div v-for="index in 3" :key="`upsell-skeleton-${index}`" class="upsell-card upsell-card-skeleton"></div>
+          </div>
+          <div v-else-if="upsellItems.length > 0" class="upsell-carousel">
+            <div v-for="item in upsellItems" :key="`${item.id}-${item.variant_id || 0}`" class="upsell-card">
+              <div class="upsell-image" v-if="item.image_url">
+                <img :src="normalizeImageUrl(item.image_url)" :alt="item.name" />
+              </div>
+              <div class="upsell-body">
+                <div class="upsell-name">{{ item.name }}</div>
+                <div class="upsell-variant">{{ item.variant_name || " " }}</div>
+                <div class="upsell-price">{{ formatPrice(item.price) }} ₽</div>
+                <button class="upsell-btn" type="button" @click="handleUpsellAction(item)">Добавить</button>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
     <div v-if="showPartialModal" class="bonus-modal-overlay" @click.self="closePartialModal">
@@ -130,7 +149,7 @@ import { useMenuStore } from "@/modules/menu/stores/menu.js";
 import { useSettingsStore } from "@/modules/settings/stores/settings.js";
 import { useKeyboardHandler } from "@/shared/composables/useKeyboardHandler";
 import { hapticFeedback, showAlert } from "@/shared/services/telegram.js";
-import { bonusesAPI, addressesAPI, citiesAPI } from "@/shared/api/endpoints.js";
+import { bonusesAPI, addressesAPI, citiesAPI, menuAPI } from "@/shared/api/endpoints.js";
 import { formatPrice, normalizeImageUrl } from "@/shared/utils/format";
 import { formatWeight, formatWeightValue } from "@/shared/utils/weight";
 import { calculateDeliveryCost, getThresholds, normalizeTariffs, findTariffForAmount } from "@/shared/utils/deliveryTariffs";
@@ -145,6 +164,8 @@ const loyaltyStore = useLoyaltyStore();
 const settingsStore = useSettingsStore();
 const { isKeyboardOpen } = useKeyboardHandler();
 const bonusBalance = ref(0);
+const upsellItems = ref([]);
+const isUpsellLoading = ref(false);
 const showBonusInfo = ref(false);
 const showPartialModal = ref(false);
 const partialBonusInput = ref("");
@@ -232,6 +253,7 @@ const isCurrentTariff = (tariff) => {
 const bonusChangeRequested = ref(false);
 onMounted(async () => {
   await loadBonusBalance();
+  await loadUpsell();
   if (menuStore.items?.length) {
     // Обновляем позиции корзины на основе актуального меню, чтобы подтянуть правильные цены и изображения.
     cartStore.refreshPricesFromMenu(menuStore.items);
@@ -304,6 +326,45 @@ function checkout() {
   }
   hapticFeedback("medium");
   router.push("/checkout");
+}
+async function loadUpsell() {
+  if (!locationStore.selectedCity?.id || cartStore.items.length === 0) {
+    upsellItems.value = [];
+    return;
+  }
+  try {
+    isUpsellLoading.value = true;
+    const response = await menuAPI.getUpsell({
+      city_id: locationStore.selectedCity.id,
+      branch_id: locationStore.selectedBranch?.id || locationStore.deliveryZone?.branch_id || null,
+      fulfillment_type: locationStore.deliveryType || "delivery",
+      limit: 3,
+      cart_items: cartStore.items.map((item) => ({
+        item_id: item.id,
+        price: Number(item.price) || 0,
+      })),
+    });
+    upsellItems.value = Array.isArray(response.data?.items) ? response.data.items : [];
+  } catch (error) {
+    upsellItems.value = [];
+    devError("Не удалось загрузить допродажи в корзине:", error);
+  } finally {
+    isUpsellLoading.value = false;
+  }
+}
+function handleUpsellAction(item) {
+  if (!item) return;
+  hapticFeedback("success");
+  cartStore.addItem({
+    id: item.id,
+    name: item.name,
+    price: Number(item.price) || 0,
+    quantity: 1,
+    modifiers: [],
+    variant_id: item.variant_id || null,
+    variant_name: item.variant_name || null,
+    image_url: item.image_url || null,
+  });
 }
 function getModifierSummary(item) {
   if (!item || !Array.isArray(item.modifiers)) return [];
@@ -523,9 +584,16 @@ watch(
     if (bonusesEnabled.value && cartStore.items.length > 0) {
       await loadMaxUsable();
     }
+    await loadUpsell();
     await ensureTariffs();
   },
   { deep: true },
+);
+watch(
+  () => [locationStore.selectedCity?.id, locationStore.selectedBranch?.id, locationStore.deliveryType, locationStore.deliveryZone?.branch_id],
+  async () => {
+    await loadUpsell();
+  },
 );
 watch(
   () => [isDelivery.value, locationStore.deliveryZone?.branch_id, locationStore.selectedCity?.id],
@@ -551,6 +619,94 @@ watch(
 }
 .items {
   margin-bottom: 8px;
+}
+.upsell-section {
+  margin-top: 16px;
+}
+.upsell-title {
+  font-size: var(--font-size-h3);
+  font-weight: var(--font-weight-semibold);
+  margin-bottom: 8px;
+  color: var(--color-text-primary);
+}
+.upsell-carousel {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  padding-bottom: 4px;
+}
+.upsell-card {
+  flex: 0 0 138px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--color-background);
+  scroll-snap-align: start;
+}
+.upsell-image {
+  width: 100%;
+  height: 138px;
+  flex: 0 0 138px;
+}
+.upsell-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.upsell-body {
+  padding: 8px;
+  display: grid;
+  gap: 6px;
+  flex: 1 1 auto;
+}
+.upsell-name {
+  font-size: 12px;
+  line-height: 1.25;
+  color: var(--color-text-primary);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.upsell-price {
+  font-size: 13px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  align-self: start;
+}
+.upsell-variant {
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.upsell-btn {
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-background-secondary);
+  color: var(--color-text-primary);
+  padding: 6px;
+  font-size: 12px;
+  font-weight: var(--font-weight-semibold);
+}
+.upsell-card-skeleton {
+  height: 276px;
+  background: linear-gradient(90deg, var(--color-background-secondary), #f3f4f7, var(--color-background-secondary));
+  background-size: 200% 100%;
+  animation: upsell-skeleton 1.2s ease-in-out infinite;
+}
+@keyframes upsell-skeleton {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: 0 0;
+  }
 }
 .cart-item {
   display: flex;

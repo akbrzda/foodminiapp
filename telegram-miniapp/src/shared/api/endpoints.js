@@ -48,6 +48,9 @@ export const menuAPI = {
   getModifiers(itemId) {
     return api.get(`/menu/products/${itemId}/modifiers`);
   },
+  getUpsell(payload) {
+    return api.post("/menu/upsell", payload);
+  },
 };
 export const ordersAPI = {
   createOrder(orderData) {

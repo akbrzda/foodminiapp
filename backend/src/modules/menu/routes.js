@@ -15,6 +15,7 @@ const router = express.Router();
 
 // Получение полного меню
 router.get("/", publicMenuController.getMenu);
+router.post("/upsell", authenticateToken, publicMenuController.getCartUpsell);
 
 // Получение категорий
 router.get("/categories", publicMenuController.getCategories);

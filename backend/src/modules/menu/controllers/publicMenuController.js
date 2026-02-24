@@ -2,6 +2,7 @@ import db from "../../../config/database.js";
 import redis from "../../../config/redis.js";
 import logger from "../../../utils/logger.js";
 import { getIntegrationSettings } from "../../integrations/services/integrationConfigService.js";
+import { getDynamicUpsell } from "../services/upsellService.js";
 
 const MENU_CACHE_TTL = 300;
 
@@ -732,5 +733,29 @@ export const getGroupModifiers = async (req, res, next) => {
     res.json({ modifiers });
   } catch (error) {
     next(error);
+  }
+};
+
+// POST /upsell - Динамичные допродажи для корзины
+export const getCartUpsell = async (req, res, next) => {
+  try {
+    const { city_id, branch_id, fulfillment_type, cart_items, limit } = req.body || {};
+    const cityId = Number(city_id);
+    if (!Number.isInteger(cityId)) {
+      return res.status(400).json({ error: "city_id is required" });
+    }
+
+    const suggestions = await getDynamicUpsell({
+      cityId,
+      branchId: Number.isInteger(Number(branch_id)) ? Number(branch_id) : null,
+      fulfillmentType: fulfillment_type || "delivery",
+      cartItems: Array.isArray(cart_items) ? cart_items : [],
+      userId: req.user?.id || null,
+      limit,
+    });
+
+    return res.json({ items: suggestions });
+  } catch (error) {
+    return next(error);
   }
 };
