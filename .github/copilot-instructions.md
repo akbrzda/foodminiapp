@@ -836,7 +836,7 @@ Use these links when working with specific technologies:
 ❌ Comment every line of code  
 ❌ Start services without checking if they're running  
 ❌ Open new terminals for each command  
-❌ Run `npm run build` after each change  
+❌ Run `npm run build`  
 ❌ Install libraries without user permission  
 ❌ Commit `.env` files  
 ❌ Use `console.log()` in production code

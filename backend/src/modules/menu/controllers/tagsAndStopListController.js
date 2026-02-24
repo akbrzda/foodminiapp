@@ -545,15 +545,24 @@ export const addToStopList = async (req, res, next) => {
       return res.status(404).json({ error: `${entity_type} not found` });
     }
 
+    const [existingStop] = await db.query(
+      `SELECT id
+       FROM menu_stop_list
+       WHERE branch_id = ?
+         AND entity_type = ?
+         AND entity_id = ?
+       LIMIT 1`,
+      [branch_id, entity_type, entity_id],
+    );
+    if (existingStop.length > 0) {
+      return res.status(409).json({
+        error: "Позиция уже находится в стоп-листе для выбранного филиала",
+      });
+    }
+
     await db.query(
       `INSERT INTO menu_stop_list (branch_id, entity_type, entity_id, fulfillment_types, reason, auto_remove, remove_at, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-       ON DUPLICATE KEY UPDATE
-         fulfillment_types = VALUES(fulfillment_types),
-         reason = VALUES(reason),
-         auto_remove = VALUES(auto_remove),
-         remove_at = VALUES(remove_at),
-         created_by = VALUES(created_by)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         branch_id,
         entity_type,

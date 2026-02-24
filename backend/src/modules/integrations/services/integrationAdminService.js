@@ -16,35 +16,6 @@ import {
   premiumBonusPurchasesSyncQueue,
 } from "../../../queues/config.js";
 
-function extractIikoItemCategoryIds(item = {}) {
-  const ids = new Set();
-  const add = (value) => {
-    const id = String(value || "").trim();
-    if (id) ids.add(id);
-  };
-
-  add(item.parentGroup);
-  add(item.parentGroupId);
-  add(item.parent_group);
-  add(item.groupId);
-  add(item.group_id);
-  add(item.categoryId);
-  add(item.category_id);
-  add(item.productCategoryId);
-  add(item.product_category_id);
-  add(item.productGroupId);
-  add(item.product_group_id);
-
-  if (Array.isArray(item.groups)) {
-    for (const group of item.groups) {
-      if (typeof group === "object") add(group.id || group.groupId || group.group_id);
-      else add(group);
-    }
-  }
-
-  return [...ids];
-}
-
 function normalizeDisplayName(value, fallback = "") {
   const source = String(value || fallback || "").trim();
   if (!source) return "";
@@ -131,27 +102,6 @@ export async function getIikoNomenclatureOverview(options = {}) {
     priceCategoriesRaw = [];
     warnings.externalMenus = error?.message || "Не удалось получить список внешних меню iiko";
   }
-  let nomenclature = {};
-  try {
-    nomenclature = await client.getNomenclature({ useConfiguredOrganization: false });
-  } catch (error) {
-    nomenclature = {};
-    warnings.nomenclature = error?.message || "Не удалось получить номенклатуру iiko";
-  }
-
-  const categoriesRaw = Array.isArray(nomenclature?.groups) && nomenclature.groups.length > 0
-    ? nomenclature.groups
-    : Array.isArray(nomenclature?.categories) && nomenclature.categories.length > 0
-      ? nomenclature.categories
-      : Array.isArray(nomenclature?.productCategories)
-        ? nomenclature.productCategories
-        : [];
-  const itemsRaw = Array.isArray(nomenclature?.items)
-    ? nomenclature.items
-    : Array.isArray(nomenclature?.products)
-      ? nomenclature.products
-      : [];
-
   const selectedExternalMenuId = externalMenuIdOverride || String(settings.iikoExternalMenuId || "").trim();
   const selectedPriceCategoryId = priceCategoryIdOverride || String(settings.iikoPriceCategoryId || "").trim();
 
@@ -198,44 +148,6 @@ export async function getIikoNomenclatureOverview(options = {}) {
     }
   }
 
-  const countsByCategory = new Map();
-  for (const item of itemsRaw) {
-    if (externalMenuItemIds && externalMenuItemIds.size > 0) {
-      const itemId = normalizeIikoId(item?.id || item?.item_id || item?.productId || item?.product_id);
-      if (!itemId || !externalMenuItemIds.has(itemId)) continue;
-    }
-    if (externalMenuItemIds && externalMenuItemIds.size === 0) {
-      continue;
-    }
-    const ids = extractIikoItemCategoryIds(item);
-    for (const id of ids) {
-      countsByCategory.set(id, (countsByCategory.get(id) || 0) + 1);
-    }
-  }
-
-  const categoriesByName = new Map();
-  for (const category of categoriesRaw) {
-    const id = String(category?.id || category?.groupId || category?.category_id || "").trim();
-    if (!id) continue;
-    const productsCount = countsByCategory.get(id) || 0;
-    const name = normalizeDisplayName(category?.name || category?.title || category?.caption, `Категория ${id}`);
-    const key = name.toLocaleLowerCase("ru-RU");
-    const next = {
-      id,
-      name,
-      products_count: productsCount,
-      selected: (settings.iikoSyncCategoryIds || []).includes(id),
-    };
-
-    const existing = categoriesByName.get(key);
-    if (!existing) {
-      categoriesByName.set(key, next);
-      continue;
-    }
-    existing.products_count += next.products_count;
-    existing.selected = existing.selected || next.selected;
-  }
-
   const externalMenus = (Array.isArray(externalMenusRaw) ? externalMenusRaw : [])
     .map((menu) => ({
       id: String(menu?.id || menu?.externalMenuId || menu?.menuId || "").trim(),
@@ -258,11 +170,15 @@ export async function getIikoNomenclatureOverview(options = {}) {
     warnings.externalMenuSelection = "Выбранное внешнее меню не найдено в списке, доступном по API";
   }
 
+  if (!selectedExternalMenuId) {
+    warnings.externalMenuSelection = "Для списка категорий выберите внешнее меню iiko";
+  }
+
   const categoriesView = selectedExternalMenuId
     ? (Array.isArray(externalMenuCategories) ? externalMenuCategories : [])
         .filter((category) => Number(category.products_count || 0) > 0)
         .sort((a, b) => a.name.localeCompare(b.name, "ru"))
-    : [...categoriesByName.values()].sort((a, b) => a.name.localeCompare(b.name, "ru"));
+    : [];
 
   return {
     categories: categoriesView,
@@ -277,7 +193,32 @@ export async function getIikoNomenclatureOverview(options = {}) {
 
 export async function updateAdminIntegrationSettings(patch) {
   const previousSettings = await getSystemSettings();
-  const { updated, errors } = await updateSystemSettings(patch);
+  const nextPatch = { ...(patch || {}) };
+
+  const hasIikoEnabledPatch = Object.prototype.hasOwnProperty.call(nextPatch, "iiko_enabled");
+  const normalizedIikoEnabled =
+    nextPatch.iiko_enabled === true ||
+    nextPatch.iiko_enabled === 1 ||
+    String(nextPatch.iiko_enabled || "").trim().toLowerCase() === "true";
+
+  if (hasIikoEnabledPatch && normalizedIikoEnabled) {
+    const previousIntegrationMode =
+      previousSettings?.integration_mode && typeof previousSettings.integration_mode === "object"
+        ? previousSettings.integration_mode
+        : { menu: "local", orders: "local", loyalty: "local" };
+    const incomingIntegrationMode =
+      nextPatch?.integration_mode && typeof nextPatch.integration_mode === "object"
+        ? nextPatch.integration_mode
+        : previousIntegrationMode;
+
+    nextPatch.integration_mode = {
+      ...previousIntegrationMode,
+      ...incomingIntegrationMode,
+      menu: "external",
+    };
+  }
+
+  const { updated, errors } = await updateSystemSettings(nextPatch);
   if (errors) {
     return { errors };
   }

@@ -771,6 +771,13 @@ const formatDateTime = (date) => {
 const submitStopList = async () => {
   saving.value = true;
   try {
+    const branchId = Number(form.value.branch_id);
+    const existingStopSet = new Set(
+      (stopList.value || [])
+        .filter((entry) => Number(entry.branch_id) === branchId)
+        .map((entry) => `${entry.entity_type}:${Number(entry.entity_id)}`),
+    );
+
     const payloadBase = {
       branch_id: form.value.branch_id,
       reason: form.value.reason && form.value.reason !== "none" ? form.value.reason : null,
@@ -779,12 +786,26 @@ const submitStopList = async () => {
       remove_at: form.value.auto_remove ? form.value.remove_at : null,
     };
     if (isModifierType.value) {
+      const modifierId = Number(selectedModifier.value?.id);
+      if (existingStopSet.has(`modifier:${modifierId}`)) {
+        showErrorNotification("Выбранный модификатор уже находится в стоп-листе этого филиала");
+        return;
+      }
+
       await api.post("/api/menu/admin/stop-list", {
         ...payloadBase,
         entity_type: "modifier",
-        entity_id: selectedModifier.value?.id,
+        entity_id: modifierId,
       });
     } else {
+      const duplicateProductIds = selectedProductIds.value
+        .map((id) => Number(id))
+        .filter((id) => existingStopSet.has(`item:${id}`));
+      if (duplicateProductIds.length > 0) {
+        showErrorNotification("Часть выбранных позиций уже находится в стоп-листе этого филиала");
+        return;
+      }
+
       const requests = selectedProductIds.value.map((id) =>
         api.post("/api/menu/admin/stop-list", {
           ...payloadBase,

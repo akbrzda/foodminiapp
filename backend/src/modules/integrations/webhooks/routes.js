@@ -3,6 +3,7 @@ import db from "../../../config/database.js";
 import { IIKO_STATUS_MAP_TO_LOCAL, INTEGRATION_MODULE, INTEGRATION_TYPE, SYNC_STATUS } from "../constants.js";
 import { getIntegrationSettings } from "../services/integrationConfigService.js";
 import { logIntegrationEvent } from "../services/integrationLoggerService.js";
+import menuAdapter from "../adapters/menuAdapter.js";
 import { getSystemSettings } from "../../../utils/settings.js";
 import {
   cancelOrderBonuses,
@@ -144,16 +145,26 @@ router.post("/stoplist", async (req, res, next) => {
     }
 
     const payload = req.body || {};
+    const syncResult = await menuAdapter.triggerStopListSync({
+      reason: "webhook",
+      branchId: null,
+    });
 
     await logIntegrationEvent({
       integrationType: INTEGRATION_TYPE.IIKO,
       module: INTEGRATION_MODULE.STOPLIST,
       action: "webhook_stoplist",
-      status: "success",
+      status: syncResult.accepted ? "success" : "failed",
       requestData: payload,
+      responseData: syncResult,
+      errorMessage: syncResult.accepted ? null : syncResult.reason || "Не удалось поставить задачу синхронизации стоп-листа",
     });
 
-    return res.json({ ok: true });
+    if (!syncResult.accepted) {
+      return res.status(400).json({ ok: false, error: syncResult.reason || "Не удалось запустить синхронизацию стоп-листа" });
+    }
+
+    return res.status(202).json({ ok: true, jobId: syncResult.jobId || null });
   } catch (error) {
     next(error);
   }

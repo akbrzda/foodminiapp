@@ -6,6 +6,7 @@ import { createBirthdayBonusWorker } from "./birthdayBonus.worker.js";
 import { createBroadcastWorker } from "./broadcast.worker.js";
 import { createTriggerWorker } from "./trigger.worker.js";
 import { createIikoMenuSyncWorker } from "./iikoMenuSync.worker.js";
+import { createIikoStopListSyncWorker } from "./iikoStopListSync.worker.js";
 import { createIikoDeliveryZonesWorker } from "./iikoDeliveryZones.worker.js";
 import { createIntegrationSchedulerWorker } from "./integrationScheduler.worker.js";
 import { createIntegrationRetryWorker } from "./integrationRetry.worker.js";
@@ -28,6 +29,7 @@ let birthdayBonusWorker;
 let broadcastWorker;
 let triggerWorker;
 let iikoMenuSyncWorker;
+let iikoStopListSyncWorker;
 let iikoOrderSyncWorker;
 let pbClientSyncWorker;
 let pbPurchaseSyncWorker;
@@ -45,7 +47,7 @@ export async function startWorkers() {
     broadcastWorker = createBroadcastWorker();
     triggerWorker = createTriggerWorker();
     iikoMenuSyncWorker = createIikoMenuSyncWorker(redisConnection);
-    // Временно отключен stoplist sync: доработки режима меню.
+    iikoStopListSyncWorker = createIikoStopListSyncWorker(redisConnection);
     // Временно отключены воркеры синхронизации заказов/клиентов интеграций.
     // iikoOrderSyncWorker = createIikoOrderSyncWorker(redisConnection);
     // pbClientSyncWorker = createPbClientSyncWorker(redisConnection);
@@ -59,14 +61,15 @@ export async function startWorkers() {
     birthdayBonusWorker.start();
     broadcastWorker.start();
     triggerWorker.start();
+    integrationSchedulerWorker.start();
     adminActionLogsCleanupWorker.start();
-    // Временно отключаем автоматические интеграционные синхронизации.
-    // Ручная синхронизация меню через очередь остается доступной.
+    // Периодические синхронизации интеграций управляются отдельным scheduler worker.
     logger.system.info("Background workers started");
     return {
       telegramWorker,
       imageWorker,
       iikoMenuSyncWorker,
+      iikoStopListSyncWorker,
       iikoOrderSyncWorker,
       pbClientSyncWorker,
       pbPurchaseSyncWorker,
@@ -111,6 +114,9 @@ export async function stopWorkers() {
     }
     if (iikoMenuSyncWorker) {
       promises.push(iikoMenuSyncWorker.close());
+    }
+    if (iikoStopListSyncWorker) {
+      promises.push(iikoStopListSyncWorker.close());
     }
     if (iikoDeliveryZonesWorker) {
       iikoDeliveryZonesWorker.stop();

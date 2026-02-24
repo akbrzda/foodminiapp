@@ -4,7 +4,6 @@ import { createHash } from "node:crypto";
 import { getIikoClientOrNull, getIntegrationSettings, getPremiumBonusClientOrNull } from "./integrationConfigService.js";
 import { INTEGRATION_MODULE, INTEGRATION_TYPE, MAX_SYNC_ATTEMPTS, SYNC_STATUS } from "../constants.js";
 import { finishIntegrationEvent, logIntegrationEvent, startIntegrationEvent } from "./integrationLoggerService.js";
-import { getSystemSettings, updateSystemSettings } from "../../../utils/settings.js";
 import { notifyMenuUpdated } from "../../../websocket/runtime.js";
 
 const nowIso = () => new Date().toISOString();
@@ -573,10 +572,6 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
     throw new Error("Не выбран iiko_external_menu_id. Синхронизация меню выполняется через /api/2/menu/by_id.");
   }
 
-  // Загружаем последние revision из настроек
-  const systemSettings = await getSystemSettings();
-  const lastRevisions = systemSettings.iiko_last_revisions || {};
-
   const startedAt = Date.now();
   const logId = await startIntegrationEvent({
     integrationType: INTEGRATION_TYPE.IIKO,
@@ -586,7 +581,6 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
   });
 
   try {
-    const data = await client.getNomenclature({ useConfiguredOrganization: false, lastRevisions });
     let externalMenuPayload = null;
     let externalMenuItemIds = new Set();
     const externalMenuCategoryIdsByItemId = new Map();
@@ -701,7 +695,7 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
     if (useExternalMenuFilter && !allowedCategoryIds.has(iikoCategoryId)) return false;
     return true;
     });
-    const sizes = Array.isArray(data?.sizes) ? data.sizes : [];
+    const sizes = [];
 
     const connection = await db.getConnection();
     let stats = { categories: 0, items: 0, variants: 0, modifierGroups: 0, modifiers: 0 };
@@ -1307,17 +1301,6 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
 
       await connection.commit();
 
-    // Сохраняем новые revision для инкрементальных обновлений
-      if (data?.organizationStats && Array.isArray(data.organizationStats)) {
-        const newRevisions = { ...lastRevisions };
-        for (const orgStat of data.organizationStats) {
-          if (orgStat.organizationId && orgStat.revision !== null && orgStat.revision !== undefined) {
-            newRevisions[orgStat.organizationId] = orgStat.revision;
-          }
-        }
-        // Обновляем настройку в БД
-        await updateSystemSettings({ iiko_last_revisions: newRevisions });
-      }
     } catch (error) {
       await connection.rollback();
       throw error;
@@ -1333,19 +1316,15 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
     });
 
     const responseData = {
-      hasData: Boolean(data),
-      keys: data ? Object.keys(data).slice(0, 20) : [],
-      organizationStats: Array.isArray(data?.organizationStats) ? data.organizationStats : [],
+      hasData: Boolean(externalMenuPayload),
+      keys: externalMenuPayload ? Object.keys(externalMenuPayload).slice(0, 20) : [],
+      organizationStats: [],
       selectedCategoryIds: [...selectedCategoryIds],
       externalMenuId: useExternalMenuFilter ? externalMenuId : null,
       priceCategoryId: useExternalMenuFilter && priceCategoryId ? priceCategoryId : null,
       externalMenuItemCount: useExternalMenuFilter ? externalMenuItemIds.size : null,
       synced: stats,
-      revisions:
-        data?.organizationStats?.reduce((acc, stat) => {
-          if (stat.organizationId && stat.revision) acc[stat.organizationId] = stat.revision;
-          return acc;
-        }, {}) || {},
+      revisions: {},
     };
 
     await finishIntegrationEvent(logId, {
@@ -1354,7 +1333,7 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
       durationMs: Date.now() - startedAt,
     });
 
-    return data;
+    return externalMenuPayload;
   } catch (error) {
     await finishIntegrationEvent(logId, {
       status: "failed",
@@ -1376,45 +1355,277 @@ export async function processIikoStopListSync(reason = "manual", branchId = null
 
   const startedAt = Date.now();
   const data = await client.getStopList({});
-  let updatedCount = 0;
+  const resolveTerminalGroupId = (value = {}) =>
+    String(value?.terminalGroupId || value?.terminal_group_id || value?.terminalGroup?.id || "").trim();
+  const resolveEntityIds = (value = {}) => {
+    const ids = new Set();
+    const push = (raw) => {
+      const normalized = String(raw || "").trim();
+      if (normalized) ids.add(normalized);
+    };
 
-  if (branchId) {
-    const rawEntities = Array.isArray(data?.items)
-      ? data.items
-      : Array.isArray(data?.products)
-        ? data.products
-        : Array.isArray(data?.stop_list)
-          ? data.stop_list
-          : [];
+    push(value?.id);
+    push(value?.itemId);
+    push(value?.item_id);
+    push(value?.productId);
+    push(value?.product_id);
+    push(value?.sizeId);
+    push(value?.size_id);
+    push(value?.variantId);
+    push(value?.variant_id);
+    push(value?.modifierId);
+    push(value?.modifier_id);
+    return [...ids];
+  };
+  const resolveContainerItems = (value = {}) => {
+    if (Array.isArray(value?.items)) return value.items;
+    if (Array.isArray(value?.products)) return value.products;
+    if (Array.isArray(value?.stopList)) return value.stopList;
+    if (Array.isArray(value?.stop_list)) return value.stop_list;
+    return [];
+  };
+  const resolveTopLevelContainers = (payload = {}) => {
+    if (Array.isArray(payload?.terminalGroupStopLists)) return payload.terminalGroupStopLists;
+    if (Array.isArray(payload?.stopLists)) return payload.stopLists;
+    if (Array.isArray(payload?.organizationStopLists)) return payload.organizationStopLists;
+    return [];
+  };
+  const parseStopListCreatedAt = (value) => {
+    const raw = String(value || "").trim();
+    if (!raw) return null;
 
-    for (const entity of rawEntities) {
-      const externalId = String(entity.id || entity.item_id || entity.variant_id || "");
-      if (!externalId) continue;
+    const direct = raw.replace("T", " ").replace(/Z$/, "").replace(/\.\d+$/, "");
+    if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(direct)) return direct;
 
-      let localType = "item";
-      let localId = null;
+    const parsedDate = new Date(raw);
+    if (Number.isNaN(parsedDate.getTime())) return null;
+    const yyyy = parsedDate.getFullYear();
+    const mm = String(parsedDate.getMonth() + 1).padStart(2, "0");
+    const dd = String(parsedDate.getDate()).padStart(2, "0");
+    const hh = String(parsedDate.getHours()).padStart(2, "0");
+    const mi = String(parsedDate.getMinutes()).padStart(2, "0");
+    const ss = String(parsedDate.getSeconds()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd} ${hh}:${mi}:${ss}`;
+  };
+  const buildStopListMeta = (value = {}) => {
+    const reasonCandidates = [
+      value?.reason,
+      value?.stopReason,
+      value?.stop_reason,
+      value?.cause,
+      value?.comment,
+      value?.description,
+    ];
+    const reasonValue = reasonCandidates.map((item) => String(item || "").trim()).find(Boolean);
+    const balanceValue = Number(value?.balance);
+    const fallbackReason =
+      Number.isFinite(balanceValue) && balanceValue <= 0
+        ? `Нет остатка в iiko (balance: ${balanceValue})`
+        : "Синхронизация стоп-листа из iiko";
 
-      const [itemRows] = await db.query("SELECT id FROM menu_items WHERE iiko_item_id = ? LIMIT 1", [externalId]);
-      if (itemRows.length > 0) {
-        localType = "item";
-        localId = itemRows[0].id;
-      } else {
-        const [variantRows] = await db.query("SELECT id FROM item_variants WHERE iiko_variant_id = ? LIMIT 1", [externalId]);
-        if (variantRows.length > 0) {
-          localType = "variant";
-          localId = variantRows[0].id;
-        }
+    return {
+      reason: reasonValue || fallbackReason,
+      createdAt: parseStopListCreatedAt(value?.dateAdd || value?.date_add || value?.createdAt || value?.created_at || value?.stoppedAt),
+    };
+  };
+
+  const autoReason = "Синхронизация стоп-листа из iiko";
+  const topLevelContainers = resolveTopLevelContainers(data);
+  const entryMap = new Map();
+
+  const pushEntry = (terminalGroupIdRaw, item) => {
+    const key = String(terminalGroupIdRaw || "").trim();
+    const ids = resolveEntityIds(item);
+    if (ids.length === 0) return;
+    if (!entryMap.has(key)) entryMap.set(key, new Map());
+    const stopMeta = buildStopListMeta(item);
+    for (const externalId of ids) {
+      const existing = entryMap.get(key).get(externalId) || null;
+      if (!existing) {
+        entryMap.get(key).set(externalId, stopMeta);
+        continue;
       }
 
-      if (!localId) continue;
+      const existingTs = existing.createdAt ? new Date(existing.createdAt).getTime() : 0;
+      const nextTs = stopMeta.createdAt ? new Date(stopMeta.createdAt).getTime() : 0;
+      const shouldReplaceCreatedAt = nextTs > existingTs;
 
-      await db.query(
-        `INSERT INTO menu_stop_list (branch_id, entity_type, entity_id, reason, created_by)\n         VALUES (?, ?, ?, ?, NULL)\n         ON DUPLICATE KEY UPDATE reason = VALUES(reason)`,
-        [branchId, localType, localId, "Синхронизация стоп-листа из iiko"],
-      );
-      updatedCount += 1;
+      entryMap.get(key).set(externalId, {
+        reason: stopMeta.reason || existing.reason || autoReason,
+        createdAt: shouldReplaceCreatedAt ? stopMeta.createdAt : existing.createdAt,
+      });
+    }
+  };
+
+  const collectEntries = (node, inheritedTerminalGroupId = "") => {
+    if (!node || typeof node !== "object") return;
+
+    const ownTerminalGroupId = resolveTerminalGroupId(node);
+    const terminalGroupId = ownTerminalGroupId || inheritedTerminalGroupId;
+    pushEntry(terminalGroupId, node);
+
+    const nestedItems = resolveContainerItems(node);
+    if (nestedItems.length === 0) return;
+    for (const nestedNode of nestedItems) {
+      collectEntries(nestedNode, terminalGroupId);
+    }
+  };
+
+  if (topLevelContainers.length > 0) {
+    for (const container of topLevelContainers) {
+      collectEntries(container, "");
+    }
+  } else {
+    const fallbackItems = resolveContainerItems(data);
+    for (const item of fallbackItems) {
+      collectEntries(item, "");
     }
   }
+
+  const requestedBranchId = Number(branchId);
+  const branchFilter = Number.isFinite(requestedBranchId) && requestedBranchId > 0 ? requestedBranchId : null;
+  const [branches] = await db.query(
+    `SELECT id, iiko_terminal_group_id
+     FROM branches
+     WHERE (? IS NULL OR id = ?)
+       AND iiko_terminal_group_id IS NOT NULL
+       AND iiko_terminal_group_id <> ''`,
+    [branchFilter, branchFilter],
+  );
+
+  const targetBranches = branches.map((row) => ({
+    id: Number(row.id),
+    terminalGroupId: String(row.iiko_terminal_group_id || "").trim(),
+  }));
+  const targetBranchIds = targetBranches.map((row) => row.id).filter(Number.isFinite);
+
+  const allExternalIdsSet = new Set();
+  for (const [terminalGroupId, idsMap] of entryMap.entries()) {
+    if (!terminalGroupId) {
+      for (const id of idsMap.keys()) allExternalIdsSet.add(id);
+      continue;
+    }
+    if (targetBranches.some((branch) => branch.terminalGroupId === terminalGroupId)) {
+      for (const id of idsMap.keys()) allExternalIdsSet.add(id);
+    }
+  }
+
+  const allExternalIds = [...allExternalIdsSet];
+  const itemIdMap = new Map();
+  const variantIdMap = new Map();
+  const modifierIdMap = new Map();
+
+  if (allExternalIds.length > 0) {
+    const placeholders = allExternalIds.map(() => "?").join(",");
+    const [[itemRows], [variantRows], [modifierRows]] = await Promise.all([
+      db.query(`SELECT id, iiko_item_id FROM menu_items WHERE iiko_item_id IN (${placeholders})`, allExternalIds),
+      db.query(`SELECT id, iiko_variant_id FROM item_variants WHERE iiko_variant_id IN (${placeholders})`, allExternalIds),
+      db.query(`SELECT id, iiko_modifier_id FROM modifiers WHERE iiko_modifier_id IN (${placeholders})`, allExternalIds),
+    ]);
+
+    for (const row of itemRows) {
+      itemIdMap.set(String(row.iiko_item_id).trim(), Number(row.id));
+    }
+    for (const row of variantRows) {
+      variantIdMap.set(String(row.iiko_variant_id).trim(), Number(row.id));
+    }
+    for (const row of modifierRows) {
+      modifierIdMap.set(String(row.iiko_modifier_id).trim(), Number(row.id));
+    }
+  }
+
+  let updatedCount = 0;
+  let matchedCount = 0;
+  let removedCount = 0;
+
+  const connection = await db.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    if (targetBranchIds.length > 0) {
+      const branchPlaceholders = targetBranchIds.map(() => "?").join(",");
+      const [deleteResult] = await connection.query(
+        `DELETE FROM menu_stop_list
+         WHERE branch_id IN (${branchPlaceholders})
+           AND created_by IS NULL
+           AND reason = ?`,
+        [...targetBranchIds, autoReason],
+      );
+      removedCount = Number(deleteResult?.affectedRows || 0);
+    }
+
+    for (const branch of targetBranches) {
+      const branchScopedEntries = new Map();
+      const mergeEntries = (sourceMap) => {
+        if (!sourceMap) return;
+        for (const [externalId, meta] of sourceMap.entries()) {
+          const existing = branchScopedEntries.get(externalId) || null;
+          if (!existing) {
+            branchScopedEntries.set(externalId, meta);
+            continue;
+          }
+          const existingTs = existing.createdAt ? new Date(existing.createdAt).getTime() : 0;
+          const nextTs = meta?.createdAt ? new Date(meta.createdAt).getTime() : 0;
+          branchScopedEntries.set(externalId, {
+            reason: meta?.reason || existing.reason || autoReason,
+            createdAt: nextTs > existingTs ? meta.createdAt : existing.createdAt,
+          });
+        }
+      };
+      mergeEntries(entryMap.get("") || null);
+      mergeEntries(entryMap.get(branch.terminalGroupId) || null);
+
+      for (const [externalId, stopMeta] of branchScopedEntries.entries()) {
+        const itemId = itemIdMap.get(externalId);
+        const variantId = variantIdMap.get(externalId);
+        const modifierId = modifierIdMap.get(externalId);
+
+        let entityType = null;
+        let entityId = null;
+        if (Number.isFinite(itemId)) {
+          entityType = "item";
+          entityId = itemId;
+        } else if (Number.isFinite(variantId)) {
+          entityType = "variant";
+          entityId = variantId;
+        } else if (Number.isFinite(modifierId)) {
+          entityType = "modifier";
+          entityId = modifierId;
+        }
+
+        if (!entityType || !Number.isFinite(entityId)) continue;
+        matchedCount += 1;
+
+        await connection.query(
+          `INSERT INTO menu_stop_list (branch_id, entity_type, entity_id, fulfillment_types, reason, auto_remove, remove_at, created_by, created_at)
+           VALUES (?, ?, ?, NULL, ?, 0, NULL, NULL, COALESCE(?, NOW()))
+           ON DUPLICATE KEY UPDATE
+             fulfillment_types = NULL,
+             reason = VALUES(reason),
+             auto_remove = 0,
+             remove_at = NULL,
+             created_by = NULL,
+             created_at = VALUES(created_at)`,
+          [branch.id, entityType, entityId, stopMeta?.reason || autoReason, stopMeta?.createdAt || null],
+        );
+        updatedCount += 1;
+      }
+    }
+
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+
+  await invalidatePublicMenuCache();
+  notifyMenuUpdated({
+    source: "iiko-stoplist-sync",
+    scope: targetBranchIds.length === 1 ? "branch" : "all",
+    branchId: targetBranchIds.length === 1 ? targetBranchIds[0] : null,
+  });
 
   await logIntegrationEvent({
     integrationType: INTEGRATION_TYPE.IIKO,
@@ -1425,6 +1636,9 @@ export async function processIikoStopListSync(reason = "manual", branchId = null
     responseData: {
       hasData: Boolean(data),
       keys: data ? Object.keys(data).slice(0, 20) : [],
+      targetBranches: targetBranchIds.length,
+      removedCount,
+      matchedCount,
       updatedCount,
     },
     durationMs: Date.now() - startedAt,

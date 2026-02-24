@@ -192,6 +192,10 @@
             <RefreshCcw :size="16" />
             Синхронизировать меню
           </Button>
+          <Button variant="secondary" :disabled="manualLoading.stoplist" @click="syncStopListNow">
+            <RefreshCcw :size="16" />
+            Синхронизировать стоп-лист
+          </Button>
           <Button variant="secondary" :disabled="manualLoading.delivery_zones" @click="syncDeliveryZonesNow">
             <RefreshCcw :size="16" />
             Синхронизировать зоны доставки
@@ -446,7 +450,7 @@ const activeTab = ref("iiko");
 const saving = ref(false);
 const retryLoading = ref(false);
 const overviewLoading = ref(false);
-const manualLoading = ref({ menu: false, delivery_zones: false });
+const manualLoading = ref({ menu: false, stoplist: false, delivery_zones: false });
 const testLoading = ref({ iiko: false, pb: false });
 const form = ref({
   iiko_enabled: false,
@@ -574,7 +578,9 @@ const loadStatus = async ({ silent = false } = {}) => {
     const { data } = await api.get("/api/admin/integrations/iiko/sync-status");
     syncStatus.value = data || {};
   } catch (error) {
-    showErrorNotification("Не удалось загрузить статус синхронизации");
+    if (!silent) {
+      showErrorNotification("Не удалось загрузить статус синхронизации");
+    }
   } finally {
     statusLoaded.value = true;
     statusLoading.value = false;
@@ -589,7 +595,9 @@ const loadQueues = async ({ silent = false } = {}) => {
     const { data } = await api.get("/api/admin/integrations/queues");
     queues.value = data?.queues || [];
   } catch (error) {
-    showErrorNotification("Не удалось загрузить список очередей");
+    if (!silent) {
+      showErrorNotification("Не удалось загрузить список очередей");
+    }
   } finally {
     queuesLoaded.value = true;
     queuesLoading.value = false;
@@ -606,7 +614,9 @@ const loadSyncLogs = async ({ silent = false } = {}) => {
     });
     syncLogs.value = data?.rows || [];
   } catch (error) {
-    showErrorNotification("Не удалось загрузить логи синхронизации");
+    if (!silent) {
+      showErrorNotification("Не удалось загрузить логи синхронизации");
+    }
   } finally {
     logsLoaded.value = true;
     logsLoading.value = false;
@@ -633,8 +643,9 @@ const startLiveRefresh = () => {
   if (liveRefreshTimer.value) return;
   liveRefreshTimer.value = setInterval(() => {
     if (document.hidden) return;
+    if (!["status", "queues", "logs"].includes(activeTab.value)) return;
     refreshLiveData();
-  }, 3000);
+  }, 10000);
 };
 
 const stopLiveRefresh = () => {
@@ -692,9 +703,21 @@ const syncMenuNow = async () => {
     await api.post("/api/admin/integrations/iiko/sync-menu");
     showSuccessNotification("Задача синхронизации меню поставлена в очередь");
   } catch (error) {
-    showErrorNotification(error?.response?.data?.error || "Не удалось запустить синхронизацию меню");
+    showErrorNotification(error?.response?.data?.error || error?.response?.data?.reason || "Не удалось запустить синхронизацию меню");
   } finally {
     manualLoading.value.menu = false;
+  }
+};
+
+const syncStopListNow = async () => {
+  manualLoading.value.stoplist = true;
+  try {
+    await api.post("/api/admin/integrations/iiko/sync-stoplist");
+    showSuccessNotification("Задача синхронизации стоп-листа поставлена в очередь");
+  } catch (error) {
+    showErrorNotification(error?.response?.data?.error || error?.response?.data?.reason || "Не удалось запустить синхронизацию стоп-листа");
+  } finally {
+    manualLoading.value.stoplist = false;
   }
 };
 
@@ -708,7 +731,7 @@ const syncDeliveryZonesNow = async () => {
     const synced = Number(stats.syncedPolygons || 0);
     showSuccessNotification(`Синхронизация зон завершена: ${synced} (создано ${created}, обновлено ${updated})`);
   } catch (error) {
-    showErrorNotification(error?.response?.data?.error || "Не удалось запустить синхронизацию зон доставки");
+    showErrorNotification(error?.response?.data?.error || error?.response?.data?.reason || "Не удалось запустить синхронизацию зон доставки");
   } finally {
     manualLoading.value.delivery_zones = false;
   }

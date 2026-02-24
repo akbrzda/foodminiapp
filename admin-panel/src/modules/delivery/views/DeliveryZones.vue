@@ -133,7 +133,7 @@
                   <Upload :size="16" />
                   Импорт
                 </Button>
-                <Button variant="outline" size="sm" :disabled="!polygons.length" @click="exportGeoJson">
+                <Button variant="outline" size="sm" :disabled="!polygons.length || geoJsonExporting" @click="exportGeoJson">
                   <Download :size="16" />
                   Экспорт
                 </Button>
@@ -269,7 +269,7 @@
               <Upload :size="16" />
               Импорт
             </Button>
-            <Button variant="outline" size="sm" :disabled="!polygons.length" @click="exportGeoJson">
+            <Button variant="outline" size="sm" :disabled="!polygons.length || geoJsonExporting" @click="exportGeoJson">
               <Download :size="16" />
               Экспорт
             </Button>
@@ -594,6 +594,7 @@ const showGeoJsonImportDialog = ref(false);
 const geoJsonImportFileName = ref("");
 const geoJsonImportItems = ref([]);
 const geoJsonImportSaving = ref(false);
+const geoJsonExporting = ref(false);
 const availableTariffSources = computed(() => {
   if (!selectedPolygon.value) return [];
   const pool = allPolygons.value.length ? allPolygons.value : polygons.value;
@@ -807,6 +808,33 @@ const parseDeliveryTime = (value) => {
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : 30;
 };
+const normalizeTariffNumber = (value) => {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+};
+const normalizeTariffAmountTo = (value) => {
+  if (value === null || value === undefined || value === "") return null;
+  return normalizeTariffNumber(value);
+};
+const parseTariffsFromFeature = (feature) => {
+  const rawTariffs = feature?.properties?.tariffs || feature?.properties?.delivery_tariffs;
+  if (!Array.isArray(rawTariffs)) return [];
+
+  return rawTariffs
+    .map((tariff) => {
+      const amountFrom = normalizeTariffNumber(tariff?.amount_from);
+      const amountTo = normalizeTariffAmountTo(tariff?.amount_to);
+      const deliveryCost = normalizeTariffNumber(tariff?.delivery_cost);
+      if (amountFrom === null || deliveryCost === null) return null;
+      return {
+        amount_from: amountFrom,
+        amount_to: amountTo,
+        delivery_cost: deliveryCost,
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.amount_from - b.amount_from);
+};
 const readGeoJsonFeatures = (geoJson) => {
   if (!geoJson || typeof geoJson !== "object") return [];
   if (geoJson.type === "FeatureCollection") {
@@ -827,9 +855,10 @@ const convertFeatureToImportItems = (feature, index) => {
   }
   const baseName = typeof feature?.properties?.name === "string" && feature.properties.name.trim() ? feature.properties.name.trim() : `Импорт #${index + 1}`;
   const deliveryTime = parseDeliveryTime(feature?.properties?.delivery_time);
+  const tariffs = parseTariffsFromFeature(feature);
   if (geometry.type === "Polygon") {
     const ring = normalizePolygonRing(geometry.coordinates?.[0]);
-    return ring ? [{ name: baseName, delivery_time: deliveryTime, polygon: ring }] : [];
+    return ring ? [{ name: baseName, delivery_time: deliveryTime, polygon: ring, tariffs }] : [];
   }
   return (geometry.coordinates || [])
     .map((polygonCoords, partIndex) => {
@@ -839,6 +868,7 @@ const convertFeatureToImportItems = (feature, index) => {
         name: `${baseName} (${partIndex + 1})`,
         delivery_time: deliveryTime,
         polygon: ring,
+        tariffs,
       };
     })
     .filter(Boolean);
@@ -892,12 +922,18 @@ const confirmGeoJsonImport = async () => {
   const total = geoJsonImportItems.value.length;
   try {
     for (const item of geoJsonImportItems.value) {
-      await api.post("/api/polygons/admin", {
+      const createResponse = await api.post("/api/polygons/admin", {
         branch_id: parseInt(branchId.value, 10),
         name: item.name,
         delivery_time: item.delivery_time,
         polygon: item.polygon,
       });
+      const polygonId = Number(createResponse?.data?.polygon?.id);
+      if (Number.isFinite(polygonId) && Array.isArray(item.tariffs) && item.tariffs.length > 0) {
+        await api.put(`/api/polygons/admin/${polygonId}/tariffs`, {
+          tariffs: item.tariffs,
+        });
+      }
     }
     await loadPolygons();
     await loadAllPolygons();
@@ -912,46 +948,74 @@ const confirmGeoJsonImport = async () => {
   }
 };
 const sanitizeFileName = (value) => value.replace(/[^a-zA-Z0-9а-яА-ЯёЁ_-]+/g, "_").replace(/^_+|_+$/g, "");
-const exportGeoJson = () => {
+const exportGeoJson = async () => {
   if (!branchId.value || !polygons.value.length) {
     showWarningNotification("Нет полигонов для экспорта");
     return;
   }
-  const branchName = branches.value.find((branch) => branch.id === parseInt(branchId.value, 10))?.name || `branch_${branchId.value}`;
-  const featureCollection = {
-    type: "FeatureCollection",
-    features: polygons.value
-      .filter((polygon) => polygon?.polygon?.type === "Polygon" && Array.isArray(polygon?.polygon?.coordinates))
-      .map((polygon) => ({
-        type: "Feature",
-        properties: {
-          id: polygon.id,
-          name: polygon.name || "",
-          delivery_time: polygon.delivery_time || 30,
-          is_active: Boolean(polygon.is_active),
-          tariffs_count: Number(polygon.tariffs_count || 0),
-        },
-        geometry: {
-          type: "Polygon",
-          coordinates: polygon.polygon.coordinates,
-        },
-      })),
-  };
-  if (!featureCollection.features.length) {
-    showWarningNotification("Нет полигонов для экспорта");
-    return;
+  geoJsonExporting.value = true;
+  try {
+    const branchName = branches.value.find((branch) => branch.id === parseInt(branchId.value, 10))?.name || `branch_${branchId.value}`;
+    const polygonsForExport = polygons.value.filter((polygon) => polygon?.polygon?.type === "Polygon" && Array.isArray(polygon?.polygon?.coordinates));
+    if (!polygonsForExport.length) {
+      showWarningNotification("Нет полигонов для экспорта");
+      return;
+    }
+
+    const features = await Promise.all(
+      polygonsForExport.map(async (polygon) => {
+        let tariffs = [];
+        try {
+          const response = await api.get(`/api/polygons/admin/${polygon.id}/tariffs`);
+          tariffs = Array.isArray(response?.data?.tariffs) ? response.data.tariffs : [];
+        } catch (error) {
+          tariffs = [];
+        }
+
+        return {
+          type: "Feature",
+          properties: {
+            id: polygon.id,
+            name: polygon.name || "",
+            delivery_time: polygon.delivery_time || 30,
+            is_active: Boolean(polygon.is_active),
+            tariffs_count: Number(polygon.tariffs_count || 0),
+            tariffs: tariffs.map((tariff) => ({
+              amount_from: Number(tariff.amount_from),
+              amount_to: tariff.amount_to === null || tariff.amount_to === undefined ? null : Number(tariff.amount_to),
+              delivery_cost: Number(tariff.delivery_cost),
+            })),
+          },
+          geometry: {
+            type: "Polygon",
+            coordinates: polygon.polygon.coordinates,
+          },
+        };
+      }),
+    );
+
+    const featureCollection = {
+      type: "FeatureCollection",
+      features,
+    };
+
+    const blob = new Blob([JSON.stringify(featureCollection, null, 2)], { type: "application/geo+json;charset=utf-8" });
+    const fileName = `${sanitizeFileName(branchName)}_polygons.geojson`;
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    showSuccessNotification(`GeoJSON экспортирован: ${fileName}`);
+  } catch (error) {
+    devError("Ошибка экспорта GeoJSON:", error);
+    showErrorNotification("Не удалось экспортировать GeoJSON");
+  } finally {
+    geoJsonExporting.value = false;
   }
-  const blob = new Blob([JSON.stringify(featureCollection, null, 2)], { type: "application/geo+json;charset=utf-8" });
-  const fileName = `${sanitizeFileName(branchName)}_polygons.geojson`;
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = fileName;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
-  showSuccessNotification(`GeoJSON экспортирован: ${fileName}`);
 };
 const onCityChange = () => {
   branchId.value = "";

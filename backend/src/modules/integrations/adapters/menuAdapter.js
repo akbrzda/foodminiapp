@@ -1,18 +1,25 @@
 import db from "../../../config/database.js";
 import { getIntegrationSettings, getIikoClientOrNull } from "../services/integrationConfigService.js";
-import { enqueueIikoMenuSync } from "../../../queues/config.js";
+import { enqueueIikoMenuSync, enqueueIikoStopListSync } from "../../../queues/config.js";
 
 export class MenuAdapter {
   async getMode() {
     const settings = await getIntegrationSettings();
-    if (settings.iikoEnabled) return "iiko";
+    const menuMode = String(settings?.integrationMode?.menu || "local")
+      .trim()
+      .toLowerCase();
+    if (settings.iikoEnabled && menuMode === "external") return "iiko";
     return "local";
   }
 
   async triggerFullSync({ reason = "manual", cityId = null } = {}) {
-    const mode = await this.getMode();
+    const settings = await getIntegrationSettings();
+    const menuMode = String(settings?.integrationMode?.menu || "local")
+      .trim()
+      .toLowerCase();
+    const mode = settings.iikoEnabled && menuMode === "external" ? "iiko" : "local";
     if (mode !== "iiko") {
-      return { accepted: false, reason: "Интеграция iiko отключена" };
+      return { accepted: false, reason: "Синхронизация меню доступна только при iiko_enabled=true и integration_mode.menu=external" };
     }
 
     const job = await enqueueIikoMenuSync({ reason, cityId });
@@ -20,7 +27,17 @@ export class MenuAdapter {
   }
 
   async triggerStopListSync({ reason = "manual", branchId = null } = {}) {
-    return { accepted: false, reason: "Синхронизация стоп-листа временно отключена. Доступен только ручной sync меню." };
+    const settings = await getIntegrationSettings();
+    const menuMode = String(settings?.integrationMode?.menu || "local")
+      .trim()
+      .toLowerCase();
+    const mode = settings.iikoEnabled && menuMode === "external" ? "iiko" : "local";
+    if (mode !== "iiko") {
+      return { accepted: false, reason: "Синхронизация стоп-листа доступна только при iiko_enabled=true и integration_mode.menu=external" };
+    }
+
+    const job = await enqueueIikoStopListSync({ reason, branchId });
+    return { accepted: true, jobId: job.id };
   }
 
   async fetchExternalNomenclature() {
@@ -28,7 +45,17 @@ export class MenuAdapter {
     if (!client) {
       throw new Error("Клиент iiko недоступен");
     }
-    return client.getNomenclature({ useConfiguredOrganization: false });
+    const settings = await getIntegrationSettings();
+    const externalMenuId = String(settings.iikoExternalMenuId || "").trim();
+    if (!externalMenuId) {
+      throw new Error("Не выбран iiko_external_menu_id");
+    }
+
+    return client.getMenuById({
+      externalMenuId,
+      priceCategoryId: String(settings.iikoPriceCategoryId || "").trim() || undefined,
+      useConfiguredOrganization: false,
+    });
   }
 
   async getSyncCounters() {

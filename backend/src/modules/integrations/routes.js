@@ -10,6 +10,7 @@ import {
   retryAllFailed,
   retrySingleEntity,
   syncIikoMenuNow,
+  syncIikoStopListNow,
   syncIikoDeliveryZonesNow,
   testIikoConnection,
   testPremiumBonusConnection,
@@ -94,10 +95,11 @@ router.post("/iiko/sync-menu", async (req, res, next) => {
 
 router.post("/iiko/sync-stoplist", async (req, res, next) => {
   try {
-    return res.status(400).json({
-      accepted: false,
-      reason: "Синхронизация стоп-листа временно отключена. Доступен только ручной sync меню.",
-    });
+    const result = await syncIikoStopListNow({ branchId: req.body?.branch_id || null });
+    if (!result.accepted) {
+      return res.status(400).json(result);
+    }
+    return res.json(result);
   } catch (error) {
     next(error);
   }
