@@ -90,7 +90,7 @@
         <div class="upsell-section" v-if="cartStore.items.length > 0">
           <div class="upsell-title">Рекомендуем</div>
           <div v-if="isUpsellLoading" class="upsell-carousel">
-            <div v-for="index in 3" :key="`upsell-skeleton-${index}`" class="upsell-card upsell-card-skeleton"></div>
+            <div v-for="index in 5" :key="`upsell-skeleton-${index}`" class="upsell-card upsell-card-skeleton"></div>
           </div>
           <div v-else-if="upsellItems.length > 0" class="upsell-carousel">
             <div v-for="item in upsellItems" :key="`${item.id}-${item.variant_id || 0}`" class="upsell-card">
@@ -338,7 +338,7 @@ async function loadUpsell() {
       city_id: locationStore.selectedCity.id,
       branch_id: locationStore.selectedBranch?.id || locationStore.deliveryZone?.branch_id || null,
       fulfillment_type: locationStore.deliveryType || "delivery",
-      limit: 3,
+      limit: 5,
       cart_items: cartStore.items.map((item) => ({
         item_id: item.id,
         price: Number(item.price) || 0,
@@ -635,6 +635,11 @@ watch(
   overflow-x: auto;
   scroll-snap-type: x mandatory;
   padding-bottom: 4px;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.upsell-carousel::-webkit-scrollbar {
+  display: none;
 }
 .upsell-card {
   flex: 0 0 138px;

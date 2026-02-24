@@ -6,6 +6,26 @@ import { getDynamicUpsell } from "../services/upsellService.js";
 
 const MENU_CACHE_TTL = 300;
 
+const buildSourceScope = (integrationSettings) => {
+  const menuMode = String(integrationSettings?.integrationMode?.menu || "local")
+    .trim()
+    .toLowerCase();
+  const useIikoSource = Boolean(integrationSettings?.iikoEnabled) && menuMode === "external";
+
+  const categoryFilter = useIikoSource
+    ? "AND COALESCE(NULLIF(TRIM(mc.iiko_category_id), ''), NULL) IS NOT NULL"
+    : "AND COALESCE(NULLIF(TRIM(mc.iiko_category_id), ''), NULL) IS NULL";
+  const itemFilter = useIikoSource
+    ? "AND COALESCE(NULLIF(TRIM(mi.iiko_item_id), ''), NULL) IS NOT NULL"
+    : "AND COALESCE(NULLIF(TRIM(mi.iiko_item_id), ''), NULL) IS NULL";
+
+  return {
+    source: useIikoSource ? "iiko" : "local",
+    categoryFilter,
+    itemFilter,
+  };
+};
+
 // Функции кэширования
 async function getMenuCache(cacheKey) {
   try {
@@ -74,8 +94,8 @@ export const getMenu = async (req, res, next) => {
 
     const cityId = Number(city_id);
     const integration = await getIntegrationSettings();
-    const onlyIiko = integration.iikoEnabled;
-    const cacheKeyParts = [`menu:city:${city_id}`, `mode:${onlyIiko ? "iiko" : "local"}`];
+    const sourceScope = buildSourceScope(integration);
+    const cacheKeyParts = [`menu:city:${city_id}`, `mode:${sourceScope.source}`];
     if (branch_id) cacheKeyParts.push(`branch:${branch_id}`);
     if (fulfillment_type) cacheKeyParts.push(`fulfillment:${fulfillment_type}`);
     const cacheKey = cacheKeyParts.join(":");
@@ -95,7 +115,7 @@ export const getMenu = async (req, res, next) => {
        WHERE mcc.city_id = ? 
          AND mc.is_active = TRUE 
          AND mcc.is_active = TRUE
-         ${onlyIiko ? "AND mc.iiko_category_id IS NOT NULL" : ""}
+         ${sourceScope.categoryFilter}
        ORDER BY mc.sort_order, mc.name`,
       [city_id],
     );
@@ -118,7 +138,7 @@ export const getMenu = async (req, res, next) => {
            AND mi.is_active = TRUE
            AND micities.city_id = ?
            AND micities.is_active = TRUE
-           ${onlyIiko ? "AND mi.iiko_item_id IS NOT NULL" : ""}
+           ${sourceScope.itemFilter}
          ORDER BY mic.sort_order, mi.sort_order, mi.name`,
         [category.id, city_id],
       );
@@ -365,7 +385,7 @@ export const getCategories = async (req, res, next) => {
     }
 
     const integration = await getIntegrationSettings();
-    const onlyIiko = integration.iikoEnabled;
+    const sourceScope = buildSourceScope(integration);
 
     const [categories] = await db.query(
       `SELECT mc.id, mc.name, mc.description, mc.image_url, mc.sort_order,
@@ -376,7 +396,7 @@ export const getCategories = async (req, res, next) => {
        WHERE mcc.city_id = ?
          AND mc.is_active = TRUE
          AND mcc.is_active = TRUE
-         ${onlyIiko ? "AND mc.iiko_category_id IS NOT NULL" : ""}
+         ${sourceScope.categoryFilter}
        ORDER BY mc.sort_order, mc.name`,
       [city_id],
     );
@@ -391,12 +411,15 @@ export const getCategories = async (req, res, next) => {
 export const getCategoryById = async (req, res, next) => {
   try {
     const categoryId = req.params.id;
+    const integration = await getIntegrationSettings();
+    const sourceScope = buildSourceScope(integration);
 
     const [categories] = await db.query(
-      `SELECT id, name, description, image_url, sort_order, 
-              is_active, created_at, updated_at
-       FROM menu_categories
-       WHERE id = ? AND is_active = TRUE`,
+      `SELECT mc.id, mc.name, mc.description, mc.image_url, mc.sort_order, 
+              mc.is_active, mc.created_at, mc.updated_at
+       FROM menu_categories mc
+       WHERE mc.id = ? AND mc.is_active = TRUE
+         ${sourceScope.categoryFilter}`,
       [categoryId],
     );
 
@@ -415,7 +438,7 @@ export const getCategoryItems = async (req, res, next) => {
   try {
     const categoryId = req.params.categoryId;
     const integration = await getIntegrationSettings();
-    const onlyIiko = integration.iikoEnabled;
+    const sourceScope = buildSourceScope(integration);
 
     const [items] = await db.query(
       `SELECT mi.id, mi.name, mi.description, mi.price, mi.image_url, 
@@ -423,7 +446,7 @@ export const getCategoryItems = async (req, res, next) => {
        FROM menu_items mi
        JOIN menu_item_categories mic ON mic.item_id = mi.id
        WHERE mic.category_id = ? AND mi.is_active = TRUE
-         ${onlyIiko ? "AND mi.iiko_item_id IS NOT NULL" : ""}
+         ${sourceScope.itemFilter}
        ORDER BY mic.sort_order, mi.sort_order, mi.name`,
       [categoryId],
     );
@@ -476,6 +499,8 @@ export const getItemById = async (req, res, next) => {
     const itemId = req.params.id;
     const { city_id, fulfillment_type } = req.query;
     const fulfillmentType = fulfillment_type || "delivery";
+    const integration = await getIntegrationSettings();
+    const sourceScope = buildSourceScope(integration);
 
     const [items] = await db.query(
       `SELECT mi.id,
@@ -490,7 +515,8 @@ export const getItemById = async (req, res, next) => {
               mi.name, mi.description, mi.price, mi.image_url,
               mi.weight, mi.weight_value, mi.weight_unit, mi.calories, mi.sort_order, mi.is_active, mi.created_at, mi.updated_at
        FROM menu_items mi
-       WHERE mi.id = ? AND mi.is_active = TRUE`,
+       WHERE mi.id = ? AND mi.is_active = TRUE
+         ${sourceScope.itemFilter}`,
       [itemId],
     );
 

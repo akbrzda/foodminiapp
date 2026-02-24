@@ -54,30 +54,79 @@ Migrations are executed via `backend/src/scripts/migrate.js`, which tracks execu
 
 ## Git Workflow
 
-### COMMIT.md File
+Ниже — версия правил, которую можно напрямую вставить в инструкцию агента. Формулировка жёсткая и однозначная, чтобы не было двойных трактовок.
 
-- **Purpose**: Accumulate changes for the next commit
-- **Format**: Commit title + list of changes in bullet points
-- **Lifecycle**:
-  1. Add changes to `COMMIT.md` after each significant update
-  2. When user does `git push` — file is cleared
-  3. Start a new cycle of change accumulation
-- **Important**: Agent does **NOT** make commits and pushes — only records information in the file
+---
 
-**Example COMMIT.md structure**:
+## COMMIT.md Rules
+
+### Purpose
+
+`COMMIT.md` is a temporary buffer for accumulating changes for the **next commit only**.
+
+The file is not a changelog.
+The file is not a history log.
+The file must contain only changes that have NOT yet been committed.
+
+---
+
+### Format
+
+Structure must always follow:
 
 ```markdown
 # Changes for next commit
 
-Added promotions and promo codes system
+<Commit title>
 
-- Created promotions table with fields (id, code, discount_type, value, valid_until)
-- Added API endpoint POST /api/promotions for creating promotions
-- Implemented promo code validation during checkout
-- Added PromotionForm.vue component in admin panel
-- Fixed bug with order total calculation
-- Updated documentation in README.md (section "Promotions and Promo Codes")
+- Change 1
+- Change 2
+- Change 3
 ```
+
+Rules:
+
+- First line: `# Changes for next commit`
+- One commit title line
+- Bullet list of changes
+- No extra text
+
+---
+
+### Lifecycle Rules
+
+1. After every significant code change, the agent must append updates to `COMMIT.md`.
+
+2. Before adding new changes, the agent must check:
+   - If the existing content has already been used for a commit,
+   - The file must be fully cleared.
+
+3. Clearing means resetting file to:
+
+```markdown
+# Changes for next commit
+```
+
+4. After clearing, the agent starts a new accumulation cycle.
+
+---
+
+### Critical Behavior
+
+- The agent NEVER performs git commit or git push.
+- The agent ONLY writes and maintains `COMMIT.md`.
+- The file must always reflect the next upcoming commit only.
+- Old committed changes must never remain in the file.
+
+---
+
+### State Logic
+
+If commit was made → reset file.
+If no commit was made → append changes.
+Never mix changes from different commit cycles.
+
+---
 
 ## CHANGELOG.md Maintenance
 
@@ -163,33 +212,6 @@ Added promotions and promo codes system
 - [ ] Add promo code input field in `CheckoutView.vue`
 - [ ] Show applied discount in total amount
 ```
-
-## README.md Updates
-
-### When to Update:
-
-✅ **Update**:
-
-- New module/functionality added to project
-- Project structure changes (new folders, files)
-- New launch/configuration commands
-- Environment variable changes
-- New dependencies requiring configuration
-- API endpoint changes (adding new routes)
-
-❌ **DON'T Update**:
-
-- Minor fixes to existing functionality
-- UI changes without new components
-- Refactoring without public API changes
-- Bug fixes without interface changes
-
-### Update Process:
-
-1. Find the corresponding section in README.md
-2. Add/modify only relevant sections
-3. Preserve the overall structure and style of the document
-4. Verify code examples are up to date
 
 ## Using MCP Context7
 
@@ -293,7 +315,6 @@ docker ps
 ### After Installation:
 
 - Update `package.json` description if new major functionality added
-- Add to README.md if library requires configuration
 - Add to `.env.example` if environment variables are required
 
 ### Prohibited:
