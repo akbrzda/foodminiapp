@@ -791,12 +791,56 @@ const renderGeoJsonImportPreview = () => {
     map.fitBounds(bounds, { padding: [28, 28] });
   }
 };
-const normalizePolygonRing = (ring) => {
+const resolveCoordinateOrder = (value) => {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return null;
+  if (["lng_lat", "lon_lat", "longitude_latitude", "geojson"].includes(normalized)) {
+    return "lng_lat";
+  }
+  if (["lat_lng", "lat_lon", "latitude_longitude", "legacy"].includes(normalized)) {
+    return "lat_lng";
+  }
+  return null;
+};
+const normalizePolygonRing = (ring, referenceCenter = null, preferredOrder = null) => {
   if (!Array.isArray(ring)) return null;
-  const coords = ring
+  const rawCoords = ring
     .filter((coord) => Array.isArray(coord) && coord.length >= 2 && Number.isFinite(Number(coord[0])) && Number.isFinite(Number(coord[1])))
     .map((coord) => [Number(coord[0]), Number(coord[1])]);
-  if (coords.length < 3) return null;
+  if (rawCoords.length < 3) return null;
+
+  // Импортируем в едином формате [lng, lat] для корректного сохранения в PostGIS.
+  // Вход может быть как стандартный GeoJSON [lng, lat], так и legacy [lat, lng].
+  let normalizedCoords = rawCoords;
+  const resolvedOrder = resolveCoordinateOrder(preferredOrder);
+  const hasClearlyGeoOrder = rawCoords.some((coord) => Math.abs(coord[0]) > 90) && rawCoords.every((coord) => Math.abs(coord[1]) <= 90);
+  const hasClearlyLegacyOrder = rawCoords.some((coord) => Math.abs(coord[1]) > 90) && rawCoords.every((coord) => Math.abs(coord[0]) <= 90);
+
+  if (resolvedOrder === "lat_lng") {
+    normalizedCoords = rawCoords.map((coord) => [coord[1], coord[0]]);
+  } else if (resolvedOrder !== "lng_lat" && hasClearlyLegacyOrder && !hasClearlyGeoOrder) {
+    normalizedCoords = rawCoords.map((coord) => [coord[1], coord[0]]);
+  } else if (resolvedOrder !== "lng_lat" && !hasClearlyGeoOrder && !hasClearlyLegacyOrder && referenceCenter) {
+    const geoLatLng = rawCoords
+      .map((coord) => [coord[1], coord[0]])
+      .filter(([lat, lng]) => isValidLatLng(lat, lng));
+    const legacyLatLng = rawCoords
+      .map((coord) => [coord[0], coord[1]])
+      .filter(([lat, lng]) => isValidLatLng(lat, lng));
+    const geoCenter = calcCenter(geoLatLng);
+    const legacyCenter = calcCenter(legacyLatLng);
+    const useLegacyOrder = distanceSq(legacyCenter, referenceCenter) < distanceSq(geoCenter, referenceCenter);
+    if (useLegacyOrder) {
+      normalizedCoords = rawCoords.map((coord) => [coord[1], coord[0]]);
+    }
+  }
+
+  if (!normalizedCoords.every(([lng, lat]) => isValidLatLng(lat, lng))) {
+    return null;
+  }
+
+  const coords = normalizedCoords;
   const [firstLng, firstLat] = coords[0];
   const [lastLng, lastLat] = coords[coords.length - 1];
   if (firstLng !== lastLng || firstLat !== lastLat) {
@@ -856,13 +900,15 @@ const convertFeatureToImportItems = (feature, index) => {
   const baseName = typeof feature?.properties?.name === "string" && feature.properties.name.trim() ? feature.properties.name.trim() : `Импорт #${index + 1}`;
   const deliveryTime = parseDeliveryTime(feature?.properties?.delivery_time);
   const tariffs = parseTariffsFromFeature(feature);
+  const referenceCenter = getReferenceCenter();
+  const preferredOrder = resolveCoordinateOrder(feature?.properties?.coordinates_order || feature?.properties?.coordinate_order);
   if (geometry.type === "Polygon") {
-    const ring = normalizePolygonRing(geometry.coordinates?.[0]);
+    const ring = normalizePolygonRing(geometry.coordinates?.[0], referenceCenter, preferredOrder);
     return ring ? [{ name: baseName, delivery_time: deliveryTime, polygon: ring, tariffs }] : [];
   }
   return (geometry.coordinates || [])
     .map((polygonCoords, partIndex) => {
-      const ring = normalizePolygonRing(polygonCoords?.[0]);
+      const ring = normalizePolygonRing(polygonCoords?.[0], referenceCenter, preferredOrder);
       if (!ring) return null;
       return {
         name: `${baseName} (${partIndex + 1})`,
@@ -972,6 +1018,12 @@ const exportGeoJson = async () => {
           tariffs = [];
         }
 
+        const exportCoordinates = (polygon.polygon.coordinates || []).map((ring) =>
+          (Array.isArray(ring) ? ring : [])
+            .filter((coord) => Array.isArray(coord) && coord.length >= 2)
+            .map((coord) => [Number(coord[1]), Number(coord[0])]),
+        );
+
         return {
           type: "Feature",
           properties: {
@@ -980,6 +1032,8 @@ const exportGeoJson = async () => {
             delivery_time: polygon.delivery_time || 30,
             is_active: Boolean(polygon.is_active),
             tariffs_count: Number(polygon.tariffs_count || 0),
+            coordinates_order: "lat_lng",
+            coordinate_order: "lat_lng",
             tariffs: tariffs.map((tariff) => ({
               amount_from: Number(tariff.amount_from),
               amount_to: tariff.amount_to === null || tariff.amount_to === undefined ? null : Number(tariff.amount_to),
@@ -988,7 +1042,7 @@ const exportGeoJson = async () => {
           },
           geometry: {
             type: "Polygon",
-            coordinates: polygon.polygon.coordinates,
+            coordinates: exportCoordinates,
           },
         };
       }),
