@@ -121,7 +121,7 @@ CREATE TABLE `users` (
   `phone` varchar(20) DEFAULT NULL,
   `first_name` varchar(100) DEFAULT NULL,
   `last_name` varchar(100) DEFAULT NULL,
-  `email` varchar(100) DEFAULT NULL,
+  `email` varchar(1024) DEFAULT NULL,
   `date_of_birth` date DEFAULT NULL,
   `timezone` varchar(64) DEFAULT NULL,
   `pb_client_id` varchar(255) DEFAULT NULL,

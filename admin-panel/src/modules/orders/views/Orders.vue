@@ -191,11 +191,11 @@
                 <span v-else>—</span>
               </div>
               <div class="mt-1 text-xs text-muted-foreground">{{ order.branch_name || "—" }}</div>
+              <div class="mt-1 text-xs text-muted-foreground">Адрес: {{ formatDeliveryAddress(order) }}</div>
               <div class="mt-3 flex items-center justify-between">
                 <Badge variant="outline">{{ order.order_type === "delivery" ? "Доставка" : "Самовывоз" }}</Badge>
                 <div class="text-right">
                   <div class="font-semibold text-foreground">{{ formatCurrency(order.total) }}</div>
-                  <div class="text-xs uppercase text-muted-foreground">{{ order.payment_method }}</div>
                 </div>
               </div>
             </button>
@@ -208,10 +208,11 @@
               <TableRow>
                 <TableHead>Заказ</TableHead>
                 <TableHead>Город</TableHead>
+                <TableHead>Адрес</TableHead>
                 <TableHead>Клиент</TableHead>
                 <TableHead>Тип</TableHead>
-                <TableHead>Статус</TableHead>
                 <TableHead class="text-right">Сумма</TableHead>
+                <TableHead>Статус</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -219,10 +220,11 @@
                 <TableRow v-for="index in 8" :key="`loading-${index}`">
                   <TableCell><Skeleton class="h-4 w-28" /></TableCell>
                   <TableCell><Skeleton class="h-4 w-24" /></TableCell>
+                  <TableCell><Skeleton class="h-4 w-40" /></TableCell>
                   <TableCell><Skeleton class="h-4 w-36" /></TableCell>
                   <TableCell><Skeleton class="h-6 w-20" /></TableCell>
-                  <TableCell><Skeleton class="h-6 w-24" /></TableCell>
                   <TableCell class="text-right"><Skeleton class="ml-auto h-4 w-20" /></TableCell>
+                  <TableCell><Skeleton class="h-6 w-24" /></TableCell>
                 </TableRow>
               </template>
               <template v-else>
@@ -234,10 +236,11 @@
                   @click="selectOrder(order)"
                 >
                   <TableCell>
-                    <div class="font-medium text-foreground">#{{ order.order_number }}</div>
+                    <div class="font-medium text-foreground">{{ order.order_number }}</div>
                     <div class="text-xs text-muted-foreground">{{ formatDateTime(order.created_at) }}</div>
                   </TableCell>
                   <TableCell>{{ order.city_name || "—" }}</TableCell>
+                  <TableCell>{{ formatDeliveryAddress(order) }}</TableCell>
                   <TableCell>
                     <a
                       v-if="normalizePhone(order.user_phone)"
@@ -248,23 +251,21 @@
                       {{ formatPhone(order.user_phone) }}
                     </a>
                     <div v-else>—</div>
-                    <div class="text-xs text-muted-foreground">{{ order.branch_name || "" }}</div>
                   </TableCell>
                   <TableCell>
                     <Badge variant="outline">{{ order.order_type === "delivery" ? "Доставка" : "Самовывоз" }}</Badge>
+                  </TableCell>
+                  <TableCell class="text-right">
+                    <div class="font-semibold text-foreground">{{ formatCurrency(order.total) }}</div>
                   </TableCell>
                   <TableCell>
                     <Badge variant="secondary" :class="getStatusBadge(order.status).class" :style="getStatusBadge(order.status).style">
                       {{ getStatusBadge(order.status).label }}
                     </Badge>
                   </TableCell>
-                  <TableCell class="text-right">
-                    <div class="font-semibold text-foreground">{{ formatCurrency(order.total) }}</div>
-                    <div class="text-xs uppercase text-muted-foreground">{{ order.payment_method }}</div>
-                  </TableCell>
                 </TableRow>
                 <TableRow v-if="orders.length === 0">
-                  <TableCell colspan="6" class="py-8 text-center text-sm text-muted-foreground">Заказы не найдены</TableCell>
+                  <TableCell colspan="7" class="py-8 text-center text-sm text-muted-foreground">Заказы не найдены</TableCell>
                 </TableRow>
               </template>
             </TableBody>
@@ -542,6 +543,12 @@ const getStatusBadge = (status) => {
     class: "",
     style: styles[status] || { backgroundColor: "#E0E0E0", color: "#666666" },
   };
+};
+const formatDeliveryAddress = (order) => {
+  if (!order || order.order_type !== "delivery") return "—";
+  const parts = [order.delivery_street, order.delivery_house].map((value) => String(value || "").trim()).filter(Boolean);
+  if (parts.length === 0) return "—";
+  return parts.join(", ");
 };
 onMounted(async () => {
   updateCalendarMonths();
