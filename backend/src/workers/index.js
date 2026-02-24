@@ -9,6 +9,7 @@ import { createIikoMenuSyncWorker } from "./iikoMenuSync.worker.js";
 import { createIikoDeliveryZonesWorker } from "./iikoDeliveryZones.worker.js";
 import { createIntegrationSchedulerWorker } from "./integrationScheduler.worker.js";
 import { createIntegrationRetryWorker } from "./integrationRetry.worker.js";
+import { createAdminActionLogsCleanupWorker } from "./adminActionLogsCleanup.worker.js";
 import IORedis from "ioredis";
 import dotenv from "dotenv";
 import { logger } from "../utils/logger.js";
@@ -33,6 +34,7 @@ let pbPurchaseSyncWorker;
 let iikoDeliveryZonesWorker;
 let integrationSchedulerWorker;
 let integrationRetryWorker;
+let adminActionLogsCleanupWorker;
 export async function startWorkers() {
   try {
     telegramWorker = createTelegramWorker(redisConnection);
@@ -51,11 +53,13 @@ export async function startWorkers() {
     iikoDeliveryZonesWorker = createIikoDeliveryZonesWorker();
     integrationSchedulerWorker = createIntegrationSchedulerWorker();
     integrationRetryWorker = createIntegrationRetryWorker();
+    adminActionLogsCleanupWorker = createAdminActionLogsCleanupWorker();
     orderAutoStatusWorker.start();
     bonusExpiryWorker.start();
     birthdayBonusWorker.start();
     broadcastWorker.start();
     triggerWorker.start();
+    adminActionLogsCleanupWorker.start();
     // Временно отключаем автоматические интеграционные синхронизации.
     // Ручная синхронизация меню через очередь остается доступной.
     logger.system.info("Background workers started");
@@ -116,6 +120,9 @@ export async function stopWorkers() {
     }
     if (integrationRetryWorker) {
       integrationRetryWorker.stop();
+    }
+    if (adminActionLogsCleanupWorker) {
+      adminActionLogsCleanupWorker.stop();
     }
     await Promise.all(promises);
     logger.system.shutdown("Background workers stopped");

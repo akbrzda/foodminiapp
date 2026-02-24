@@ -159,9 +159,9 @@ router.get("/stats", authenticateToken, requireRole("admin", "ceo"), async (req,
 router.delete("/cleanup", authenticateToken, requireRole("admin", "ceo"), async (req, res, next) => {
   try {
     const { days = 90 } = req.body;
-    if (days < 30) {
+    if (days < 14) {
       return res.status(400).json({
-        error: "Cannot delete logs newer than 30 days",
+        error: "Cannot delete logs newer than 14 days",
       });
     }
     const cutoffDate = new Date();
