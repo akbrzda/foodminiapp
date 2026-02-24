@@ -105,10 +105,9 @@
                   <h3>{{ item.name }}</h3>
                   <p class="description">{{ item.description }}</p>
                   <p class="item-weight" v-if="getDisplayWeight(item)">{{ getDisplayWeight(item) }}</p>
-                  <div class="item-tags" v-if="item.tags && item.tags.length > 0">
-                    <span v-for="tag in item.tags" :key="tag.id" class="item-tag">
-                      <span v-if="tag.icon">{{ tag.icon }}</span>
-                      {{ tag.name }}
+                  <div class="item-badges" v-if="item.badges && item.badges.length > 0">
+                    <span v-for="badge in item.badges" :key="badge.code" class="item-badge" :class="`item-badge-${badge.code}`">
+                      {{ badge.label }}
                     </span>
                   </div>
                   <div v-if="isItemUnavailable(item)" class="item-unavailable">Временно недоступно</div>
@@ -1054,6 +1053,7 @@ function goToCart() {
 }
 .item-card {
   display: flex;
+  position: relative;
   gap: 8px;
   padding: 8px;
   background: var(--color-background);
@@ -1109,18 +1109,47 @@ function goToCart() {
   color: var(--color-text-muted);
   margin: 0;
 }
-.item-tags {
+.item-badges {
   display: flex;
+  flex-direction: column;
+  position: absolute;
+  top: 8px;
+  left: 8px;
   flex-wrap: wrap;
-  gap: 6px;
-  margin: 6px 0;
+  gap: 2px;
 }
-.item-tag {
+.item-badge {
   background: #eef2f6;
   border-radius: 999px;
-  padding: 3px 8px;
-  font-size: 11px;
+  padding: 2px 6px;
+  font-size: 10px;
   color: var(--color-text-secondary);
+  font-weight: var(--font-weight-semibold);
+  text-align: center;
+}
+.item-badge-new {
+  background: #e6f7ff;
+  color: #1d4ed8;
+}
+.item-badge-hit {
+  background: #fff7e6;
+  color: #b45309;
+}
+.item-badge-spicy {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+.item-badge-vegetarian {
+  background: #dcfce7;
+  color: #166534;
+}
+.item-badge-piquant {
+  background: #fce7f3;
+  color: #9d174d;
+}
+.item-badge-value {
+  background: #ecfccb;
+  color: #3f6212;
 }
 .item-unavailable {
   margin-top: 6px;

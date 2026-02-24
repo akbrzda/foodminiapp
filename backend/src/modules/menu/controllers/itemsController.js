@@ -3,7 +3,55 @@ import logger from "../../../utils/logger.js";
 import { getIntegrationSettings } from "../../integrations/services/integrationConfigService.js";
 import { notifyMenuUpdated } from "../../../websocket/runtime.js";
 
+const NEW_BADGE_DAYS = 14;
+const HIT_BADGE_SALES_THRESHOLD = 50;
+
 // Вспомогательные функции
+const toBool = (value, fallback = false) => {
+  if (value === null || value === undefined) return fallback;
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value === 1;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["1", "true", "yes", "on"].includes(normalized)) return true;
+    if (["0", "false", "no", "off", ""].includes(normalized)) return false;
+  }
+  return Boolean(value);
+};
+
+const isNewAutoActiveByCreatedAt = (createdAt) => {
+  if (!createdAt) return false;
+  const createdDate = new Date(createdAt);
+  if (Number.isNaN(createdDate.getTime())) return false;
+  return Date.now() - createdDate.getTime() <= NEW_BADGE_DAYS * 24 * 60 * 60 * 1000;
+};
+
+const resolveBadgeValue = (storedValue, autoValue) => {
+  if (storedValue === null || storedValue === undefined) return Boolean(autoValue);
+  return toBool(storedValue);
+};
+
+async function getCompletedSalesCount(itemId, connection = db) {
+  if (!itemId) return 0;
+  const [rows] = await connection.query(
+    `SELECT COALESCE(SUM(oi.quantity), 0) AS sold_count
+     FROM order_items oi
+     JOIN orders o ON o.id = oi.order_id
+     WHERE oi.item_id = ?
+       AND o.status = 'completed'`,
+    [itemId],
+  );
+  return Number(rows?.[0]?.sold_count) || 0;
+}
+
+function validateBadgesLimit({ isNewEnabled, isHitEnabled, isSpicyEnabled, isVegetarianEnabled, isPiquantEnabled, isValueEnabled }) {
+  const activeCount = [isNewEnabled, isHitEnabled, isSpicyEnabled, isVegetarianEnabled, isPiquantEnabled, isValueEnabled].filter(Boolean).length;
+  if (activeCount > 2) {
+    return "Можно выбрать не более 2 бейджей для одного блюда";
+  }
+  return null;
+}
+
 async function getItemCityIds(itemId) {
   const [rows] = await db.query("SELECT city_id FROM menu_item_cities WHERE item_id = ?", [itemId]);
   return rows.map((row) => row.city_id);
@@ -121,6 +169,12 @@ export const createItem = async (req, res, next) => {
       carbs_per_serving,
       sort_order,
       is_active,
+      is_new,
+      is_hit,
+      is_spicy,
+      is_vegetarian,
+      is_piquant,
+      is_value,
       category_ids,
       tag_ids,
       city_ids,
@@ -133,6 +187,42 @@ export const createItem = async (req, res, next) => {
       });
     }
 
+    const desiredIsNew = is_new !== undefined ? toBool(is_new, false) : null;
+    const desiredIsHit = is_hit !== undefined ? toBool(is_hit, false) : null;
+    const desiredIsSpicy = toBool(is_spicy, false);
+    const desiredIsVegetarian = toBool(is_vegetarian, false);
+    const desiredIsPiquant = toBool(is_piquant, false);
+    const desiredIsValue = toBool(is_value, false);
+
+    const badgeLimitError = validateBadgesLimit({
+      isNewEnabled: desiredIsNew || false,
+      isHitEnabled: desiredIsHit || false,
+      isSpicyEnabled: desiredIsSpicy,
+      isVegetarianEnabled: desiredIsVegetarian,
+      isPiquantEnabled: desiredIsPiquant,
+      isValueEnabled: desiredIsValue,
+    });
+    if (badgeLimitError) {
+      return res.status(400).json({ error: badgeLimitError });
+    }
+
+    const createTime = new Date();
+    const isNewAutoActive = isNewAutoActiveByCreatedAt(createTime);
+    const effectiveIsNew = desiredIsNew === null ? isNewAutoActive : desiredIsNew;
+    const effectiveIsHit = desiredIsHit === null ? false : desiredIsHit;
+
+    const effectiveBadgeLimitError = validateBadgesLimit({
+      isNewEnabled: effectiveIsNew,
+      isHitEnabled: effectiveIsHit,
+      isSpicyEnabled: desiredIsSpicy,
+      isVegetarianEnabled: desiredIsVegetarian,
+      isPiquantEnabled: desiredIsPiquant,
+      isValueEnabled: desiredIsValue,
+    });
+    if (effectiveBadgeLimitError) {
+      return res.status(400).json({ error: effectiveBadgeLimitError });
+    }
+
     const connection = await db.getConnection();
     try {
       await connection.beginTransaction();
@@ -143,8 +233,8 @@ export const createItem = async (req, res, next) => {
          (name, description, composition, price, image_url, weight_value, weight_unit, 
           calories_per_100g, proteins_per_100g, fats_per_100g, carbs_per_100g,
           calories_per_serving, proteins_per_serving, fats_per_serving, carbs_per_serving,
-          sort_order, is_active)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          sort_order, is_active, is_new, is_hit, is_spicy, is_vegetarian, is_piquant, is_value)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           name,
           description || null,
@@ -163,6 +253,12 @@ export const createItem = async (req, res, next) => {
           carbs_per_serving || null,
           sort_order || 0,
           is_active !== undefined ? is_active : true,
+          desiredIsNew === null ? null : desiredIsNew ? 1 : 0,
+          desiredIsHit === null ? null : desiredIsHit ? 1 : 0,
+          desiredIsSpicy ? 1 : 0,
+          desiredIsVegetarian ? 1 : 0,
+          desiredIsPiquant ? 1 : 0,
+          desiredIsValue ? 1 : 0,
         ],
       );
 
@@ -213,7 +309,8 @@ export const createItem = async (req, res, next) => {
                 weight_value, weight_unit, 
                 calories_per_100g, proteins_per_100g, fats_per_100g, carbs_per_100g,
                 calories_per_serving, proteins_per_serving, fats_per_serving, carbs_per_serving,
-                sort_order, is_active, 
+                sort_order, is_active,
+                is_new, is_hit, is_spicy, is_vegetarian, is_piquant, is_value,
                 created_at, updated_at
          FROM menu_items WHERE id = ?`,
         [itemId],
@@ -269,6 +366,12 @@ export const getAdminItems = async (req, res, next) => {
         mi.carbs_per_serving,
         mi.sort_order, 
         mi.is_active,
+        mi.is_new,
+        mi.is_hit,
+        mi.is_spicy,
+        mi.is_vegetarian,
+        mi.is_piquant,
+        mi.is_value,
         mi.created_at, 
         mi.updated_at
       FROM menu_items mi
@@ -376,6 +479,12 @@ export const getAdminItemById = async (req, res, next) => {
         mi.carbs_per_serving,
         mi.sort_order, 
         mi.is_active,
+        mi.is_new,
+        mi.is_hit,
+        mi.is_spicy,
+        mi.is_vegetarian,
+        mi.is_piquant,
+        mi.is_value,
         mi.created_at, 
         mi.updated_at
       FROM menu_items mi
@@ -387,7 +496,20 @@ export const getAdminItemById = async (req, res, next) => {
       return res.status(404).json({ error: "Item not found" });
     }
 
-    res.json({ item: items[0] });
+    const item = items[0];
+    const salesCount = await getCompletedSalesCount(item.id);
+    const isNewAuto = isNewAutoActiveByCreatedAt(item.created_at);
+    const isHitAuto = salesCount >= HIT_BADGE_SALES_THRESHOLD;
+    const isNewEnabled = resolveBadgeValue(item.is_new, isNewAuto);
+    const isHitEnabled = resolveBadgeValue(item.is_hit, isHitAuto);
+
+    res.json({
+      item: {
+        ...item,
+        is_new: isNewEnabled,
+        is_hit: isHitEnabled,
+      },
+    });
   } catch (error) {
     next(error);
   }
@@ -415,15 +537,50 @@ export const updateItem = async (req, res, next) => {
       carbs_per_serving,
       sort_order,
       is_active,
+      is_new,
+      is_hit,
+      is_spicy,
+      is_vegetarian,
+      is_piquant,
+      is_value,
       category_ids,
       tag_ids,
       city_ids,
       prices,
     } = req.body;
 
-    const [items] = await db.query("SELECT id FROM menu_items WHERE id = ?", [itemId]);
+    const [items] = await db.query(
+      `SELECT id, created_at, is_new, is_hit, is_spicy, is_vegetarian, is_piquant, is_value
+       FROM menu_items
+       WHERE id = ?`,
+      [itemId],
+    );
     if (items.length === 0) {
       return res.status(404).json({ error: "Item not found" });
+    }
+    const existingItem = items[0];
+    const salesCount = await getCompletedSalesCount(itemId);
+    const isNewAuto = isNewAutoActiveByCreatedAt(existingItem.created_at);
+    const isHitAuto = salesCount >= HIT_BADGE_SALES_THRESHOLD;
+    const currentIsNewEffective = resolveBadgeValue(existingItem.is_new, isNewAuto);
+    const currentIsHitEffective = resolveBadgeValue(existingItem.is_hit, isHitAuto);
+    const desiredIsNew = is_new !== undefined ? toBool(is_new) : currentIsNewEffective;
+    const desiredIsHit = is_hit !== undefined ? toBool(is_hit) : currentIsHitEffective;
+    const desiredIsSpicy = is_spicy !== undefined ? toBool(is_spicy) : toBool(existingItem.is_spicy);
+    const desiredIsVegetarian = is_vegetarian !== undefined ? toBool(is_vegetarian) : toBool(existingItem.is_vegetarian);
+    const desiredIsPiquant = is_piquant !== undefined ? toBool(is_piquant) : toBool(existingItem.is_piquant);
+    const desiredIsValue = is_value !== undefined ? toBool(is_value) : toBool(existingItem.is_value);
+
+    const badgeLimitError = validateBadgesLimit({
+      isNewEnabled: desiredIsNew,
+      isHitEnabled: desiredIsHit,
+      isSpicyEnabled: desiredIsSpicy,
+      isVegetarianEnabled: desiredIsVegetarian,
+      isPiquantEnabled: desiredIsPiquant,
+      isValueEnabled: desiredIsValue,
+    });
+    if (badgeLimitError) {
+      return res.status(400).json({ error: badgeLimitError });
     }
 
     const updates = [];
@@ -497,6 +654,30 @@ export const updateItem = async (req, res, next) => {
       updates.push("is_active = ?");
       values.push(is_active);
     }
+    if (is_new !== undefined) {
+      updates.push("is_new = ?");
+      values.push(desiredIsNew ? 1 : 0);
+    }
+    if (is_hit !== undefined) {
+      updates.push("is_hit = ?");
+      values.push(desiredIsHit ? 1 : 0);
+    }
+    if (is_spicy !== undefined) {
+      updates.push("is_spicy = ?");
+      values.push(desiredIsSpicy ? 1 : 0);
+    }
+    if (is_vegetarian !== undefined) {
+      updates.push("is_vegetarian = ?");
+      values.push(desiredIsVegetarian ? 1 : 0);
+    }
+    if (is_piquant !== undefined) {
+      updates.push("is_piquant = ?");
+      values.push(desiredIsPiquant ? 1 : 0);
+    }
+    if (is_value !== undefined) {
+      updates.push("is_value = ?");
+      values.push(desiredIsValue ? 1 : 0);
+    }
 
     if (updates.length === 0) {
       return res.status(400).json({ error: "No fields to update" });
@@ -557,7 +738,8 @@ export const updateItem = async (req, res, next) => {
                 weight_value, weight_unit, 
                 calories_per_100g, proteins_per_100g, fats_per_100g, carbs_per_100g,
                 calories_per_serving, proteins_per_serving, fats_per_serving, carbs_per_serving,
-                sort_order, is_active, 
+                sort_order, is_active,
+                is_new, is_hit, is_spicy, is_vegetarian, is_piquant, is_value,
                 created_at, updated_at
          FROM menu_items WHERE id = ?`,
         [itemId],

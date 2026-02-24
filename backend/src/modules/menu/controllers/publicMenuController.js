@@ -5,6 +5,8 @@ import { getIntegrationSettings } from "../../integrations/services/integrationC
 import { getDynamicUpsell } from "../services/upsellService.js";
 
 const MENU_CACHE_TTL = 300;
+const NEW_BADGE_DAYS = 14;
+const HIT_BADGE_SALES_THRESHOLD = 50;
 
 const buildSourceScope = (integrationSettings) => {
   const menuMode = String(integrationSettings?.integrationMode?.menu || "local")
@@ -25,6 +27,59 @@ const buildSourceScope = (integrationSettings) => {
     itemFilter,
   };
 };
+
+const isTruthy = (value) => value === true || value === 1 || value === "1";
+
+function buildItemBadges(item, soldCount = 0) {
+  const badges = [];
+  const createdAt = item?.created_at ? new Date(item.created_at) : null;
+  const now = new Date();
+  const isNewAuto =
+    createdAt instanceof Date && !Number.isNaN(createdAt.getTime()) && now.getTime() - createdAt.getTime() <= NEW_BADGE_DAYS * 24 * 60 * 60 * 1000;
+  const isHitAuto = Number(soldCount) >= HIT_BADGE_SALES_THRESHOLD;
+  const hasManualNew = item?.is_new !== null && item?.is_new !== undefined;
+  const hasManualHit = item?.is_hit !== null && item?.is_hit !== undefined;
+  const isNewEnabled = hasManualNew ? isTruthy(item?.is_new) : isNewAuto;
+  const isHitEnabled = hasManualHit ? isTruthy(item?.is_hit) : isHitAuto;
+
+  if (isNewEnabled) {
+    badges.push({ code: "new", label: "Новинка" });
+  }
+  if (isHitEnabled) {
+    badges.push({ code: "hit", label: "Хит" });
+  }
+  if (isTruthy(item?.is_spicy)) {
+    badges.push({ code: "spicy", label: "Острое" });
+  }
+  if (isTruthy(item?.is_vegetarian)) {
+    badges.push({ code: "vegetarian", label: "Вегетарианское" });
+  }
+  if (isTruthy(item?.is_piquant)) {
+    badges.push({ code: "piquant", label: "Пикантное" });
+  }
+  if (isTruthy(item?.is_value)) {
+    badges.push({ code: "value", label: "Выгодно" });
+  }
+
+  return badges.slice(0, 2);
+}
+
+async function getCompletedSalesByItemIds(itemIds = []) {
+  const normalizedIds = itemIds.map((id) => Number(id)).filter(Number.isFinite);
+  if (normalizedIds.length === 0) return new Map();
+
+  const [rows] = await db.query(
+    `SELECT oi.item_id, COALESCE(SUM(oi.quantity), 0) AS sold_count
+     FROM order_items oi
+     JOIN orders o ON o.id = oi.order_id
+     WHERE oi.item_id IN (${normalizedIds.map(() => "?").join(",")})
+       AND o.status = 'completed'
+     GROUP BY oi.item_id`,
+    normalizedIds,
+  );
+
+  return new Map(rows.map((row) => [Number(row.item_id), Number(row.sold_count) || 0]));
+}
 
 // Функции кэширования
 async function getMenuCache(cacheKey) {
@@ -130,6 +185,7 @@ export const getMenu = async (req, res, next) => {
                 mic.sort_order AS category_sort_order,
                 mi.calories_per_100g, mi.proteins_per_100g, mi.fats_per_100g, mi.carbs_per_100g,
                 mi.calories_per_serving, mi.proteins_per_serving, mi.fats_per_serving, mi.carbs_per_serving,
+                mi.is_new, mi.is_hit, mi.is_spicy, mi.is_vegetarian, mi.is_piquant, mi.is_value,
                 mi.created_at, mi.updated_at
          FROM menu_items mi
          JOIN menu_item_categories mic ON mic.item_id = mi.id
@@ -143,6 +199,7 @@ export const getMenu = async (req, res, next) => {
         [category.id, city_id],
       );
 
+      const salesByItemId = await getCompletedSalesByItemIds(items.map((item) => item.id));
       const availableItems = [];
 
       for (const item of items) {
@@ -156,6 +213,7 @@ export const getMenu = async (req, res, next) => {
           [item.id],
         );
         item.tags = tags;
+        item.badges = buildItemBadges(item, salesByItemId.get(Number(item.id)) || 0);
 
         // Получение цены товара
         if (fulfillment_type) {
@@ -513,7 +571,9 @@ export const getItemById = async (req, res, next) => {
                 JSON_ARRAY()
               ) AS category_ids,
               mi.name, mi.description, mi.price, mi.image_url,
-              mi.weight, mi.weight_value, mi.weight_unit, mi.calories, mi.sort_order, mi.is_active, mi.created_at, mi.updated_at
+              mi.weight, mi.weight_value, mi.weight_unit, mi.calories, mi.sort_order, mi.is_active,
+              mi.is_new, mi.is_hit, mi.is_spicy, mi.is_vegetarian, mi.is_piquant, mi.is_value,
+              mi.created_at, mi.updated_at
        FROM menu_items mi
        WHERE mi.id = ? AND mi.is_active = TRUE
          ${sourceScope.itemFilter}`,
@@ -539,6 +599,8 @@ export const getItemById = async (req, res, next) => {
     item.category_ids = categoryIds;
     // Оставляем обратную совместимость для клиентов, ожидающих одно значение.
     item.category_id = categoryIds[0] || null;
+    const salesByItemId = await getCompletedSalesByItemIds([item.id]);
+    item.badges = buildItemBadges(item, salesByItemId.get(Number(item.id)) || 0);
 
     // Получение цены товара по городу
     if (city_id) {

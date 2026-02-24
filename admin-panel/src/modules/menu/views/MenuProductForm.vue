@@ -320,7 +320,13 @@
                   @dragover.prevent
                   @drop.prevent="onVariantDrop(variant, index, $event)"
                 >
-                  <input :id="`variant-file-${getVariantUploadKey(variant, index)}`" type="file" accept="image/*" class="hidden" @change="onVariantFileChange(variant, index, $event)" />
+                  <input
+                    :id="`variant-file-${getVariantUploadKey(variant, index)}`"
+                    type="file"
+                    accept="image/*"
+                    class="hidden"
+                    @change="onVariantFileChange(variant, index, $event)"
+                  />
                   <Button type="button" variant="outline" size="sm" @click="triggerVariantFile(variant, index)">
                     <UploadCloud :size="16" />
                     Загрузить (до 10МБ)
@@ -332,7 +338,11 @@
                   <span v-if="getVariantUploadState(variant, index).loading" class="text-xs text-muted-foreground">Загрузка...</span>
                 </div>
                 <div v-if="getVariantImagePreview(variant, index)" class="mt-3 flex items-center gap-3">
-                  <img :src="normalizeImageUrl(getVariantImagePreview(variant, index))" class="h-16 w-16 rounded-xl object-cover" alt="variant-preview" />
+                  <img
+                    :src="normalizeImageUrl(getVariantImagePreview(variant, index))"
+                    class="h-16 w-16 rounded-xl object-cover"
+                    alt="variant-preview"
+                  />
                   <span class="text-xs text-muted-foreground">При отсутствии фото варианта будет использовано базовое фото блюда.</span>
                 </div>
               </FieldContent>
@@ -493,8 +503,48 @@
       <TabsContent :value="4" class="space-y-4">
         <Card>
           <CardHeader>
+            <CardTitle class="text-base">Бейджи карточки</CardTitle>
+            <CardDescription>Отметки для отображения на карточке блюда в Mini App</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p class="mb-3 text-xs text-muted-foreground">Можно выбрать не более 2 бейджей</p>
+            <div class="grid gap-2 md:grid-cols-2">
+              <Label class="flex items-center gap-2 text-sm text-foreground">
+                <input :checked="form.is_new" type="checkbox" class="h-4 w-4 rounded border-border text-primary focus:ring-primary" @change="toggleBadge('is_new', $event)" />
+                <Badge>Новинка</Badge>
+              </Label>
+              <Label class="flex items-center gap-2 text-sm text-foreground">
+                <input :checked="form.is_hit" type="checkbox" class="h-4 w-4 rounded border-border text-primary focus:ring-primary" @change="toggleBadge('is_hit', $event)" />
+                <Badge>Хит</Badge>
+              </Label>
+              <Label class="flex items-center gap-2 text-sm text-foreground">
+                <input :checked="form.is_spicy" type="checkbox" class="h-4 w-4 rounded border-border text-primary focus:ring-primary" @change="toggleBadge('is_spicy', $event)" />
+                <Badge>Острое</Badge>
+              </Label>
+              <Label class="flex items-center gap-2 text-sm text-foreground">
+                <input
+                  :checked="form.is_vegetarian"
+                  type="checkbox"
+                  class="h-4 w-4 rounded border-border text-primary focus:ring-primary"
+                  @change="toggleBadge('is_vegetarian', $event)"
+                />
+                <Badge>Вегетарианское</Badge>
+              </Label>
+              <Label class="flex items-center gap-2 text-sm text-foreground">
+                <input :checked="form.is_piquant" type="checkbox" class="h-4 w-4 rounded border-border text-primary focus:ring-primary" @change="toggleBadge('is_piquant', $event)" />
+                <Badge>Пикантное</Badge>
+              </Label>
+              <Label class="flex items-center gap-2 text-sm text-foreground">
+                <input :checked="form.is_value" type="checkbox" class="h-4 w-4 rounded border-border text-primary focus:ring-primary" @change="toggleBadge('is_value', $event)" />
+                <Badge>Выгодно</Badge>
+              </Label>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
             <CardTitle class="text-base">Теги</CardTitle>
-            <CardDescription>Добавление тегов к блюду (острое, новинка и т.д.)</CardDescription>
+            <CardDescription>Теги используются только для фильтрации блюд</CardDescription>
           </CardHeader>
           <CardContent>
             <div class="grid gap-2 md:grid-cols-2">
@@ -559,9 +609,13 @@ const activeTab = ref(0);
 const fileInput = ref(null);
 const uploadState = ref({ loading: false, error: null, preview: null });
 const variantUploadStates = ref({});
+const badgeTouched = ref({
+  is_new: false,
+  is_hit: false,
+});
 const draggedVariantIndex = ref(null);
 const dragOverVariantIndex = ref(null);
-const tabLabels = ["Основное", "Вариации", "Модификаторы", "Доступность и цены", "Теги"];
+const tabLabels = ["Основное", "Вариации", "Модификаторы", "Доступность и цены", "Теги и бейджи"];
 const allowedFulfillmentValues = ["pickup", "delivery"];
 const fulfillmentTypes = [
   { value: "pickup", label: "Самовывоз" },
@@ -596,6 +650,12 @@ const form = ref({
   disabled_modifier_ids: [],
   city_ids: [],
   tag_ids: [],
+  is_new: true,
+  is_hit: false,
+  is_spicy: false,
+  is_vegetarian: false,
+  is_piquant: false,
+  is_value: false,
   prices: [],
 });
 const modalTitle = computed(() => (isEditing.value ? "Редактировать блюдо" : "Новое блюдо"));
@@ -636,6 +696,23 @@ const normalizeImageUrl = (url) => {
   if (url.startsWith("http://") || url.startsWith("https://")) return url;
   const base = (import.meta.env.VITE_UPLOADS_URL || import.meta.env.VITE_API_URL || window.location.origin).replace(/\/$/, "");
   return url.startsWith("/") ? `${base}${url}` : `${base}/${url}`;
+};
+const getActiveBadgesCount = () => {
+  const badgeKeys = ["is_new", "is_hit", "is_spicy", "is_vegetarian", "is_piquant", "is_value"];
+  return badgeKeys.reduce((count, key) => count + (form.value[key] ? 1 : 0), 0);
+};
+const toggleBadge = (key, event) => {
+  const nextValue = Boolean(event?.target?.checked);
+  const currentValue = Boolean(form.value[key]);
+  if (nextValue === currentValue) return;
+  if (nextValue && getActiveBadgesCount() >= 2) {
+    showErrorNotification("Можно выбрать не более 2 бейджей");
+    return;
+  }
+  form.value[key] = nextValue;
+  if (key === "is_new" || key === "is_hit") {
+    badgeTouched.value[key] = true;
+  }
 };
 const normalizeCityId = (value) => {
   if (value === null || value === undefined || value === "") return null;
@@ -807,6 +884,12 @@ const loadItem = async () => {
       carbs_per_serving: item.carbs_per_serving,
       sort_order: item.sort_order || 0,
       is_active: normalizeIsActive(item.is_active),
+      is_new: normalizeIsActive(item.is_new, false),
+      is_hit: normalizeIsActive(item.is_hit, false),
+      is_spicy: normalizeIsActive(item.is_spicy, false),
+      is_vegetarian: normalizeIsActive(item.is_vegetarian, false),
+      is_piquant: normalizeIsActive(item.is_piquant, false),
+      is_value: normalizeIsActive(item.is_value, false),
       category_ids: normalizeIdArray(categoriesRes.data.category_ids),
       variants: variantsWithPrices,
       modifier_group_ids: normalizeIdArray(modifiersRes.data.modifier_group_ids),
@@ -814,6 +897,10 @@ const loadItem = async () => {
       city_ids: normalizeIdArray(citiesRes.data.city_ids),
       tag_ids: normalizeIdArray(tagsRes.data.tag_ids),
       prices: (pricesRes.data.prices || []).filter((price) => allowedFulfillmentValues.includes(price.fulfillment_type)),
+    };
+    badgeTouched.value = {
+      is_new: false,
+      is_hit: false,
     };
     selectedCityId.value = form.value.city_ids.length ? form.value.city_ids[0] : null;
     initialDisabledModifierIds.value = [...form.value.disabled_modifier_ids];
@@ -825,6 +912,11 @@ const loadItem = async () => {
 };
 const saveItem = async () => {
   try {
+    if (getActiveBadgesCount() > 2) {
+      showErrorNotification("Можно выбрать не более 2 бейджей");
+      return null;
+    }
+
     const payload = {
       name: form.value.name,
       description: form.value.description,
@@ -843,6 +935,12 @@ const saveItem = async () => {
       carbs_per_serving: form.value.carbs_per_serving,
       sort_order: form.value.sort_order,
       is_active: form.value.is_active,
+      is_spicy: form.value.is_spicy,
+      is_vegetarian: form.value.is_vegetarian,
+      is_piquant: form.value.is_piquant,
+      is_value: form.value.is_value,
+      ...(badgeTouched.value.is_new ? { is_new: form.value.is_new } : {}),
+      ...(badgeTouched.value.is_hit ? { is_hit: form.value.is_hit } : {}),
     };
     let savedItemId;
     if (isEditing.value) {
@@ -875,7 +973,9 @@ const saveDisabledModifiers = async (savedItemId) => {
   const initialDisabledIds = new Set(initialDisabledModifierIds.value || []);
   const toDisable = allModifierIds.filter((id) => desiredDisabledIds.has(id) && !initialDisabledIds.has(id));
   const toEnable = allModifierIds.filter((id) => !desiredDisabledIds.has(id) && initialDisabledIds.has(id));
-  await Promise.all(toDisable.map((modifierId) => api.post(`/api/menu/admin/products/${savedItemId}/disabled-modifiers`, { modifier_id: modifierId })));
+  await Promise.all(
+    toDisable.map((modifierId) => api.post(`/api/menu/admin/products/${savedItemId}/disabled-modifiers`, { modifier_id: modifierId })),
+  );
   await Promise.all(toEnable.map((modifierId) => api.delete(`/api/menu/admin/products/${savedItemId}/disabled-modifiers/${modifierId}`)));
   initialDisabledModifierIds.value = [...form.value.disabled_modifier_ids];
 };

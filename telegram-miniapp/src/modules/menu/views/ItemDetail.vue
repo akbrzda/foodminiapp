@@ -30,14 +30,11 @@
       <div class="item-header">
         <div class="item-title-row">
           <h1 class="item-name">{{ item.name }}</h1>
-          <button v-if="hasKbjuData" type="button" class="kbju-info-btn" aria-label="Показать КБЖУ" @click="toggleKbjuPopup">
-            !
-          </button>
+          <button v-if="hasKbjuData" type="button" class="kbju-info-btn" aria-label="Показать КБЖУ" @click="toggleKbjuPopup">!</button>
         </div>
-        <div v-if="item.tags && item.tags.length > 0" class="tag-row">
-          <span v-for="tag in item.tags" :key="tag.id" class="tag-pill">
-            <span v-if="tag.icon">{{ tag.icon }}</span>
-            {{ tag.name }}
+        <div v-if="item.badges && item.badges.length > 0" class="badge-row">
+          <span v-for="badge in item.badges" :key="badge.code" class="badge-pill" :class="`badge-pill-${badge.code}`">
+            {{ badge.label }}
           </span>
         </div>
         <p class="item-composition" v-if="item.composition">Состав: {{ item.composition }}</p>
@@ -717,18 +714,48 @@ function closeKbjuPopup() {
   align-items: start;
   column-gap: 10px;
 }
-.tag-row {
+.badge-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  flex-direction: column;
+  gap: 4px;
   margin: 8px 0;
+  position: absolute;
+  top: 16px;
+  left: 16px;
 }
-.tag-pill {
+.badge-pill {
   background: #eef2f6;
   border-radius: 999px;
   padding: 4px 10px;
   font-size: 11px;
   color: var(--color-text-secondary);
+  font-weight: var(--font-weight-semibold);
+  text-align: center;
+}
+.badge-pill-new {
+  background: #e6f7ff;
+  color: #1d4ed8;
+}
+.badge-pill-hit {
+  background: #fff7e6;
+  color: #b45309;
+}
+.badge-pill-spicy {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+.badge-pill-vegetarian {
+  background: #dcfce7;
+  color: #166534;
+}
+.badge-pill-piquant {
+  background: #fce7f3;
+  color: #9d174d;
+}
+.badge-pill-value {
+  background: #ecfccb;
+  color: #3f6212;
 }
 .item-description {
   font-size: var(--font-size-body);
