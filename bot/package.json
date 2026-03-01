@@ -1,0 +1,29 @@
+{
+  "name": "foodminiapp-bot",
+  "version": "1.0.0",
+  "description": "Отдельный Telegram bot service для FoodMiniApp",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "nodemon src/index.js",
+    "start": "node src/index.js"
+  },
+  "keywords": [
+    "telegram",
+    "bot",
+    "foodminiapp"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^1.13.2",
+    "bullmq": "^5.66.4",
+    "dotenv": "^17.2.3",
+    "express": "^5.2.1",
+    "ioredis": "^5.9.1",
+    "mysql2": "^3.16.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.11"
+  }
+}

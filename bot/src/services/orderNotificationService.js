@@ -1,11 +1,5 @@
-import { Worker } from "bullmq";
-import axios from "axios";
-import dotenv from "dotenv";
-import { logger } from "../utils/logger.js";
 import { TELEGRAM_NEW_ORDER_NOTIFICATION_DEFAULT, getSystemSettings } from "../utils/settings.js";
-dotenv.config();
-const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
+import { sendTextMessage } from "./telegramApi.js";
 
 const escapeHtml = (value) =>
   String(value ?? "")
@@ -90,13 +84,12 @@ const applyTemplate = (template, placeholders) => {
   return rendered.replaceAll(/\n{3,}/g, "\n\n").trim();
 };
 
-function formatNewOrderMessage(orderData) {
+const formatNewOrderMessage = (orderData) => {
   const {
     order_number,
     order_type,
     city_name,
     branch_name,
-    delivery_address,
     delivery_street,
     delivery_house,
     delivery_apartment,
@@ -106,14 +99,11 @@ function formatNewOrderMessage(orderData) {
     payment_method,
     comment,
   } = orderData;
+
   let message = `🔔 <b>Новый заказ #${order_number}</b>\n\n`;
   message += `📍 <b>Тип:</b> ${order_type === "delivery" ? "Доставка 🚚" : "Самовывоз 🏪"}\n`;
-  if (city_name) {
-    message += `🏙️ <b>Город:</b> ${city_name}\n`;
-  }
-  if (branch_name) {
-    message += `🏪 <b>Филиал:</b> ${branch_name}\n`;
-  }
+  if (city_name) message += `🏙️ <b>Город:</b> ${city_name}\n`;
+  if (branch_name) message += `🏪 <b>Филиал:</b> ${branch_name}\n`;
   if (order_type === "delivery" && delivery_street) {
     message += `📫 <b>Адрес:</b> ${delivery_street}, д. ${delivery_house}`;
     if (delivery_entrance) message += `, подъезд ${delivery_entrance}`;
@@ -122,28 +112,21 @@ function formatNewOrderMessage(orderData) {
   }
   message += `💳 <b>Оплата:</b> ${payment_method === "cash" ? "Наличные 💵" : "Карта 💳"}\n`;
   message += `💰 <b>Сумма:</b> ${total}₽\n\n`;
-  if (items && items.length > 0) {
-    message += `📦 <b>Состав заказа:</b>\n`;
+  if (Array.isArray(items) && items.length > 0) {
+    message += "📦 <b>Состав заказа:</b>\n";
     items.forEach((item) => {
       message += `• ${item.item_name}`;
       if (item.variant_name) message += ` (${item.variant_name})`;
       message += ` x${item.quantity} - ${item.subtotal}₽\n`;
-      if (item.modifiers && item.modifiers.length > 0) {
-        item.modifiers.forEach((mod) => {
-          message += `  + ${mod.modifier_name}`;
-          if (mod.modifier_price > 0) message += ` (+${mod.modifier_price}₽)`;
-          message += "\n";
-        });
-      }
     });
   }
   if (comment) {
     message += `\n💬 <b>Комментарий:</b> ${comment}`;
   }
   return message;
-}
+};
 
-function formatNewOrderMessageFromTemplate(orderData, config) {
+const formatNewOrderMessageFromTemplate = (orderData, config) => {
   const orderTypeLabel = orderData.order_type === "delivery" ? "Доставка 🚚" : "Самовывоз 🏪";
   const paymentMethodLabel = orderData.payment_method === "cash" ? "Наличные 💵" : "Карта 💳";
   const isDelivery = orderData.order_type === "delivery";
@@ -151,6 +134,7 @@ function formatNewOrderMessageFromTemplate(orderData, config) {
   const itemsTotalQuantity = Array.isArray(orderData.items)
     ? orderData.items.reduce((sum, item) => sum + (Number(item?.quantity) > 0 ? Number(item.quantity) : 0), 0)
     : 0;
+
   const placeholders = {
     order_id: orderData.order_id || "",
     order_number: orderData.order_number || "",
@@ -173,17 +157,8 @@ function formatNewOrderMessageFromTemplate(orderData, config) {
     user_phone: orderData.user_phone || "",
     user_telegram_id: orderData.user_telegram_id || "",
     delivery_address: isDelivery ? buildDeliveryAddress(orderData) || "" : "",
-    delivery_street: isDelivery ? orderData.delivery_street || "" : "",
-    delivery_house: isDelivery ? orderData.delivery_house || "" : "",
-    delivery_entrance: isDelivery ? orderData.delivery_entrance || "" : "",
-    delivery_floor: isDelivery ? orderData.delivery_floor || "" : "",
-    delivery_apartment: isDelivery ? orderData.delivery_apartment || "" : "",
-    delivery_intercom: isDelivery ? orderData.delivery_intercom || "" : "",
-    delivery_latitude: isDelivery ? orderData.delivery_latitude ?? "" : "",
-    delivery_longitude: isDelivery ? orderData.delivery_longitude ?? "" : "",
     payment_method: orderData.payment_method || "",
     payment_method_label: paymentMethodLabel,
-    change_from: orderData.payment_method === "cash" ? orderData.change_from ?? "" : "",
     subtotal: orderData.subtotal ?? "",
     delivery_cost: orderData.delivery_cost ?? "",
     bonus_spent: orderData.bonus_spent ?? "",
@@ -193,10 +168,12 @@ function formatNewOrderMessageFromTemplate(orderData, config) {
     comment: orderData.comment || "",
     items_list: buildItemsList(orderData.items),
   };
+
   const rendered = applyTemplate(config.message_template, placeholders);
   return rendered || formatNewOrderMessage(orderData);
-}
-function formatStatusChangeMessage(orderData) {
+};
+
+const formatStatusChangeMessage = (orderData) => {
   const { order_number, old_status, new_status } = orderData;
   const statusEmoji = {
     pending: "⏳",
@@ -217,59 +194,38 @@ function formatStatusChangeMessage(orderData) {
     cancelled: "Отменен",
   };
   return `${statusEmoji[new_status]} <b>Заказ #${order_number}</b>\n\nСтатус изменен: ${statusText[old_status]} → ${statusText[new_status]}`;
-}
-async function sendTelegramMessage(chatId, message, { messageThreadId = null } = {}) {
-  if (!TELEGRAM_BOT_TOKEN) {
-    throw new Error("TELEGRAM_BOT_TOKEN is not configured");
-  }
-  const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
-  try {
-    const payload = {
-      chat_id: chatId,
-      text: message,
-      parse_mode: "HTML",
-    };
-    if (Number.isInteger(messageThreadId) && messageThreadId > 0) {
-      payload.message_thread_id = messageThreadId;
-    }
-    const response = await axios.post(url, payload);
-    return response.data;
-  } catch (error) {
-    if (error.response) {
-      throw new Error(
-        `Telegram API error: ${error.response.data.description || error.message} (chat_id=${chatId}, message_thread_id=${messageThreadId || "none"})`,
-      );
-    }
-    throw error;
-  }
-}
-async function processTelegramNotification(job) {
-  const { type, data } = job.data;
-  logger.system.startup(`Processing Telegram notification: ${type} (Job ID: ${job.id})`);
-  let message;
-  let chatId = data.chat_id || TELEGRAM_CHAT_ID;
+};
+
+export const processTelegramNotificationJob = async (jobData) => {
+  const { type, data } = jobData;
+  const defaultChatId = String(process.env.TELEGRAM_CHAT_ID || "").trim();
   const isTest = data?.is_test === true;
+
+  let message = "";
+  let chatId = data?.chat_id || defaultChatId;
   let messageThreadId = null;
   let config = null;
+
   if (type === "new_order" || type === "status_change") {
     const settings = await getSystemSettings();
     config = normalizeNewOrderConfig(settings?.telegram_new_order_notification);
+
     if (!config.enabled && !isTest) {
-      logger.system.startup(`Telegram ${type} notification disabled in settings (Job ID: ${job.id})`);
       return { skipped: true, reason: "disabled" };
     }
+
     chatId = config.group_id || chatId;
     if (config.use_city_threads) {
-      const cityKey = String(Number(data.city_id));
+      const cityKey = String(Number(data?.city_id));
       if (cityKey && cityKey !== "NaN") {
         messageThreadId = config.city_thread_ids[cityKey] || null;
       }
     }
   }
+
   switch (type) {
     case "new_order": {
       if (!config?.notify_on_new_order && !isTest) {
-        logger.system.startup(`Telegram new_order event disabled in settings (Job ID: ${job.id})`);
         return { skipped: true, reason: "disabled" };
       }
       message = formatNewOrderMessageFromTemplate(data, config);
@@ -278,52 +234,37 @@ async function processTelegramNotification(job) {
     case "status_change": {
       const newStatus = String(data?.new_status || "").trim();
       if (newStatus === "completed" && !config?.notify_on_completed && !isTest) {
-        logger.system.startup(`Telegram completed event disabled in settings (Job ID: ${job.id})`);
         return { skipped: true, reason: "disabled" };
       }
       if (newStatus === "cancelled" && !config?.notify_on_cancelled && !isTest) {
-        logger.system.startup(`Telegram cancelled event disabled in settings (Job ID: ${job.id})`);
         return { skipped: true, reason: "disabled" };
       }
       if (newStatus !== "completed" && newStatus !== "cancelled") {
-        logger.system.startup(`Telegram status_change skipped for unsupported status=${newStatus || "unknown"} (Job ID: ${job.id})`);
         return { skipped: true, reason: "unsupported_status" };
       }
       message = formatStatusChangeMessage(data);
       break;
     }
-    case "custom":
-      message = data.message;
+    case "custom": {
+      message = String(data?.message || "").trim();
       break;
+    }
     default:
       throw new Error(`Unknown notification type: ${type}`);
   }
+
   if (!chatId) {
-    throw new Error("Chat ID is not configured");
+    throw new Error("Chat ID не настроен");
   }
-  const result = await sendTelegramMessage(chatId, message, { messageThreadId });
-  logger.system.startup(`✅ Telegram notification sent: ${type} (Job ID: ${job.id})`);
-  return result;
-}
-export function createTelegramWorker(connection) {
-  const worker = new Worker("telegram-notifications", processTelegramNotification, {
-    connection,
-    concurrency: 5,
+
+  return sendTextMessage({
+    chatId,
+    text: message,
+    parseMode: "HTML",
+    messageThreadId,
   });
-  worker.on("completed", (job) => {
-  });
-  worker.on("failed", (job, err) => {
-    console.error(`❌ Telegram notification failed: Job ${job?.id}`, err.message);
-    logger.system.redisError(`Telegram worker failed: ${err.message}`);
-  });
-  worker.on("error", (err) => {
-    console.error("❌ Telegram worker error:", err);
-  });
-  return worker;
-}
+};
+
 export default {
-  createTelegramWorker,
-  sendTelegramMessage,
-  formatNewOrderMessage,
-  formatStatusChangeMessage,
+  processTelegramNotificationJob,
 };

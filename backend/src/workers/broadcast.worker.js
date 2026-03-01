@@ -4,6 +4,7 @@ import { deleteQueueItem, updateQueueSchedule } from "../modules/broadcasts/mode
 import { updateMessageStatus } from "../modules/broadcasts/models/broadcastMessages.js";
 import { incrementCampaignStat } from "../modules/broadcasts/models/broadcastStats.js";
 import { checkCampaignCompletion } from "../modules/broadcasts/services/broadcastService.js";
+import { sendBroadcastMessageViaBot } from "../utils/botService.js";
 
 const WORKER_ENABLED = String(process.env.BROADCAST_WORKER_ENABLED || "true").toLowerCase() !== "false";
 const BATCH_SIZE = Number(process.env.BROADCAST_WORKER_BATCH_SIZE || 50);
@@ -76,59 +77,16 @@ const buildInlineKeyboard = (buttons, campaignId, messageId) => {
   return { inline_keyboard: rows };
 };
 
-const sendTelegramRequest = async (method, payload) => {
-  const botToken = process.env.TELEGRAM_BOT_TOKEN;
-  if (!botToken) {
-    throw new Error("TELEGRAM_BOT_TOKEN не задан");
-  }
-  const response = await fetch(`https://api.telegram.org/bot${botToken}/${method}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  const result = await response.json();
-  if (!result.ok) {
-    throw new Error(result.description || "Ошибка Telegram API");
-  }
-  return result.result;
-};
-
-const isMarkdownParseError = (error) => {
-  const message = String(error?.message || "");
-  return message.toLowerCase().includes("can't parse entities");
-};
-
-const sendTelegramRequestSafe = async (method, payload) => {
-  try {
-    return await sendTelegramRequest(method, payload);
-  } catch (error) {
-    if (isMarkdownParseError(error)) {
-      const fallback = { ...payload };
-      delete fallback.parse_mode;
-      logger.system.dbError("Markdown ошибка в тексте рассылки, отправляем без форматирования");
-      return sendTelegramRequest(method, fallback);
-    }
-    throw error;
-  }
-};
-
 const sendBroadcastMessage = async ({ telegramId, text, imageUrl, buttons, campaignId, messageId }) => {
   const keyboard = buildInlineKeyboard(buttons, campaignId, messageId);
-  if (imageUrl) {
-    return sendTelegramRequestSafe("sendPhoto", {
-      chat_id: telegramId,
-      photo: imageUrl,
-      caption: text,
-      parse_mode: "Markdown",
-      reply_markup: keyboard || undefined,
-    });
-  }
-  return sendTelegramRequestSafe("sendMessage", {
-    chat_id: telegramId,
+  const response = await sendBroadcastMessageViaBot({
+    telegramId,
     text,
-    parse_mode: "Markdown",
-    reply_markup: keyboard || undefined,
+    imageUrl: imageUrl || null,
+    parseMode: "Markdown",
+    replyMarkup: keyboard || undefined,
   });
+  return { message_id: response?.data?.message_id || null };
 };
 
 const fetchQueueBatch = async (workerId) => {

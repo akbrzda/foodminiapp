@@ -30,7 +30,6 @@ import WSServer from "./websocket/server.js";
 import { registerWsServer } from "./websocket/runtime.js";
 import { startWorkers, stopWorkers } from "./workers/index.js";
 import { logger } from "./utils/logger.js";
-import { createTelegramCommandBot } from "./modules/telegram-bot/commandBot.js";
 
 dotenv.config();
 const app = express();
@@ -199,7 +198,6 @@ const server = http.createServer(app);
 const wsServer = new WSServer(server);
 registerWsServer(wsServer);
 wsServer.startHeartbeat();
-const telegramCommandBot = createTelegramCommandBot();
 export { wsServer };
 server.listen(PORT, async () => {
   await logger.system.startup(PORT);
@@ -220,15 +218,9 @@ server.listen(PORT, async () => {
   } catch (error) {
     await logger.system.dbError(`Failed to start workers: ${error.message}`);
   }
-  try {
-    await telegramCommandBot.start();
-  } catch (error) {
-    await logger.system.warn(`Failed to start Telegram command bot: ${error.message}`);
-  }
 });
 process.on("SIGTERM", async () => {
   await logger.system.shutdown("SIGTERM received");
-  await telegramCommandBot.stop();
   await stopWorkers();
   server.close(() => {
     process.exit(0);
@@ -236,7 +228,6 @@ process.on("SIGTERM", async () => {
 });
 process.on("SIGINT", async () => {
   await logger.system.shutdown("SIGINT received");
-  await telegramCommandBot.stop();
   await stopWorkers();
   server.close(() => {
     process.exit(0);

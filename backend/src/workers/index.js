@@ -1,4 +1,3 @@
-import { createTelegramWorker } from "./telegram.worker.js";
 import { createImageWorker } from "./image.worker.js";
 import { createOrderAutoStatusWorker } from "./orderAutoStatus.worker.js";
 import { createBonusExpiryWorker } from "./bonusExpiry.worker.js";
@@ -21,7 +20,6 @@ const redisConnection = new IORedis({
   password: process.env.REDIS_PASSWORD || "redis_password_change_me",
   maxRetriesPerRequest: null,
 });
-let telegramWorker;
 let imageWorker;
 let orderAutoStatusWorker;
 let bonusExpiryWorker;
@@ -39,7 +37,6 @@ let integrationRetryWorker;
 let adminActionLogsCleanupWorker;
 export async function startWorkers() {
   try {
-    telegramWorker = createTelegramWorker(redisConnection);
     imageWorker = createImageWorker(redisConnection);
     orderAutoStatusWorker = createOrderAutoStatusWorker();
     bonusExpiryWorker = createBonusExpiryWorker();
@@ -66,7 +63,6 @@ export async function startWorkers() {
     // Периодические синхронизации интеграций управляются отдельным scheduler worker.
     logger.system.info("Background workers started");
     return {
-      telegramWorker,
       imageWorker,
       iikoMenuSyncWorker,
       iikoStopListSyncWorker,
@@ -82,9 +78,6 @@ export async function startWorkers() {
 export async function stopWorkers() {
   try {
     const promises = [];
-    if (telegramWorker) {
-      promises.push(telegramWorker.close());
-    }
     if (imageWorker) {
       promises.push(imageWorker.close());
     }

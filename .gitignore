@@ -6,7 +6,7 @@ AGENTS.md
 TASKS.md
 COMMIT.md
 CHANGELOG.md
-/backend/logs/
+logs/
 design/
 /uploads/
 dist/
