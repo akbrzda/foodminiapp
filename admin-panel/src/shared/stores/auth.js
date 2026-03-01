@@ -115,10 +115,6 @@ export const useAuthStore = defineStore("auth", {
       crossTabSyncAttached = true;
     },
     async restoreSession() {
-      if (this.user) {
-        this.sessionChecked = true;
-        return true;
-      }
       try {
         const response = await api.get("/api/auth/session");
         if (response.data?.user) {

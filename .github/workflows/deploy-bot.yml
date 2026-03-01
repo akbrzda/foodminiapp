@@ -40,7 +40,7 @@ jobs:
           TELEGRAM_WEBHOOK_URL=${{ secrets.TELEGRAM_WEBHOOK_URL }}
           TELEGRAM_WEBHOOK_SECRET=${{ secrets.TELEGRAM_WEBHOOK_SECRET }}
           BOT_SERVICE_TOKEN=${{ secrets.BOT_SERVICE_TOKEN }}
-          BACKEND_URL=${{ secrets.BACKEND_URL }}
+          BACKEND_URL=${{ secrets.VITE_API_URL }}
           DB_HOST=${{ secrets.DB_HOST }}
           DB_PORT=${{ secrets.DB_PORT }}
           DB_NAME=${{ secrets.DB_NAME }}

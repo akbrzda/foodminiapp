@@ -38,6 +38,7 @@ jobs:
           REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}
           JWT_SECRET=${{ secrets.JWT_SECRET }}
           ENCRYPTION_KEY=${{ secrets.ENCRYPTION_KEY }}
+          ADMIN_REFRESH_SESSION_HOURS=${{ secrets.ADMIN_REFRESH_SESSION_HOURS }}
           TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_MINIAPP_URL=${{ secrets.TELEGRAM_MINIAPP_URL }}
           BOT_SERVICE_URL=${{ secrets.BOT_SERVICE_URL }}
@@ -81,6 +82,7 @@ jobs:
             --exclude 'node_modules' \
             --exclude '.git' \
             --exclude 'logs' \
+            --exclude 'bot' \
             backend/ ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/var/www/backend.panda.akbrzda.ru/
       - name: Install dependencies on server
         uses: appleboy/ssh-action@v1.0.0
