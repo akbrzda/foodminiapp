@@ -1,9 +1,10 @@
 import db from "../config/database.js";
 import redis from "../config/redis.js";
-import { answerCallbackQuery, requestTelegram, sendPhotoMessage, sendTextMessage, sendVideoMessage } from "./telegramApi.js";
+import { answerCallbackQuery, requestTelegram, sendPhotoMessage, sendTextMessage } from "./telegramApi.js";
 import { logger } from "../utils/logger.js";
 
 const CHECK_SUB_RATE_LIMIT_SECONDS = 10;
+const DEFAULT_ALREADY_SUBSCRIBED_MESSAGE = "Вы уже подписаны на канал. Нажмите кнопку проверки, если хотите получить награду.";
 
 const isUserSubscribed = (chatMember) => {
   const status = String(chatMember?.status || "").toLowerCase();
@@ -21,7 +22,7 @@ const buildSubscriptionKeyboard = (campaignId, channelUrl) => ({
 
 const resolveCampaignByTag = async (tag) => {
   const [rows] = await db.query(
-    `SELECT id, tag, title, channel_id, channel_url, welcome_message, success_message, error_message,
+    `SELECT id, tag, title, channel_id, channel_url, welcome_message, success_message, already_subscribed_message, error_message,
             media_type, media_url, is_reward_unique, is_active, is_perpetual, start_date, end_date
      FROM subscription_campaigns
      WHERE tag = ? AND is_active = 1
@@ -40,7 +41,7 @@ const resolveCampaignByTag = async (tag) => {
 
 const resolveCampaignById = async (campaignId) => {
   const [rows] = await db.query(
-    `SELECT id, tag, title, channel_id, channel_url, welcome_message, success_message, error_message,
+    `SELECT id, tag, title, channel_id, channel_url, welcome_message, success_message, already_subscribed_message, error_message,
             media_type, media_url, is_reward_unique, is_active, is_perpetual, start_date, end_date
      FROM subscription_campaigns
      WHERE id = ? AND is_active = 1
@@ -188,15 +189,6 @@ const sendSuccessPayload = async ({ chatId, campaign }) => {
     });
     return;
   }
-  if (mediaType === "video" && mediaUrl) {
-    await sendVideoMessage({
-      chatId,
-      video: mediaUrl,
-      caption: text,
-      parseMode: "HTML",
-    });
-    return;
-  }
   await sendTextMessage({
     chatId,
     text,
@@ -256,8 +248,11 @@ export const handleStartWithSubscriptionTag = async ({ chatId, telegramUser, tag
 
   if (subscribed && attempt) {
     await markSubscribed({ attemptId: attempt.id });
-    const updatedAttempt = await getAttempt({ campaignId: campaign.id, userId });
-    await processReward({ campaign, attempt: updatedAttempt, chatId });
+    await sendTextMessage({
+      chatId,
+      text: String(campaign.already_subscribed_message || DEFAULT_ALREADY_SUBSCRIBED_MESSAGE),
+      parseMode: "HTML",
+    });
     return { handled: true };
   }
 

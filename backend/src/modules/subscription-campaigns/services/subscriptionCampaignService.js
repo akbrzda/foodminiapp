@@ -1,10 +1,11 @@
 import db from "../../../config/database.js";
 
 const BASE_SELECT = `SELECT
-  sc.id, sc.tag, sc.title, sc.channel_id, sc.channel_url, sc.welcome_message, sc.success_message, sc.error_message,
+  sc.id, sc.tag, sc.title, sc.channel_id, sc.channel_url, sc.welcome_message, sc.success_message, sc.already_subscribed_message, sc.error_message,
   sc.media_type, sc.media_url, sc.is_reward_unique, sc.is_active, sc.is_perpetual, sc.start_date, sc.end_date,
   sc.created_at, sc.updated_at
 FROM subscription_campaigns sc`;
+const DEFAULT_ALREADY_SUBSCRIBED_MESSAGE = "Вы уже подписаны на канал. Нажмите кнопку проверки, если хотите получить награду.";
 
 const normalizeBoolean = (value, fallback = false) => {
   if (value === undefined || value === null || value === "") return fallback;
@@ -64,6 +65,7 @@ const parseSubscriptionCampaignPayload = (payload, { isUpdate = false } = {}) =>
     channel_url: fromPayload("channel_url", (value) => value?.trim()),
     welcome_message: fromPayload("welcome_message", (value) => value?.trim()),
     success_message: fromPayload("success_message", (value) => value?.trim()),
+    already_subscribed_message: fromPayload("already_subscribed_message", (value) => value?.trim()),
     error_message: fromPayload("error_message", (value) => value?.trim()),
     media_type: fromPayload("media_type", (value) => (value ? String(value).trim().toLowerCase() : null)),
     media_url: fromPayload("media_url", (value) => value?.trim() || null),
@@ -74,7 +76,20 @@ const parseSubscriptionCampaignPayload = (payload, { isUpdate = false } = {}) =>
     end_date: fromPayload("end_date", normalizeDateTime),
   };
 
-  const requiredFields = ["tag", "title", "channel_id", "channel_url", "welcome_message", "success_message", "error_message"];
+  if (!parsed.already_subscribed_message) {
+    parsed.already_subscribed_message = DEFAULT_ALREADY_SUBSCRIBED_MESSAGE;
+  }
+
+  const requiredFields = [
+    "tag",
+    "title",
+    "channel_id",
+    "channel_url",
+    "welcome_message",
+    "success_message",
+    "already_subscribed_message",
+    "error_message",
+  ];
   if (!isUpdate) {
     const missingField = requiredFields.find((field) => !parsed[field]);
     if (missingField) {
@@ -110,8 +125,8 @@ const parseSubscriptionCampaignPayload = (payload, { isUpdate = false } = {}) =>
     }
   }
 
-  if (parsed.media_type && !["photo", "video"].includes(parsed.media_type)) {
-    const error = new Error("media_type поддерживает только значения: photo, video");
+  if (parsed.media_type && parsed.media_type !== "photo") {
+    const error = new Error("media_type поддерживает только значение: photo");
     error.status = 400;
     throw error;
   }
@@ -148,9 +163,9 @@ export const createSubscriptionCampaign = async (payload) => {
   const data = parseSubscriptionCampaignPayload(payload, { isUpdate: false });
   const [result] = await db.query(
     `INSERT INTO subscription_campaigns
-      (tag, title, channel_id, channel_url, welcome_message, success_message, error_message, media_type, media_url,
+      (tag, title, channel_id, channel_url, welcome_message, success_message, already_subscribed_message, error_message, media_type, media_url,
        is_reward_unique, is_active, is_perpetual, start_date, end_date)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       data.tag,
       data.title,
@@ -158,6 +173,7 @@ export const createSubscriptionCampaign = async (payload) => {
       data.channel_url,
       data.welcome_message,
       data.success_message,
+      data.already_subscribed_message,
       data.error_message,
       data.media_type,
       data.media_url,

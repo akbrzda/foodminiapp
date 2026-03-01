@@ -62,7 +62,7 @@
                   <Eye :size="16" />
                 </Button>
                 <Button variant="ghost" size="icon" @click="copyCampaignLink(campaign)">
-                  <Copy :size="16" />
+                  <Link2 :size="16" />
                 </Button>
                 <Button variant="ghost" size="icon" @click="editCampaign(campaign.id)">
                   <Pencil :size="16" />
@@ -115,7 +115,7 @@
                         <Eye :size="16" />
                       </Button>
                       <Button variant="ghost" size="icon" @click="copyCampaignLink(campaign)">
-                        <Copy :size="16" />
+                        <Link2 :size="16" />
                       </Button>
                       <Button variant="ghost" size="icon" @click="editCampaign(campaign.id)">
                         <Pencil :size="16" />
@@ -140,7 +140,7 @@
 <script setup>
 import { devError } from "@/shared/utils/logger";
 import { onMounted, reactive, ref, watch } from "vue";
-import { Copy, Eye, Pencil, Plus } from "lucide-vue-next";
+import { Link2, Eye, Pencil, Plus } from "lucide-vue-next";
 import { useRouter } from "vue-router";
 import api from "@/shared/api/client.js";
 import { useNotifications } from "@/shared/composables/useNotifications.js";

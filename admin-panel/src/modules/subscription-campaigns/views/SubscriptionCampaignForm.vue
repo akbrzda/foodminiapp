@@ -142,34 +142,35 @@
             </FieldContent>
           </Field>
           <Field>
+            <FieldLabel>Сообщение для уже подписанного</FieldLabel>
+            <FieldContent>
+              <Textarea
+                v-model="form.already_subscribed_message"
+                rows="4"
+                placeholder="Вы уже подписаны. Нажмите кнопку проверки, чтобы получить награду."
+              />
+            </FieldContent>
+          </Field>
+          <Field>
             <FieldLabel>Error message</FieldLabel>
             <FieldContent>
               <Textarea v-model="form.error_message" rows="4" placeholder="Пока не видим подписку, попробуйте снова" />
             </FieldContent>
           </Field>
-          <FieldGroup class="grid gap-4 md:grid-cols-2">
-            <Field>
-              <FieldLabel>Тип медиа</FieldLabel>
-              <FieldContent>
-                <Select v-model="form.media_type">
-                  <SelectTrigger class="w-full">
-                    <SelectValue placeholder="Без медиа" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">Без медиа</SelectItem>
-                    <SelectItem value="photo">Фото</SelectItem>
-                    <SelectItem value="video">Видео</SelectItem>
-                  </SelectContent>
-                </Select>
-              </FieldContent>
-            </Field>
-            <Field>
-              <FieldLabel>{{ form.media_type === "video" ? "Ссылка на видео" : "Ссылка на медиа" }}</FieldLabel>
-              <FieldContent>
-                <Input v-model="form.media_url" placeholder="https://..." />
-              </FieldContent>
-            </Field>
-          </FieldGroup>
+          <Field>
+            <FieldLabel>Тип медиа</FieldLabel>
+            <FieldContent>
+              <Select v-model="form.media_type">
+                <SelectTrigger class="w-full">
+                  <SelectValue placeholder="Без медиа" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Без медиа</SelectItem>
+                  <SelectItem value="photo">Фото</SelectItem>
+                </SelectContent>
+              </Select>
+            </FieldContent>
+          </Field>
           <Field v-if="form.media_type === 'photo'">
             <FieldLabel>Загрузка фото (upload util)</FieldLabel>
             <FieldContent>
@@ -246,6 +247,7 @@ const form = reactive({
   channel_url: "",
   welcome_message: "",
   success_message: "",
+  already_subscribed_message: "",
   error_message: "",
   media_type: "",
   media_url: "",
@@ -278,6 +280,7 @@ const fillForm = (data) => {
   form.channel_url = data.channel_url || "";
   form.welcome_message = data.welcome_message || "";
   form.success_message = data.success_message || "";
+  form.already_subscribed_message = data.already_subscribed_message || "";
   form.error_message = data.error_message || "";
   form.media_type = data.media_type || "";
   form.media_url = data.media_url || "";
@@ -313,6 +316,7 @@ const saveCampaign = async () => {
       channel_url: form.channel_url,
       welcome_message: form.welcome_message,
       success_message: form.success_message,
+      already_subscribed_message: form.already_subscribed_message,
       error_message: form.error_message,
       media_type: form.media_type || null,
       media_url: form.media_url || null,
