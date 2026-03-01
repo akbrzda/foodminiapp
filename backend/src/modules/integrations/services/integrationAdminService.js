@@ -5,6 +5,16 @@ import { getSyncLogs } from "../repositories/syncLogRepository.js";
 import menuAdapter from "../adapters/menuAdapter.js";
 import { processIikoDeliveryZonesSync, retryFailedSyncs } from "./syncProcessors.js";
 import {
+  ensureIikoReadinessSeed,
+  executeIikoOnboardingAction,
+  listManualMappingTargets,
+  listMappingCandidates,
+  listReadiness,
+  refreshIikoReadiness,
+  refreshMenuReadiness,
+  resolveMappingCandidate,
+} from "./integrationReadinessService.js";
+import {
   enqueueIikoOrderSync,
   enqueuePremiumBonusClientSync,
   enqueuePremiumBonusPurchaseSync,
@@ -64,6 +74,7 @@ async function deactivateRemovedIikoCategories(categoryIds = []) {
 }
 
 export async function getAdminIntegrationSettings() {
+  await ensureIikoReadinessSeed();
   const settings = await getSystemSettings();
   return {
     settings,
@@ -223,6 +234,11 @@ export async function updateAdminIntegrationSettings(patch) {
     return { errors };
   }
 
+  if (hasIikoEnabledPatch && normalizedIikoEnabled) {
+    await ensureIikoReadinessSeed();
+    await refreshMenuReadiness({ preserveNotConfigured: true });
+  }
+
   let deactivatedCategoriesCount = 0;
   if (Object.prototype.hasOwnProperty.call(updated, "iiko_sync_category_ids")) {
     const removedCategoryIds = getRemovedCategoryIds(previousSettings.iiko_sync_category_ids, updated.iiko_sync_category_ids);
@@ -237,6 +253,60 @@ export async function updateAdminIntegrationSettings(patch) {
     },
     settings: await getSystemSettings(),
   };
+}
+
+export async function getIikoReadiness() {
+  await ensureIikoReadinessSeed();
+  await refreshIikoReadiness({ preserveNotConfigured: true });
+  const rows = await listReadiness("iiko");
+  const byModule = rows.reduce((acc, row) => {
+    acc[row.module] = row;
+    return acc;
+  }, {});
+
+  return {
+    provider: "iiko",
+    modules: byModule,
+    rows,
+  };
+}
+
+export async function refreshIikoReadinessNow() {
+  return refreshIikoReadiness();
+}
+
+export async function listIikoMappingCandidates(query = {}) {
+  return listMappingCandidates({
+    provider: "iiko",
+    module: query.module || "menu",
+    state: query.state || "",
+    page: query.page,
+    limit: query.limit,
+  });
+}
+
+export async function resolveIikoMappingCandidate(payload = {}) {
+  return resolveMappingCandidate({
+    candidateId: payload.candidate_id,
+    action: payload.action,
+    resolvedBy: payload.resolved_by || null,
+    targetLocalId: payload.target_local_id || null,
+  });
+}
+
+export async function listIikoManualMappingTargets(query = {}) {
+  return listManualMappingTargets({
+    entityType: query.entity_type,
+    query: query.q,
+    limit: query.limit,
+  });
+}
+
+export async function runIikoOnboarding(payload = {}) {
+  return executeIikoOnboardingAction({
+    action: payload.action,
+    adminUserId: payload.admin_user_id || null,
+  });
 }
 
 export async function testIikoConnection() {

@@ -629,6 +629,53 @@ CREATE TABLE `integration_sync_logs` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 
+CREATE TABLE `integration_readiness` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `provider` enum('iiko','premiumbonus') COLLATE utf8mb4_unicode_ci NOT NULL,
+  `module` enum('menu','stoplist','delivery_zones','modifiers','orders','clients','loyalty') COLLATE utf8mb4_unicode_ci NOT NULL,
+  `status` enum('not_configured','needs_mapping','ready') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'not_configured',
+  `total_count` int NOT NULL DEFAULT '0',
+  `linked_count` int NOT NULL DEFAULT '0',
+  `unlinked_count` int NOT NULL DEFAULT '0',
+  `stats` json DEFAULT NULL,
+  `policy` json DEFAULT NULL,
+  `last_checked_at` timestamp NULL DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_integration_readiness_provider_module` (`provider`,`module`),
+  KEY `idx_integration_readiness_status` (`status`),
+  KEY `idx_integration_readiness_last_checked_at` (`last_checked_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+CREATE TABLE `integration_mapping_candidates` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `provider` enum('iiko','premiumbonus') COLLATE utf8mb4_unicode_ci NOT NULL,
+  `module` enum('menu','stoplist','delivery_zones','modifiers','orders','clients','loyalty') COLLATE utf8mb4_unicode_ci NOT NULL,
+  `entity_type` enum('category','item','variant','modifier','stoplist_entity') COLLATE utf8mb4_unicode_ci NOT NULL,
+  `local_entity_type` enum('category','item','variant','modifier','unknown') COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `local_entity_id` int DEFAULT NULL,
+  `local_name` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `external_entity_id` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `external_context` json DEFAULT NULL,
+  `external_payload` json DEFAULT NULL,
+  `confidence` decimal(5,2) DEFAULT NULL,
+  `state` enum('suggested','confirmed','rejected','ignored','requires_review') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'suggested',
+  `notes` text COLLATE utf8mb4_unicode_ci,
+  `resolved_by` int DEFAULT NULL,
+  `resolved_at` timestamp NULL DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_integration_mapping_candidates_lookup` (`provider`,`module`,`state`),
+  KEY `idx_integration_mapping_candidates_local` (`local_entity_type`,`local_entity_id`),
+  KEY `idx_integration_mapping_candidates_external` (`external_entity_id`),
+  KEY `idx_integration_mapping_candidates_entity` (`entity_type`),
+  CONSTRAINT `integration_mapping_candidates_ibfk_1` FOREIGN KEY (`resolved_by`) REFERENCES `admin_users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
 CREATE TABLE `menu_item_categories` (
   `id` int NOT NULL AUTO_INCREMENT,
   `item_id` int NOT NULL,

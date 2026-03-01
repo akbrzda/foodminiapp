@@ -8,8 +8,11 @@ import * as itemsController from "./controllers/itemsController.js";
 import * as modifiersController from "./controllers/modifiersController.js";
 import * as variantsAndPricesController from "./controllers/variantsAndPricesController.js";
 import * as tagsAndStopListController from "./controllers/tagsAndStopListController.js";
+import { checkIikoIntegration } from "../integrations/middleware/checkIikoIntegration.js";
 
 const router = express.Router();
+
+router.use("/admin", authenticateToken, checkIikoIntegration);
 
 // ==================== ПУБЛИЧНЫЕ ЭНДПОИНТЫ ====================
 

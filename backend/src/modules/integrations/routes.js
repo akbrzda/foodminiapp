@@ -3,12 +3,18 @@ import { authenticateToken, requireRole } from "../../middleware/auth.js";
 import { logger } from "../../utils/logger.js";
 import {
   getAdminIntegrationSettings,
+  getIikoReadiness,
+  listIikoMappingCandidates,
+  listIikoManualMappingTargets,
   getIikoNomenclatureOverview,
   getIntegrationSyncStatus,
   getIntegrationQueuesStatus,
   listIntegrationSyncLogs,
+  refreshIikoReadinessNow,
   retryAllFailed,
   retrySingleEntity,
+  resolveIikoMappingCandidate,
+  runIikoOnboarding,
   syncIikoMenuNow,
   syncIikoStopListNow,
   syncIikoDeliveryZonesNow,
@@ -121,6 +127,68 @@ router.get("/iiko/sync-status", async (req, res, next) => {
   try {
     const data = await getIntegrationSyncStatus();
     return res.json(data);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/iiko/readiness", async (req, res, next) => {
+  try {
+    const data = await getIikoReadiness();
+    return res.json(data);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/iiko/readiness/refresh", async (req, res, next) => {
+  try {
+    const result = await refreshIikoReadinessNow();
+    return res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/iiko/mapping-candidates", async (req, res, next) => {
+  try {
+    const result = await listIikoMappingCandidates(req.query || {});
+    return res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/iiko/mapping-options", async (req, res, next) => {
+  try {
+    const result = await listIikoManualMappingTargets(req.query || {});
+    return res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/iiko/mapping/resolve", async (req, res, next) => {
+  try {
+    const result = await resolveIikoMappingCandidate({
+      candidate_id: req.body?.candidate_id,
+      action: req.body?.action,
+      resolved_by: req.user?.id || null,
+      target_local_id: req.body?.target_local_id || null,
+    });
+    return res.json({ success: true, data: result });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/iiko/onboarding", async (req, res, next) => {
+  try {
+    const result = await runIikoOnboarding({
+      action: req.body?.action,
+      admin_user_id: req.user?.id || null,
+    });
+    return res.json({ success: true, data: result });
   } catch (error) {
     next(error);
   }

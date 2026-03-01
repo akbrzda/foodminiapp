@@ -790,8 +790,8 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
       }
 
       const name = normalizeDisplayName(item.name || item.title, `Позиция ${iikoItemId}`);
-      const composition = firstNonEmptyString(item.composition, item.additionalInfo, item.description, item.comment);
-      const description = null;
+      const description = firstNonEmptyString(item.description, item.additionalInfo, item.comment);
+      const composition = firstNonEmptyString(item.composition, item.additionalInfo, item.comment);
       const imageUrl =
         resolveImageUrl(item.image_url) ||
         resolveImageUrl(item.image) ||
@@ -1315,6 +1315,50 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
       cityId: cityId ? Number(cityId) || null : null,
     });
 
+    const [[menuCounters]] = await Promise.all([
+      db.query(
+        `SELECT
+           (
+             (SELECT SUM(CASE WHEN is_active = 1 THEN 1 ELSE 0 END) FROM menu_categories) +
+             (SELECT SUM(CASE WHEN is_active = 1 THEN 1 ELSE 0 END) FROM menu_items) +
+             (SELECT SUM(CASE WHEN is_active = 1 THEN 1 ELSE 0 END) FROM item_variants) +
+             (SELECT SUM(CASE WHEN is_active = 1 THEN 1 ELSE 0 END) FROM modifiers)
+           ) AS total_count,
+           (
+             (SELECT SUM(CASE WHEN is_active = 1 AND COALESCE(NULLIF(TRIM(iiko_category_id), ''), NULL) IS NOT NULL THEN 1 ELSE 0 END) FROM menu_categories) +
+             (SELECT SUM(CASE WHEN is_active = 1 AND COALESCE(NULLIF(TRIM(iiko_item_id), ''), NULL) IS NOT NULL THEN 1 ELSE 0 END) FROM menu_items) +
+             (SELECT SUM(CASE WHEN is_active = 1 AND COALESCE(NULLIF(TRIM(iiko_variant_id), ''), NULL) IS NOT NULL THEN 1 ELSE 0 END) FROM item_variants) +
+             (SELECT SUM(CASE WHEN is_active = 1 AND COALESCE(NULLIF(TRIM(iiko_modifier_id), ''), NULL) IS NOT NULL THEN 1 ELSE 0 END) FROM modifiers)
+           ) AS linked_count`,
+      ),
+    ]);
+
+    const menuTotalCount = Number(menuCounters?.total_count || 0);
+    const menuLinkedCount = Number(menuCounters?.linked_count || 0);
+    const menuUnlinkedCount = Math.max(menuTotalCount - menuLinkedCount, 0);
+    const menuStatus = menuUnlinkedCount === 0 ? "ready" : "needs_mapping";
+    const menuStats = {
+      total: menuTotalCount,
+      linked: menuLinkedCount,
+      unlinked: menuUnlinkedCount,
+      linked_percent: menuTotalCount > 0 ? Number(((menuLinkedCount / menuTotalCount) * 100).toFixed(2)) : 0,
+      unlinked_percent: menuTotalCount > 0 ? Number(((menuUnlinkedCount / menuTotalCount) * 100).toFixed(2)) : 0,
+    };
+    await db.query(
+      `INSERT INTO integration_readiness
+         (provider, module, status, total_count, linked_count, unlinked_count, stats, policy, last_checked_at)
+       VALUES
+         ('iiko', 'menu', ?, ?, ?, ?, ?, JSON_OBJECT('max_unlinked_percent', 0), NOW())
+       ON DUPLICATE KEY UPDATE
+         status = VALUES(status),
+         total_count = VALUES(total_count),
+         linked_count = VALUES(linked_count),
+         unlinked_count = VALUES(unlinked_count),
+         stats = VALUES(stats),
+         last_checked_at = NOW()`,
+      [menuStatus, menuTotalCount, menuLinkedCount, menuUnlinkedCount, JSON.stringify(menuStats)],
+    );
+
     const responseData = {
       hasData: Boolean(externalMenuPayload),
       keys: externalMenuPayload ? Object.keys(externalMenuPayload).slice(0, 20) : [],
@@ -1537,6 +1581,7 @@ export async function processIikoStopListSync(reason = "manual", branchId = null
   let updatedCount = 0;
   let matchedCount = 0;
   let removedCount = 0;
+  const unmatchedExternalIds = new Set();
 
   const connection = await db.getConnection();
   try {
@@ -1593,7 +1638,10 @@ export async function processIikoStopListSync(reason = "manual", branchId = null
           entityId = modifierId;
         }
 
-        if (!entityType || !Number.isFinite(entityId)) continue;
+        if (!entityType || !Number.isFinite(entityId)) {
+          unmatchedExternalIds.add(externalId);
+          continue;
+        }
         matchedCount += 1;
 
         await connection.query(
@@ -1620,6 +1668,94 @@ export async function processIikoStopListSync(reason = "manual", branchId = null
     connection.release();
   }
 
+  if (unmatchedExternalIds.size > 0) {
+    const externalContext = JSON.stringify({
+      source: "iiko_stoplist_sync",
+      branch_id: branchId || null,
+      synced_at: new Date().toISOString(),
+    });
+    for (const externalId of unmatchedExternalIds) {
+      await db.query(
+        `INSERT INTO integration_mapping_candidates
+           (provider, module, entity_type, local_entity_type, local_entity_id, local_name,
+            external_entity_id, external_context, external_payload, confidence, state, notes)
+         SELECT 'iiko', 'stoplist', 'stoplist_entity', 'unknown', NULL, NULL,
+                ?, ?, NULL, NULL, 'requires_review', 'ID из стоп-листа iiko не найден среди локальных сопоставлений'
+         WHERE NOT EXISTS (
+           SELECT 1
+           FROM integration_mapping_candidates c
+           WHERE c.provider = 'iiko'
+             AND c.module = 'stoplist'
+             AND c.external_entity_id = ?
+             AND c.state IN ('suggested', 'requires_review')
+         )`,
+        [externalId, externalContext, externalId],
+      );
+    }
+  }
+
+  if (matchedCount > 0) {
+    const matchedIds = [...allExternalIdsSet].filter((externalId) => {
+      const itemId = itemIdMap.get(externalId);
+      const variantId = variantIdMap.get(externalId);
+      const modifierId = modifierIdMap.get(externalId);
+      return Number.isFinite(itemId) || Number.isFinite(variantId) || Number.isFinite(modifierId);
+    });
+
+    if (matchedIds.length > 0) {
+      const placeholders = matchedIds.map(() => "?").join(",");
+      await db.query(
+        `UPDATE integration_mapping_candidates
+         SET state = 'confirmed', resolved_at = NOW(), updated_at = NOW()
+         WHERE provider = 'iiko'
+           AND module = 'stoplist'
+           AND external_entity_id IN (${placeholders})
+           AND state IN ('suggested', 'requires_review')`,
+        matchedIds,
+      );
+    }
+  }
+
+  const [[stopListTotalRows], [menuReadinessRows]] = await Promise.all([
+    db.query(
+      `SELECT COUNT(*) AS total
+       FROM menu_stop_list
+       WHERE created_by IS NULL
+         AND reason = ?`,
+      [autoReason],
+    ),
+    db.query(
+      `SELECT status
+       FROM integration_readiness
+       WHERE provider = 'iiko' AND module = 'menu'
+       LIMIT 1`,
+    ),
+  ]);
+  const stopListTotal = Number(stopListTotalRows?.[0]?.total || 0);
+  const unmatchedCount = unmatchedExternalIds.size;
+  const stopListStatus = menuReadinessRows?.[0]?.status === "ready" && unmatchedCount === 0 ? "ready" : "needs_mapping";
+  const stopListStats = {
+    synced_entries: stopListTotal,
+    unmatched_candidates: unmatchedCount,
+    linked: Math.max(stopListTotal - unmatchedCount, 0),
+    unlinked: unmatchedCount,
+  };
+
+  await db.query(
+    `INSERT INTO integration_readiness
+       (provider, module, status, total_count, linked_count, unlinked_count, stats, policy, last_checked_at)
+     VALUES
+       ('iiko', 'stoplist', ?, ?, ?, ?, ?, JSON_OBJECT(), NOW())
+     ON DUPLICATE KEY UPDATE
+       status = VALUES(status),
+       total_count = VALUES(total_count),
+       linked_count = VALUES(linked_count),
+       unlinked_count = VALUES(unlinked_count),
+       stats = VALUES(stats),
+       last_checked_at = NOW()`,
+    [stopListStatus, stopListTotal, Math.max(stopListTotal - unmatchedCount, 0), unmatchedCount, JSON.stringify(stopListStats)],
+  );
+
   await invalidatePublicMenuCache();
   notifyMenuUpdated({
     source: "iiko-stoplist-sync",
@@ -1639,6 +1775,7 @@ export async function processIikoStopListSync(reason = "manual", branchId = null
       targetBranches: targetBranchIds.length,
       removedCount,
       matchedCount,
+      unmatchedCount,
       updatedCount,
     },
     durationMs: Date.now() - startedAt,
