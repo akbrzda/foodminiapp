@@ -181,27 +181,34 @@ const navSections = computed(() => {
       id: "operations",
       title: "Операции",
       items: [
-        { label: "Дашборд", to: "/dashboard", icon: LayoutDashboard },
         { label: "Заказы", to: "/orders", icon: ClipboardList, badge: newOrdersCount.value },
+        { label: "Дашборд", to: "/dashboard", icon: LayoutDashboard },
         { label: "Клиенты", to: "/clients", icon: Users },
-        { label: "Рассылки", to: "/broadcasts", icon: Megaphone, visible: !isManager.value },
-        { label: "Кампании подписки", to: "/campaign", icon: BellRing, visible: !isManager.value },
       ],
     },
     {
-      id: "menu",
-      title: "Меню",
+      id: "marketing",
+      title: "Маркетинг",
+      visible: !isManager.value,
       items: [
-        { label: "Категории", to: "/menu/categories", icon: ListTree, visible: !isManager.value },
+        { label: "Кампании подписки", to: "/campaign", icon: BellRing },
+        { label: "Рассылки", to: "/broadcasts", icon: Megaphone, visible: !isManager.value },
+      ],
+    },
+    {
+      id: "catalog",
+      title: "Каталог",
+      items: [
         { label: "Блюда", to: "/menu/products", icon: UtensilsCrossed, visible: !isManager.value },
+        { label: "Категории", to: "/menu/categories", icon: ListTree, visible: !isManager.value },
         { label: "Модификаторы", to: "/menu/modifiers", icon: Layers, visible: !isManager.value },
         { label: "Теги", to: "/menu/tags", icon: Tag, visible: !isManager.value },
         { label: "Стоп-лист", to: "/menu/stop-list", icon: Ban },
       ],
     },
     {
-      id: "references",
-      title: "Справочники",
+      id: "locations",
+      title: "Локации",
       items: [
         { label: "Города", to: "/cities", icon: MapPinned, visible: !isManager.value },
         { label: "Филиалы", to: "/branches", icon: Building2 },
@@ -210,11 +217,11 @@ const navSections = computed(() => {
     },
     {
       id: "system",
-      title: "Система",
+      title: "Администрирование",
       visible: !isManager.value,
       items: [
-        { label: "Настройки системы", to: "/system/settings", icon: SlidersHorizontal },
         { label: "Интеграции", to: "/integrations", icon: PlugZap },
+        { label: "Настройки системы", to: "/system/settings", icon: SlidersHorizontal },
         { label: "Пользователи", to: "/admin-users", icon: UserCog },
         { label: "Логи", to: "/logs", icon: FileText },
       ],

@@ -15,39 +15,53 @@
     </Card>
     <Card>
       <CardContent>
-        <div class="grid gap-3 md:grid-cols-5">
-          <Input v-model="filters.search" placeholder="Поиск по названию и описанию" />
-          <Select v-model="filters.status">
-            <SelectTrigger class="w-full">
-              <SelectValue placeholder="Статус" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Все статусы</SelectItem>
-              <SelectItem value="active">Только активные</SelectItem>
-              <SelectItem value="hidden">Только скрытые</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select v-model="filters.cityId">
-            <SelectTrigger class="w-full">
-              <SelectValue placeholder="Город" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Все города</SelectItem>
-              <SelectItem v-for="city in cityOptions" :key="city.id" :value="String(city.id)">
-                {{ city.name }}
-              </SelectItem>
-            </SelectContent>
-          </Select>
-          <Select v-model="filters.source">
-            <SelectTrigger class="w-full">
-              <SelectValue placeholder="Источник категорий" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="local">Локальное</SelectItem>
-              <SelectItem value="iiko">iiko</SelectItem>
-            </SelectContent>
-          </Select>
-          <Button variant="outline" @click="resetFilters">Сбросить фильтры</Button>
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-12">
+          <div class="space-y-1 sm:col-span-2 xl:col-span-4">
+            <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Поиск</label>
+            <Input v-model="filters.search" placeholder="Поиск по названию и описанию" />
+          </div>
+          <div class="space-y-1 xl:col-span-2">
+            <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Статус</label>
+            <Select v-model="filters.status">
+              <SelectTrigger class="w-full">
+                <SelectValue placeholder="Статус" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Все статусы</SelectItem>
+                <SelectItem value="active">Только активные</SelectItem>
+                <SelectItem value="hidden">Только скрытые</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div class="space-y-1 xl:col-span-2">
+            <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Город</label>
+            <Select v-model="filters.cityId">
+              <SelectTrigger class="w-full">
+                <SelectValue placeholder="Город" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Все города</SelectItem>
+                <SelectItem v-for="city in cityOptions" :key="city.id" :value="String(city.id)">
+                  {{ city.name }}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div class="space-y-1 xl:col-span-2">
+            <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Источник</label>
+            <Select v-model="filters.source">
+              <SelectTrigger class="w-full">
+                <SelectValue placeholder="Источник категорий" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="local">Локальное</SelectItem>
+                <SelectItem value="iiko">iiko</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div class="flex items-end xl:col-span-2">
+            <Button class="w-full" variant="outline" @click="resetFilters">Сбросить фильтры</Button>
+          </div>
         </div>
       </CardContent>
     </Card>

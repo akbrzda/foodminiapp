@@ -16,7 +16,7 @@
       <CardContent class="space-y-4 p-4">
         <FieldGroup class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <Field>
-            <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Филиал</FieldLabel>
+            <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Филиал</FieldLabel>
             <FieldContent>
               <Select v-model="filters.branch_id">
                 <SelectTrigger class="w-full">
@@ -35,7 +35,7 @@
             </FieldContent>
           </Field>
           <Field>
-            <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Тип</FieldLabel>
+            <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Тип</FieldLabel>
             <FieldContent>
               <Select v-model="filters.entity_type">
                 <SelectTrigger class="w-full">
@@ -51,7 +51,7 @@
             </FieldContent>
           </Field>
           <Field>
-            <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Канал</FieldLabel>
+            <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Канал</FieldLabel>
             <FieldContent>
               <Select v-model="filters.fulfillment_type">
                 <SelectTrigger class="w-full">
@@ -67,7 +67,7 @@
             </FieldContent>
           </Field>
           <Field>
-            <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Поиск</FieldLabel>
+            <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Поиск</FieldLabel>
             <FieldContent>
               <Input v-model="filters.search" placeholder="ID, название, причина" />
             </FieldContent>

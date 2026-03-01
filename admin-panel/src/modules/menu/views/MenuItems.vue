@@ -15,30 +15,41 @@
     </Card>
     <Card>
       <CardContent>
-        <div class="grid gap-3 md:grid-cols-4">
-          <Input v-model="filters.search" placeholder="Поиск по названию и описанию" />
-          <Select v-model="filters.status">
-            <SelectTrigger class="w-full">
-              <SelectValue placeholder="Статус" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Все статусы</SelectItem>
-              <SelectItem value="active">Только активные</SelectItem>
-              <SelectItem value="hidden">Только скрытые</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select v-model="filters.categoryId">
-            <SelectTrigger class="w-full">
-              <SelectValue placeholder="Категория" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Все категории</SelectItem>
-              <SelectItem v-for="category in categoriesOptions" :key="category.id" :value="String(category.id)">
-                {{ category.name }}
-              </SelectItem>
-            </SelectContent>
-          </Select>
-          <Button variant="outline" @click="resetFilters">Сбросить фильтры</Button>
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-12">
+          <div class="space-y-1 sm:col-span-2 xl:col-span-6">
+            <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Поиск</label>
+            <Input v-model="filters.search" placeholder="Поиск по названию и описанию" />
+          </div>
+          <div class="space-y-1 xl:col-span-2">
+            <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Статус</label>
+            <Select v-model="filters.status">
+              <SelectTrigger class="w-full">
+                <SelectValue placeholder="Статус" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Все статусы</SelectItem>
+                <SelectItem value="active">Только активные</SelectItem>
+                <SelectItem value="hidden">Только скрытые</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div class="space-y-1 xl:col-span-2">
+            <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Категория</label>
+            <Select v-model="filters.categoryId">
+              <SelectTrigger class="w-full">
+                <SelectValue placeholder="Категория" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Все категории</SelectItem>
+                <SelectItem v-for="category in categoriesOptions" :key="category.id" :value="String(category.id)">
+                  {{ category.name }}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div class="flex items-end xl:col-span-2">
+            <Button class="w-full" variant="outline" @click="resetFilters">Сбросить фильтры</Button>
+          </div>
         </div>
       </CardContent>
     </Card>

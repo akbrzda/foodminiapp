@@ -97,6 +97,22 @@
             </FieldContent>
           </Field>
           <Field>
+            <FieldLabel>Webhook Secret</FieldLabel>
+            <FieldContent>
+              <Input
+                v-model="form.iiko_webhook_secret"
+                type="password"
+                name="iiko_webhook_secret_settings"
+                autocomplete="section-iiko new-password"
+                autocapitalize="none"
+                autocorrect="off"
+                spellcheck="false"
+                data-lpignore="true"
+                data-1p-ignore="true"
+              />
+            </FieldContent>
+          </Field>
+          <Field>
             <FieldLabel>Внешнее меню iiko</FieldLabel>
             <FieldContent>
               <Select v-model="form.iiko_external_menu_id">
@@ -456,6 +472,7 @@ const form = ref({
   iiko_enabled: false,
   iiko_api_url: "",
   iiko_api_key: "",
+  iiko_webhook_secret: "",
   iiko_sync_category_ids: [],
   iiko_external_menu_id: "",
   iiko_price_category_id: "",
@@ -524,6 +541,7 @@ const applyForm = (settings = {}) => {
     iiko_sync_category_ids: categories,
     iiko_external_menu_id: String(settings.iiko_external_menu_id || ""),
     iiko_price_category_id: String(settings.iiko_price_category_id || ""),
+    iiko_webhook_secret: String(settings.iiko_webhook_secret || ""),
     iiko_preserve_local_names: settings.iiko_preserve_local_names !== false,
     integration_mode: settings.integration_mode || { menu: "local", orders: "local", loyalty: "local" },
   };
