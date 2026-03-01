@@ -191,7 +191,7 @@ app.use("/api/logs", logsRoutes);
 app.use("/api/analytics", analyticsRoutes);
 app.use("/api/uploads", uploadsRoutes);
 app.use("/api/broadcasts", broadcastsRoutes);
-app.use("/api/subscription-campaigns", subscriptionCampaignsRoutes);
+app.use("/api/campaign", subscriptionCampaignsRoutes);
 app.use("/api/admin/integrations", integrationsAdminRoutes);
 app.use("/api/webhooks/iiko", integrationsWebhooksRoutes);
 app.use(notFoundHandler);

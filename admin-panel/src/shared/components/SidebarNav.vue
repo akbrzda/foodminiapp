@@ -185,7 +185,7 @@ const navSections = computed(() => {
         { label: "Заказы", to: "/orders", icon: ClipboardList, badge: newOrdersCount.value },
         { label: "Клиенты", to: "/clients", icon: Users },
         { label: "Рассылки", to: "/broadcasts", icon: Megaphone, visible: !isManager.value },
-        { label: "Подписочные", to: "/subscription-campaigns", icon: BellRing, visible: !isManager.value },
+        { label: "Кампании подписки", to: "/campaign", icon: BellRing, visible: !isManager.value },
       ],
     },
     {

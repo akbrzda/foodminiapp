@@ -2,7 +2,7 @@
   <div class="space-y-6">
     <Card>
       <CardContent>
-        <PageHeader title="Подписочные кампании" description="Кампании привлечения подписчиков в Telegram-канал">
+        <PageHeader title="Кампании подписки" description="Кампании привлечения подписчиков в Telegram-канал">
           <template #actions>
             <Button @click="createCampaign">
               <Plus :size="16" />
@@ -61,6 +61,9 @@
                 <Button variant="ghost" size="icon" @click="openDetail(campaign.id)">
                   <Eye :size="16" />
                 </Button>
+                <Button variant="ghost" size="icon" @click="copyCampaignLink(campaign)">
+                  <Copy :size="16" />
+                </Button>
                 <Button variant="ghost" size="icon" @click="editCampaign(campaign.id)">
                   <Pencil :size="16" />
                 </Button>
@@ -111,6 +114,9 @@
                       <Button variant="ghost" size="icon" @click="openDetail(campaign.id)">
                         <Eye :size="16" />
                       </Button>
+                      <Button variant="ghost" size="icon" @click="copyCampaignLink(campaign)">
+                        <Copy :size="16" />
+                      </Button>
                       <Button variant="ghost" size="icon" @click="editCampaign(campaign.id)">
                         <Pencil :size="16" />
                       </Button>
@@ -134,7 +140,7 @@
 <script setup>
 import { devError } from "@/shared/utils/logger";
 import { onMounted, reactive, ref, watch } from "vue";
-import { Eye, Pencil, Plus } from "lucide-vue-next";
+import { Copy, Eye, Pencil, Plus } from "lucide-vue-next";
 import { useRouter } from "vue-router";
 import api from "@/shared/api/client.js";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
@@ -156,13 +162,14 @@ import Skeleton from "@/shared/components/ui/skeleton/Skeleton.vue";
 import TablePagination from "@/shared/components/TablePagination.vue";
 
 const router = useRouter();
-const { showErrorNotification } = useNotifications();
+const { showErrorNotification, showSuccessNotification, showWarningNotification } = useNotifications();
 
 const isLoading = ref(false);
 const campaigns = ref([]);
 const page = ref(1);
 const pageSize = ref(20);
 const total = ref(0);
+const botUsername = ref(String(import.meta.env.VITE_TELEGRAM_BOT_USERNAME || "").trim());
 const filters = reactive({
   search: "",
   is_active: "",
@@ -173,7 +180,7 @@ let debounceTimer = null;
 const loadCampaigns = async () => {
   isLoading.value = true;
   try {
-    const response = await api.get("/api/subscription-campaigns", {
+    const response = await api.get("/api/campaign", {
       params: {
         page: page.value,
         limit: pageSize.value,
@@ -195,6 +202,43 @@ const formatPeriod = (campaign) => {
   if (campaign.is_perpetual) return "Бессрочно";
   if (!campaign.start_date && !campaign.end_date) return "—";
   return `${formatDateTime(campaign.start_date) || "—"} — ${formatDateTime(campaign.end_date) || "—"}`;
+};
+
+const loadBotUsername = async () => {
+  if (botUsername.value) return;
+  try {
+    const response = await api.get("/api/settings/admin/telegram-bot/profile");
+    const username = String(response.data?.data?.username || "").trim();
+    if (username) {
+      botUsername.value = username;
+    }
+  } catch (error) {
+    devError("Не удалось получить username Telegram-бота:", error);
+  }
+};
+
+const buildDeepLink = (tag) => {
+  const normalizedTag = String(tag || "")
+    .trim()
+    .replace(/\s+/g, "_")
+    .replace(/[^a-zA-Z0-9_-]/g, "");
+  if (!normalizedTag) return "";
+  if (!botUsername.value) return "";
+  return `https://t.me/${botUsername.value}?start=${normalizedTag}`;
+};
+
+const copyCampaignLink = async (campaign) => {
+  const link = buildDeepLink(campaign?.tag);
+  if (!link) {
+    showWarningNotification("Не удалось сформировать ссылку кампании");
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(link);
+    showSuccessNotification("Ссылка кампании скопирована");
+  } catch (error) {
+    showErrorNotification("Не удалось скопировать ссылку");
+  }
 };
 
 const createCampaign = () => {
@@ -232,6 +276,7 @@ watch(
 );
 
 onMounted(() => {
+  loadBotUsername();
   loadCampaigns();
 });
 </script>

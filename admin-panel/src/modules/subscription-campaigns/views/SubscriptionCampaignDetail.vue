@@ -2,7 +2,7 @@
   <div class="space-y-6">
     <Card>
       <CardContent>
-        <PageHeader :title="campaign?.title || 'Подписочная кампания'" description="Статистика и участники">
+        <PageHeader :title="campaign?.title || 'Кампания подписки'" description="Статистика и участники">
           <template #actions>
             <BackButton @click="goBack" />
             <Button variant="secondary" @click="editCampaign">
@@ -235,8 +235,8 @@ const loadCampaign = async () => {
   isLoadingCampaign.value = true;
   try {
     const [campaignResponse, statsResponse] = await Promise.all([
-      api.get(`/api/subscription-campaigns/${campaignId.value}`),
-      api.get(`/api/subscription-campaigns/${campaignId.value}/stats`),
+      api.get(`/api/campaign/${campaignId.value}`),
+      api.get(`/api/campaign/${campaignId.value}/stats`),
     ]);
     campaign.value = campaignResponse.data?.data || null;
     stats.value = statsResponse.data?.data || {};
@@ -264,7 +264,7 @@ const loadBotUsername = async () => {
 const loadParticipants = async () => {
   isLoadingParticipants.value = true;
   try {
-    const response = await api.get(`/api/subscription-campaigns/${campaignId.value}/participants`, {
+    const response = await api.get(`/api/campaign/${campaignId.value}/participants`, {
       params: {
         page: participantsPage.value,
         limit: participantsPageSize.value,
@@ -286,7 +286,7 @@ const loadParticipants = async () => {
 
 const exportParticipants = async () => {
   try {
-    const response = await api.get(`/api/subscription-campaigns/${campaignId.value}/participants/export`, {
+    const response = await api.get(`/api/campaign/${campaignId.value}/participants/export`, {
       params: {
         search: filters.search || undefined,
         is_currently_subscribed: filters.is_currently_subscribed || undefined,

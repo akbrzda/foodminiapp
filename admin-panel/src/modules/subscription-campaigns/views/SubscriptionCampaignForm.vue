@@ -2,7 +2,7 @@
   <div class="space-y-6">
     <Card>
       <CardContent>
-        <PageHeader :title="isEditing ? 'Редактирование подписочной кампании' : 'Новая подписочная кампания'" description="Настройка deep-link и условий участия">
+        <PageHeader :title="isEditing ? 'Редактирование кампании подписки' : 'Новая кампания подписки'" description="Настройка deep-link и условий участия">
           <template #actions>
             <BackButton @click="goBack" />
           </template>
@@ -35,16 +35,7 @@
             <Field>
               <FieldLabel>Тег кампании</FieldLabel>
               <FieldContent>
-                <div class="space-y-2">
-                  <Input v-model="form.tag" placeholder="kazan_promo_2026" />
-                  <div class="flex flex-wrap gap-2">
-                    <Input :model-value="deepLinkByTag" readonly class="min-w-[280px] flex-1" />
-                    <Button type="button" variant="outline" @click="copyTaggedLink">
-                      <Copy :size="16" />
-                      Скопировать ссылку
-                    </Button>
-                  </div>
-                </div>
+                <Input v-model="form.tag" placeholder="kazan_promo_2026" />
               </FieldContent>
             </Field>
           </FieldGroup>
@@ -221,7 +212,7 @@
 <script setup>
 import { devError } from "@/shared/utils/logger";
 import { computed, onMounted, reactive, ref } from "vue";
-import { Copy, Save, Trash2, UploadCloud } from "lucide-vue-next";
+import { Save, Trash2, UploadCloud } from "lucide-vue-next";
 import { useRoute, useRouter } from "vue-router";
 import api from "@/shared/api/client.js";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
@@ -240,11 +231,10 @@ import Skeleton from "@/shared/components/ui/skeleton/Skeleton.vue";
 
 const route = useRoute();
 const router = useRouter();
-const { showErrorNotification, showSuccessNotification, showWarningNotification } = useNotifications();
+const { showErrorNotification, showSuccessNotification } = useNotifications();
 
 const campaignId = computed(() => Number(route.params.id || 0));
 const isEditing = computed(() => Boolean(campaignId.value));
-const botUsername = ref(String(import.meta.env.VITE_TELEGRAM_BOT_USERNAME || "").trim());
 const isLoading = ref(false);
 const isSaving = ref(false);
 const fileInput = ref(null);
@@ -264,19 +254,6 @@ const form = reactive({
   is_perpetual: false,
   start_date: "",
   end_date: "",
-});
-
-const normalizeTag = (value) =>
-  String(value || "")
-    .trim()
-    .replace(/\s+/g, "_")
-    .replace(/[^a-zA-Z0-9_-]/g, "");
-
-const deepLinkByTag = computed(() => {
-  const tag = normalizeTag(form.tag);
-  if (!tag) return "";
-  if (!botUsername.value) return `https://t.me/<username>?start=${tag}`;
-  return `https://t.me/${botUsername.value}?start=${tag}`;
 });
 
 const toLocalDateTime = (value) => {
@@ -312,43 +289,17 @@ const fillForm = (data) => {
   uploadState.value = { loading: false, error: null, preview: data.media_url || null };
 };
 
-const copyTaggedLink = async () => {
-  if (!deepLinkByTag.value) {
-    showWarningNotification("Сначала укажите тег кампании");
-    return;
-  }
-  try {
-    await navigator.clipboard.writeText(deepLinkByTag.value);
-    showSuccessNotification("Ссылка с тегом скопирована");
-  } catch (error) {
-    showErrorNotification("Не удалось скопировать ссылку");
-  }
-};
-
 const loadCampaign = async () => {
   if (!isEditing.value) return;
   isLoading.value = true;
   try {
-    const response = await api.get(`/api/subscription-campaigns/${campaignId.value}`);
+    const response = await api.get(`/api/campaign/${campaignId.value}`);
     fillForm(response.data?.data || {});
   } catch (error) {
     devError("Ошибка загрузки подписочной кампании:", error);
     showErrorNotification(error?.response?.data?.error || "Не удалось загрузить кампанию");
   } finally {
     isLoading.value = false;
-  }
-};
-
-const loadBotUsername = async () => {
-  if (botUsername.value) return;
-  try {
-    const response = await api.get("/api/settings/admin/telegram-bot/profile");
-    const username = String(response.data?.data?.username || "").trim();
-    if (username) {
-      botUsername.value = username;
-    }
-  } catch (error) {
-    devError("Не удалось получить username Telegram-бота:", error);
   }
 };
 
@@ -372,9 +323,9 @@ const saveCampaign = async () => {
       end_date: form.is_perpetual ? null : toApiDateTime(form.end_date),
     };
     if (isEditing.value) {
-      await api.put(`/api/subscription-campaigns/${campaignId.value}`, payload);
+      await api.put(`/api/campaign/${campaignId.value}`, payload);
     } else {
-      await api.post("/api/subscription-campaigns", payload);
+      await api.post("/api/campaign", payload);
     }
     showSuccessNotification("Кампания сохранена");
     router.push({ name: "subscription-campaigns" });
@@ -414,7 +365,7 @@ const handleFile = async (file) => {
   formData.append("image", file);
   try {
     const entityId = isEditing.value ? campaignId.value : "temp";
-    const response = await api.post(`/api/uploads/subscription-campaigns/${entityId}`, formData, {
+    const response = await api.post(`/api/uploads/campaign/${entityId}`, formData, {
       headers: { "Content-Type": "multipart/form-data" },
     });
     const uploadedUrl = response.data?.data?.url || "";
@@ -438,7 +389,6 @@ const goBack = () => {
 };
 
 onMounted(() => {
-  loadBotUsername();
   loadCampaign();
 });
 </script>
