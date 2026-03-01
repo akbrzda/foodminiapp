@@ -167,7 +167,7 @@ router.post("/telegram", telegramAuthLimiter, async (req, res, next) => {
     }
     const [users] = await db.query(
       `SELECT u.id, u.telegram_id, u.phone, u.first_name, u.last_name, u.email, u.date_of_birth,
-              u.loyalty_balance, u.current_loyalty_level_id, u.loyalty_joined_at
+              u.loyalty_balance, u.current_loyalty_level_id, u.loyalty_joined_at, u.registration_type, u.bot_registered_at
        FROM users u
        WHERE u.telegram_id = ?`,
       [id],
@@ -188,12 +188,15 @@ router.post("/telegram", telegramAuthLimiter, async (req, res, next) => {
         updates.push("last_name = ?");
         values.push(last_name);
       }
+      if (users[0].registration_type !== "miniapp") {
+        updates.push("registration_type = 'miniapp'");
+      }
       if (updates.length > 0) {
         values.push(userId);
         await db.query(`UPDATE users SET ${updates.join(", ")} WHERE id = ?`, values);
         const [updatedUsers] = await db.query(
           `SELECT u.id, u.telegram_id, u.phone, u.first_name, u.last_name, u.email, u.date_of_birth,
-                  u.loyalty_balance, u.current_loyalty_level_id, u.loyalty_joined_at
+                  u.loyalty_balance, u.current_loyalty_level_id, u.loyalty_joined_at, u.registration_type, u.bot_registered_at
            FROM users u
            WHERE u.id = ?`,
           [userId],
@@ -214,17 +217,15 @@ router.post("/telegram", telegramAuthLimiter, async (req, res, next) => {
       }
     } else {
       isNewUser = true;
-      const [result] = await db.query("INSERT INTO users (telegram_id, phone, first_name, last_name) VALUES (?, ?, ?, ?)", [
-        id,
-        null,
-        first_name || null,
-        last_name || null,
-      ]);
+      const [result] = await db.query(
+        "INSERT INTO users (telegram_id, registration_type, bot_registered_at, phone, first_name, last_name) VALUES (?, 'miniapp', NULL, ?, ?, ?)",
+        [id, null, first_name || null, last_name || null],
+      );
       userId = result.insertId;
       await db.query("UPDATE users SET current_loyalty_level_id = 1, loyalty_joined_at = NOW() WHERE id = ?", [userId]);
       const [newUser] = await db.query(
         `SELECT u.id, u.telegram_id, u.phone, u.first_name, u.last_name, u.email, u.date_of_birth,
-                u.loyalty_balance, u.current_loyalty_level_id, u.loyalty_joined_at
+                u.loyalty_balance, u.current_loyalty_level_id, u.loyalty_joined_at, u.registration_type, u.bot_registered_at
          FROM users u
          WHERE u.id = ?`,
         [userId],

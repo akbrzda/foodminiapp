@@ -2,6 +2,7 @@ import axios from "axios";
 import { logger } from "../utils/logger.js";
 import { sendTelegramStartMessage } from "../services/startMessageService.js";
 import { answerCallbackQuery, requestTelegram } from "../services/telegramApi.js";
+import { handleCheckSubscriptionCallback, handleStartWithSubscriptionTag } from "../services/subscriptionCampaignService.js";
 
 const POLL_TIMEOUT_SECONDS = 25;
 const RETRY_DELAY_MS = 2000;
@@ -37,6 +38,15 @@ export const createTelegramCommandBot = () => {
     return cmd.toLowerCase();
   };
 
+  const parseStartArgument = (text) => {
+    const parts = String(text || "")
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+    if (parts.length < 2) return "";
+    return String(parts[1] || "").trim();
+  };
+
   const forwardBroadcastCallback = async (callbackQuery) => {
     try {
       await axios.post(`${backendUrl}/api/broadcasts/telegram/callback`, {
@@ -64,6 +74,18 @@ export const createTelegramCommandBot = () => {
     if (!command) return;
     if (command !== "/start") return;
 
+    const startArg = parseStartArgument(message?.text || "");
+    if (startArg) {
+      const result = await handleStartWithSubscriptionTag({
+        chatId,
+        telegramUser: message?.from,
+        tag: startArg,
+      });
+      if (result?.handled) {
+        return;
+      }
+    }
+
     await sendTelegramStartMessage(chatId, null);
   };
 
@@ -71,6 +93,10 @@ export const createTelegramCommandBot = () => {
     if (!callbackQuery?.data || !callbackQuery?.from?.id) return;
 
     const data = String(callbackQuery.data);
+    if (data.startsWith("check_sub:")) {
+      const result = await handleCheckSubscriptionCallback({ callbackQuery });
+      if (result?.handled) return;
+    }
     if (data.startsWith("broadcast:")) {
       await forwardBroadcastCallback(callbackQuery);
       return;

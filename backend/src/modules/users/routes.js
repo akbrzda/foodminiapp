@@ -55,6 +55,9 @@ router.post("/register", async (req, res, next) => {
         updates.push("last_name = ?");
         values.push(last_name);
       }
+      if (user.registration_type !== "miniapp") {
+        updates.push("registration_type = 'miniapp'");
+      }
       if (systemSettings.premiumbonus_enabled) {
         updates.push("pb_sync_status = 'pending'");
         updates.push("loyalty_mode = 'premiumbonus'");
@@ -82,7 +85,7 @@ router.post("/register", async (req, res, next) => {
     }
 
     const [result] = await db.query(
-      "INSERT INTO users (phone, telegram_id, first_name, last_name, loyalty_mode, pb_sync_status) VALUES (?, ?, ?, ?, ?, ?)",
+      "INSERT INTO users (phone, telegram_id, registration_type, bot_registered_at, first_name, last_name, loyalty_mode, pb_sync_status) VALUES (?, ?, 'miniapp', NULL, ?, ?, ?, ?)",
       [normalizedPhone, null, first_name || null, last_name || null, loyaltyMode, pbSyncStatus],
     );
 

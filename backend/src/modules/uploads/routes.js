@@ -60,6 +60,7 @@ router.post("/modifiers/:id", upload.single("image"), uploadImage(IMAGE_CATEGORI
 router.post("/modifier-groups/:id", upload.single("image"), uploadImage(IMAGE_CATEGORIES.MODIFIER_GROUPS, { allowTemp: false }));
 router.post("/tags/:id", upload.single("image"), uploadImage(IMAGE_CATEGORIES.TAGS, { allowTemp: false }));
 router.post("/broadcasts/:id", upload.single("image"), uploadImage(IMAGE_CATEGORIES.BROADCASTS));
+router.post("/subscription-campaigns/:id", upload.single("image"), uploadImage(IMAGE_CATEGORIES.SUBSCRIPTION_CAMPAIGNS));
 router.post("/telegram-start/:id", upload.single("image"), uploadImage(IMAGE_CATEGORIES.TELEGRAM_START, { allowTemp: false }));
 
 router.delete("/:category/:id/:filename", async (req, res, next) => {

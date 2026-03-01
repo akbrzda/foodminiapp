@@ -12,6 +12,7 @@ export const IMAGE_CATEGORIES = {
   MODIFIER_GROUPS: "modifier-groups",
   TAGS: "tags",
   BROADCASTS: "broadcasts",
+  SUBSCRIPTION_CAMPAIGNS: "subscription-campaigns",
   TELEGRAM_START: "telegram-start",
 };
 export function getUploadPath(category, entityId) {

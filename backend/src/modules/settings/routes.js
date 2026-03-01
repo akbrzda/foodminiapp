@@ -1,4 +1,5 @@
 import express from "express";
+import axios from "axios";
 import { authenticateToken, requireRole } from "../../middleware/auth.js";
 import { getSystemSettings, getSettingsList, updateSystemSettings } from "../../utils/settings.js";
 import { logger } from "../../utils/logger.js";
@@ -155,6 +156,42 @@ router.post("/admin/telegram-orders/test", authenticateToken, requireRole("admin
     }
 
     res.json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/admin/telegram-bot/profile", authenticateToken, requireRole("admin", "ceo"), async (req, res, next) => {
+  try {
+    const token = String(process.env.TELEGRAM_BOT_TOKEN || "").trim();
+    if (!token) {
+      return res.status(400).json({ success: false, error: "TELEGRAM_BOT_TOKEN не задан" });
+    }
+
+    const response = await axios.post(
+      `https://api.telegram.org/bot${token}/getMe`,
+      {},
+      {
+        headers: {
+          "Content-Type": "application/json",
+        },
+        timeout: 10000,
+      },
+    );
+
+    if (!response.data?.ok) {
+      return res.status(502).json({ success: false, error: "Не удалось получить профиль Telegram-бота" });
+    }
+
+    const bot = response.data?.result || {};
+    res.json({
+      success: true,
+      data: {
+        id: bot.id || null,
+        username: bot.username || null,
+        first_name: bot.first_name || null,
+      },
+    });
   } catch (error) {
     next(error);
   }

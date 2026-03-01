@@ -32,6 +32,9 @@ import BroadcastForm from "@/modules/broadcasts/views/BroadcastForm.vue";
 import BroadcastDetail from "@/modules/broadcasts/views/BroadcastDetail.vue";
 import BroadcastSegments from "@/modules/broadcasts/views/BroadcastSegments.vue";
 import BroadcastDashboard from "@/modules/broadcasts/views/BroadcastDashboard.vue";
+import SubscriptionCampaigns from "@/modules/subscription-campaigns/views/SubscriptionCampaigns.vue";
+import SubscriptionCampaignForm from "@/modules/subscription-campaigns/views/SubscriptionCampaignForm.vue";
+import SubscriptionCampaignDetail from "@/modules/subscription-campaigns/views/SubscriptionCampaignDetail.vue";
 import NotFound from "@/shared/components/NotFound.vue";
 const router = createRouter({
   history: createWebHistory(),
@@ -377,6 +380,58 @@ const router = createRouter({
             subtitle: "Сводная аналитика",
             roles: ["admin", "ceo"],
             breadcrumbs: [{ label: "Рассылки", to: "/broadcasts" }, { label: "Дашборд" }],
+          },
+        },
+        {
+          path: "subscription-campaigns",
+          name: "subscription-campaigns",
+          component: SubscriptionCampaigns,
+          meta: {
+            title: "Подписочные кампании",
+            subtitle: "Привлечение подписчиков",
+            roles: ["admin", "ceo"],
+            breadcrumbs: [{ label: "Подписочные кампании", to: "/subscription-campaigns" }],
+            isList: true,
+            listName: "subscription-campaigns",
+          },
+        },
+        {
+          path: "subscription-campaigns/new",
+          name: "subscription-campaign-new",
+          component: SubscriptionCampaignForm,
+          meta: {
+            title: "Новая подписочная кампания",
+            subtitle: "Создание кампании",
+            roles: ["admin", "ceo"],
+            breadcrumbs: [{ label: "Подписочные кампании", to: "/subscription-campaigns" }, { label: "Новая кампания" }],
+            isEdit: true,
+            parentList: "subscription-campaigns",
+          },
+        },
+        {
+          path: "subscription-campaigns/:id/edit",
+          name: "subscription-campaign-edit",
+          component: SubscriptionCampaignForm,
+          meta: {
+            title: "Редактирование подписочной кампании",
+            subtitle: "Настройка кампании",
+            roles: ["admin", "ceo"],
+            breadcrumbs: [{ label: "Подписочные кампании", to: "/subscription-campaigns" }, { label: "Редактирование" }],
+            isEdit: true,
+            parentList: "subscription-campaigns",
+          },
+        },
+        {
+          path: "subscription-campaigns/:id",
+          name: "subscription-campaign-detail",
+          component: SubscriptionCampaignDetail,
+          meta: {
+            title: "Статистика подписочной кампании",
+            subtitle: "Участники и конверсия",
+            roles: ["admin", "ceo"],
+            breadcrumbs: [{ label: "Подписочные кампании", to: "/subscription-campaigns" }, { label: "Статистика" }],
+            isDetail: true,
+            parentList: "subscription-campaigns",
           },
         },
         {

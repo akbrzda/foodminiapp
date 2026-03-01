@@ -118,6 +118,8 @@ CREATE TABLE `tags` (
 CREATE TABLE `users` (
   `id` int NOT NULL AUTO_INCREMENT,
   `telegram_id` bigint DEFAULT NULL,
+  `registration_type` enum('bot_only','miniapp') NOT NULL DEFAULT 'bot_only',
+  `bot_registered_at` timestamp NULL DEFAULT NULL,
   `phone` varchar(20) DEFAULT NULL,
   `first_name` varchar(100) DEFAULT NULL,
   `last_name` varchar(100) DEFAULT NULL,
@@ -145,6 +147,7 @@ CREATE TABLE `users` (
   KEY `idx_pb_client_id` (`pb_client_id`),
   KEY `idx_pb_sync_status` (`pb_sync_status`),
   KEY `idx_loyalty_mode` (`loyalty_mode`),
+  KEY `idx_users_registration_type` (`registration_type`),
   KEY `idx_users_timezone` (`timezone`),
   KEY `idx_current_loyalty_level` (`current_loyalty_level_id`),
   KEY `idx_loyalty_joined_at` (`loyalty_joined_at`),
@@ -776,7 +779,7 @@ CREATE TABLE `broadcast_campaigns` (
   `id` int NOT NULL AUTO_INCREMENT,
   `name` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
   `description` text COLLATE utf8mb4_unicode_ci,
-  `type` enum('manual','trigger') COLLATE utf8mb4_unicode_ci NOT NULL,
+  `type` enum('manual','trigger','subscription_campaign') COLLATE utf8mb4_unicode_ci NOT NULL,
   `status` enum('draft','scheduled','sending','completed','cancelled','failed') COLLATE utf8mb4_unicode_ci NOT NULL,
   `trigger_type` enum('inactive_users','birthday','new_registration') COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `trigger_config` json DEFAULT NULL,
@@ -805,6 +808,54 @@ CREATE TABLE `broadcast_campaigns` (
   KEY `idx_broadcast_campaigns_segment_id` (`segment_id`),
   CONSTRAINT `broadcast_campaigns_ibfk_1` FOREIGN KEY (`segment_id`) REFERENCES `broadcast_segments` (`id`) ON DELETE SET NULL,
   CONSTRAINT `broadcast_campaigns_ibfk_2` FOREIGN KEY (`created_by`) REFERENCES `admin_users` (`id`) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+CREATE TABLE `subscription_campaigns` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `tag` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `title` varchar(200) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `channel_id` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `channel_url` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `welcome_message` text COLLATE utf8mb4_unicode_ci NOT NULL,
+  `success_message` text COLLATE utf8mb4_unicode_ci NOT NULL,
+  `error_message` text COLLATE utf8mb4_unicode_ci NOT NULL,
+  `media_type` enum('photo','video') COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `media_url` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `is_reward_unique` tinyint(1) NOT NULL DEFAULT '0',
+  `is_active` tinyint(1) NOT NULL DEFAULT '1',
+  `is_perpetual` tinyint(1) NOT NULL DEFAULT '0',
+  `start_date` timestamp NULL DEFAULT NULL,
+  `end_date` timestamp NULL DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_subscription_campaigns_tag` (`tag`),
+  KEY `idx_subscription_campaigns_active_dates` (`is_active`,`start_date`,`end_date`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+CREATE TABLE `subscription_attempts` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `campaign_id` int NOT NULL,
+  `user_id` int NOT NULL,
+  `telegram_id` bigint NOT NULL,
+  `first_click_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `last_check_at` timestamp NULL DEFAULT NULL,
+  `first_subscribed_at` timestamp NULL DEFAULT NULL,
+  `last_reward_claimed_at` timestamp NULL DEFAULT NULL,
+  `attempts_count` int NOT NULL DEFAULT '1',
+  `rewards_claimed_count` int NOT NULL DEFAULT '0',
+  `is_currently_subscribed` tinyint(1) NOT NULL DEFAULT '0',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_subscription_attempts_campaign_user` (`campaign_id`,`user_id`),
+  KEY `idx_subscription_attempts_telegram_id` (`telegram_id`),
+  KEY `idx_subscription_attempts_campaign_subscribed` (`campaign_id`,`is_currently_subscribed`),
+  KEY `idx_subscription_attempts_campaign_first_subscribed` (`campaign_id`,`first_subscribed_at`),
+  CONSTRAINT `fk_subscription_attempts_campaign` FOREIGN KEY (`campaign_id`) REFERENCES `subscription_campaigns` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_subscription_attempts_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 

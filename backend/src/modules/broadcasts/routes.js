@@ -33,6 +33,9 @@ import { listActiveTriggers } from "./services/triggerService.js";
 const router = express.Router();
 
 const ensureAdmin = [authenticateToken, requireRole("admin", "manager", "ceo")];
+const ALLOWED_CAMPAIGN_TYPES = new Set(["manual", "trigger", "subscription_campaign"]);
+const ALLOWED_CAMPAIGN_STATUSES = new Set(["draft", "scheduled", "sending", "completed", "cancelled", "failed"]);
+const ALLOWED_TRIGGER_TYPES = new Set(["inactive_users", "birthday", "new_registration"]);
 
 const parseJsonField = (value, fallback = null) => {
   if (value === null || value === undefined || value === "") return fallback;
@@ -276,12 +279,23 @@ router.get("/", ensureAdmin, async (req, res, next) => {
 
 router.post("/", ensureAdmin, async (req, res, next) => {
   try {
+    const type = req.body.type || "manual";
+    const status = req.body.status || "draft";
+    if (!ALLOWED_CAMPAIGN_TYPES.has(type)) {
+      return res.status(400).json({ success: false, error: "Некорректный тип кампании" });
+    }
+    if (!ALLOWED_CAMPAIGN_STATUSES.has(status)) {
+      return res.status(400).json({ success: false, error: "Некорректный статус кампании" });
+    }
+    if (type === "trigger" && req.body.trigger_type && !ALLOWED_TRIGGER_TYPES.has(req.body.trigger_type)) {
+      return res.status(400).json({ success: false, error: "Некорректный тип триггера" });
+    }
     const payload = {
       name: req.body.name,
       description: req.body.description,
-      type: req.body.type || "manual",
-      status: req.body.status || "draft",
-      trigger_type: req.body.trigger_type || null,
+      type,
+      status,
+      trigger_type: type === "trigger" ? req.body.trigger_type || null : null,
       trigger_config: parseJsonField(req.body.trigger_config, req.body.trigger_config),
       segment_id: req.body.segment_id || null,
       segment_config: parseJsonField(req.body.segment_config, req.body.segment_config),
@@ -294,7 +308,10 @@ router.post("/", ensureAdmin, async (req, res, next) => {
       is_active: req.body.is_active ?? 1,
       created_by: req.user.id,
     };
-    if (!payload.name || !payload.segment_config) {
+    if (!payload.name) {
+      return res.status(400).json({ success: false, error: "Укажите название кампании" });
+    }
+    if (payload.type !== "subscription_campaign" && !payload.segment_config) {
       return res.status(400).json({ error: "Укажите название и условия сегментации" });
     }
     const campaignId = await createCampaign(payload);
@@ -319,13 +336,33 @@ router.get("/:id", ensureAdmin, async (req, res, next) => {
 router.put("/:id", ensureAdmin, async (req, res, next) => {
   try {
     const campaignId = Number(req.params.id);
+    if (req.body.type !== undefined && !ALLOWED_CAMPAIGN_TYPES.has(req.body.type)) {
+      return res.status(400).json({ success: false, error: "Некорректный тип кампании" });
+    }
+    if (req.body.status !== undefined && !ALLOWED_CAMPAIGN_STATUSES.has(req.body.status)) {
+      return res.status(400).json({ success: false, error: "Некорректный статус кампании" });
+    }
+    if (req.body.trigger_type !== undefined && req.body.trigger_type && !ALLOWED_TRIGGER_TYPES.has(req.body.trigger_type)) {
+      return res.status(400).json({ success: false, error: "Некорректный тип триггера" });
+    }
+    const nextType = req.body.type;
     const payload = {
       name: req.body.name,
       description: req.body.description,
-      type: req.body.type,
+      type: nextType,
       status: req.body.status,
-      trigger_type: req.body.trigger_type,
-      trigger_config: parseJsonField(req.body.trigger_config, req.body.trigger_config),
+      trigger_type:
+        nextType === "trigger"
+          ? req.body.trigger_type
+          : nextType !== undefined
+            ? null
+            : req.body.trigger_type === undefined
+              ? undefined
+              : null,
+      trigger_config:
+        nextType !== undefined && nextType !== "trigger"
+          ? null
+          : parseJsonField(req.body.trigger_config, req.body.trigger_config),
       segment_id: req.body.segment_id,
       segment_config: parseJsonField(req.body.segment_config, req.body.segment_config),
       content_text: req.body.content_text,
