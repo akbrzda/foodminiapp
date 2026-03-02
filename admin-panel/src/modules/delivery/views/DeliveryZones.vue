@@ -1,6 +1,14 @@
 <template>
   <div class="relative h-full min-h-[calc(100vh-80px)] bg-background">
     <div id="map" class="absolute inset-0 z-0"></div>
+    <div class="absolute bottom-4 right-4 z-20 flex flex-col gap-2">
+      <Button type="button" size="icon" variant="secondary" class="h-10 w-10 shadow-lg" @click="zoomInMap">
+        <Plus :size="18" />
+      </Button>
+      <Button type="button" size="icon" variant="secondary" class="h-10 w-10 shadow-lg" @click="zoomOutMap">
+        <Minus :size="18" />
+      </Button>
+    </div>
     <input
       ref="geoJsonInputRef"
       type="file"
@@ -467,7 +475,7 @@
 <script setup>
 import { devError } from "@/shared/utils/logger";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
-import { Download, List, Lock, Plus, Save, SlidersHorizontal, Upload } from "lucide-vue-next";
+import { Download, List, Lock, Minus, Plus, Save, SlidersHorizontal, Upload } from "lucide-vue-next";
 import { parseDate as parseCalendarDate } from "@internationalized/date";
 import api from "@/shared/api/client.js";
 import PolygonSidebar from "@/shared/components/PolygonSidebar.vue";
@@ -485,42 +493,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import PageHeader from "@/shared/components/PageHeader.vue";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
 import { useListContext } from "@/shared/composables/useListContext.js";
-import { createMarkerIcon, getMapColor, getTileLayer } from "@/shared/utils/leaflet.js";
-import L from "leaflet";
-import "leaflet/dist/leaflet.css";
-import "leaflet-draw";
-import "leaflet-draw/dist/leaflet.draw.css";
+import { loadYandexMaps } from "@/shared/services/yandexMaps.js";
 
-const patchLeafletTouchEvents = () => {
-  if (!L?.DomEvent || L.DomEvent.__touchleavePatched) return;
-  const sanitizeTypes = (types) => {
-    if (typeof types !== "string") return types;
-    return types
-      .split(/\s+/)
-      .filter((type) => type && type !== "touchleave")
-      .join(" ");
-  };
-  const originalOn = L.DomEvent.on;
-  const originalOff = L.DomEvent.off;
-  L.DomEvent.on = function (obj, types, fn, context) {
-    const safeTypes = sanitizeTypes(types);
-    if (!safeTypes) return this;
-    return originalOn.call(this, obj, safeTypes, fn, context);
-  };
-  L.DomEvent.off = function (obj, types, fn, context) {
-    const safeTypes = sanitizeTypes(types);
-    if (!safeTypes) return this;
-    return originalOff.call(this, obj, safeTypes, fn, context);
-  };
-  L.DomEvent.__touchleavePatched = true;
-};
-
-// Убираем предупреждения Leaflet о неверном событии touchleave.
-patchLeafletTouchEvents();
-if (L?.GeometryUtil?.readableArea && !L.GeometryUtil.__patched) {
-  L.GeometryUtil.readableArea = () => "";
-  L.GeometryUtil.__patched = true;
-}
+const MAP_ACCENT = "#ffd200";
+const MAP_ACCENT_FILL = "rgba(255, 210, 0, 0.26)";
+const MAP_DANGER = "#ef4444";
+const MAP_MUTED = "#9ca3af";
 const referenceStore = useReferenceStore();
 const authStore = useAuthStore();
 const route = useRoute();
@@ -606,15 +584,13 @@ const availableTariffSources = computed(() => {
   );
 });
 let map = null;
-let drawnItems = null;
-let tileLayer = null;
-let drawControl = null;
+let yandexMaps = null;
 let currentLayer = null;
-let editHandler = null;
-let importPreviewLayer = null;
+let branchMarker = null;
 const polygonLayers = new Map();
+const renderedPolygonLayers = [];
+const importPreviewLayers = [];
 let branchesRequestId = 0;
-let drawControlVisible = true;
 const modalTitle = computed(() => (editing.value ? "Редактировать полигон" : "Новый полигон"));
 const modalSubtitle = computed(() => (editing.value ? "Измените параметры полигона" : "Добавьте зону доставки"));
 const getManagerDefaultCityId = () => {
@@ -737,7 +713,7 @@ const getReferenceCenter = () => {
   }
   if (map) {
     const center = map.getCenter();
-    return { lat: center.lat, lng: center.lng };
+    return { lat: Number(center?.[0]), lng: Number(center?.[1]) };
   }
   return null;
 };
@@ -756,39 +732,83 @@ const toLeafletCoords = (coords = [], referenceCenter = null) => {
   const legacyCenter = calcCenter(legacyLatLng);
   return distanceSq(geoJsonCenter, referenceCenter) <= distanceSq(legacyCenter, referenceCenter) ? fromGeoJson : legacyLatLng;
 };
+
+const ensureYandex = async () => {
+  if (yandexMaps) return yandexMaps;
+  yandexMaps = await loadYandexMaps();
+  return yandexMaps;
+};
+
+const calcBounds = (coords = []) => {
+  if (!Array.isArray(coords) || !coords.length) return null;
+  let minLat = Number.POSITIVE_INFINITY;
+  let minLng = Number.POSITIVE_INFINITY;
+  let maxLat = Number.NEGATIVE_INFINITY;
+  let maxLng = Number.NEGATIVE_INFINITY;
+  coords.forEach((coord) => {
+    const lat = Number(coord?.[0]);
+    const lng = Number(coord?.[1]);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+    minLat = Math.min(minLat, lat);
+    minLng = Math.min(minLng, lng);
+    maxLat = Math.max(maxLat, lat);
+    maxLng = Math.max(maxLng, lng);
+  });
+  if (!Number.isFinite(minLat) || !Number.isFinite(minLng) || !Number.isFinite(maxLat) || !Number.isFinite(maxLng)) {
+    return null;
+  }
+  return [
+    [minLat, minLng],
+    [maxLat, maxLng],
+  ];
+};
+
+const clearRenderedPolygons = () => {
+  polygonLayers.clear();
+  while (renderedPolygonLayers.length) {
+    const layer = renderedPolygonLayers.pop();
+    if (map) {
+      map.geoObjects.remove(layer);
+    }
+  }
+};
+
 const clearGeoJsonImportPreview = () => {
-  if (importPreviewLayer) {
-    importPreviewLayer.clearLayers();
+  while (importPreviewLayers.length) {
+    const layer = importPreviewLayers.pop();
+    if (map) {
+      map.geoObjects.remove(layer);
+    }
   }
 };
 const renderGeoJsonImportPreview = () => {
-  if (!map || !importPreviewLayer) return;
+  if (!map || !yandexMaps) return;
   clearGeoJsonImportPreview();
   if (!showGeoJsonImportDialog.value || !geoJsonImportItems.value.length) return;
-  if (importPreviewLayer.bringToFront) {
-    importPreviewLayer.bringToFront();
-  }
-  let bounds = null;
+  const previewPoints = [];
   geoJsonImportItems.value.forEach((item) => {
     const coords = toLeafletCoords(item.polygon, getReferenceCenter());
     if (coords.length < 3) return;
-    const layer = L.polygon(coords, {
-      color: "#0ea5e9",
-      fillColor: "#38bdf8",
-      fillOpacity: 0.38,
-      weight: 4,
-      opacity: 1,
-      dashArray: "10 6",
-    });
-    importPreviewLayer.addLayer(layer);
-    if (!bounds) {
-      bounds = layer.getBounds();
-    } else {
-      bounds.extend(layer.getBounds());
-    }
+    const layer = new yandexMaps.Polygon(
+      [coords],
+      {},
+      {
+        strokeColor: "#0ea5e9",
+        fillColor: "rgba(56, 189, 248, 0.38)",
+        fillOpacity: 0.4,
+        strokeWidth: 4,
+        strokeStyle: "shortdash",
+        opacity: 1,
+        interactivityModel: "default#silent",
+      },
+    );
+    importPreviewLayers.push(layer);
+    map.geoObjects.add(layer);
+    previewPoints.push(...coords);
   });
-  if (bounds?.isValid()) {
-    map.fitBounds(bounds, { padding: [28, 28] });
+  const bounds = calcBounds(previewPoints);
+  if (bounds) {
+    map.setBounds(bounds, { checkZoomRange: true, zoomMargin: 28 });
   }
 };
 const resolveCoordinateOrder = (value) => {
@@ -1080,13 +1100,15 @@ const onCityChange = () => {
   loadBranches();
   loadAllPolygons();
   if (map) {
-    map.remove();
+    map.destroy();
     map = null;
   }
-  drawnItems = null;
+  clearRenderedPolygons();
+  clearGeoJsonImportPreview();
+  branchMarker = null;
   currentLayer = null;
   nextTick(() => {
-    initMap();
+    void initMap();
   });
 };
 const onBranchChange = async () => {
@@ -1095,15 +1117,21 @@ const onBranchChange = async () => {
   closeGeoJsonImportDialog();
   await loadPolygons();
   await nextTick();
-  initMap();
+  await initMap();
 };
-const initMap = () => {
+const zoomInMap = () => {
+  if (!map) return;
+  map.setZoom(map.getZoom() + 1, { duration: 120 });
+};
+const zoomOutMap = () => {
+  if (!map) return;
+  map.setZoom(map.getZoom() - 1, { duration: 120 });
+};
+const initMap = async () => {
+  const ymaps = await ensureYandex();
   if (map) {
-    map.remove();
-  }
-  drawControlVisible = true;
-  if (L?.GeometryUtil?.readableArea) {
-    L.GeometryUtil.readableArea = () => "";
+    map.destroy();
+    map = null;
   }
   const container = document.getElementById("map");
   if (!container) return;
@@ -1117,116 +1145,68 @@ const initMap = () => {
       center = [selectedCity.latitude, selectedCity.longitude];
     }
   }
-  map = L.map("map", {
-    zoomControl: false,
-    attributionControl: false,
-  }).setView(center, 12);
-  tileLayer = getTileLayer({ maxZoom: 20 }).addTo(map);
+  map = new ymaps.Map(
+    container,
+    {
+      center,
+      zoom: 12,
+      controls: [],
+    },
+    {
+      suppressMapOpenBlock: true,
+    },
+  );
   if (selectedBranch) {
-    const branchIcon = createMarkerIcon("pin", "primary", 18);
-    L.marker(center, { icon: branchIcon })
-      .addTo(map)
-      .bindPopup(`<strong>${selectedBranch.name}</strong><br>${selectedBranch.address || ""}`, { autoPan: false });
-  }
-  drawnItems = new L.FeatureGroup();
-  map.addLayer(drawnItems);
-  importPreviewLayer = new L.FeatureGroup();
-  map.addLayer(importPreviewLayer);
-  if (branchId.value && !isManager.value) {
-    drawControlVisible = true;
-    drawControl = new L.Control.Draw({
-      edit: {
-        featureGroup: drawnItems,
-        remove: false,
+    branchMarker = new ymaps.Placemark(
+      center,
+      {
+        balloonContentBody: `<strong>${selectedBranch.name}</strong><br>${selectedBranch.address || ""}`,
       },
-      draw: {
-        polygon: {
-          allowIntersection: false,
-          showArea: false,
-          shapeOptions: {
-            color: getMapColor("accent"),
-            fillColor: getMapColor("accentFill"),
-            fillOpacity: 1,
-            weight: 3,
-            opacity: 0.9,
-          },
-        },
-        polyline: false,
-        rectangle: false,
-        circle: false,
-        circlemarker: false,
-        marker: false,
+      {
+        preset: "islands#redIcon",
       },
-    });
-    if (drawControlVisible) {
-      map.addControl(drawControl);
-    }
-    map.on(L.Draw.Event.CREATED, (event) => {
-      const layer = event.layer;
-      if (currentLayer) {
-        drawnItems.removeLayer(currentLayer);
-      }
-      currentLayer = layer;
-      drawnItems.addLayer(layer);
-      showModal.value = true;
-      editing.value = null;
-    });
-  } else if (isManager.value) {
-    drawControlVisible = false;
+    );
+    map.geoObjects.add(branchMarker);
   }
   renderPolygonsOnMap();
   renderGeoJsonImportPreview();
-  if (branchId.value && !isManager.value) {
-    editHandler = new L.EditToolbar.Edit(map, {
-      featureGroup: drawnItems,
-      selectedPathOptions: {
-        color: getMapColor("warning"),
-        fillColor: getMapColor("warning"),
-        fillOpacity: 0.2,
-      },
-    });
-  } else {
-    editHandler = null;
-  }
 };
 const renderPolygonsOnMap = () => {
-  if (!map || !drawnItems) return;
-  drawnItems.clearLayers();
-  polygonLayers.clear();
+  if (!map || !yandexMaps) return;
+  clearRenderedPolygons();
   const isImportPreviewActive = showGeoJsonImportDialog.value && geoJsonImportItems.value.length > 0;
   const visiblePolygons = filteredPolygons.value;
-  const accent = getMapColor("accent");
-  const accentFill = getMapColor("accentFill");
-  const danger = getMapColor("danger");
-  const muted = "#9ca3af";
   const referenceCenter = getReferenceCenter();
   visiblePolygons.forEach((polygon) => {
     if (!polygon.polygon) return;
-    let color, fillOpacity;
+    let color;
+    let fillOpacity;
     if (isPolygonBlocked(polygon)) {
-      color = danger;
+      color = MAP_DANGER;
       fillOpacity = 0.3;
     } else if (!polygon.is_active) {
-      color = muted;
+      color = MAP_MUTED;
       fillOpacity = 0.2;
     } else {
-      color = accentFill;
+      color = MAP_ACCENT_FILL;
       fillOpacity = 1;
     }
-    const style = {
-      color: accent,
-      fillColor: color,
-      fillOpacity: isImportPreviewActive ? Math.min(fillOpacity, 0.08) : fillOpacity,
-      weight: isImportPreviewActive ? 2 : 3,
-      opacity: isImportPreviewActive ? 0.35 : 0.9,
-    };
     const rawCoords = polygon.polygon?.coordinates?.[0];
     if (!rawCoords?.length) return;
     const coords = toLeafletCoords(rawCoords, referenceCenter);
     if (!coords.length) return;
-    const layer = L.polygon(coords, style);
-    layer.polygonId = polygon.id;
-    layer.on("click", () => {
+    const layer = new yandexMaps.Polygon(
+      [coords],
+      {},
+      {
+        strokeColor: MAP_ACCENT,
+        fillColor: color,
+        fillOpacity: isImportPreviewActive ? Math.min(fillOpacity, 0.08) : fillOpacity,
+        strokeWidth: isImportPreviewActive ? 2 : 3,
+        opacity: isImportPreviewActive ? 0.35 : 0.9,
+      },
+    );
+    layer.events.add("click", () => {
       openPolygonSidebar(polygon);
     });
     let statusBadge = "";
@@ -1249,8 +1229,9 @@ const renderPolygonsOnMap = () => {
         ${statusBadge}
       </div>
     `;
-    layer.bindPopup(popupContent, { autoPan: false });
-    drawnItems.addLayer(layer);
+    layer.properties.set("balloonContentBody", popupContent);
+    map.geoObjects.add(layer);
+    renderedPolygonLayers.push(layer);
     polygonLayers.set(polygon.id, layer);
   });
 };
@@ -1262,7 +1243,7 @@ const saveDeliveryZonesContext = () => {
   };
   if (map) {
     const center = map.getCenter();
-    additionalData.mapCenter = { lat: center.lat, lng: center.lng };
+    additionalData.mapCenter = { lat: Number(center?.[0]), lng: Number(center?.[1]) };
   }
   saveContext({ cityId: cityId.value }, additionalData);
 };
@@ -1315,8 +1296,11 @@ const getPolygonStatusClass = (polygon) => {
 const focusPolygonOnMap = (polygon, openSidebar = false) => {
   if (!polygon?.id) return;
   const layer = polygonLayers.get(polygon.id);
-  if (layer?.getBounds && map) {
-    map.fitBounds(layer.getBounds(), { padding: [36, 36], maxZoom: 16 });
+  if (map && layer?.geometry?.getBounds) {
+    const bounds = layer.geometry.getBounds();
+    if (bounds) {
+      map.setBounds(bounds, { checkZoomRange: true, zoomMargin: 36 });
+    }
   }
   if (openSidebar) {
     showMobilePolygonList.value = false;
@@ -1408,7 +1392,7 @@ const unblockPolygon = async (polygon) => {
 };
 const onFilterChange = () => {
   nextTick(() => {
-    if (map && drawnItems) {
+    if (map) {
       renderPolygonsOnMap();
     }
   });
@@ -1560,9 +1544,6 @@ const savePolygonFromSidebar = async (data) => {
       delivery_time: data.delivery_time,
       is_active: data.is_active ? 1 : 0,
     };
-    if (editingPolygonId.value === data.id && currentLayer) {
-      payload.polygon = currentLayer.toGeoJSON().geometry.coordinates[0];
-    }
     await api.put(`/api/polygons/admin/${data.id}`, payload);
     await loadPolygons();
     await loadAllPolygons();
@@ -1602,44 +1583,15 @@ const transferPolygon = async (data) => {
   }
 };
 const startRedrawPolygon = (polygon) => {
-  if (!ensureEditAccess("Недостаточно прав для редактирования полигона")) return;
-  if (!polygon?.id) return;
-  const layer = polygonLayers.get(polygon.id);
-  if (!layer) return;
-  stopPolygonEditing();
-  currentLayer = layer;
-  editingPolygonId.value = polygon.id;
-  if (drawControl && map && drawControlVisible) {
-    map.removeControl(drawControl);
-    drawControlVisible = false;
-  }
-  if (layer.bringToFront) {
-    layer.bringToFront();
-  }
-  if (layer.editing?.enable) {
-    layer.editing.enable();
-  }
+  editPolygon(polygon);
 };
 const stopPolygonEditing = () => {
-  if (currentLayer?.editing?.disable) {
-    currentLayer.editing.disable();
-  }
-  if (drawControl && map && !drawControlVisible) {
-    map.addControl(drawControl);
-    drawControlVisible = true;
-  }
   editingPolygonId.value = null;
   currentLayer = null;
 };
 const closeModal = () => {
   showModal.value = false;
   editing.value = null;
-  if (editHandler?.disable) {
-    editHandler.disable();
-  }
-  if (currentLayer?.editing?.disable) {
-    currentLayer.editing.disable();
-  }
   renderPolygonsOnMap();
   form.value = {
     name: "",
@@ -1648,12 +1600,29 @@ const closeModal = () => {
 };
 const submitPolygon = async () => {
   if (!ensureEditAccess("Недостаточно прав для сохранения полигона")) return;
+  if (!currentLayer?.geometry?.getCoordinates) {
+    showWarningNotification("Сначала нарисуйте полигон");
+    return;
+  }
+  const ring = currentLayer.geometry.getCoordinates()?.[0] || [];
+  const normalizedRing = ring
+    .filter((coord) => Array.isArray(coord) && coord.length >= 2)
+    .map((coord) => [Number(coord[1]), Number(coord[0])]);
+  if (normalizedRing.length < 3) {
+    showWarningNotification("Полигон содержит недостаточно точек");
+    return;
+  }
+  const [firstLng, firstLat] = normalizedRing[0];
+  const [lastLng, lastLat] = normalizedRing[normalizedRing.length - 1];
+  if (firstLng !== lastLng || firstLat !== lastLat) {
+    normalizedRing.push([firstLng, firstLat]);
+  }
   try {
     const payload = {
       branch_id: parseInt(branchId.value),
       name: form.value.name,
       delivery_time: form.value.delivery_time,
-      polygon: currentLayer ? currentLayer.toGeoJSON().geometry.coordinates[0] : editing.value?.polygon?.coordinates?.[0] || [],
+      polygon: normalizedRing,
     };
     if (editing.value) {
       await api.put(`/api/polygons/admin/${editing.value.id}`, payload);
@@ -1671,8 +1640,8 @@ const submitPolygon = async () => {
 watch(
   () => showModal.value,
   (open) => {
-    if (!open && currentLayer && !editing.value && drawnItems) {
-      drawnItems.removeLayer(currentLayer);
+    if (!open && currentLayer && !editing.value && map) {
+      map.geoObjects.remove(currentLayer);
       currentLayer = null;
     }
   },
@@ -1680,7 +1649,7 @@ watch(
 watch(
   () => [allPolygons.value, polygons.value, cityId.value, branchId.value],
   () => {
-    if (map && drawnItems) {
+    if (map) {
       renderPolygonsOnMap();
       renderGeoJsonImportPreview();
     }
@@ -1697,7 +1666,7 @@ watch(
 watch(
   () => showGeoJsonImportDialog.value,
   (open) => {
-    if (!map || !drawnItems) return;
+    if (!map) return;
     renderPolygonsOnMap();
     if (open) {
       renderGeoJsonImportPreview();
@@ -1732,21 +1701,20 @@ onMounted(async () => {
   }
 
   await nextTick();
-  initMap();
+  await initMap();
 
   if (context?.mapCenter && map) {
-    map.setView([context.mapCenter.lat, context.mapCenter.lng], 12);
+    map.setCenter([context.mapCenter.lat, context.mapCenter.lng], 12, { duration: 0 });
     restoreScroll(context.scroll);
   }
 });
 onUnmounted(() => {
   closeGeoJsonImportDialog();
   if (map) {
-    map.remove();
+    map.destroy();
     map = null;
   }
-  importPreviewLayer = null;
-  tileLayer = null;
+  yandexMaps = null;
 });
 </script>
 <style>

@@ -164,8 +164,6 @@ import { devError } from "@/shared/utils/logger";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch, shallowRef } from "vue";
 import { MapPin, MapPinned, Plus, Save, Trash2 } from "lucide-vue-next";
 import { useRoute, useRouter } from "vue-router";
-import L from "leaflet";
-import "leaflet/dist/leaflet.css";
 import api from "@/shared/api/client.js";
 import Button from "@/shared/components/ui/button/Button.vue";
 import Card from "@/shared/components/ui/card/Card.vue";
@@ -177,7 +175,7 @@ import BackButton from "@/shared/components/BackButton.vue";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/components/ui/select";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
 import { useReferenceStore } from "@/shared/stores/reference.js";
-import { createMarkerIcon, getTileLayer } from "@/shared/utils/leaflet.js";
+import { loadYandexMaps } from "@/shared/services/yandexMaps.js";
 import { formatPhoneInput, isValidPhone, normalizeBoolean, normalizePhone } from "@/shared/utils/format.js";
 
 const route = useRoute();
@@ -213,7 +211,7 @@ const form = ref({
 
 const branchMap = shallowRef(null);
 const branchMarker = shallowRef(null);
-const branchTileLayer = shallowRef(null);
+const yandexMaps = shallowRef(null);
 
 const days = [
   { value: "monday", label: "Понедельник" },
@@ -271,9 +269,16 @@ const sortWorkingHours = () => {
   });
 };
 
+const syncBranchMarkerPosition = () => {
+  const coords = branchMarker.value?.geometry?.getCoordinates?.();
+  if (!Array.isArray(coords) || coords.length < 2) return;
+  form.value.latitude = Number(coords[0]);
+  form.value.longitude = Number(coords[1]);
+};
+
 const initBranchMap = () => {
   if (branchMap.value) {
-    branchMap.value.remove();
+    branchMap.value.destroy();
   }
   let center = [55.751244, 37.618423];
   if (form.value.latitude && form.value.longitude) {
@@ -285,40 +290,42 @@ const initBranchMap = () => {
     }
   }
   const container = document.getElementById("branch-map");
-  if (!container) return;
-  branchMap.value = L.map(container, {
-    attributionControl: false,
-    zoomControl: true,
-  }).setView(center, 13);
-  branchTileLayer.value = getTileLayer({ maxZoom: 20 }).addTo(branchMap.value);
+  if (!container || !yandexMaps.value) return;
+  branchMap.value = new yandexMaps.value.Map(
+    container,
+    {
+      center,
+      zoom: 13,
+      controls: ["zoomControl"],
+    },
+    {
+      suppressMapOpenBlock: true,
+    },
+  );
   if (form.value.latitude && form.value.longitude) {
-    const branchIcon = createMarkerIcon("pin", "primary", 18);
-    branchMarker.value = L.marker([form.value.latitude, form.value.longitude], {
+    branchMarker.value = new yandexMaps.value.Placemark([form.value.latitude, form.value.longitude], {}, {
       draggable: true,
-      icon: branchIcon,
-    }).addTo(branchMap.value);
-    branchMarker.value.on("dragend", () => {
-      const pos = branchMarker.value.getLatLng();
-      form.value.latitude = pos.lat;
-      form.value.longitude = pos.lng;
+      preset: "islands#redIcon",
     });
+    branchMap.value.geoObjects.add(branchMarker.value);
+    branchMarker.value.events.add("dragend", syncBranchMarkerPosition);
   }
-  branchMap.value.on("click", (event) => {
-    form.value.latitude = event.latlng.lat;
-    form.value.longitude = event.latlng.lng;
-    const branchIcon = createMarkerIcon("pin", "primary", 18);
+  branchMap.value.events.add("click", (event) => {
+    const coords = event.get("coords");
+    const lat = Number(coords?.[0]);
+    const lon = Number(coords?.[1]);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+    form.value.latitude = lat;
+    form.value.longitude = lon;
     if (branchMarker.value) {
-      branchMarker.value.setLatLng(event.latlng);
+      branchMarker.value.geometry.setCoordinates([lat, lon]);
     } else {
-      branchMarker.value = L.marker(event.latlng, {
+      branchMarker.value = new yandexMaps.value.Placemark([lat, lon], {}, {
         draggable: true,
-        icon: branchIcon,
-      }).addTo(branchMap.value);
-      branchMarker.value.on("dragend", () => {
-        const pos = branchMarker.value.getLatLng();
-        form.value.latitude = pos.lat;
-        form.value.longitude = pos.lng;
+        preset: "islands#redIcon",
       });
+      branchMap.value.geoObjects.add(branchMarker.value);
+      branchMarker.value.events.add("dragend", syncBranchMarkerPosition);
     }
   });
 };
@@ -336,19 +343,16 @@ const geocodeAddress = async () => {
       form.value.latitude = response.data.lat;
       form.value.longitude = response.data.lng;
       if (branchMap.value) {
-        branchMap.value.setView([response.data.lat, response.data.lng], 15);
+        branchMap.value.setCenter([response.data.lat, response.data.lng], 15, { duration: 200 });
         if (branchMarker.value) {
-          branchMarker.value.setLatLng([response.data.lat, response.data.lng]);
+          branchMarker.value.geometry.setCoordinates([response.data.lat, response.data.lng]);
         } else {
-          branchMarker.value = L.marker([response.data.lat, response.data.lng], {
+          branchMarker.value = new yandexMaps.value.Placemark([response.data.lat, response.data.lng], {}, {
             draggable: true,
-            icon: createMarkerIcon("pin", "primary", 18),
-          }).addTo(branchMap.value);
-          branchMarker.value.on("dragend", () => {
-            const pos = branchMarker.value.getLatLng();
-            form.value.latitude = pos.lat;
-            form.value.longitude = pos.lng;
+            preset: "islands#redIcon",
           });
+          branchMap.value.geoObjects.add(branchMarker.value);
+          branchMarker.value.events.add("dragend", syncBranchMarkerPosition);
         }
       }
     }
@@ -510,6 +514,12 @@ watch(
 );
 
 onMounted(async () => {
+  try {
+    yandexMaps.value = await loadYandexMaps();
+  } catch (error) {
+    devError("Ошибка загрузки Яндекс Карт:", error);
+    showErrorNotification("Не удалось загрузить Яндекс Карты");
+  }
   await referenceStore.loadCities();
   await loadIikoBranches();
   if (!cityId.value) {
@@ -538,10 +548,10 @@ onMounted(async () => {
 
 onUnmounted(() => {
   if (branchMap.value) {
-    branchMap.value.remove();
+    branchMap.value.destroy();
     branchMap.value = null;
     branchMarker.value = null;
-    branchTileLayer.value = null;
+    yandexMaps.value = null;
   }
 });
 </script>

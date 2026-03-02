@@ -36,13 +36,14 @@
   </div>
 </template>
 <script setup>
-import { ref, computed, onMounted } from "vue";
-import { X, MapPin } from "lucide-vue-next";
+import { ref, computed, onMounted, onUnmounted } from "vue";
+import { X } from "lucide-vue-next";
 import { useRouter } from "vue-router";
 import { useLocationStore } from "@/modules/location/stores/location.js";
 import { formatPhone, normalizePhone } from "@/shared/utils/phone.js";
 import { citiesAPI } from "@/shared/api/endpoints.js";
 import { hapticFeedback } from "@/shared/services/telegram.js";
+import { loadYandexMaps } from "@/shared/services/yandexMaps.js";
 import { formatWorkHoursLines, getBranchOpenState, normalizeWorkHours } from "@/shared/utils/workingHours";
 import { devError } from "@/shared/utils/logger.js";
 import FloatingField from "@/shared/components/FloatingField.vue";
@@ -52,7 +53,6 @@ const mapContainerRef = ref(null);
 const searchQuery = ref("");
 const branches = ref([]);
 const selectedBranch = ref(locationStore.selectedBranch || null);
-let leafletLoading = null;
 let mapInstance = null;
 let markers = [];
 const filteredBranches = computed(() => {
@@ -71,9 +71,15 @@ onMounted(async () => {
   await loadBranches();
   await initMap();
 });
-function goBack() {
-  router.back();
-}
+
+onUnmounted(() => {
+  if (mapInstance) {
+    mapInstance.destroy();
+    mapInstance = null;
+  }
+  markers = [];
+});
+
 async function loadBranches() {
   try {
     const response = await citiesAPI.getBranches(locationStore.selectedCity.id);
@@ -93,54 +99,56 @@ async function loadBranches() {
 }
 async function initMap() {
   if (!mapContainerRef.value || mapInstance) return;
-  const L = await loadLeaflet();
-  if (!L) return;
+  const ymaps = await loadYandexMaps().catch((error) => {
+    devError("Не удалось загрузить карту Яндекс:", error);
+    return null;
+  });
+  if (!ymaps) return;
   const center = getCityCenter();
-  mapInstance = L.map(mapContainerRef.value, { zoomControl: false, attributionControl: false }).setView(center, 12);
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(mapInstance);
-  setMarkers(L);
+  mapInstance = new ymaps.Map(
+    mapContainerRef.value,
+    {
+      center,
+      zoom: 12,
+      controls: [],
+    },
+    {
+      suppressMapOpenBlock: true,
+    },
+  );
+  setMarkers(ymaps);
 }
-function setMarkers(L) {
-  markers.forEach((marker) => marker.remove());
+function setMarkers(ymaps) {
+  markers.forEach((marker) => mapInstance.geoObjects.remove(marker));
   markers = [];
   branches.value.forEach((branch) => {
     const { lat, lon } = normalizeCoords(branch.latitude, branch.longitude);
     if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
-    const marker = L.marker([lat, lon], { icon: createBranchMarkerIcon(L) }).addTo(mapInstance);
-    marker.on("click", () => selectBranch(branch));
+    const marker = new ymaps.Placemark(
+      [lat, lon],
+      {
+        hintContent: branch.displayName || branch.name,
+        balloonContent: branch.displayAddress || branch.address || "",
+      },
+      {
+        preset: "islands#redIcon",
+      },
+    );
+    marker.events.add("click", () => selectBranch(branch));
+    mapInstance.geoObjects.add(marker);
     markers.push(marker);
-  });
-}
-function createBranchMarkerIcon(L) {
-  const pinSize = 36;
-  const headSize = 20;
-  const tailSize = 8;
-  return L.divIcon({
-    className: "fma-miniapp-branch-marker",
-    html: `
-      <div style="position:relative;width:${pinSize}px;height:${pinSize}px;">
-        <div style="
-          position:absolute;left:50%;bottom:8px;transform:translateX(-50%);
-          width:${headSize}px;height:${headSize}px;border-radius:999px;
-          background:#e53935;border:2px solid #fff;box-shadow:0 4px 12px rgba(15,23,42,.35);
-          display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:800;line-height:1;
-        ">Я</div>
-        <div style="
-          position:absolute;left:50%;bottom:2px;transform:translateX(-50%) rotate(45deg);
-          width:${tailSize}px;height:${tailSize}px;background:#e53935;
-          border-right:2px solid #fff;border-bottom:2px solid #fff;box-shadow:0 3px 10px rgba(15,23,42,.25);
-        "></div>
-      </div>
-    `,
-    iconSize: [pinSize, pinSize],
-    iconAnchor: [pinSize / 2, Math.round(pinSize * 0.95)],
-    popupAnchor: [0, -Math.round(pinSize * 0.75)],
   });
 }
 function selectBranch(branch) {
   hapticFeedback("light");
   selectedBranch.value = branch;
   locationStore.setBranch(branch);
+  const { lat, lon } = normalizeCoords(branch.latitude, branch.longitude);
+  if (mapInstance && Number.isFinite(lat) && Number.isFinite(lon)) {
+    mapInstance.setCenter([lat, lon], Math.max(mapInstance.getZoom(), 14), {
+      duration: 250,
+    });
+  }
 }
 function confirmPickup() {
   if (!selectedBranch.value) {
@@ -209,30 +217,6 @@ function normalizeCoords(latValue, lonValue) {
 }
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\$&");
-}
-async function loadLeaflet() {
-  if (leafletLoading) return leafletLoading;
-  leafletLoading = new Promise((resolve) => {
-    if (window.L) {
-      resolve(window.L);
-      return;
-    }
-    const css = document.createElement("link");
-    css.rel = "stylesheet";
-    css.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
-    css.integrity = "sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H";
-    css.crossOrigin = "anonymous";
-    document.head.appendChild(css);
-    const script = document.createElement("script");
-    script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
-    script.integrity = "sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH";
-    script.crossOrigin = "anonymous";
-    script.async = true;
-    script.onload = () => resolve(window.L);
-    script.onerror = () => resolve(null);
-    document.body.appendChild(script);
-  });
-  return leafletLoading;
 }
 </script>
 <style scoped>

@@ -2,6 +2,12 @@
   <section class="relative h-full min-h-[320px] w-full flex-1 bg-background lg:min-h-0">
     <div ref="mapContainerRef" class="absolute inset-0 z-0"></div>
     <div class="pointer-events-auto absolute right-2 top-2 z-20 flex flex-col gap-2 sm:right-4 sm:top-4">
+      <Button size="icon" variant="outline" @click="$emit('zoomIn')">
+        <Plus :size="16" />
+      </Button>
+      <Button size="icon" variant="outline" @click="$emit('zoomOut')">
+        <Minus :size="16" />
+      </Button>
       <Button size="icon" variant="outline" @click="$emit('togglePolygons')">
         <Eye v-if="polygonsVisible" :size="16" />
         <EyeOff v-else :size="16" />
@@ -15,14 +21,14 @@
 
 <script setup>
 import { ref } from "vue";
-import { Eye, EyeOff, LocateFixed } from "lucide-vue-next";
+import { Eye, EyeOff, LocateFixed, Minus, Plus } from "lucide-vue-next";
 import Button from "@/shared/components/ui/button/Button.vue";
 
 defineProps({
   polygonsVisible: { type: Boolean, required: true },
 });
 
-defineEmits(["togglePolygons", "centerOnBranch"]);
+defineEmits(["togglePolygons", "centerOnBranch", "zoomIn", "zoomOut"]);
 
 const mapContainerRef = ref(null);
 

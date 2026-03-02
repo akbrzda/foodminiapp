@@ -718,22 +718,27 @@ async function submitOrder() {
         orderData.delivery_latitude = locationStore.deliveryCoords.lat;
         orderData.delivery_longitude = locationStore.deliveryCoords.lng;
       }
-      const addressParts = deliveryAddress.value.split(",").map((s) => s.trim());
+      const rawAddress = String(deliveryAddress.value || "").trim();
+      const commaParts = rawAddress
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean);
       let street = "";
       let house = "";
-      if (addressParts.length >= 2) {
-        house = addressParts[addressParts.length - 1];
-        street = addressParts.slice(0, -1).join(", ");
+      if (commaParts.length >= 2 && /\d/.test(commaParts[commaParts.length - 1])) {
+        house = commaParts[commaParts.length - 1];
+        street = commaParts.slice(0, -1).join(", ");
       } else {
-        const match = deliveryAddress.value.match(/^(.+?)\s+(\d+.*)$/);
+        const match = rawAddress.match(/^(.*?)(?:\s+|,\s*)(\d[\dA-Za-zА-Яа-я/-]*)$/u);
         if (match) {
           street = match[1];
           house = match[2];
         } else {
-          street = deliveryAddress.value;
-          house = "";
+          street = rawAddress;
         }
       }
+      street = String(street || "").trim();
+      house = String(house || "").trim();
       orderData.delivery_street = street;
       orderData.delivery_house = house;
       orderData.delivery_entrance = deliveryDetails.value.entrance;

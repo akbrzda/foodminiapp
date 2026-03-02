@@ -21,36 +21,6 @@
               </FieldContent>
             </Field>
             <Field>
-              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Город iiko (справочник)</FieldLabel>
-              <FieldContent>
-                <div v-if="iikoAddressCitiesLoading" class="space-y-2">
-                  <Skeleton class="h-10 w-full" />
-                  <Skeleton class="h-10 w-full" />
-                </div>
-                <template v-else>
-                  <div class="space-y-2">
-                    <Select v-model="form.iiko_city_id">
-                      <SelectTrigger class="w-full" :disabled="!iikoAddressCities.length">
-                        <SelectValue placeholder="Не привязан" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="">Не привязан</SelectItem>
-                        <SelectItem v-for="city in iikoAddressCities" :key="city.id" :value="city.id">
-                          {{ city.name }}
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <div class="flex items-center justify-between gap-2 text-xs">
-                      <p :class="iikoHintClass">{{ iikoHintText }}</p>
-                      <Button type="button" variant="outline" size="sm" :disabled="iikoAddressCitiesLoading" @click="loadIikoAddressCities">
-                        Обновить список
-                      </Button>
-                    </div>
-                  </div>
-                </template>
-              </FieldContent>
-            </Field>
-            <Field>
               <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Поиск на карте</FieldLabel>
               <FieldContent>
                 <div class="flex flex-col gap-2 sm:flex-row">
@@ -117,11 +87,9 @@
 
 <script setup>
 import { devError } from "@/shared/utils/logger";
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
 import { MapPin, Save, Search } from "lucide-vue-next";
 import { useRoute, useRouter } from "vue-router";
-import L from "leaflet";
-import "leaflet/dist/leaflet.css";
 import api from "@/shared/api/client.js";
 import Button from "@/shared/components/ui/button/Button.vue";
 import Card from "@/shared/components/ui/card/Card.vue";
@@ -130,10 +98,9 @@ import { Field, FieldContent, FieldGroup, FieldLabel } from "@/shared/components
 import Input from "@/shared/components/ui/input/Input.vue";
 import PageHeader from "@/shared/components/PageHeader.vue";
 import BackButton from "@/shared/components/BackButton.vue";
-import Skeleton from "@/shared/components/ui/skeleton/Skeleton.vue";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/components/ui/select";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
-import { createMarkerIcon, getTileLayer } from "@/shared/utils/leaflet.js";
+import { loadYandexMaps } from "@/shared/services/yandexMaps.js";
 
 const route = useRoute();
 const router = useRouter();
@@ -146,26 +113,12 @@ const pageSubtitle = computed(() => (isEditing.value ? "Изменение да�
 
 const saving = ref(false);
 const searchQuery = ref("");
-const iikoAddressCities = ref([]);
-const iikoAddressCitiesLoading = ref(false);
-const iikoAddressCitiesError = ref("");
 const form = ref({
   name: "",
-  iiko_city_id: "",
   latitude: null,
   longitude: null,
   timezone: "Europe/Moscow",
   is_active: true,
-});
-const iikoHintText = computed(() => {
-  if (iikoAddressCitiesLoading.value) return "Загружаем список городов iiko...";
-  if (iikoAddressCitiesError.value) return iikoAddressCitiesError.value;
-  if (!iikoAddressCities.value.length) return "Список пуст. Проверьте настройки iiko в Интеграциях и нажмите «Обновить список».";
-  return `Доступно городов iiko: ${iikoAddressCities.value.length}`;
-});
-const iikoHintClass = computed(() => {
-  if (iikoAddressCitiesError.value || !iikoAddressCities.value.length) return "text-red-600";
-  return "text-muted-foreground";
 });
 const timezoneOptions = [
   { value: "Europe/Kaliningrad", label: "Europe/Kaliningrad (UTC+2)" },
@@ -183,7 +136,15 @@ const timezoneOptions = [
 
 let cityMap = null;
 let cityMarker = null;
-let cityTileLayer = null;
+let yandexMaps = null;
+
+const syncMarkerPosition = () => {
+  if (!cityMarker) return;
+  const coords = cityMarker.geometry?.getCoordinates?.();
+  if (!Array.isArray(coords) || coords.length < 2) return;
+  form.value.latitude = Number(coords[0]);
+  form.value.longitude = Number(coords[1]);
+};
 
 const goBack = () => {
   if (window.history.state?.back) {
@@ -195,42 +156,46 @@ const goBack = () => {
 
 const initCityMap = () => {
   if (cityMap) {
-    cityMap.remove();
+    cityMap.destroy();
   }
   const center = form.value.latitude && form.value.longitude ? [form.value.latitude, form.value.longitude] : [55.751244, 37.618423];
   const container = document.getElementById("city-map");
-  if (!container) return;
-  cityMap = L.map(container, {
-    attributionControl: false,
-    zoomControl: true,
-  }).setView(center, form.value.latitude ? 11 : 5);
-  cityTileLayer = getTileLayer({ maxZoom: 20 }).addTo(cityMap);
+  if (!container || !yandexMaps) return;
+  cityMap = new yandexMaps.Map(
+    container,
+    {
+      center,
+      zoom: form.value.latitude ? 11 : 5,
+      controls: ["zoomControl"],
+    },
+    {
+      suppressMapOpenBlock: true,
+    },
+  );
   if (form.value.latitude && form.value.longitude) {
-    cityMarker = L.marker([form.value.latitude, form.value.longitude], {
+    cityMarker = new yandexMaps.Placemark([form.value.latitude, form.value.longitude], {}, {
       draggable: true,
-      icon: createMarkerIcon("pin", "primary", 18),
-    }).addTo(cityMap);
-    cityMarker.on("dragend", () => {
-      const pos = cityMarker.getLatLng();
-      form.value.latitude = pos.lat;
-      form.value.longitude = pos.lng;
+      preset: "islands#redIcon",
     });
+    cityMap.geoObjects.add(cityMarker);
+    cityMarker.events.add("dragend", syncMarkerPosition);
   }
-  cityMap.on("click", (event) => {
-    form.value.latitude = event.latlng.lat;
-    form.value.longitude = event.latlng.lng;
+  cityMap.events.add("click", (event) => {
+    const coords = event.get("coords");
+    const lat = Number(coords?.[0]);
+    const lon = Number(coords?.[1]);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+    form.value.latitude = lat;
+    form.value.longitude = lon;
     if (cityMarker) {
-      cityMarker.setLatLng(event.latlng);
+      cityMarker.geometry.setCoordinates([lat, lon]);
     } else {
-      cityMarker = L.marker(event.latlng, {
+      cityMarker = new yandexMaps.Placemark([lat, lon], {}, {
         draggable: true,
-        icon: createMarkerIcon("pin", "primary", 18),
-      }).addTo(cityMap);
-      cityMarker.on("dragend", () => {
-        const pos = cityMarker.getLatLng();
-        form.value.latitude = pos.lat;
-        form.value.longitude = pos.lng;
+        preset: "islands#redIcon",
       });
+      cityMap.geoObjects.add(cityMarker);
+      cityMarker.events.add("dragend", syncMarkerPosition);
     }
   });
 };
@@ -245,19 +210,16 @@ const geocodeCity = async () => {
       form.value.latitude = response.data.lat;
       form.value.longitude = response.data.lng;
       if (cityMap) {
-        cityMap.setView([response.data.lat, response.data.lng], 11);
+        cityMap.setCenter([response.data.lat, response.data.lng], 11, { duration: 200 });
         if (cityMarker) {
-          cityMarker.setLatLng([response.data.lat, response.data.lng]);
+          cityMarker.geometry.setCoordinates([response.data.lat, response.data.lng]);
         } else {
-          cityMarker = L.marker([response.data.lat, response.data.lng], {
+          cityMarker = new yandexMaps.Placemark([response.data.lat, response.data.lng], {}, {
             draggable: true,
-            icon: createMarkerIcon("pin", "primary", 18),
-          }).addTo(cityMap);
-          cityMarker.on("dragend", () => {
-            const pos = cityMarker.getLatLng();
-            form.value.latitude = pos.lat;
-            form.value.longitude = pos.lng;
+            preset: "islands#redIcon",
           });
+          cityMap.geoObjects.add(cityMarker);
+          cityMarker.events.add("dragend", syncMarkerPosition);
         }
       }
     }
@@ -283,7 +245,6 @@ const loadCity = async () => {
     }
     form.value = {
       name: city.name,
-      iiko_city_id: city.iiko_city_id || "",
       latitude: city.latitude ? Number(city.latitude) : null,
       longitude: city.longitude ? Number(city.longitude) : null,
       timezone: city.timezone || "Europe/Moscow",
@@ -295,29 +256,6 @@ const loadCity = async () => {
     devError("Ошибка загрузки города:", error);
     showErrorNotification("Ошибка загрузки города");
     goBack();
-  }
-};
-
-const loadIikoAddressCities = async () => {
-  iikoAddressCitiesLoading.value = true;
-  iikoAddressCitiesError.value = "";
-  try {
-    const response = await api.get("/api/cities/admin/iiko/address-cities");
-    iikoAddressCities.value = Array.isArray(response.data?.cities) ? response.data.cities : [];
-    if (!iikoAddressCities.value.length) {
-      iikoAddressCitiesError.value = "iiko вернул пустой справочник городов.";
-    }
-  } catch (error) {
-    iikoAddressCities.value = [];
-    if (error?.response?.status === 400) {
-      iikoAddressCitiesError.value = "Интеграция iiko выключена или не настроена.";
-      return;
-    }
-    iikoAddressCitiesError.value = "Не удалось загрузить справочник городов iiko.";
-    devError("Ошибка загрузки справочника городов iiko:", error);
-    showErrorNotification("Не удалось загрузить справочник городов iiko");
-  } finally {
-    iikoAddressCitiesLoading.value = false;
   }
 };
 
@@ -340,16 +278,24 @@ const submitCity = async () => {
 };
 
 onMounted(() => {
-  loadIikoAddressCities();
-  loadCity();
+  loadYandexMaps()
+    .then((ymaps) => {
+      yandexMaps = ymaps;
+      loadCity();
+    })
+    .catch((error) => {
+      devError("Ошибка загрузки Яндекс Карт:", error);
+      showErrorNotification("Не удалось загрузить Яндекс Карты");
+      loadCity();
+    });
 });
 
 onUnmounted(() => {
   if (cityMap) {
-    cityMap.remove();
+    cityMap.destroy();
     cityMap = null;
     cityMarker = null;
-    cityTileLayer = null;
+    yandexMaps = null;
   }
 });
 </script>

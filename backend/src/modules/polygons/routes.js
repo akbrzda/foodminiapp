@@ -1,14 +1,13 @@
 import express from "express";
 import db from "../../config/database.js";
-import { authenticateToken, requireRole, checkCityAccess } from "../../middleware/auth.js";
+import { authenticateToken, requireRole } from "../../middleware/auth.js";
 import redis from "../../config/redis.js";
 import axios from "axios";
 import { findTariffForAmount, getNextThreshold, validateTariffs } from "./utils/deliveryTariffs.js";
-import { checkIikoIntegration } from "../integrations/middleware/checkIikoIntegration.js";
-import { getIikoClientOrNull, getIntegrationSettings } from "../integrations/services/integrationConfigService.js";
+import { getSystemSettings } from "../../utils/settings.js";
 const router = express.Router();
 
-router.use("/admin", authenticateToken, checkIikoIntegration);
+router.use("/admin", authenticateToken);
 const parseGeoJson = (value) => {
   if (!value) return null;
   if (typeof value === "string") {
@@ -22,27 +21,13 @@ const parseGeoJson = (value) => {
 };
 const getPolygonMeta = async (polygonId) => {
   const [rows] = await db.query(
-    `SELECT dp.id, dp.branch_id, dp.source, b.city_id
+    `SELECT dp.id, dp.branch_id, b.city_id
      FROM delivery_polygons dp
      JOIN branches b ON dp.branch_id = b.id
-     WHERE dp.id = ?`,
+     WHERE dp.id = ? AND dp.source = 'local'`,
     [polygonId],
   );
   return rows[0] || null;
-};
-const hasIikoBranchMapping = (value) => {
-  return String(value || "").trim().length > 0;
-};
-const resolveBranchPolygonSource = (branch, iikoEnabled) => {
-  if (!iikoEnabled) return "local";
-  return hasIikoBranchMapping(branch?.iiko_terminal_group_id) ? "iiko" : "local";
-};
-const denyIikoPolygonWrite = (polygon, res) => {
-  if (polygon?.source !== "iiko") return false;
-  res.status(403).json({
-    error: "Редактирование iiko-полигонов недоступно. Изменения выполняются в iiko.",
-  });
-  return true;
 };
 const getTariffsByPolygonId = async (polygonId) => {
   const [rows] = await db.query(
@@ -65,91 +50,195 @@ const denyManagerWrite = (req, res) => {
   res.status(403).json({ error: "Недостаточно прав для выполнения действия" });
   return true;
 };
-const IIKO_STREETS_CACHE_TTL = 6 * 60 * 60;
-const IIKO_STREETS_SEARCH_CACHE_TTL = 5 * 60;
-const NOMINATIM_HEADERS = {
-  "User-Agent": "MiniappPanda/1.0 (Food Delivery Service)",
-};
+const STREETS_SEARCH_CACHE_TTL = 5 * 60;
+const YANDEX_GEOCODER_URL = "https://geocode-maps.yandex.ru/v1/";
+const YANDEX_SUGGEST_URL = "https://suggest-maps.yandex.ru/v1/suggest";
 const normalizeStreetName = (value) => String(value || "").trim();
 const normalizeStreetQuery = (value) => String(value || "").trim().toLowerCase();
-const mapIikoStreetItem = (street = {}) => {
-  const id = String(street?.id || "").trim();
-  const name = normalizeStreetName(street?.name);
-  if (!id || !name) return null;
-  const classifierId = String(street?.classifierId || "").trim();
+const parseYandexPoint = (geoObject = {}) => {
+  const rawPos = String(geoObject?.Point?.pos || "").trim();
+  if (!rawPos) return null;
+  const [lonRaw, latRaw] = rawPos.split(/\s+/);
+  const lon = Number.parseFloat(lonRaw);
+  const lat = Number.parseFloat(latRaw);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  return { lat, lon };
+};
+const getYandexAddressComponents = (geoObject = {}) => {
+  const components = geoObject?.metaDataProperty?.GeocoderMetaData?.Address?.Components;
+  return Array.isArray(components) ? components : [];
+};
+const findYandexComponentName = (components = [], kinds = []) => {
+  for (const kind of kinds) {
+    const found = components.find((component) => component?.kind === kind && String(component?.name || "").trim());
+    if (found) return String(found.name).trim();
+  }
+  return "";
+};
+const mapYandexGeoObject = (geoObject = {}) => {
+  const point = parseYandexPoint(geoObject);
+  if (!point) return null;
+  const meta = geoObject?.metaDataProperty?.GeocoderMetaData || {};
+  const components = getYandexAddressComponents(geoObject);
+  const street = findYandexComponentName(components, ["street", "route"]);
+  const house = findYandexComponentName(components, ["house"]);
+  const city = findYandexComponentName(components, ["locality", "province", "area"]);
+  const country = findYandexComponentName(components, ["country"]);
+  const fullText = String(meta?.text || "").trim();
+  const label = street ? (house ? `${street}, ${house}` : street) : fullText;
+  if (!label) return null;
   return {
-    id,
-    classifier_id: classifierId || null,
-    name,
-    source: "iiko",
+    lat: point.lat,
+    lon: point.lon,
+    lng: point.lon,
+    label,
+    formatted_address: fullText || label,
+    address: {
+      street,
+      house,
+      city,
+      country,
+    },
   };
 };
-const mapNominatimStreetItem = (name = "") => {
-  const normalizedName = normalizeStreetName(name);
-  if (!normalizedName) return null;
+const loadYandexMapsSettings = async () => {
+  const settings = await getSystemSettings();
   return {
-    id: `nominatim:${normalizedName.toLowerCase()}`,
+    geocoderApiKey: String(settings?.yandex_js_api_key || "").trim(),
+    suggestApiKey: String(settings?.yandex_suggest_api_key || "").trim(),
+    language: String(settings?.maps_default_language || "ru_RU").trim() || "ru_RU",
+  };
+};
+const requestYandexGeocoder = async ({ geocoderApiKey, language, query, results = 5, kind = "" }) => {
+  const params = {
+    apikey: geocoderApiKey,
+    geocode: query,
+    format: "json",
+    results: Math.min(Math.max(Number(results) || 1, 1), 20),
+    lang: language || "ru_RU",
+  };
+  if (kind) {
+    params.kind = kind;
+  }
+  const { data } = await axios.get(YANDEX_GEOCODER_URL, {
+    params,
+    timeout: 7000,
+  });
+  const members = data?.response?.GeoObjectCollection?.featureMember;
+  if (!Array.isArray(members)) return [];
+  return members.map((member) => mapYandexGeoObject(member?.GeoObject)).filter(Boolean);
+};
+const mapYandexStreetItem = (title = "", subtitle = "") => {
+  const normalizedTitle = normalizeStreetName(title);
+  const normalizedSubtitle = normalizeStreetName(subtitle);
+  if (!normalizedTitle) return null;
+  const label = normalizedSubtitle ? `${normalizedTitle}, ${normalizedSubtitle}` : normalizedTitle;
+  return {
+    id: `yandex:${label.toLowerCase()}`,
     classifier_id: null,
-    name: normalizedName,
-    source: "nominatim",
+    name: normalizedTitle,
+    label,
+    source: "yandex",
   };
 };
+const extractSuggestTags = (row = {}) => {
+  const rawTags = row?.tags;
+  if (!Array.isArray(rawTags)) return [];
+  return rawTags.map((tag) => String(tag || "").trim().toLowerCase()).filter(Boolean);
+};
+const isStreetSuggestResult = (row = {}) => {
+  const tags = extractSuggestTags(row);
+  if (tags.includes("street") || tags.includes("house")) return true;
+  const title = String(row?.title?.text || "").toLowerCase();
+  const subtitle = String(row?.subtitle?.text || "").toLowerCase();
+  return (
+    title.includes("улиц") ||
+    title.includes("проспект") ||
+    title.includes("переул") ||
+    title.includes("бульвар") ||
+    subtitle.includes("улиц") ||
+    subtitle.includes("проспект") ||
+    subtitle.includes("переул") ||
+    subtitle.includes("бульвар")
+  );
+};
+const collectStreetNamesFromSuggest = (rows = [], requestLimit = 10) => {
+  const uniqueStreetItems = [];
+  const seen = new Set();
+  for (const row of rows) {
+    if (!isStreetSuggestResult(row)) continue;
+    const title = String(row?.title?.text || "").trim();
+    const subtitle = String(row?.subtitle?.text || "").trim();
+    const mapped = mapYandexStreetItem(title || subtitle, subtitle);
+    const key = String(mapped?.label || "").toLowerCase();
+    if (!mapped || !key || seen.has(key)) continue;
+    seen.add(key);
+    uniqueStreetItems.push(mapped);
+    if (uniqueStreetItems.length >= requestLimit) break;
+  }
+  return uniqueStreetItems;
+};
+const STREET_QUERY_STOPWORDS = new Set(["улица", "ул", "ул.", "проспект", "пр-кт", "дом", "д", "д."]);
+const tokenizeStreetSearch = (value = "") =>
+  String(value || "")
+    .toLowerCase()
+    .replace(/[.,/#!$%^&*;:{}=\-_`~()]/g, " ")
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter((token) => token && !STREET_QUERY_STOPWORDS.has(token));
 const filterStreetItemsByQuery = (items = [], rawQuery = "", limit = 10) => {
-  const query = normalizeStreetQuery(rawQuery);
+  const queryTokens = tokenizeStreetSearch(rawQuery);
   const normalizedLimit = Math.min(Math.max(Number(limit) || 10, 1), 20);
   const filtered = items
-    .filter((item) => normalizeStreetQuery(item?.name).includes(query))
+    .filter((item) => {
+      if (!queryTokens.length) return true;
+      const searchable = `${item?.label || ""} ${item?.name || ""}`.toLowerCase();
+      return queryTokens.every((token) => searchable.includes(token));
+    })
     .slice(0, normalizedLimit);
   return filtered;
 };
-const searchNominatimStreets = async ({ query, cityName, latitude, longitude, limit = 10 }) => {
-  const requestLimit = Math.min(Math.max(Number(limit) || 10, 1), 20);
-  const params = {
-    q: cityName ? `${query}, ${cityName}` : query,
-    format: "json",
-    limit: Math.max(requestLimit * 2, 10),
-    addressdetails: 1,
+const searchYandexStreets = async ({ suggestApiKey, query, cityName, latitude, longitude, language, limit = 10 }) => {
+  const requestLimit = Math.min(Math.max(Number(limit) || 10, 1), 10);
+  const fullText = cityName ? `${query}, ${cityName}` : query;
+  const baseParams = {
+    apikey: suggestApiKey,
+    text: fullText,
+    lang: language || "ru_RU",
+    results: requestLimit,
+    print_address: 1,
+    strict_bounds: 1,
   };
-  if (Number.isFinite(latitude) && Number.isFinite(longitude) && query.length >= 3) {
-    const radius = 0.7;
-    params.viewbox = `${longitude - radius},${latitude - radius},${longitude + radius},${latitude + radius}`;
-    params.bounded = 1;
+  if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
+    baseParams.ll = `${longitude},${latitude}`;
+    baseParams.spn = "0.35,0.35";
   }
-
-  const { data } = await axios.get("https://nominatim.openstreetmap.org/search", {
-    params,
-    headers: NOMINATIM_HEADERS,
+  const strictStreetParams = {
+    ...baseParams,
+    types: "street,house",
+  };
+  const { data: strictData } = await axios.get(YANDEX_SUGGEST_URL, {
+    params: strictStreetParams,
     timeout: 5000,
   });
+  const strictItems = Array.isArray(strictData?.results) ? strictData.results : [];
+  let streetItems = collectStreetNamesFromSuggest(strictItems, requestLimit);
 
-  const uniqueStreetNames = [];
-  const seen = new Set();
-  for (const row of Array.isArray(data) ? data : []) {
-    const address = row?.address || {};
-    const streetName =
-      address.road ||
-      address.pedestrian ||
-      address.footway ||
-      address.residential ||
-      address.living_street ||
-      address.street ||
-      address.neighbourhood ||
-      "";
-    const normalized = normalizeStreetName(streetName);
-    const lower = normalized.toLowerCase();
-    if (!normalized || seen.has(lower)) continue;
-    seen.add(lower);
-    uniqueStreetNames.push(normalized);
+  if (streetItems.length === 0) {
+    const { data } = await axios.get(YANDEX_SUGGEST_URL, {
+      params: baseParams,
+      timeout: 5000,
+    });
+    const fallbackItems = Array.isArray(data?.results) ? data.results : [];
+    streetItems = collectStreetNamesFromSuggest(fallbackItems, requestLimit);
   }
 
-  return uniqueStreetNames.map((name) => mapNominatimStreetItem(name)).filter(Boolean).slice(0, requestLimit);
+  return streetItems.slice(0, requestLimit);
 };
 
 router.get("/city/:cityId", async (req, res, next) => {
   try {
     const cityId = req.params.cityId;
-    const integrationSettings = await getIntegrationSettings();
-    const iikoEnabled = Boolean(integrationSettings.iikoEnabled);
     const [polygons] = await db.query(
       `SELECT dp.id, dp.branch_id, dp.name, 
               dp.source,
@@ -157,24 +246,19 @@ router.get("/city/:cityId", async (req, res, next) => {
               dp.delivery_time,
               dp.min_order_amount, dp.delivery_cost,
               b.name as branch_name,
-              b.iiko_terminal_group_id,
               (SELECT COUNT(*) FROM delivery_tariffs dt WHERE dt.polygon_id = dp.id) as tariffs_count
        FROM delivery_polygons dp
        JOIN branches b ON dp.branch_id = b.id
-       WHERE b.city_id = ? AND dp.is_active = TRUE AND b.is_active = TRUE
+       WHERE b.city_id = ? AND dp.source = 'local' AND dp.is_active = TRUE AND b.is_active = TRUE
          AND (dp.is_blocked = FALSE OR 
               (dp.blocked_from IS NOT NULL AND dp.blocked_until IS NOT NULL 
                AND NOW() NOT BETWEEN dp.blocked_from AND dp.blocked_until))`,
       [cityId],
     );
-    const filteredPolygons = polygons.filter((polygon) => {
-      const requiredSource = resolveBranchPolygonSource(polygon, iikoEnabled);
-      return polygon.source === requiredSource;
-    });
-    if (!filteredPolygons.length) {
+    if (!polygons.length) {
       return res.json({ polygons: [] });
     }
-    const polygonIds = filteredPolygons.map((p) => p.id);
+    const polygonIds = polygons.map((p) => p.id);
     const placeholders = polygonIds.map(() => "?").join(",");
     const [tariffsRows] = await db.query(
       `SELECT id, polygon_id, amount_from, amount_to, delivery_cost
@@ -196,7 +280,7 @@ router.get("/city/:cityId", async (req, res, next) => {
         delivery_cost: row.delivery_cost,
       });
     });
-    const parsedPolygons = filteredPolygons.map((p) => ({
+    const parsedPolygons = polygons.map((p) => ({
       ...p,
       polygon: parseGeoJson(p.polygon),
       tariffs: tariffsByPolygon.get(p.id) || [],
@@ -209,12 +293,10 @@ router.get("/city/:cityId", async (req, res, next) => {
 router.get("/branch/:branchId", async (req, res, next) => {
   try {
     const branchId = req.params.branchId;
-    const [branchRows] = await db.query("SELECT id, iiko_terminal_group_id FROM branches WHERE id = ?", [branchId]);
+    const [branchRows] = await db.query("SELECT id FROM branches WHERE id = ?", [branchId]);
     if (!branchRows.length) {
       return res.status(404).json({ error: "Branch not found" });
     }
-    const integrationSettings = await getIntegrationSettings();
-    const source = resolveBranchPolygonSource(branchRows[0], Boolean(integrationSettings.iikoEnabled));
     const [polygons] = await db.query(
       `SELECT id, branch_id, name, 
               source,
@@ -223,11 +305,11 @@ router.get("/branch/:branchId", async (req, res, next) => {
               min_order_amount, delivery_cost,
               (SELECT COUNT(*) FROM delivery_tariffs dt WHERE dt.polygon_id = delivery_polygons.id) as tariffs_count
        FROM delivery_polygons
-       WHERE branch_id = ? AND source = ? AND is_active = TRUE
+       WHERE branch_id = ? AND source = 'local' AND is_active = TRUE
          AND (is_blocked = FALSE OR 
               (blocked_from IS NOT NULL AND blocked_until IS NOT NULL 
                AND NOW() NOT BETWEEN blocked_from AND blocked_until))`,
-      [branchId, source],
+      [branchId],
     );
     if (!polygons.length) {
       return res.json({ polygons: [] });
@@ -278,7 +360,7 @@ router.get("/address-directory/streets", async (req, res, next) => {
       return res.status(400).json({ error: "q is required and must be a non-empty string" });
     }
 
-    const searchCacheKey = `iiko:streets:search:${cityId}:${query.toLowerCase()}:${limit}`;
+    const searchCacheKey = `maps:streets:search:${cityId}:${query.toLowerCase()}:${limit}`;
     try {
       const cachedSearch = await redis.get(searchCacheKey);
       if (cachedSearch) {
@@ -289,7 +371,7 @@ router.get("/address-directory/streets", async (req, res, next) => {
     }
 
     const [cityRows] = await db.query(
-      `SELECT id, name, iiko_city_id, latitude, longitude
+      `SELECT id, name, latitude, longitude
        FROM cities
        WHERE id = ?`,
       [cityId],
@@ -299,77 +381,26 @@ router.get("/address-directory/streets", async (req, res, next) => {
       return res.status(404).json({ error: "City not found" });
     }
 
-    const integrationSettings = await getIntegrationSettings();
-    const canUseIiko = Boolean(integrationSettings.iikoEnabled && String(city.iiko_city_id || "").trim());
-    let responsePayload = null;
-
-    if (canUseIiko) {
-      try {
-        const client = await getIikoClientOrNull();
-        if (client) {
-          const organizations = await client.getOrganizations();
-          const primaryOrganizationId =
-            (Array.isArray(organizations) ? organizations : [])
-              .map((organization) => String(organization?.id || organization?.organizationId || organization?.organization_id || "").trim())
-              .find(Boolean) || "unknown";
-          const cityIikoId = String(city.iiko_city_id).trim();
-          const streetsCacheKey = `iiko:streets:${primaryOrganizationId}:${cityIikoId}`;
-
-          let allStreets = null;
-          try {
-            const cachedStreets = await redis.get(streetsCacheKey);
-            if (cachedStreets) {
-              allStreets = JSON.parse(cachedStreets);
-            }
-          } catch (redisError) {
-            // Redis errors are non-critical
-          }
-
-          if (!Array.isArray(allStreets)) {
-            const streets = await client.getAddressStreetsByCity({
-              organizationId: primaryOrganizationId === "unknown" ? undefined : primaryOrganizationId,
-              cityId: cityIikoId,
-              includeDeleted: false,
-            });
-            allStreets = (Array.isArray(streets) ? streets : []).map((street) => mapIikoStreetItem(street)).filter(Boolean);
-            try {
-              await redis.set(streetsCacheKey, JSON.stringify(allStreets), "EX", IIKO_STREETS_CACHE_TTL);
-            } catch (redisError) {
-              // Redis errors are non-critical
-            }
-          }
-
-          const filtered = filterStreetItemsByQuery(allStreets, query, limit);
-          if (filtered.length > 0) {
-            responsePayload = {
-              items: filtered,
-              source: "iiko",
-              fallbackUsed: false,
-            };
-          }
-        }
-      } catch (iikoError) {
-        responsePayload = null;
-      }
+    const mapsSettings = await loadYandexMapsSettings();
+    if (!mapsSettings.suggestApiKey) {
+      return res.status(503).json({ error: "Yandex suggest API key is not configured" });
     }
-
-    if (!responsePayload) {
-      const nominatimStreets = await searchNominatimStreets({
-        query,
-        cityName: city.name,
-        latitude: Number(city.latitude),
-        longitude: Number(city.longitude),
-        limit,
-      });
-      responsePayload = {
-        items: nominatimStreets,
-        source: "nominatim",
-        fallbackUsed: true,
-      };
-    }
+    const yandexStreets = await searchYandexStreets({
+      suggestApiKey: mapsSettings.suggestApiKey,
+      query,
+      cityName: city.name,
+      latitude: Number(city.latitude),
+      longitude: Number(city.longitude),
+      language: mapsSettings.language,
+      limit,
+    });
+    const responsePayload = {
+      items: filterStreetItemsByQuery(yandexStreets, query, limit),
+      source: "yandex",
+    };
 
     try {
-      await redis.set(searchCacheKey, JSON.stringify(responsePayload), "EX", IIKO_STREETS_SEARCH_CACHE_TTL);
+      await redis.set(searchCacheKey, JSON.stringify(responsePayload), "EX", STREETS_SEARCH_CACHE_TTL);
     } catch (redisError) {
       // Redis errors are non-critical
     }
@@ -436,27 +467,24 @@ router.post("/geocode", async (req, res, next) => {
     } catch (redisError) {
       // Redis errors are non-critical
     }
-    const nominatimUrl = "https://nominatim.openstreetmap.org/search";
-    const fullQuery = city ? `${query}, ${city}` : query;
-    const params = {
-      q: fullQuery,
-      format: "json",
-      limit,
-      addressdetails: 1,
-    };
-    if (hasCenter && hasRadius && query.length >= 3) {
-      const viewbox = `${longitude - radius},${latitude - radius},${longitude + radius},${latitude + radius}`;
-      params.viewbox = viewbox;
-      params.bounded = 1;
+    const mapsSettings = await loadYandexMapsSettings();
+    if (!mapsSettings.geocoderApiKey) {
+      return res.status(503).json({ error: "Yandex geocoder API key is not configured" });
     }
-    const response = await axios.get(nominatimUrl, {
-      params,
-      headers: {
-        "User-Agent": "MiniappPanda/1.0 (Food Delivery Service)",
-      },
-      timeout: 5000,
+    const fullQuery = city ? `${query}, ${city}` : query;
+    const geocodeItems = await requestYandexGeocoder({
+      geocoderApiKey: mapsSettings.geocoderApiKey,
+      language: mapsSettings.language,
+      query: fullQuery,
+      results: limit,
     });
-    if (!response.data || response.data.length === 0) {
+    const items = geocodeItems.filter((item) => {
+      if (!hasCenter || !hasRadius || query.length < 3) return true;
+      const dLat = Math.abs(item.lat - latitude);
+      const dLon = Math.abs(item.lon - longitude);
+      return dLat <= radius && dLon <= radius;
+    });
+    if (!items.length) {
       if (limit > 1) {
         return res.json({ items: [] });
       }
@@ -464,39 +492,6 @@ router.post("/geocode", async (req, res, next) => {
         error: "Address not found",
       });
     }
-    const items = response.data
-      .map((item) => {
-        const address = item?.address || {};
-        const street =
-          address.road ||
-          address.pedestrian ||
-          address.footway ||
-          address.residential ||
-          address.living_street ||
-          address.street ||
-          address.neighbourhood;
-        const house = address.house_number || address.building || "";
-        const label = street ? (house ? `${street}, ${house}` : street) : item.display_name || "";
-        const lat = Number.parseFloat(item.lat);
-        const lon = Number.parseFloat(item.lon);
-        if (!Number.isFinite(lat) || !Number.isFinite(lon) || !label) {
-          return null;
-        }
-        return {
-          lat,
-          lon,
-          lng: lon,
-          label,
-          formatted_address: item.display_name || label,
-          address: {
-            street: street || "",
-            house,
-            city: address.city || address.town || address.village || "",
-            country: address.country || "",
-          },
-        };
-      })
-      .filter(Boolean);
     const geocodeResult = { items };
     try {
       await redis.set(cacheKey, JSON.stringify(geocodeResult), "EX", 86400);
@@ -569,209 +564,22 @@ router.post("/reverse", async (req, res, next) => {
     } catch (redisError) {
       // Redis errors are non-critical
     }
-    const nominatimUrl = "https://nominatim.openstreetmap.org/reverse";
-    let response = null;
-    let lastError = null;
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      try {
-        response = await axios.get(nominatimUrl, {
-          params: {
-            format: "jsonv2",
-            addressdetails: 1,
-            zoom: 18,
-            lat: roundedLat,
-            lon: roundedLon,
-            "accept-language": "ru",
-          },
-          headers: {
-            "User-Agent": "MiniappPanda/1.0 (Food Delivery Service)",
-          },
-          timeout: 8000,
-        });
-        lastError = null;
-        break;
-      } catch (error) {
-        lastError = error;
-        if (error?.code === "ECONNABORTED" && attempt === 0) {
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-          continue;
-        }
-        break;
-      }
+    const mapsSettings = await loadYandexMapsSettings();
+    if (!mapsSettings.geocoderApiKey) {
+      return res.status(503).json({ error: "Yandex geocoder API key is not configured" });
     }
-    if (lastError) {
-      try {
-        await redis.set(cacheKey, JSON.stringify({}), "EX", 60);
-      } catch (redisError) {
-        // Redis errors are non-critical
-      }
+    const reverseItems = await requestYandexGeocoder({
+      geocoderApiKey: mapsSettings.geocoderApiKey,
+      language: mapsSettings.language,
+      query: `${roundedLon},${roundedLat}`,
+      results: 1,
+      kind: "house",
+    });
+    const first = reverseItems[0];
+    if (!first) {
       return res.json({ label: "", lat, lon, error: "reverse_unavailable" });
     }
-    if (!response.data) {
-      return res.status(404).json({
-        error: "Address not found",
-      });
-    }
-    const result = response.data;
-    const address = result.address || {};
-    const baseLat = Number.parseFloat(result.lat);
-    const baseLon = Number.parseFloat(result.lon);
-    const street =
-      address.road ||
-      address.pedestrian ||
-      address.footway ||
-      address.residential ||
-      address.living_street ||
-      address.street ||
-      address.neighbourhood;
-    let house = address.house_number || address.building;
-    let finalLat = Number.isFinite(baseLat) ? baseLat : lat;
-    let finalLon = Number.isFinite(baseLon) ? baseLon : lon;
-    let label = street ? (house ? `${street}, ${house}` : street) : result.display_name || "";
-
-    // Если reverse попал только в улицу, выбираем ближайший адрес с номером дома рядом с точкой.
-    if (street && !house) {
-      const extractAddress = (value) => {
-        const addr = value?.address || {};
-        const extractedStreet =
-          addr.road ||
-          addr.pedestrian ||
-          addr.footway ||
-          addr.residential ||
-          addr.living_street ||
-          addr.street ||
-          addr.neighbourhood;
-        const extractedHouse = addr.house_number || addr.building;
-        const extractedLat = Number.parseFloat(value?.lat);
-        const extractedLon = Number.parseFloat(value?.lon);
-        if (!extractedStreet || !extractedHouse || !Number.isFinite(extractedLat) || !Number.isFinite(extractedLon)) {
-          return null;
-        }
-        return { street: extractedStreet, house: extractedHouse, lat: extractedLat, lon: extractedLon };
-      };
-      try {
-        const city =
-          address.city ||
-          address.town ||
-          address.village ||
-          address.county ||
-          address.state ||
-          "";
-        const query = city ? `${street}, ${city}` : street;
-        const delta = 0.0035;
-        const nearbySearch = await axios.get("https://nominatim.openstreetmap.org/search", {
-          params: {
-            q: query,
-            format: "jsonv2",
-            addressdetails: 1,
-            limit: 20,
-            viewbox: `${lon - delta},${lat - delta},${lon + delta},${lat + delta}`,
-            bounded: 1,
-            "accept-language": "ru",
-          },
-          headers: {
-            "User-Agent": "MiniappPanda/1.0 (Food Delivery Service)",
-          },
-          timeout: 7000,
-        });
-
-        let candidates = nearbySearch.data || [];
-        if (!candidates.length && city) {
-          // Structured search для дома по улице/городу обычно точнее, чем общий q.
-          const structured = await axios.get("https://nominatim.openstreetmap.org/search", {
-            params: {
-              street,
-              city,
-              format: "jsonv2",
-              addressdetails: 1,
-              limit: 20,
-              viewbox: `${lon - delta},${lat - delta},${lon + delta},${lat + delta}`,
-              bounded: 1,
-              "accept-language": "ru",
-            },
-            headers: {
-              "User-Agent": "MiniappPanda/1.0 (Food Delivery Service)",
-            },
-            timeout: 7000,
-          });
-          candidates = structured.data || [];
-        }
-
-        const nearest = candidates
-          .map((item) => {
-            const itemAddress = item?.address || {};
-            const itemStreet =
-              itemAddress.road ||
-              itemAddress.pedestrian ||
-              itemAddress.footway ||
-              itemAddress.residential ||
-              itemAddress.living_street ||
-              itemAddress.street ||
-              itemAddress.neighbourhood;
-            const itemHouse = itemAddress.house_number || itemAddress.building;
-            const itemLat = Number.parseFloat(item.lat);
-            const itemLon = Number.parseFloat(item.lon);
-            if (!itemStreet || !itemHouse || !Number.isFinite(itemLat) || !Number.isFinite(itemLon)) {
-              return null;
-            }
-            const dLat = itemLat - lat;
-            const dLon = itemLon - lon;
-            return { itemStreet, itemHouse, itemLat, itemLon, distance: dLat * dLat + dLon * dLon };
-          })
-          .filter(Boolean)
-          .sort((a, b) => a.distance - b.distance)[0];
-
-        if (nearest) {
-          house = nearest.itemHouse;
-          finalLat = nearest.itemLat;
-          finalLon = nearest.itemLon;
-          label = `${nearest.itemStreet}, ${nearest.itemHouse}`;
-        }
-      } catch (fallbackError) {
-        // Ошибка fallback-поиска не критична, остаёмся на результате reverse.
-      }
-
-      // Если после поиска по улице/городу дом так и не найден, пробуем несколько ближайших точек вокруг маркера.
-      if (!house) {
-        const offsets = [
-          [0.0002, 0],
-          [-0.0002, 0],
-          [0, 0.0002],
-          [0, -0.0002],
-          [0.0002, 0.0002],
-          [-0.0002, -0.0002],
-        ];
-        for (const [dLat, dLon] of offsets) {
-          try {
-            const nearbyReverse = await axios.get(nominatimUrl, {
-              params: {
-                format: "jsonv2",
-                addressdetails: 1,
-                zoom: 18,
-                lat: Number(lat + dLat).toFixed(5),
-                lon: Number(lon + dLon).toFixed(5),
-                "accept-language": "ru",
-              },
-              headers: {
-                "User-Agent": "MiniappPanda/1.0 (Food Delivery Service)",
-              },
-              timeout: 5000,
-            });
-            const extracted = extractAddress(nearbyReverse.data);
-            if (!extracted) continue;
-            house = extracted.house;
-            finalLat = extracted.lat;
-            finalLon = extracted.lon;
-            label = `${extracted.street}, ${extracted.house}`;
-            break;
-          } catch (pointError) {
-            // Игнорируем ошибку точечного fallback и продолжаем.
-          }
-        }
-      }
-    }
-
-    const payload = { lat: finalLat, lon: finalLon, label };
+    const payload = { lat: first.lat, lon: first.lon, label: first.label };
     try {
       await redis.set(cacheKey, JSON.stringify(payload), "EX", 86400);
     } catch (redisError) {
@@ -791,8 +599,6 @@ router.post("/reverse", async (req, res, next) => {
 router.post("/check-delivery", async (req, res, next) => {
   try {
     const { latitude, longitude, city_id, cart_amount } = req.body;
-    const integrationSettings = await getIntegrationSettings();
-    const iikoEnabled = Boolean(integrationSettings.iikoEnabled);
     const lat = Number(latitude);
     const lon = Number(longitude);
     const cityId = Number(city_id);
@@ -817,15 +623,11 @@ router.post("/check-delivery", async (req, res, next) => {
            AND (dp.is_blocked = FALSE OR 
                 (dp.blocked_from IS NOT NULL AND dp.blocked_until IS NOT NULL 
                  AND NOW() NOT BETWEEN dp.blocked_from AND dp.blocked_until))
-           AND (
-                (? = 1 AND COALESCE(NULLIF(TRIM(b.iiko_terminal_group_id), ''), NULL) IS NOT NULL AND dp.source = 'iiko')
-                OR
-                ((? = 0 OR COALESCE(NULLIF(TRIM(b.iiko_terminal_group_id), ''), NULL) IS NULL) AND dp.source = 'local')
-           )
+           AND dp.source = 'local'
            AND ST_Contains(dp.polygon, ST_GeomFromText(?, 4326))
          ORDER BY dp.delivery_time, dp.id
          LIMIT 1`,
-        [cityId, iikoEnabled ? 1 : 0, iikoEnabled ? 1 : 0, point],
+        [cityId, point],
       );
       return polygons[0] || null;
     };
@@ -893,8 +695,6 @@ router.post("/check-delivery", async (req, res, next) => {
 });
 router.get("/admin/all", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
   try {
-    const integrationSettings = await getIntegrationSettings();
-    const iikoEnabled = Boolean(integrationSettings.iikoEnabled);
     let cityFilter = "";
     const values = [];
     if (req.user.role === "manager") {
@@ -902,7 +702,7 @@ router.get("/admin/all", authenticateToken, requireRole("admin", "manager", "ceo
       if (cities.length === 0) {
         return res.json({ polygons: [] });
       }
-      cityFilter = `WHERE b.city_id IN (${cities.map(() => "?").join(",")})`;
+      cityFilter = `AND b.city_id IN (${cities.map(() => "?").join(",")})`;
       values.push(...cities);
     }
     const [polygons] = await db.query(
@@ -911,19 +711,16 @@ router.get("/admin/all", authenticateToken, requireRole("admin", "manager", "ceo
               dp.delivery_time,
               dp.min_order_amount, dp.delivery_cost, dp.is_active,
               dp.is_blocked, dp.blocked_from, dp.blocked_until, dp.block_reason,
-              b.city_id, b.name as branch_name, b.iiko_terminal_group_id,
+              b.city_id, b.name as branch_name,
               (SELECT COUNT(*) FROM delivery_tariffs dt WHERE dt.polygon_id = dp.id) as tariffs_count
        FROM delivery_polygons dp
        JOIN branches b ON dp.branch_id = b.id
+       WHERE dp.source = 'local'
        ${cityFilter}
        ORDER BY b.city_id, dp.name`,
       values,
     );
-    const filteredPolygons = polygons.filter((polygon) => {
-      const requiredSource = resolveBranchPolygonSource(polygon, iikoEnabled);
-      return polygon.source === requiredSource;
-    });
-    const parsedPolygons = filteredPolygons.map((p) => ({
+    const parsedPolygons = polygons.map((p) => ({
       ...p,
       polygon: parseGeoJson(p.polygon),
     }));
@@ -935,12 +732,10 @@ router.get("/admin/all", authenticateToken, requireRole("admin", "manager", "ceo
 router.get("/admin/branch/:branchId", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
   try {
     const branchId = req.params.branchId;
-    const [branches] = await db.query("SELECT city_id, iiko_terminal_group_id FROM branches WHERE id = ?", [branchId]);
+    const [branches] = await db.query("SELECT city_id FROM branches WHERE id = ?", [branchId]);
     if (branches.length === 0) {
       return res.status(404).json({ error: "Branch not found" });
     }
-    const integrationSettings = await getIntegrationSettings();
-    const source = resolveBranchPolygonSource(branches[0], Boolean(integrationSettings.iikoEnabled));
     if (req.user.role === "manager" && !req.user.cities.includes(branches[0].city_id)) {
       return res.status(403).json({
         error: "You do not have access to this city",
@@ -955,9 +750,9 @@ router.get("/admin/branch/:branchId", authenticateToken, requireRole("admin", "m
                 created_at, updated_at,
                 (SELECT COUNT(*) FROM delivery_tariffs dt WHERE dt.polygon_id = delivery_polygons.id) as tariffs_count
          FROM delivery_polygons
-         WHERE branch_id = ? AND source = ?
+         WHERE branch_id = ? AND source = 'local'
          ORDER BY name`,
-      [branchId, source],
+      [branchId],
     );
     const parsedPolygons = polygons.map((p) => ({
       ...p,
@@ -978,9 +773,6 @@ router.get("/admin/:id/tariffs", authenticateToken, requireRole("admin", "manage
     if (req.user.role === "manager" && !req.user.cities.includes(meta.city_id)) {
       return res.status(403).json({ error: "You do not have access to this city" });
     }
-    if (meta.source === "iiko") {
-      return res.json({ tariffs: [], read_only: true });
-    }
     const tariffs = await getTariffsByPolygonId(polygonId);
     res.json({ tariffs });
   } catch (error) {
@@ -999,7 +791,6 @@ router.put("/admin/:id/tariffs", authenticateToken, requireRole("admin", "manage
     if (req.user.role === "manager" && !req.user.cities.includes(meta.city_id)) {
       return res.status(403).json({ error: "You do not have access to this city" });
     }
-    if (denyIikoPolygonWrite(meta, res)) return;
     const { tariffs = [] } = req.body;
     const { valid, errors, normalized } = validateTariffs(tariffs);
     if (!valid) {
@@ -1043,8 +834,6 @@ router.post("/admin/:id/tariffs/copy", authenticateToken, requireRole("admin", "
         return res.status(403).json({ error: "You do not have access to this city" });
       }
     }
-    if (denyIikoPolygonWrite(targetMeta, res)) return;
-    if (denyIikoPolygonWrite(sourceMeta, res)) return;
     if (targetMeta.branch_id !== sourceMeta.branch_id) {
       return res.status(400).json({ error: "Полигон-источник должен быть в том же филиале" });
     }
@@ -1083,16 +872,9 @@ router.post("/admin", authenticateToken, requireRole("admin", "manager", "ceo"),
         error: "branch_id and polygon are required",
       });
     }
-    const [branches] = await db.query("SELECT city_id, iiko_terminal_group_id FROM branches WHERE id = ?", [branch_id]);
+    const [branches] = await db.query("SELECT city_id FROM branches WHERE id = ?", [branch_id]);
     if (branches.length === 0) {
       return res.status(404).json({ error: "Branch not found" });
-    }
-    const integrationSettings = await getIntegrationSettings();
-    const source = resolveBranchPolygonSource(branches[0], Boolean(integrationSettings.iikoEnabled));
-    if (source === "iiko") {
-      return res.status(403).json({
-        error: "Для филиала с интеграцией iiko локальные полигоны недоступны.",
-      });
     }
     if (req.user.role === "manager" && !req.user.cities.includes(branches[0].city_id)) {
       return res.status(403).json({
@@ -1140,10 +922,10 @@ router.put("/admin/:id", authenticateToken, requireRole("admin", "manager", "ceo
     const polygonId = req.params.id;
     const { name, polygon, delivery_time, min_order_amount, delivery_cost, is_active } = req.body;
     const [polygons] = await db.query(
-      `SELECT dp.id, dp.source, b.city_id
+      `SELECT dp.id, b.city_id
          FROM delivery_polygons dp
          JOIN branches b ON dp.branch_id = b.id
-         WHERE dp.id = ?`,
+         WHERE dp.id = ? AND dp.source = 'local'`,
       [polygonId],
     );
     if (polygons.length === 0) {
@@ -1154,7 +936,6 @@ router.put("/admin/:id", authenticateToken, requireRole("admin", "manager", "ceo
         error: "You do not have access to this city",
       });
     }
-    if (denyIikoPolygonWrite(polygons[0], res)) return;
     const updates = [];
     const values = [];
     if (name !== undefined) {
@@ -1217,10 +998,10 @@ router.post("/admin/:id/block", authenticateToken, requireRole("admin", "manager
     const polygonId = req.params.id;
     const { blocked_from, blocked_until, block_reason } = req.body;
     const [polygons] = await db.query(
-      `SELECT dp.id, dp.source, b.city_id
+      `SELECT dp.id, b.city_id
          FROM delivery_polygons dp
          JOIN branches b ON dp.branch_id = b.id
-         WHERE dp.id = ?`,
+         WHERE dp.id = ? AND dp.source = 'local'`,
       [polygonId],
     );
     if (polygons.length === 0) {
@@ -1231,7 +1012,6 @@ router.post("/admin/:id/block", authenticateToken, requireRole("admin", "manager
         error: "You do not have access to this city",
       });
     }
-    if (denyIikoPolygonWrite(polygons[0], res)) return;
     if (blocked_from && blocked_until) {
       const from = new Date(blocked_from);
       const until = new Date(blocked_until);
@@ -1275,10 +1055,10 @@ router.post("/admin/:id/unblock", authenticateToken, requireRole("admin", "manag
   try {
     const polygonId = req.params.id;
     const [polygons] = await db.query(
-      `SELECT dp.id, dp.source, b.city_id
+      `SELECT dp.id, b.city_id
          FROM delivery_polygons dp
          JOIN branches b ON dp.branch_id = b.id
-         WHERE dp.id = ?`,
+         WHERE dp.id = ? AND dp.source = 'local'`,
       [polygonId],
     );
     if (polygons.length === 0) {
@@ -1289,7 +1069,6 @@ router.post("/admin/:id/unblock", authenticateToken, requireRole("admin", "manag
         error: "You do not have access to this city",
       });
     }
-    if (denyIikoPolygonWrite(polygons[0], res)) return;
     await db.query(
       `UPDATE delivery_polygons 
        SET is_blocked = FALSE, 
@@ -1337,10 +1116,10 @@ router.post("/admin/bulk-block", authenticateToken, requireRole("admin", "manage
     }
     const placeholders = polygon_ids.map(() => "?").join(",");
     const [polygons] = await db.query(
-      `SELECT dp.id, dp.source, b.city_id
+      `SELECT dp.id, b.city_id
          FROM delivery_polygons dp
          JOIN branches b ON dp.branch_id = b.id
-         WHERE dp.id IN (${placeholders})`,
+         WHERE dp.id IN (${placeholders}) AND dp.source = 'local'`,
       polygon_ids,
     );
     if (polygons.length === 0) {
@@ -1353,9 +1132,6 @@ router.post("/admin/bulk-block", authenticateToken, requireRole("admin", "manage
           error: "You do not have access to one or more cities",
         });
       }
-    }
-    if (polygons.some((polygon) => polygon.source === "iiko")) {
-      return res.status(403).json({ error: "Массовая блокировка iiko-полигонов недоступна" });
     }
     await db.query(
       `UPDATE delivery_polygons 
@@ -1384,10 +1160,10 @@ router.post("/admin/bulk-unblock", authenticateToken, requireRole("admin", "mana
     }
     const placeholders = polygon_ids.map(() => "?").join(",");
     const [polygons] = await db.query(
-      `SELECT dp.id, dp.source, b.city_id
+      `SELECT dp.id, b.city_id
          FROM delivery_polygons dp
          JOIN branches b ON dp.branch_id = b.id
-         WHERE dp.id IN (${placeholders})`,
+         WHERE dp.id IN (${placeholders}) AND dp.source = 'local'`,
       polygon_ids,
     );
     if (polygons.length === 0) {
@@ -1400,9 +1176,6 @@ router.post("/admin/bulk-unblock", authenticateToken, requireRole("admin", "mana
           error: "You do not have access to one or more cities",
         });
       }
-    }
-    if (polygons.some((polygon) => polygon.source === "iiko")) {
-      return res.status(403).json({ error: "Массовая разблокировка iiko-полигонов недоступна" });
     }
     await db.query(
       `UPDATE delivery_polygons 
@@ -1432,10 +1205,10 @@ router.post("/admin/:id/transfer", authenticateToken, requireRole("admin", "mana
       return res.status(400).json({ error: "new_branch_id is required" });
     }
     const [polygons] = await db.query(
-      `SELECT dp.id, dp.branch_id, dp.source, b.city_id
+      `SELECT dp.id, dp.branch_id, b.city_id
          FROM delivery_polygons dp
          JOIN branches b ON dp.branch_id = b.id
-         WHERE dp.id = ?`,
+         WHERE dp.id = ? AND dp.source = 'local'`,
       [polygonId],
     );
     if (polygons.length === 0) {
@@ -1447,7 +1220,6 @@ router.post("/admin/:id/transfer", authenticateToken, requireRole("admin", "mana
         error: "You do not have access to this city",
       });
     }
-    if (denyIikoPolygonWrite(polygons[0], res)) return;
     const [newBranches] = await db.query(`SELECT id, city_id, name FROM branches WHERE id = ?`, [new_branch_id]);
     if (newBranches.length === 0) {
       return res.status(404).json({ error: "New branch not found" });
@@ -1485,10 +1257,10 @@ router.delete("/admin/:id", authenticateToken, requireRole("admin", "manager", "
     if (denyManagerWrite(req, res)) return;
     const polygonId = req.params.id;
     const [polygons] = await db.query(
-      `SELECT dp.id, dp.source, b.city_id
+      `SELECT dp.id, b.city_id
          FROM delivery_polygons dp
          JOIN branches b ON dp.branch_id = b.id
-         WHERE dp.id = ?`,
+         WHERE dp.id = ? AND dp.source = 'local'`,
       [polygonId],
     );
     if (polygons.length === 0) {
@@ -1499,7 +1271,6 @@ router.delete("/admin/:id", authenticateToken, requireRole("admin", "manager", "
         error: "You do not have access to this city",
       });
     }
-    if (denyIikoPolygonWrite(polygons[0], res)) return;
     await db.query("DELETE FROM delivery_polygons WHERE id = ?", [polygonId]);
     res.json({ message: "Polygon deleted successfully" });
   } catch (error) {

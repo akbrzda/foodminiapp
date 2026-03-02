@@ -25,6 +25,9 @@ export const TELEGRAM_NEW_ORDER_NOTIFICATION_DEFAULT = {
 };
 
 const TELEGRAM_START_BUTTON_TYPES = new Set(["url", "web_app"]);
+const MAPS_API_KEY_MAX_LENGTH = 512;
+const MAPS_LANGUAGE_REGEX = /^[a-z]{2}_[A-Z]{2}$/;
+const MAPS_COUNTRY_REGEX = /^[A-Z]{2}$/;
 
 export const SETTINGS_SCHEMA = {
   bonuses_enabled: {
@@ -181,6 +184,34 @@ export const SETTINGS_SCHEMA = {
     group: "Интеграции",
     type: "string",
   },
+  yandex_js_api_key: {
+    default: "",
+    label: "Yandex JS API Key",
+    description: "Единый ключ для JavaScript API и HTTP Геокодера Яндекс Карт",
+    group: "Карты",
+    type: "string",
+  },
+  yandex_suggest_api_key: {
+    default: "",
+    label: "Yandex Suggest API Key",
+    description: "Серверный ключ для API Геосаджеста Яндекс Карт",
+    group: "Карты",
+    type: "string",
+  },
+  maps_default_language: {
+    default: "ru_RU",
+    label: "Язык карт по умолчанию",
+    description: "Локаль API Яндекс Карт в формате ll_CC, например ru_RU",
+    group: "Карты",
+    type: "string",
+  },
+  maps_default_country: {
+    default: "TJ",
+    label: "Страна карт по умолчанию",
+    description: "Код страны ISO 3166-1 alpha-2, например TJ или RU",
+    group: "Карты",
+    type: "string",
+  },
 };
 
 const normalizeSettingValue = (rawValue, fallback) => {
@@ -216,6 +247,40 @@ const normalizeString = (value) => {
   const trimmed = value.trim();
   if (!trimmed) return null;
   return trimmed;
+};
+const validateMapsSetting = (key, value) => {
+  if (typeof value !== "string") {
+    return "Ожидалась строка";
+  }
+
+  if (key === "maps_default_language") {
+    if (!value) return null;
+    if (!MAPS_LANGUAGE_REGEX.test(value)) {
+      return "maps_default_language должен быть в формате ll_CC, например ru_RU";
+    }
+    return null;
+  }
+
+  if (key === "maps_default_country") {
+    if (!value) return null;
+    if (!MAPS_COUNTRY_REGEX.test(value)) {
+      return "maps_default_country должен быть в формате ISO alpha-2, например TJ";
+    }
+    return null;
+  }
+
+  if (key === "yandex_js_api_key" || key === "yandex_suggest_api_key") {
+    if (!value) return null;
+    if (value.length < 8) {
+      return `${key} слишком короткий`;
+    }
+    if (value.length > MAPS_API_KEY_MAX_LENGTH) {
+      return `${key} не должен превышать ${MAPS_API_KEY_MAX_LENGTH} символов`;
+    }
+    return null;
+  }
+
+  return null;
 };
 const TELEGRAM_START_MAX_IMAGES = 20;
 const TELEGRAM_START_MAX_IMAGE_WEIGHT = 1000;
@@ -508,6 +573,11 @@ export const updateSystemSettings = async (patch) => {
           continue;
         }
         updates[key] = normalized;
+      }
+      const mapsValidationError = validateMapsSetting(key, updates[key]);
+      if (mapsValidationError) {
+        errors[key] = mapsValidationError;
+        continue;
       }
     } else if (meta.type === "json") {
       if (!value || typeof value !== "object" || Array.isArray(value)) {

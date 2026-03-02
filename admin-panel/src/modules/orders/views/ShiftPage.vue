@@ -58,6 +58,8 @@
         v-show="mobilePane === 'map' || !isMobileViewport"
         ref="orderMapRef"
         :polygons-visible="polygonsVisible"
+        @zoom-in="zoomInMap"
+        @zoom-out="zoomOutMap"
         @toggle-polygons="togglePolygons"
         @center-on-branch="centerOnBranch"
       />
@@ -84,15 +86,13 @@
 
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import L from "leaflet";
-import "leaflet/dist/leaflet.css";
 import { devError } from "@/shared/utils/logger";
 import api from "@/shared/api/client.js";
 import { useReferenceStore } from "@/shared/stores/reference.js";
 import { useOrdersStore } from "@/modules/orders/stores/orders.js";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
 import { useTheme } from "@/shared/composables/useTheme.js";
-import { createMarkerIcon, getMapColor, getTileLayer } from "@/shared/utils/leaflet.js";
+import { loadYandexMaps } from "@/shared/services/yandexMaps.js";
 import ShiftHeader from "@/modules/orders/components/ShiftHeader.vue";
 import OrdersList from "@/modules/orders/components/OrdersList.vue";
 import OrderMap from "@/modules/orders/components/OrderMap.vue";
@@ -138,18 +138,16 @@ const localStatusUpdates = new Map();
 
 // Состояние карты
 const orderRefs = new Map();
+let yandexMaps = null;
 let mapInstance = null;
 let polygonsLayer = null;
 let branchMarker = null;
 let staticBranchMarker = null;
 let deliveryMarker = null;
 let routeLine = null;
-let tileLayer = null;
 const polygonsVisible = ref(localStorage.getItem("shift_polygons_visible") !== "false");
-
-// Вычисляемые свойства для карты
-const mapAccentColor = computed(() => getMapColor("accent"));
-const mapAccentFill = computed(() => getMapColor("accentFill"));
+const mapAccentColor = "#ffd200";
+const mapAccentFill = "rgba(255, 210, 0, 0.26)";
 
 // Табы для списка заказов
 const tabs = computed(() => [
@@ -437,6 +435,36 @@ const scheduleShiftReload = () => {
 };
 
 // Функции управления картой
+const ensureYandexMaps = async () => {
+  if (yandexMaps) return yandexMaps;
+  yandexMaps = await loadYandexMaps();
+  return yandexMaps;
+};
+
+const calcBounds = (points) => {
+  if (!Array.isArray(points) || !points.length) return null;
+  let minLat = Number.POSITIVE_INFINITY;
+  let minLng = Number.POSITIVE_INFINITY;
+  let maxLat = Number.NEGATIVE_INFINITY;
+  let maxLng = Number.NEGATIVE_INFINITY;
+  for (const point of points) {
+    const lat = Number(point?.[0]);
+    const lng = Number(point?.[1]);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+    minLat = Math.min(minLat, lat);
+    minLng = Math.min(minLng, lng);
+    maxLat = Math.max(maxLat, lat);
+    maxLng = Math.max(maxLng, lng);
+  }
+  if (!Number.isFinite(minLat) || !Number.isFinite(minLng) || !Number.isFinite(maxLat) || !Number.isFinite(maxLng)) {
+    return null;
+  }
+  return [
+    [minLat, minLng],
+    [maxLat, maxLng],
+  ];
+};
+
 const togglePolygons = () => {
   polygonsVisible.value = !polygonsVisible.value;
   localStorage.setItem("shift_polygons_visible", polygonsVisible.value ? "true" : "false");
@@ -446,26 +474,39 @@ const togglePolygons = () => {
 const updatePolygonsVisibility = () => {
   if (!mapInstance || !polygonsLayer) return;
   if (polygonsVisible.value) {
-    polygonsLayer.addTo(mapInstance);
-    const bounds = polygonsLayer.getBounds();
-    if (bounds.isValid()) {
-      mapInstance.fitBounds(bounds, { padding: [24, 24] });
+    mapInstance.geoObjects.add(polygonsLayer);
+    if (typeof polygonsLayer.getBounds === "function") {
+      const bounds = polygonsLayer.getBounds();
+      if (bounds) {
+        mapInstance.setBounds(bounds, { checkZoomRange: true, zoomMargin: 24 });
+      }
     }
   } else {
-    polygonsLayer.remove();
+    mapInstance.geoObjects.remove(polygonsLayer);
   }
 };
 
-const initMap = () => {
-  const mapContainer = orderMapRef.value?.mapContainerRef;
+const initMap = async () => {
+  const ymaps = await ensureYandexMaps();
+  const mapContainer = orderMapRef.value?.mapContainerRef?.value || orderMapRef.value?.mapContainerRef;
   if (!mapContainer) return;
   if (mapInstance) {
-    mapInstance.remove();
+    mapInstance.destroy();
+    mapInstance = null;
   }
   const branch = branchOptions.value.find((item) => item.id === Number(selectedBranchId.value));
   const center = branch?.latitude && branch?.longitude ? [branch.latitude, branch.longitude] : [55.751244, 37.618423];
-  mapInstance = L.map(mapContainer, { zoomControl: true, attributionControl: false }).setView(center, 12);
-  tileLayer = getTileLayer({ maxZoom: 18 }).addTo(mapInstance);
+  mapInstance = new ymaps.Map(
+    mapContainer,
+    {
+      center,
+      zoom: 12,
+      controls: [],
+    },
+    {
+      suppressMapOpenBlock: true,
+    },
+  );
   renderBranchMarker();
 };
 
@@ -479,85 +520,92 @@ const centerOnBranch = () => {
   if (isMobileViewport.value) {
     mobilePane.value = "map";
   }
-  mapInstance.setView([lat, lng], 12, { animate: true });
+  mapInstance.setCenter([lat, lng], 12, { duration: 180 });
+};
+const zoomInMap = () => {
+  if (!mapInstance) return;
+  mapInstance.setZoom(mapInstance.getZoom() + 1, { duration: 120 });
+};
+const zoomOutMap = () => {
+  if (!mapInstance) return;
+  mapInstance.setZoom(mapInstance.getZoom() - 1, { duration: 120 });
 };
 
 const renderBranchMarker = () => {
-  if (!mapInstance) return;
+  if (!mapInstance || !yandexMaps) return;
   const branch = branchOptions.value.find((item) => item.id === Number(selectedBranchId.value));
   if (!branch?.latitude || !branch?.longitude) return;
   if (staticBranchMarker) {
-    staticBranchMarker.remove();
+    mapInstance.geoObjects.remove(staticBranchMarker);
   }
-  const branchIcon = createMarkerIcon("pin", "primary", 18);
-  staticBranchMarker = L.marker([branch.latitude, branch.longitude], { icon: branchIcon }).addTo(mapInstance);
+  staticBranchMarker = new yandexMaps.Placemark(
+    [Number(branch.latitude), Number(branch.longitude)],
+    {},
+    {
+      preset: "islands#redIcon",
+    },
+  );
+  mapInstance.geoObjects.add(staticBranchMarker);
 };
 
 const loadPolygons = async () => {
-  if (!selectedBranchId.value) return;
+  if (!selectedBranchId.value || !mapInstance || !yandexMaps) return;
   try {
     const response = await api.get(`/api/polygons/branch/${selectedBranchId.value}`);
     const polygons = response.data.polygons || [];
-    const normalizePolygon = (polygon) => {
-      if (!polygon || !polygon.coordinates) return polygon;
-      const swap = (coord) => (Array.isArray(coord) ? [coord[1], coord[0]] : coord);
-      const normalizeCoords = (coords) => coords.map((ring) => ring.map((point) => swap(point)));
-      return { ...polygon, coordinates: normalizeCoords(polygon.coordinates) };
-    };
     if (polygonsLayer) {
-      polygonsLayer.remove();
+      mapInstance.geoObjects.remove(polygonsLayer);
       polygonsLayer = null;
     }
-    const features = polygons
-      .map((polygon) => {
-        const geometry = normalizePolygon(polygon.polygon);
-        if (!geometry) return null;
-        return {
-          type: "Feature",
-          geometry,
-          properties: { ...polygon },
-        };
-      })
-      .filter(Boolean);
-    polygonsLayer = L.geoJSON(features, {
-      style: {
-        color: mapAccentColor.value,
-        weight: 2,
-        opacity: 0.8,
-        fillColor: mapAccentFill.value,
-        fillOpacity: 1,
-      },
-      onEachFeature: (feature, layer) => {
-        const props = feature?.properties || {};
-        const name = props.name || `Полигон #${props.id || ""}`;
-        const branchName = props.branch_name || "";
-        const deliveryTime = props.delivery_time || 30;
-        const minOrder = 0;
-        const tariffsCount = Number(props.tariffs_count || 0);
-        const isBlocked = Boolean(props.is_blocked);
-        const isInactive = props.is_active === 0 || props.is_active === false;
-        let statusBadge = "";
-        if (isBlocked) {
-          statusBadge =
-            '<span style="display:inline-block;background:rgba(239,68,68,0.12);color:#ef4444;padding:2px 6px;border-radius:999px;font-size:11px;margin-top:6px;">Заблокирован</span>';
-        } else if (isInactive) {
-          statusBadge =
-            '<span style="display:inline-block;background:rgba(148,163,184,0.18);color:#94a3b8;padding:2px 6px;border-radius:999px;font-size:11px;margin-top:6px;">Неактивен</span>';
-        }
-        const popupContent = `
-      <div class="space-y-1.5 font-sans">
-        <div class="text-sm font-semibold text-foreground">${name}</div>
-        <div class="text-xs text-muted-foreground">${branchName}</div>
-        <div class="grid gap-1 text-xs text-muted-foreground">
-          <div>Время доставки: ${deliveryTime} мин</div>
-            <div style="background: inherit;">Мин. заказ: ${minOrder} ₽</div>
-          <div>Тарифы: ${tariffsCount} шт.</div>
-        </div>
-        ${statusBadge}
-      </div>
-    `;
-        layer.bindPopup(popupContent, { autoPan: false });
-      },
+    polygonsLayer = new yandexMaps.GeoObjectCollection();
+    polygons.forEach((polygon) => {
+      const ring = polygon?.polygon?.coordinates?.[0];
+      if (!Array.isArray(ring) || ring.length < 3) return;
+      const latLngRing = ring
+        .filter((coord) => Array.isArray(coord) && coord.length >= 2)
+        .map((coord) => [Number(coord[1]), Number(coord[0])])
+        .filter((coord) => Number.isFinite(coord[0]) && Number.isFinite(coord[1]));
+      if (latLngRing.length < 3) return;
+      const name = polygon.name || `Полигон #${polygon.id || ""}`;
+      const branchName = polygon.branch_name || "";
+      const deliveryTime = polygon.delivery_time || 30;
+      const tariffsCount = Number(polygon.tariffs_count || 0);
+      const isBlocked = Boolean(polygon.is_blocked);
+      const isInactive = polygon.is_active === 0 || polygon.is_active === false;
+      let statusBadge = "";
+      if (isBlocked) {
+        statusBadge =
+          '<span style="display:inline-block;background:rgba(239,68,68,0.12);color:#ef4444;padding:2px 6px;border-radius:999px;font-size:11px;margin-top:6px;">Заблокирован</span>';
+      } else if (isInactive) {
+        statusBadge =
+          '<span style="display:inline-block;background:rgba(148,163,184,0.18);color:#94a3b8;padding:2px 6px;border-radius:999px;font-size:11px;margin-top:6px;">Неактивен</span>';
+      }
+      const polygonObject = new yandexMaps.Polygon(
+        [latLngRing],
+        {
+          balloonContentBody: `
+            <div class="space-y-1.5 font-sans">
+              <div class="text-sm font-semibold text-foreground">${name}</div>
+              <div class="text-xs text-muted-foreground">${branchName}</div>
+              <div class="grid gap-1 text-xs text-muted-foreground">
+                <div>Время доставки: ${deliveryTime} мин</div>
+                <div style="background: inherit;">Мин. заказ: 0 ₽</div>
+                <div>Тарифы: ${tariffsCount} шт.</div>
+              </div>
+              ${statusBadge}
+            </div>
+          `,
+        },
+        {
+          fillColor: mapAccentFill,
+          strokeColor: mapAccentColor,
+          strokeWidth: 2,
+          fillOpacity: 0.35,
+          opacity: 0.85,
+          interactivityModel: "default#geoObject",
+        },
+      );
+      polygonsLayer.add(polygonObject);
     });
     updatePolygonsVisibility();
   } catch (error) {
@@ -568,15 +616,15 @@ const loadPolygons = async () => {
 // Функции отображения заказов на карте
 const clearOrderMap = () => {
   if (branchMarker) {
-    branchMarker.remove();
+    mapInstance?.geoObjects?.remove(branchMarker);
     branchMarker = null;
   }
   if (deliveryMarker) {
-    deliveryMarker.remove();
+    mapInstance?.geoObjects?.remove(deliveryMarker);
     deliveryMarker = null;
   }
   if (routeLine) {
-    routeLine.remove();
+    mapInstance?.geoObjects?.remove(routeLine);
     routeLine = null;
   }
 };
@@ -614,7 +662,7 @@ const normalizeDeliveryCoords = (order) => {
 };
 
 const showOrderOnMap = (order) => {
-  if (!mapInstance) return;
+  if (!mapInstance || !yandexMaps) return;
   if (order.order_type !== "delivery") {
     clearOrderMap();
     return;
@@ -633,25 +681,37 @@ const showOrderOnMap = (order) => {
   const deliveryLat = normalizedDelivery.lat;
   const deliveryLng = normalizedDelivery.lng;
   clearOrderMap();
-  const branchIcon = createMarkerIcon("pin", "primary", 18);
-  const deliveryIcon = createMarkerIcon("circle", "blue", 16);
-  branchMarker = L.marker([branchLat, branchLng], { icon: branchIcon }).addTo(mapInstance);
-  deliveryMarker = L.marker([deliveryLat, deliveryLng], { icon: deliveryIcon }).addTo(mapInstance);
-  routeLine = L.polyline(
+  branchMarker = new yandexMaps.Placemark([branchLat, branchLng], {}, { preset: "islands#redIcon" });
+  deliveryMarker = new yandexMaps.Placemark([deliveryLat, deliveryLng], {}, { preset: "islands#blueCircleDotIcon" });
+  routeLine = new yandexMaps.Polyline(
     [
       [branchLat, branchLng],
       [deliveryLat, deliveryLng],
     ],
-    { color: mapAccentColor.value, weight: 3, dashArray: "10, 5" },
-  ).addTo(mapInstance);
-  const bounds = L.latLngBounds([branchLat, branchLng], [deliveryLat, deliveryLng]);
-  mapInstance.fitBounds(bounds, { padding: [50, 50] });
+    {},
+    {
+      strokeColor: mapAccentColor,
+      strokeWidth: 3,
+      strokeStyle: "shortdash",
+      opacity: 0.9,
+    },
+  );
+  mapInstance.geoObjects.add(branchMarker);
+  mapInstance.geoObjects.add(deliveryMarker);
+  mapInstance.geoObjects.add(routeLine);
+  const bounds = calcBounds([
+    [branchLat, branchLng],
+    [deliveryLat, deliveryLng],
+  ]);
+  if (bounds) {
+    mapInstance.setBounds(bounds, { checkZoomRange: true, zoomMargin: 50 });
+  }
   const scrollToOrder = () => {
     const element = orderRefs.get(order.id);
     element?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
-  branchMarker.on("click", scrollToOrder);
-  deliveryMarker.on("click", scrollToOrder);
+  branchMarker.events.add("click", scrollToOrder);
+  deliveryMarker.events.add("click", scrollToOrder);
 };
 
 // Обработка событий WebSocket
@@ -748,7 +808,7 @@ watch(
     if (next) {
       localStorage.setItem("shift_selected_branch_id", String(next));
       await loadOrders();
-      initMap();
+      await initMap();
       if (isMobileViewport.value) {
         mobilePane.value = "orders";
       }
@@ -777,7 +837,7 @@ watch(
   (pane) => {
     if (pane !== "map") return;
     nextTick(() => {
-      mapInstance?.invalidateSize?.();
+      mapInstance?.container?.fitToViewport?.();
     });
   },
 );
@@ -788,7 +848,7 @@ watch(
       mobilePane.value = "orders";
     }
     nextTick(() => {
-      mapInstance?.invalidateSize?.();
+      mapInstance?.container?.fitToViewport?.();
     });
   },
 );
@@ -835,9 +895,9 @@ onBeforeUnmount(() => {
     ordersStore.leaveRoom(`branch-${selectedBranchId.value}-orders`);
   }
   if (mapInstance) {
-    mapInstance.remove();
+    mapInstance.destroy();
     mapInstance = null;
   }
-  tileLayer = null;
+  yandexMaps = null;
 });
 </script>

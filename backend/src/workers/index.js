@@ -6,7 +6,6 @@ import { createBroadcastWorker } from "./broadcast.worker.js";
 import { createTriggerWorker } from "./trigger.worker.js";
 import { createIikoMenuSyncWorker } from "./iikoMenuSync.worker.js";
 import { createIikoStopListSyncWorker } from "./iikoStopListSync.worker.js";
-import { createIikoDeliveryZonesWorker } from "./iikoDeliveryZones.worker.js";
 import { createIntegrationSchedulerWorker } from "./integrationScheduler.worker.js";
 import { createIntegrationRetryWorker } from "./integrationRetry.worker.js";
 import { createAdminActionLogsCleanupWorker } from "./adminActionLogsCleanup.worker.js";
@@ -31,7 +30,6 @@ let iikoStopListSyncWorker;
 let iikoOrderSyncWorker;
 let pbClientSyncWorker;
 let pbPurchaseSyncWorker;
-let iikoDeliveryZonesWorker;
 let integrationSchedulerWorker;
 let integrationRetryWorker;
 let adminActionLogsCleanupWorker;
@@ -49,7 +47,6 @@ export async function startWorkers() {
     // iikoOrderSyncWorker = createIikoOrderSyncWorker(redisConnection);
     // pbClientSyncWorker = createPbClientSyncWorker(redisConnection);
     // pbPurchaseSyncWorker = createPbPurchaseSyncWorker(redisConnection);
-    iikoDeliveryZonesWorker = createIikoDeliveryZonesWorker();
     integrationSchedulerWorker = createIntegrationSchedulerWorker();
     integrationRetryWorker = createIntegrationRetryWorker();
     adminActionLogsCleanupWorker = createAdminActionLogsCleanupWorker();
@@ -110,9 +107,6 @@ export async function stopWorkers() {
     }
     if (iikoStopListSyncWorker) {
       promises.push(iikoStopListSyncWorker.close());
-    }
-    if (iikoDeliveryZonesWorker) {
-      iikoDeliveryZonesWorker.stop();
     }
     if (integrationSchedulerWorker) {
       integrationSchedulerWorker.stop();

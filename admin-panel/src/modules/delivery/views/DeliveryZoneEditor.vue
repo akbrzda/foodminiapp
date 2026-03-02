@@ -1,6 +1,14 @@
 <template>
   <div class="relative h-full min-h-[calc(100vh-80px)] bg-background">
     <div id="editor-map" class="absolute inset-0 z-0"></div>
+    <div class="absolute bottom-4 right-4 z-20 flex flex-col gap-2">
+      <Button type="button" size="icon" variant="secondary" class="h-10 w-10 shadow-lg" @click="zoomInMap">
+        <Plus :size="18" />
+      </Button>
+      <Button type="button" size="icon" variant="secondary" class="h-10 w-10 shadow-lg" @click="zoomOutMap">
+        <Minus :size="18" />
+      </Button>
+    </div>
     <div class="absolute left-4 top-4 z-10 w-[260px] rounded-xl border border-border bg-background/95 shadow-xl backdrop-blur">
       <div class="p-4 space-y-3">
         <PageHeader :title="pageTitle" description="Редактирование полигона">
@@ -88,7 +96,7 @@
             </div>
           </template>
         </template>
-        <Button class="w-full" :disabled="!currentLayer" @click="savePolygon">
+        <Button class="w-full" :disabled="!hasCurrentPolygon" @click="savePolygon">
           <Save :size="16" />
           Сохранить
         </Button>
@@ -113,13 +121,13 @@
 </template>
 <script setup>
 import { devError } from "@/shared/utils/logger";
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
-import { Copy, Edit, Save } from "lucide-vue-next";
+import { computed, onMounted, onUnmounted, ref } from "vue";
+import { Copy, Edit, Minus, Plus, Save } from "lucide-vue-next";
 import { useRoute, useRouter } from "vue-router";
 import api from "@/shared/api/client.js";
 import { useReferenceStore } from "@/shared/stores/reference.js";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
-import { getMapColor, getTileLayer } from "@/shared/utils/leaflet.js";
+import { loadYandexMaps } from "@/shared/services/yandexMaps.js";
 import Button from "@/shared/components/ui/button/Button.vue";
 import CardContent from "@/shared/components/ui/card/CardContent.vue";
 import CardHeader from "@/shared/components/ui/card/CardHeader.vue";
@@ -130,34 +138,11 @@ import PageHeader from "@/shared/components/PageHeader.vue";
 import { Field, FieldContent, FieldGroup, FieldLabel } from "@/shared/components/ui/field";
 import DeliveryTariffEditorDialog from "@/modules/delivery/components/DeliveryTariffEditorDialog.vue";
 import DeliveryTariffCopyDialog from "@/modules/delivery/components/DeliveryTariffCopyDialog.vue";
-import L from "leaflet";
-import "leaflet/dist/leaflet.css";
-import "leaflet-draw";
-import "leaflet-draw/dist/leaflet.draw.css";
 
-const patchLeafletTouchEvents = () => {
-  if (!L?.DomEvent || L.DomEvent.__touchleavePatched) return;
-  const sanitizeTypes = (types) => {
-    if (typeof types !== "string") return types;
-    return types
-      .split(/\s+/)
-      .filter((type) => type && type !== "touchleave")
-      .join(" ");
-  };
-  const originalOn = L.DomEvent.on;
-  const originalOff = L.DomEvent.off;
-  L.DomEvent.on = function (obj, types, fn, context) {
-    const safeTypes = sanitizeTypes(types);
-    if (!safeTypes) return this;
-    return originalOn.call(this, obj, safeTypes, fn, context);
-  };
-  L.DomEvent.off = function (obj, types, fn, context) {
-    const safeTypes = sanitizeTypes(types);
-    if (!safeTypes) return this;
-    return originalOff.call(this, obj, safeTypes, fn, context);
-  };
-  L.DomEvent.__touchleavePatched = true;
-};
+const MAP_ACCENT = "#ffd200";
+const MAP_ACCENT_FILL = "rgba(255, 210, 0, 0.26)";
+const MAP_MUTED = "rgba(148, 163, 184, 0.24)";
+
 const isValidLatLng = (lat, lng) => Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
 const calcCenter = (coords = []) => {
   if (!coords.length) return null;
@@ -201,12 +186,44 @@ const toLeafletCoords = (coords = [], referenceCenter = null) => {
   return distanceSq(geoJsonCenter, referenceCenter) <= distanceSq(legacyCenter, referenceCenter) ? fromGeoJson : legacyLatLng;
 };
 
-// Убираем предупреждения Leaflet о неверном событии touchleave.
-patchLeafletTouchEvents();
-if (L?.GeometryUtil?.readableArea && !L.GeometryUtil.__patched) {
-  L.GeometryUtil.readableArea = () => "";
-  L.GeometryUtil.__patched = true;
-}
+const ringToStoredCoords = (coords = []) => {
+  const normalized = coords
+    .filter((coord) => Array.isArray(coord) && coord.length >= 2)
+    .map((coord) => [Number(coord[1]), Number(coord[0])])
+    .filter((coord) => Number.isFinite(coord[0]) && Number.isFinite(coord[1]));
+  if (normalized.length < 3) return [];
+  const [firstLng, firstLat] = normalized[0];
+  const [lastLng, lastLat] = normalized[normalized.length - 1];
+  if (firstLng !== lastLng || firstLat !== lastLat) {
+    normalized.push([firstLng, firstLat]);
+  }
+  return normalized;
+};
+
+const collectBounds = (coords = []) => {
+  if (!Array.isArray(coords) || !coords.length) return null;
+  let minLat = Number.POSITIVE_INFINITY;
+  let minLng = Number.POSITIVE_INFINITY;
+  let maxLat = Number.NEGATIVE_INFINITY;
+  let maxLng = Number.NEGATIVE_INFINITY;
+  coords.forEach((point) => {
+    const lat = Number(point?.[0]);
+    const lng = Number(point?.[1]);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+    minLat = Math.min(minLat, lat);
+    minLng = Math.min(minLng, lng);
+    maxLat = Math.max(maxLat, lat);
+    maxLng = Math.max(maxLng, lng);
+  });
+  if (!Number.isFinite(minLat) || !Number.isFinite(minLng) || !Number.isFinite(maxLat) || !Number.isFinite(maxLng)) {
+    return null;
+  }
+  return [
+    [minLat, minLng],
+    [maxLat, maxLng],
+  ];
+};
+
 const route = useRoute();
 const router = useRouter();
 const referenceStore = useReferenceStore();
@@ -236,13 +253,45 @@ const visibleTariffs = computed(() => {
   if (!tariffs.value || tariffs.value.length <= 5) return tariffs.value || [];
   return [...tariffs.value.slice(0, 3), { ellipsis: true }, tariffs.value[tariffs.value.length - 1]];
 });
+const hasCurrentPolygon = computed(() => {
+  if (!currentLayer) return false;
+  const ring = currentLayer.geometry?.getCoordinates?.()?.[0] || [];
+  return ringToStoredCoords(ring).length >= 4;
+});
+
+let yandexMaps = null;
 let map = null;
-let drawnItems = null;
-let drawControl = null;
 let currentLayer = null;
 let originalPolygon = null;
-let backgroundLayer = null;
-let tileLayer = null;
+const backgroundLayers = [];
+
+const ensureYandexMaps = async () => {
+  if (yandexMaps) return yandexMaps;
+  yandexMaps = await loadYandexMaps();
+  return yandexMaps;
+};
+
+const clearCurrentLayer = () => {
+  if (!map || !currentLayer) return;
+  map.geoObjects.remove(currentLayer);
+  currentLayer = null;
+};
+
+const clearBackgroundLayers = () => {
+  if (!map) return;
+  while (backgroundLayers.length) {
+    const layer = backgroundLayers.pop();
+    map.geoObjects.remove(layer);
+  }
+};
+
+const fitMapToCoords = (coords) => {
+  if (!map) return;
+  const bounds = collectBounds(coords);
+  if (!bounds) return;
+  map.setBounds(bounds, { checkZoomRange: true, zoomMargin: 24 });
+};
+
 const goBack = () => {
   router.push({
     name: "delivery-zones",
@@ -252,91 +301,87 @@ const goBack = () => {
     },
   });
 };
-const initMap = () => {
+const zoomInMap = () => {
+  if (!map) return;
+  map.setZoom(map.getZoom() + 1, { duration: 120 });
+};
+const zoomOutMap = () => {
+  if (!map) return;
+  map.setZoom(map.getZoom() - 1, { duration: 120 });
+};
+
+const initMap = async () => {
+  const ymaps = await ensureYandexMaps();
   const container = document.getElementById("editor-map");
   if (!container) return;
   if (map) {
-    map.remove();
-  }
-  if (L?.GeometryUtil?.readableArea) {
-    L.GeometryUtil.readableArea = () => "";
+    map.destroy();
+    map = null;
   }
   const branches = cityId.value ? referenceStore.branchesByCity[cityId.value] || [] : [];
   const selectedBranch = branches.find((b) => b.id === branchId.value);
   const center = selectedBranch?.latitude && selectedBranch?.longitude ? [selectedBranch.latitude, selectedBranch.longitude] : [55.751244, 37.618423];
-  map = L.map(container, { zoomControl: false, attributionControl: false }).setView(center, 13);
-  tileLayer = getTileLayer({ maxZoom: 20 }).addTo(map);
-  drawnItems = new L.FeatureGroup();
-  map.addLayer(drawnItems);
-  backgroundLayer = new L.FeatureGroup();
-  map.addLayer(backgroundLayer);
-  drawControl = new L.Control.Draw({
-    edit: { featureGroup: drawnItems, remove: false },
-    draw: {
-      polygon: {
-        allowIntersection: false,
-        showArea: false,
-        shapeOptions: {
-          color: getMapColor("accent"),
-          fillColor: getMapColor("accentFill"),
-          fillOpacity: 1,
-          weight: 3,
-          opacity: 0.9,
-        },
-      },
-      polyline: false,
-      rectangle: false,
-      circle: false,
-      circlemarker: false,
-      marker: false,
+  map = new ymaps.Map(
+    container,
+    {
+      center,
+      zoom: 13,
+      controls: [],
     },
-  });
-  map.addControl(drawControl);
-  map.on(L.Draw.Event.CREATED, (event) => {
-    if (currentLayer) {
-      drawnItems.removeLayer(currentLayer);
-    }
-    currentLayer = event.layer;
-    drawnItems.addLayer(currentLayer);
-  });
+    {
+      suppressMapOpenBlock: true,
+    },
+  );
 };
+
 const renderPolygon = (polygon) => {
-  if (!map || !drawnItems || !polygon?.polygon?.coordinates?.[0]) return;
-  drawnItems.clearLayers();
+  if (!map || !yandexMaps || !polygon?.polygon?.coordinates?.[0]) return;
+  clearCurrentLayer();
   const rawCoords = polygon.polygon.coordinates[0];
   const coords = toLeafletCoords(rawCoords, getReferenceCenter());
   if (!coords.length) return;
-  currentLayer = L.polygon(coords, {
-    color: getMapColor("accent"),
-    fillColor: getMapColor("accentFill"),
-    fillOpacity: 1,
-    weight: 3,
-    opacity: 0.9,
-  });
-  drawnItems.addLayer(currentLayer);
-  map.fitBounds(currentLayer.getBounds(), { padding: [24, 24] });
+  currentLayer = new yandexMaps.Polygon(
+    [coords],
+    {},
+    {
+      strokeColor: MAP_ACCENT,
+      strokeWidth: 3,
+      fillColor: MAP_ACCENT_FILL,
+      fillOpacity: 0.8,
+      opacity: 0.9,
+      editorMaxPoints: 2000,
+    },
+  );
+  map.geoObjects.add(currentLayer);
+  fitMapToCoords(coords);
 };
+
 const renderBackgroundPolygons = (excludeId = null) => {
-  if (!map || !backgroundLayer) return;
-  backgroundLayer.clearLayers();
-  const muted = "#cbd5e1";
-  const style = {
-    color: muted,
-    fillColor: muted,
-    fillOpacity: 0.08,
-    weight: 2,
-    opacity: 0.6,
-  };
+  if (!map || !yandexMaps) return;
+  clearBackgroundLayers();
   branchPolygons.value.forEach((polygon) => {
     if (excludeId && polygon.id === excludeId) return;
     const rawCoords = polygon.polygon?.coordinates?.[0];
     if (!rawCoords?.length) return;
     const coords = toLeafletCoords(rawCoords, getReferenceCenter());
     if (!coords.length) return;
-    const layer = L.polygon(coords, style);
-    backgroundLayer.addLayer(layer);
+    const layer = new yandexMaps.Polygon(
+      [coords],
+      {},
+      {
+        strokeColor: "#94a3b8",
+        strokeWidth: 2,
+        fillColor: MAP_MUTED,
+        fillOpacity: 0.2,
+        opacity: 0.6,
+        interactivityModel: "default#silent",
+      },
+    );
+    backgroundLayers.push(layer);
+    map.geoObjects.add(layer);
   });
 };
+
 const loadPolygon = async () => {
   if (!branchId.value) return;
   const response = await api.get(`/api/polygons/admin/branch/${branchId.value}`);
@@ -419,28 +464,48 @@ const confirmTariffCopy = async (value) => {
     showErrorNotification(message);
   }
 };
+
 const startDrawing = () => {
-  if (!map || !drawControl) return;
-  new L.Draw.Polygon(map, drawControl.options.draw.polygon).enable();
+  if (!map || !yandexMaps) return;
+  clearCurrentLayer();
+  currentLayer = new yandexMaps.Polygon(
+    [[]],
+    {},
+    {
+      strokeColor: MAP_ACCENT,
+      strokeWidth: 3,
+      fillColor: MAP_ACCENT_FILL,
+      fillOpacity: 0.8,
+      opacity: 0.9,
+      editorMaxPoints: 2000,
+    },
+  );
+  map.geoObjects.add(currentLayer);
+  currentLayer.editor.startDrawing();
 };
+
 const resetPolygon = () => {
   if (polygonId.value === "new") {
-    if (currentLayer) {
-      drawnItems.removeLayer(currentLayer);
-      currentLayer = null;
-    }
+    clearCurrentLayer();
     return;
   }
   renderPolygon(originalPolygon);
   renderBackgroundPolygons(originalPolygon?.id || null);
 };
+
 const savePolygon = async () => {
   if (!currentLayer) return;
+  const ring = currentLayer.geometry?.getCoordinates?.()?.[0] || [];
+  const storedPolygon = ringToStoredCoords(ring);
+  if (storedPolygon.length < 4) {
+    showErrorNotification("Нарисуйте корректный полигон");
+    return;
+  }
   const payload = {
     branch_id: branchId.value,
     name: form.value.name,
     delivery_time: form.value.delivery_time,
-    polygon: currentLayer.toGeoJSON().geometry.coordinates[0],
+    polygon: storedPolygon,
   };
   try {
     if (polygonId.value === "new") {
@@ -456,13 +521,14 @@ const savePolygon = async () => {
     showErrorNotification("Ошибка сохранения полигона");
   }
 };
+
 onMounted(async () => {
   try {
     await referenceStore.loadCities();
     if (cityId.value) {
       await referenceStore.loadBranches(cityId.value);
     }
-    initMap();
+    await initMap();
     await loadPolygon();
   } catch (error) {
     devError("Ошибка загрузки полигона:", error);
@@ -471,22 +537,10 @@ onMounted(async () => {
 });
 onUnmounted(() => {
   if (map) {
-    map.remove();
+    map.destroy();
     map = null;
   }
-  tileLayer = null;
+  yandexMaps = null;
 });
 </script>
-<style scoped>
-:deep(#editor-map .leaflet-top.leaflet-left) {
-  left: auto;
-  right: 400px;
-  top: 16px;
-}
-@media (max-width: 1024px) {
-  :deep(#editor-map .leaflet-top.leaflet-left) {
-    right: 16px;
-    top: 76px;
-  }
-}
-</style>
+<style scoped></style>

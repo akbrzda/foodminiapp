@@ -10,6 +10,11 @@
                 <RefreshCcw v-else :size="16" />
                 Сбросить
               </Button>
+              <Button variant="secondary" :disabled="moduleLoading || moduleSaving || mapsTesting" @click="testMapsSettings">
+                <Spinner v-if="mapsTesting" class="h-4 w-4" />
+                <SendHorizontal v-else :size="16" />
+                {{ mapsTesting ? "Проверка..." : "Тест Яндекс API" }}
+              </Button>
               <Button :disabled="moduleLoading || moduleSaving" @click="saveModuleSettings">
                 <Spinner v-if="moduleSaving" class="h-4 w-4" />
                 <Save v-else :size="16" />
@@ -107,7 +112,15 @@
                           <SelectItem :value="false">Выключено</SelectItem>
                         </SelectContent>
                       </Select>
-                      <Input v-else-if="item.type === 'string'" v-model="moduleForm[item.key]" type="text" />
+                      <Input
+                        v-else-if="item.type === 'string'"
+                        v-model="moduleForm[item.key]"
+                        :type="MAPS_SECRET_KEYS.has(item.key) ? 'password' : 'text'"
+                        :autocomplete="MAPS_SECRET_KEYS.has(item.key) ? 'new-password' : 'off'"
+                        autocapitalize="none"
+                        autocorrect="off"
+                        spellcheck="false"
+                      />
                       <Input
                         v-else
                         v-model.number="moduleForm[item.key]"
@@ -634,6 +647,8 @@ const moduleItems = ref([]);
 const moduleForm = ref({});
 const moduleLoading = ref(false);
 const moduleSaving = ref(false);
+const mapsTesting = ref(false);
+const mapsTestQuery = ref("Москва, Тверская улица, 1");
 const reasons = ref([]);
 const reasonsLoading = ref(false);
 const tabs = ["Модули", "Причины стоп-листа", "Приветственное сообщение", "Telegram заказы"];
@@ -689,6 +704,7 @@ const { showErrorNotification, showSuccessNotification } = useNotifications();
 const modalTitle = computed(() => (editing.value ? "Редактировать причину" : "Новая причина"));
 const modalSubtitle = computed(() => (editing.value ? "Измените параметры" : "Создайте причину стоп-листа"));
 const percentKeys = new Set();
+const MAPS_SECRET_KEYS = new Set(["yandex_suggest_api_key"]);
 const primitiveTypes = new Set(["boolean", "string", "number"]);
 const TELEGRAM_ORDER_PLACEHOLDERS = [
   "{{order_id}}",
@@ -882,6 +898,23 @@ const saveModuleSettings = async () => {
     showErrorNotification(message);
   } finally {
     moduleSaving.value = false;
+  }
+};
+
+const testMapsSettings = async () => {
+  mapsTesting.value = true;
+  try {
+    const { data } = await api.post("/api/settings/admin/maps/test", {
+      query: mapsTestQuery.value,
+    });
+    const suggestCount = Number(data?.data?.suggest_count || 0);
+    const geocodeCount = Number(data?.data?.geocode_count || 0);
+    showSuccessNotification(`Яндекс API доступен: suggest ${suggestCount}, geocode ${geocodeCount}`);
+  } catch (error) {
+    devError("Failed to test yandex maps settings:", error);
+    showErrorNotification(error.response?.data?.error || "Не удалось проверить Яндекс API");
+  } finally {
+    mapsTesting.value = false;
   }
 };
 

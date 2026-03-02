@@ -37,6 +37,22 @@ router.get("/", async (req, res, next) => {
   }
 });
 
+router.get("/maps-public", async (req, res, next) => {
+  try {
+    const settings = await getSystemSettings();
+    res.json({
+      success: true,
+      data: {
+        yandex_js_api_key: String(settings?.yandex_js_api_key || "").trim(),
+        language: String(settings?.maps_default_language || "ru_RU").trim() || "ru_RU",
+        country: String(settings?.maps_default_country || "TJ").trim() || "TJ",
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.get("/admin", authenticateToken, requireRole("admin", "ceo"), async (req, res, next) => {
   try {
     const settings = await getSystemSettings();
@@ -46,6 +62,71 @@ router.get("/admin", authenticateToken, requireRole("admin", "ceo"), async (req,
     });
   } catch (error) {
     next(error);
+  }
+});
+
+router.post("/admin/maps/test", authenticateToken, requireRole("admin", "ceo"), async (req, res, next) => {
+  try {
+    const settings = await getSystemSettings();
+    const geocoderKey = String(settings?.yandex_js_api_key || "").trim();
+    const suggestKey = String(settings?.yandex_suggest_api_key || "").trim();
+    const language = String(settings?.maps_default_language || "ru_RU").trim() || "ru_RU";
+    const query = String(req.body?.query || "Москва, Тверская улица, 1").trim();
+
+    if (!geocoderKey) {
+      return res.status(400).json({ success: false, error: "Не задан yandex_js_api_key (единый ключ JS API + HTTP Геокодер)" });
+    }
+    if (!suggestKey) {
+      return res.status(400).json({ success: false, error: "Не задан yandex_suggest_api_key" });
+    }
+    if (!query) {
+      return res.status(400).json({ success: false, error: "Укажите query для теста" });
+    }
+
+    const [suggestResponse, geocodeResponse] = await Promise.all([
+      axios.get("https://suggest-maps.yandex.ru/v1/suggest", {
+        params: {
+          apikey: suggestKey,
+          text: query,
+          lang: language,
+          results: 3,
+        },
+        timeout: 7000,
+      }),
+      axios.get("https://geocode-maps.yandex.ru/v1/", {
+        params: {
+          apikey: geocoderKey,
+          geocode: query,
+          format: "json",
+          results: 3,
+          lang: language,
+        },
+        timeout: 7000,
+      }),
+    ]);
+
+    const suggestCount = Array.isArray(suggestResponse?.data?.results) ? suggestResponse.data.results.length : 0;
+    const geocodeCount = Array.isArray(geocodeResponse?.data?.response?.GeoObjectCollection?.featureMember)
+      ? geocodeResponse.data.response.GeoObjectCollection.featureMember.length
+      : 0;
+
+    return res.json({
+      success: true,
+      data: {
+        query,
+        suggest_count: suggestCount,
+        geocode_count: geocodeCount,
+      },
+    });
+  } catch (error) {
+    if (error?.response) {
+      return res.status(502).json({
+        success: false,
+        error: "Ошибка проверки Яндекс API",
+        details: error.message,
+      });
+    }
+    return next(error);
   }
 });
 

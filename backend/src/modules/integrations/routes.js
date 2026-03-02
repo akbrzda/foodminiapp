@@ -17,7 +17,6 @@ import {
   runIikoOnboarding,
   syncIikoMenuNow,
   syncIikoStopListNow,
-  syncIikoDeliveryZonesNow,
   testIikoConnection,
   testPremiumBonusConnection,
   updateAdminIntegrationSettings,
@@ -102,18 +101,6 @@ router.post("/iiko/sync-menu", async (req, res, next) => {
 router.post("/iiko/sync-stoplist", async (req, res, next) => {
   try {
     const result = await syncIikoStopListNow({ branchId: req.body?.branch_id || null });
-    if (!result.accepted) {
-      return res.status(400).json(result);
-    }
-    return res.json(result);
-  } catch (error) {
-    next(error);
-  }
-});
-
-router.post("/iiko/sync-delivery-zones", async (req, res, next) => {
-  try {
-    const result = await syncIikoDeliveryZonesNow();
     if (!result.accepted) {
       return res.status(400).json(result);
     }

@@ -76,8 +76,7 @@
         {{ deliveryZoneError }}
       </div>
 
-      <div class="details-grid details-grid-three">
-        <FloatingField v-model="deliveryHouse" label="Дом" placeholder="Дом" :control-class="['detail-input', 'mini-field']" />
+      <div class="details-grid details-grid-two">
         <FloatingField v-model="deliveryDetails.entrance" label="Подъезд" placeholder="Подъезд" :control-class="['detail-input', 'mini-field']" />
         <FloatingField v-model="deliveryDetails.floor" label="Этаж" placeholder="Этаж" :control-class="['detail-input', 'mini-field']" />
       </div>
@@ -98,6 +97,7 @@ import { useRouter } from "vue-router";
 import { useLocationStore } from "@/modules/location/stores/location.js";
 import { addressesAPI } from "@/shared/api/endpoints.js";
 import { hapticFeedback } from "@/shared/services/telegram.js";
+import { loadYandexMaps } from "@/shared/services/yandexMaps.js";
 import { devDebug, devError } from "@/shared/utils/logger.js";
 import FloatingField from "@/shared/components/FloatingField.vue";
 
@@ -108,28 +108,7 @@ const mapContainerRef = ref(null);
 const addressFieldRef = ref(null);
 const cityPolygons = ref([]);
 
-const parseSavedAddress = (value) => {
-  const raw = String(value || "").trim();
-  if (!raw) {
-    return { street: "", house: "" };
-  }
-  const parts = raw
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
-  if (parts.length < 2) {
-    return { street: raw, house: "" };
-  }
-  const maybeHouse = parts[parts.length - 1];
-  if (/\d/.test(maybeHouse)) {
-    return { street: parts.slice(0, -1).join(", "), house: maybeHouse };
-  }
-  return { street: raw, house: "" };
-};
-
-const savedAddress = parseSavedAddress(locationStore.deliveryAddress || "");
-const deliveryStreet = ref(savedAddress.street);
-const deliveryHouse = ref(savedAddress.house);
+const deliveryStreet = ref(String(locationStore.deliveryAddress || "").trim());
 const mapAddressHint = ref(locationStore.deliveryAddress || "");
 const addressSuggestions = ref([]);
 const showSuggestions = ref(false);
@@ -143,7 +122,7 @@ const deliveryDetails = reactive({
   comment: locationStore.deliveryDetails?.comment || "",
 });
 
-const lastAddress = ref(`${deliveryStreet.value}__${deliveryHouse.value}`);
+const lastAddress = ref(deliveryStreet.value);
 const deliveryZoneError = ref("");
 
 const GEO_PERMISSION_KEY = "geoPermission";
@@ -153,9 +132,9 @@ const REVERSE_DEBOUNCE_MS = 350;
 
 let searchTimeout = null;
 let reverseTimeout = null;
-let leafletLoading = null;
+let yandexMaps = null;
 let mapInstance = null;
-let polygonsLayer = null;
+let polygonOverlays = [];
 let suggestionsController = null;
 let reverseController = null;
 let lastSearchId = 0;
@@ -249,18 +228,14 @@ onUnmounted(() => {
   if (reverseController) reverseController.abort();
 
   if (mapInstance) {
-    mapInstance.remove();
+    mapInstance.destroy();
     mapInstance = null;
   }
-  polygonsLayer = null;
+  polygonOverlays = [];
 });
 
 function buildCombinedAddress() {
   const street = deliveryStreet.value.trim();
-  const house = deliveryHouse.value.trim();
-  if (street && house) {
-    return cityName.value ? `${street}, ${house}, ${cityName.value}` : `${street}, ${house}`;
-  }
   if (street) {
     return cityName.value ? `${street}, ${cityName.value}` : street;
   }
@@ -326,9 +301,7 @@ function onInputControlPointerDown() {
 
 function queueMapResize() {
   setTimeout(() => {
-    if (mapInstance) {
-      mapInstance.invalidateSize({ debounceMoveend: true });
-    }
+    mapInstance?.container?.fitToViewport?.();
   }, 120);
 }
 
@@ -378,11 +351,19 @@ async function requestInitialLocation() {
 
 function selectAddress(address) {
   hapticFeedback("light");
-  deliveryStreet.value = address.label;
+  deliveryStreet.value = String(address?.label || "").trim();
   deliveryZoneError.value = "";
   showSuggestions.value = false;
   addressSuggestions.value = [];
-  selectedLocation.value = null;
+  if (Number.isFinite(Number(address?.lat)) && Number.isFinite(Number(address?.lon))) {
+    const lat = Number(address.lat);
+    const lon = Number(address.lon);
+    selectedLocation.value = { lat, lon, lng: lon };
+    mapAddressHint.value = address.label || deliveryStreet.value;
+    setMapCenter(lat, lon, { animate: true, resolveAddress: false });
+  } else {
+    selectedLocation.value = null;
+  }
   getAddressInputElement()?.blur();
 }
 
@@ -400,7 +381,6 @@ function clearAddress() {
   lastReverseId += 1;
 
   deliveryStreet.value = "";
-  deliveryHouse.value = "";
   addressSuggestions.value = [];
   showSuggestions.value = false;
   isSuggestionsLoading.value = false;
@@ -412,13 +392,12 @@ function clearAddress() {
 
 async function confirmAddress() {
   deliveryZoneError.value = "";
-  const hasStreetAndHouse = Boolean(deliveryStreet.value.trim() && deliveryHouse.value.trim());
-  const preferredAddress = hasStreetAndHouse ? buildCombinedAddress() : buildCombinedAddress() || mapAddressHint.value.trim();
+  const preferredAddress = buildCombinedAddress() || mapAddressHint.value.trim();
   if (!preferredAddress) {
     hapticFeedback("error");
     return;
   }
-  if (hasStreetAndHouse || !selectedLocation.value) {
+  if (!selectedLocation.value || deliveryStreet.value.trim()) {
     const resolved = await geocodeAddress(preferredAddress);
     if (!resolved) {
       hapticFeedback("error");
@@ -458,7 +437,7 @@ async function confirmAddress() {
       return;
     }
   }
-  const addressToSave = hasStreetAndHouse ? `${deliveryStreet.value.trim()}, ${deliveryHouse.value.trim()}` : preferredAddress.trim();
+  const addressToSave = deliveryStreet.value.trim() || preferredAddress.trim();
   locationStore.setDeliveryAddress(addressToSave);
   locationStore.setDeliveryDetails({ ...deliveryDetails });
   locationStore.setDeliveryCoords({
@@ -476,33 +455,42 @@ async function confirmAddress() {
 
 async function initMap() {
   if (!mapContainerRef.value || mapInstance) return;
-  const L = await loadLeaflet();
-  if (!L) return;
+  yandexMaps = await loadYandexMaps().catch((error) => {
+    devError("Не удалось загрузить карту Яндекс:", error);
+    return null;
+  });
+  if (!yandexMaps) return;
 
   const initial = selectedLocation.value || cityCenter.value || { lat: 55.7522, lon: 37.6156 };
-  mapInstance = L.map(mapContainerRef.value, {
-    zoomControl: false,
-    attributionControl: false,
-    inertia: true,
-  }).setView([initial.lat, initial.lon ?? initial.lng], 15);
-
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(mapInstance);
-  polygonsLayer = L.layerGroup().addTo(mapInstance);
+  mapInstance = new yandexMaps.Map(
+    mapContainerRef.value,
+    {
+      center: [initial.lat, initial.lon ?? initial.lng],
+      zoom: 15,
+      controls: [],
+    },
+    {
+      suppressMapOpenBlock: true,
+    },
+  );
   renderCityPolygons();
-  mapInstance.on("movestart", () => {
+  mapInstance.events.add("actionbegin", () => {
     if (!isAddressFocused.value) {
       showSuggestions.value = false;
     }
   });
-  mapInstance.on("moveend", () => {
+  mapInstance.events.add("actionend", () => {
     if (isProgrammaticMove) {
       isProgrammaticMove = false;
       if (Date.now() < suppressReverseUntil) return;
     }
     if (Date.now() < suppressReverseUntil) return;
     const center = mapInstance.getCenter();
-    selectedLocation.value = { lat: center.lat, lon: center.lng, lng: center.lng };
-    scheduleReverseFromCenter(center.lat, center.lng, false);
+    const centerLat = Number(center?.[0]);
+    const centerLon = Number(center?.[1]);
+    if (!Number.isFinite(centerLat) || !Number.isFinite(centerLon)) return;
+    selectedLocation.value = { lat: centerLat, lon: centerLon, lng: centerLon };
+    scheduleReverseFromCenter(centerLat, centerLon, false);
   });
 
   if (selectedLocation.value) {
@@ -532,9 +520,9 @@ async function loadCityPolygons() {
 }
 
 function renderCityPolygons() {
-  if (!mapInstance || !polygonsLayer || !window.L) return;
-  const L = window.L;
-  polygonsLayer.clearLayers();
+  if (!mapInstance || !yandexMaps) return;
+  polygonOverlays.forEach((overlay) => mapInstance.geoObjects.remove(overlay));
+  polygonOverlays = [];
   const selectedZoneId = Number(locationStore.deliveryZone?.id);
 
   cityPolygons.value.forEach((polygon) => {
@@ -548,17 +536,23 @@ function renderCityPolygons() {
         .filter((pair) => Number.isFinite(pair[0]) && Number.isFinite(pair[1]));
       if (points.length < 3) return;
 
-      const shape = L.polygon(points, {
-        color: isSelected ? "#f59e0b" : "#10b981",
-        fillColor: isSelected ? "#f59e0b" : "#10b981",
-        fillOpacity: isSelected ? 0.28 : 0.12,
-        weight: isSelected ? 3 : 2,
-      });
-      shape.addTo(polygonsLayer);
-
-      if (polygon?.name) {
-        shape.bindTooltip(polygon.name, { direction: "center", sticky: true });
-      }
+      const shape = new yandexMaps.Polygon(
+        [points],
+        polygon?.name
+          ? {
+              hintContent: String(polygon.name),
+            }
+          : {},
+        {
+          fillColor: isSelected ? "rgba(245,158,11,0.28)" : "rgba(16,185,129,0.12)",
+          strokeColor: isSelected ? "#f59e0b" : "#10b981",
+          strokeWidth: isSelected ? 3 : 2,
+          strokeOpacity: 1,
+          interactivityModel: "default#transparent",
+        },
+      );
+      mapInstance.geoObjects.add(shape);
+      polygonOverlays.push(shape);
     });
   });
 }
@@ -584,7 +578,7 @@ function setMapCenter(lat, lon, options = {}) {
   const { animate = true, resolveAddress = false } = options;
   isProgrammaticMove = true;
   suppressReverseUntil = Date.now() + 700;
-  mapInstance.setView([nextLat, nextLon], mapInstance.getZoom(), { animate });
+  mapInstance.setCenter([nextLat, nextLon], mapInstance.getZoom(), { duration: animate ? 250 : 0 });
   selectedLocation.value = { lat: nextLat, lon: nextLon, lng: nextLon };
 
   if (resolveAddress) {
@@ -603,17 +597,7 @@ function scheduleReverseFromCenter(lat, lon, immediate = false) {
     const suggestion = await reverseGeocode(lat, lon);
     if (requestId !== lastReverseId || !suggestion?.label) return;
     mapAddressHint.value = suggestion.label;
-    const parts = String(suggestion.label || "")
-      .split(",")
-      .map((value) => value.trim())
-      .filter(Boolean);
-    if (parts.length >= 2 && /\d/.test(parts[parts.length - 1])) {
-      deliveryHouse.value = parts[parts.length - 1];
-      deliveryStreet.value = parts.slice(0, -1).join(", ");
-    } else {
-      deliveryStreet.value = suggestion.label;
-      deliveryHouse.value = "";
-    }
+    deliveryStreet.value = suggestion.label;
 
     // Привязываем центр карты к точке найденного адреса (например, к ближайшему дому),
     // чтобы центр-маркер и выбранный адрес всегда совпадали.
@@ -633,11 +617,13 @@ function scheduleReverseFromCenter(lat, lon, immediate = false) {
 }
 
 function zoomIn() {
-  mapInstance?.zoomIn();
+  if (!mapInstance) return;
+  mapInstance.setZoom(mapInstance.getZoom() + 1, { duration: 150 });
 }
 
 function zoomOut() {
-  mapInstance?.zoomOut();
+  if (!mapInstance) return;
+  mapInstance.setZoom(mapInstance.getZoom() - 1, { duration: 150 });
 }
 
 async function locateUser() {
@@ -656,7 +642,8 @@ async function locateUser() {
 }
 
 async function fetchAddressSuggestions(query) {
-  const normalized = query.trim().toLowerCase();
+  const normalizedQuery = String(query || "").trim();
+  const normalized = normalizedQuery.toLowerCase();
   if (!normalized) {
     addressSuggestions.value = [];
     isSuggestionsLoading.value = false;
@@ -667,14 +654,14 @@ async function fetchAddressSuggestions(query) {
   if (searchCache.has(normalized)) {
     addressSuggestions.value = searchCache.get(normalized) || [];
     isSuggestionsLoading.value = false;
-    lastSearchedQuery.value = query.trim();
+    lastSearchedQuery.value = normalizedQuery;
     showSuggestions.value = true;
     return;
   }
 
   const searchId = ++lastSearchId;
   isSuggestionsLoading.value = true;
-  lastSearchedQuery.value = query.trim();
+  lastSearchedQuery.value = normalizedQuery;
   if (suggestionsController) {
     suggestionsController.abort();
   }
@@ -687,7 +674,7 @@ async function fetchAddressSuggestions(query) {
       isSuggestionsLoading.value = false;
       return;
     }
-    const response = await addressesAPI.searchStreetDirectory(locationStore.selectedCity.id, query, 10, {
+    const response = await addressesAPI.searchStreetDirectory(locationStore.selectedCity.id, normalizedQuery, 10, {
       signal: suggestionsController.signal,
     });
     if (searchId !== lastSearchId) return;
@@ -787,7 +774,7 @@ function normalizeStreetDirectoryItems(payload) {
         id: String(item?.id || "").trim() || label.toLowerCase(),
         classifierId: String(item?.classifier_id || item?.classifierId || "").trim() || null,
         label,
-        source: String(item?.source || payload?.source || "nominatim"),
+        source: String(item?.source || payload?.source || "yandex"),
       };
     })
     .filter(Boolean);
@@ -811,37 +798,8 @@ function normalizeSuggestion(item) {
   return { label, lat, lon };
 }
 
-async function loadLeaflet() {
-  if (leafletLoading) return leafletLoading;
-
-  leafletLoading = new Promise((resolve) => {
-    if (window.L) {
-      resolve(window.L);
-      return;
-    }
-
-    const css = document.createElement("link");
-    css.rel = "stylesheet";
-    css.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
-    css.integrity = "sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H";
-    css.crossOrigin = "anonymous";
-    document.head.appendChild(css);
-
-    const script = document.createElement("script");
-    script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
-    script.integrity = "sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH";
-    script.crossOrigin = "anonymous";
-    script.async = true;
-    script.onload = () => resolve(window.L);
-    script.onerror = () => resolve(null);
-    document.body.appendChild(script);
-  });
-
-  return leafletLoading;
-}
-
-watch([deliveryStreet, deliveryHouse], ([street, house]) => {
-  const signature = `${street}__${house}`;
+watch([deliveryStreet], ([street]) => {
+  const signature = `${street}`;
   if (signature !== lastAddress.value) {
     deliveryDetails.apartment = "";
     deliveryDetails.entrance = "";
@@ -1093,10 +1051,6 @@ watch(
   display: grid;
   gap: 8px;
   margin-bottom: 10px;
-}
-
-.details-grid-three {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .details-grid-two {

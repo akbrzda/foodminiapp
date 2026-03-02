@@ -378,39 +378,6 @@ router.put("/admin/:id", authenticateToken, requireRole("admin", "ceo"), async (
   }
 });
 
-router.get("/admin/iiko/address-cities", authenticateToken, requireRole("admin", "ceo"), async (req, res, next) => {
-  try {
-    const client = await getIikoClientOrNull();
-    if (!client) {
-      return res.status(400).json({ error: "Интеграция iiko выключена или не настроена" });
-    }
-
-    const cities = await client.getAddressCities({ includeDeleted: false, useConfiguredOrganization: false });
-    const normalized = (Array.isArray(cities) ? cities : [])
-      .map((city) => ({
-        id: String(city?.id || "").trim(),
-        name: String(city?.name || "").trim(),
-        classifierId: String(city?.classifierId || "").trim() || null,
-        isDeleted: Boolean(city?.isDeleted),
-      }))
-      .filter((city) => city.id && city.name);
-    const uniqueById = new Map();
-    for (const city of normalized) {
-      if (!uniqueById.has(city.id)) {
-        uniqueById.set(city.id, city);
-      }
-    }
-    const deduplicated = [...uniqueById.values()].sort((a, b) => a.name.localeCompare(b.name, "ru"));
-
-    return res.json({
-      cities: deduplicated,
-      fetchedAt: new Date().toISOString(),
-    });
-  } catch (error) {
-    return next(error);
-  }
-});
-
 router.delete("/admin/:id", authenticateToken, requireRole("admin", "ceo"), async (req, res, next) => {
   try {
     const cityId = req.params.id;

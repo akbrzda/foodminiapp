@@ -1,4 +1,5 @@
 import api from "./index.js";
+
 export const authAPI = {
   loginWithTelegram(initData) {
     return api.post("/auth/telegram", { initData });
@@ -13,6 +14,7 @@ export const authAPI = {
     return api.delete("/users/me");
   },
 };
+
 export const userStateAPI = {
   getState() {
     return api.get("/users/state");
@@ -21,6 +23,7 @@ export const userStateAPI = {
     return api.put("/users/state", state);
   },
 };
+
 export const citiesAPI = {
   getCities() {
     return api.get("/cities");
@@ -29,6 +32,7 @@ export const citiesAPI = {
     return api.get(`/cities/${cityId}/branches`);
   },
 };
+
 export const menuAPI = {
   getMenu(cityId, { branchId, fulfillmentType } = {}) {
     const params = { city_id: cityId };
@@ -52,6 +56,7 @@ export const menuAPI = {
     return api.post("/menu/upsell", payload);
   },
 };
+
 export const ordersAPI = {
   createOrder(orderData) {
     return api.post("/orders", orderData);
@@ -66,6 +71,7 @@ export const ordersAPI = {
     return api.post(`/orders/${orderId}/repeat`);
   },
 };
+
 export const bonusesAPI = {
   getBalance() {
     return api.get("/client/loyalty/balance");
@@ -82,6 +88,7 @@ export const bonusesAPI = {
     return api.get("/client/loyalty/levels");
   },
 };
+
 export const addressesAPI = {
   getAddresses() {
     return api.get("/users/me/addresses");
@@ -120,13 +127,12 @@ export const addressesAPI = {
     });
   },
 };
-export const geocodeAPI = {
-  geocode(address) {
-    return api.post("/geocode", { address });
-  },
-};
+
 export const settingsAPI = {
   getSettings() {
     return api.get("/settings");
+  },
+  getMapsPublic() {
+    return api.get("/settings/maps-public");
   },
 };
