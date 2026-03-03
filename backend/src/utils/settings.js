@@ -28,7 +28,6 @@ const TELEGRAM_START_BUTTON_TYPES = new Set(["url", "web_app"]);
 const MAPS_API_KEY_MAX_LENGTH = 512;
 const MAPS_LANGUAGE_REGEX = /^[a-z]{2}_[A-Z]{2}$/;
 const MAPS_COUNTRY_REGEX = /^[A-Z]{2}$/;
-const MENU_CARD_LAYOUTS = new Set(["horizontal", "vertical"]);
 
 export const SETTINGS_SCHEMA = {
   bonuses_enabled: {
@@ -58,20 +57,6 @@ export const SETTINGS_SCHEMA = {
     description: "Оформление заказов на самовывоз",
     group: "Заказы",
     type: "boolean",
-  },
-  menu_badges_enabled: {
-    default: true,
-    label: "Бейджи карточек меню",
-    description: "Показывать бейджи в карточках блюд и разрешать редактирование бейджей в админке",
-    group: "Оформление",
-    type: "boolean",
-  },
-  menu_cards_layout: {
-    default: "horizontal",
-    label: "Режим карточек меню",
-    description: "horizontal — одна карточка в ряд, vertical — две карточки в ряд",
-    group: "Оформление",
-    type: "string",
   },
   telegram_start_message: {
     default: TELEGRAM_START_MESSAGE_DEFAULT,
@@ -279,7 +264,7 @@ const validateMapsSetting = (key, value) => {
   if (key === "maps_default_country") {
     if (!value) return null;
     if (!MAPS_COUNTRY_REGEX.test(value)) {
-      return "maps_default_country должен быть в формате ISO alpha-2, например TJ";
+      return "maps_default_country должен быть в формате ISO alpha-2, например RU";
     }
     return null;
   }
@@ -295,17 +280,6 @@ const validateMapsSetting = (key, value) => {
     return null;
   }
 
-  return null;
-};
-const validateAppearanceSetting = (key, value) => {
-  if (key !== "menu_cards_layout") return null;
-  if (typeof value !== "string") {
-    return "menu_cards_layout должен быть строкой";
-  }
-  const normalized = String(value || "").trim().toLowerCase();
-  if (!MENU_CARD_LAYOUTS.has(normalized)) {
-    return "menu_cards_layout должен быть horizontal или vertical";
-  }
   return null;
 };
 const TELEGRAM_START_MAX_IMAGES = 20;
@@ -399,7 +373,9 @@ const validateTelegramStartMessage = (value) => {
 
   const primaryImageUrl = normalizedImages.find((image) => image.is_active)?.url || normalizedImages[0]?.url || "";
 
-  const buttonTypeRaw = String(value.button_type || "url").trim().toLowerCase();
+  const buttonTypeRaw = String(value.button_type || "url")
+    .trim()
+    .toLowerCase();
   const buttonType = TELEGRAM_START_BUTTON_TYPES.has(buttonTypeRaw) ? buttonTypeRaw : null;
   if (!buttonType) {
     return { normalized: null, error: "button_type должен быть url или web_app" };
@@ -478,9 +454,7 @@ const validateTelegramNewOrderNotification = (value) => {
   }
 
   const sourceMap =
-    value.city_thread_ids && typeof value.city_thread_ids === "object" && !Array.isArray(value.city_thread_ids)
-      ? value.city_thread_ids
-      : {};
+    value.city_thread_ids && typeof value.city_thread_ids === "object" && !Array.isArray(value.city_thread_ids) ? value.city_thread_ids : {};
   const normalizedThreadMap = {};
   for (const [cityIdRaw, threadIdRaw] of Object.entries(sourceMap)) {
     const cityId = Number(cityIdRaw);
@@ -604,14 +578,6 @@ export const updateSystemSettings = async (patch) => {
       if (mapsValidationError) {
         errors[key] = mapsValidationError;
         continue;
-      }
-      const appearanceValidationError = validateAppearanceSetting(key, updates[key]);
-      if (appearanceValidationError) {
-        errors[key] = appearanceValidationError;
-        continue;
-      }
-      if (key === "menu_cards_layout") {
-        updates[key] = String(updates[key]).trim().toLowerCase();
       }
     } else if (meta.type === "json") {
       if (!value || typeof value !== "object" || Array.isArray(value)) {
