@@ -1,67 +1,81 @@
 <template>
   <div class="pickup-map">
-    <div ref="mapContainerRef" class="map"></div>
-    <div class="search-bar">
-      <FloatingField v-model="searchQuery" label="Найти пиццерию" placeholder="Найти пиццерию" :control-class="['search-input', 'mini-field']" />
+    <div class="map-section">
+      <div ref="mapContainerRef" class="map"></div>
     </div>
-    <div v-if="filteredBranches.length" class="branch-list">
-      <button v-for="branch in filteredBranches" :key="branch.id" class="branch-card" @click="selectBranch(branch)">
-        <div class="branch-title">{{ branch.displayName || branch.name }}</div>
-        <div class="branch-address">{{ branch.displayAddress || branch.address }}</div>
-        <div class="branch-status" :class="branch.isOpen ? 'open' : 'closed'">
-          {{ branch.isOpen ? "Открыто" : "Закрыто" }}
+
+    <div class="form-section">
+      <div class="sheet-handle"></div>
+
+      <div v-if="filteredBranches.length && !selectedBranch" class="branch-list">
+        <h2 class="sheet-heading">Рестораны</h2>
+        <button v-for="branch in filteredBranches" :key="branch.id" class="branch-card" @click="selectBranch(branch)">
+          <div class="branch-card-content">
+            <div class="branch-title">{{ branch.displayName || branch.name }}</div>
+            <div class="branch-address">{{ branch.displayAddress || branch.address }}</div>
+            <div class="branch-schedule-lines">
+              <div v-for="(line, index) in getBranchScheduleLines(branch)" :key="`list-schedule-${branch.id}-${index}`">
+                {{ line }}
+              </div>
+            </div>
+          </div>
+          <ChevronRight :size="16" class="branch-chevron" />
+        </button>
+      </div>
+
+      <div v-if="selectedBranch" class="branch-sheet">
+        <div class="sheet-title">
+          <button class="sheet-back" type="button" @click="selectedBranch = null">
+            <ArrowLeft :size="20" />
+          </button>
+          {{ selectedBranch.displayName || selectedBranch.name }}
         </div>
-      </button>
-    </div>
-    <div v-if="selectedBranch" class="branch-sheet">
-      <button class="sheet-close" aria-label="Закрыть карточку филиала" @click="selectedBranch = null">
-        <X :size="16" />
-      </button>
-      <div class="sheet-title">{{ selectedBranch.displayName || selectedBranch.name }}</div>
-      <div class="sheet-address">{{ selectedBranch.displayAddress || selectedBranch.address }}</div>
-      <a v-if="selectedBranch.phone" class="sheet-phone" :href="`tel:${normalizePhone(selectedBranch.phone)}`">
-        {{ formatPhone(selectedBranch.phone) }}
-      </a>
-      <div class="sheet-status" :class="selectedBranch.isOpen ? 'open' : 'closed'">
-        {{ selectedBranch.isOpen ? "Открыто" : "Закрыто" }}
+
+        <div class="sheet-row">
+          <MapPin :size="16" />
+          <div>
+            <div class="sheet-address">{{ selectedBranch.displayAddress || selectedBranch.address }}</div>
+          </div>
+        </div>
+
+        <div class="sheet-row">
+          <Clock3 :size="16" />
+          <div class="sheet-info">
+            <template v-for="(line, index) in getBranchScheduleLines(selectedBranch)" :key="`schedule-${index}`">
+              <div>{{ line }}</div>
+            </template>
+          </div>
+        </div>
+
+        <a v-if="selectedBranch.phone" class="sheet-row sheet-phone-row" :href="`tel:${normalizePhone(selectedBranch.phone)}`">
+          <Phone :size="16" />
+          <div class="sheet-phone">{{ formatPhone(selectedBranch.phone) }}</div>
+        </a>
+
+        <button class="primary-btn" @click="confirmPickup">Заберу отсюда</button>
       </div>
-      <div class="sheet-hours">
-        <template v-if="getWorkHoursLines(selectedBranch).length">
-          <div v-for="(line, index) in getWorkHoursLines(selectedBranch)" :key="index">{{ line }}</div>
-        </template>
-        <template v-else>Время работы уточняйте</template>
-      </div>
-      <button class="primary-btn" @click="confirmPickup">Заберу отсюда</button>
     </div>
   </div>
 </template>
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from "vue";
-import { X } from "lucide-vue-next";
+import { ArrowLeft, ChevronRight, Clock3, MapPin, Phone } from "lucide-vue-next";
 import { useRouter } from "vue-router";
 import { useLocationStore } from "@/modules/location/stores/location.js";
 import { formatPhone, normalizePhone } from "@/shared/utils/phone.js";
 import { citiesAPI } from "@/shared/api/endpoints.js";
 import { hapticFeedback } from "@/shared/services/telegram.js";
 import { loadYandexMaps } from "@/shared/services/yandexMaps.js";
-import { formatWorkHoursLines, getBranchOpenState, normalizeWorkHours } from "@/shared/utils/workingHours";
+import { formatWorkHoursLines, normalizeWorkHours } from "@/shared/utils/workingHours";
 import { devError } from "@/shared/utils/logger.js";
-import FloatingField from "@/shared/components/FloatingField.vue";
 const router = useRouter();
 const locationStore = useLocationStore();
 const mapContainerRef = ref(null);
-const searchQuery = ref("");
 const branches = ref([]);
-const selectedBranch = ref(locationStore.selectedBranch || null);
+const selectedBranch = ref(null);
 let mapInstance = null;
 let markers = [];
-const filteredBranches = computed(() => {
-  if (!searchQuery.value) return branches.value;
-  const query = searchQuery.value.toLowerCase();
-  return branches.value.filter((branch) =>
-    `${branch.displayName || branch.name} ${branch.displayAddress || branch.address}`.toLowerCase().includes(query),
-  );
-});
+const filteredBranches = computed(() => branches.value);
 onMounted(async () => {
   locationStore.setDeliveryType("pickup");
   if (!locationStore.selectedCity) {
@@ -86,13 +100,8 @@ async function loadBranches() {
     const data = response.data.branches || [];
     branches.value = data.map((branch) => buildDisplayBranch(branch));
     locationStore.setBranches(branches.value);
-    if (locationStore.selectedBranch) {
-      const matched = branches.value.find((branch) => branch.id === locationStore.selectedBranch.id);
-      if (matched) {
-        selectedBranch.value = matched;
-        locationStore.setBranch(matched);
-      }
-    }
+    // По UX всегда начинаем со списка филиалов. Карточка открывается только по клику.
+    selectedBranch.value = null;
   } catch (error) {
     devError("Не удалось загрузить филиалы:", error);
   }
@@ -104,12 +113,12 @@ async function initMap() {
     return null;
   });
   if (!ymaps) return;
-  const center = getCityCenter();
+  const center = getInitialMapCenter();
   mapInstance = new ymaps.Map(
     mapContainerRef.value,
     {
       center,
-      zoom: 12,
+      zoom: 16,
       controls: [],
     },
     {
@@ -145,7 +154,7 @@ function selectBranch(branch) {
   locationStore.setBranch(branch);
   const { lat, lon } = normalizeCoords(branch.latitude, branch.longitude);
   if (mapInstance && Number.isFinite(lat) && Number.isFinite(lon)) {
-    mapInstance.setCenter([lat, lon], Math.max(mapInstance.getZoom(), 14), {
+    mapInstance.setCenter([lat, lon], 16, {
       duration: 250,
     });
   }
@@ -162,17 +171,34 @@ function getCityCenter() {
   const { lat, lon } = normalizeCoords(locationStore.selectedCity?.latitude, locationStore.selectedCity?.longitude);
   return [Number.isFinite(lat) ? lat : 55.7522, Number.isFinite(lon) ? lon : 37.6156];
 }
+function getInitialMapCenter() {
+  const selected = selectedBranch.value;
+  if (selected) {
+    const selectedCoords = normalizeCoords(selected.latitude, selected.longitude);
+    if (Number.isFinite(selectedCoords.lat) && Number.isFinite(selectedCoords.lon)) {
+      return [selectedCoords.lat, selectedCoords.lon];
+    }
+  }
+
+  const firstWithCoords = branches.value.find((branch) => {
+    const coords = normalizeCoords(branch.latitude, branch.longitude);
+    return Number.isFinite(coords.lat) && Number.isFinite(coords.lon);
+  });
+  if (firstWithCoords) {
+    const coords = normalizeCoords(firstWithCoords.latitude, firstWithCoords.longitude);
+    return [coords.lat, coords.lon];
+  }
+
+  return getCityCenter();
+}
 function buildDisplayBranch(branch) {
   const displayAddress = normalizeAddress(branch.address);
   let displayName = branch.name || "Пиццерия";
   if (isAddressLike(displayName) || normalizeAddress(displayName) === displayAddress) {
     displayName = "Панда Пицца";
   }
-  const timeZone = locationStore.selectedCity?.timezone || "Europe/Moscow";
-  const openState = getBranchOpenState(branch.working_hours || branch.work_hours, timeZone);
   return {
     ...branch,
-    isOpen: openState.isOpen,
     displayName,
     displayAddress: displayAddress || branch.address || "",
     work_hours: normalizeWorkHours(branch.work_hours || branch.working_hours),
@@ -180,6 +206,12 @@ function buildDisplayBranch(branch) {
 }
 function getWorkHoursLines(branch) {
   return formatWorkHoursLines(branch.work_hours || branch.working_hours);
+}
+function getBranchScheduleLines(branch) {
+  const lines = getWorkHoursLines(branch);
+  if (!lines.length) return ["Время работы уточняйте"];
+  if (lines.length === 1) return [`Ежедневно: ${lines[0]}`];
+  return lines;
 }
 function normalizeAddress(value) {
   if (!value) return "";
@@ -221,54 +253,76 @@ function escapeRegExp(value) {
 </script>
 <style scoped>
 .pickup-map {
-  position: relative;
   min-height: 100vh;
   background: var(--color-background);
-  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+}
+.map-section {
+  position: relative;
+  overflow: hidden;
+  height: 60vh;
+  background: var(--color-background-secondary);
 }
 .map {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  inset: 0;
   z-index: 0;
 }
-.search-bar {
-  position: fixed;
-  left: 12px;
-  right: 12px;
-  bottom: calc(92px + var(--tg-content-safe-area-inset-bottom, 0px));
+.form-section {
+  background: var(--color-background);
+  border-radius: var(--border-radius-xl);
+  padding: 12px;
   z-index: 20;
+  min-height: 0;
+  margin-top: -48px;
 }
-.search-input {
-  margin: 0;
+.sheet-handle {
+  width: 40px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--color-border);
+  margin: 0 auto 12px;
 }
 .branch-list {
-  position: fixed;
-  left: 12px;
-  right: 12px;
-  bottom: calc(150px + var(--tg-content-safe-area-inset-bottom, 0px));
-  z-index: 20;
-  max-height: 220px;
+  max-height: min(40vh, 320px);
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 0;
+  margin-bottom: 10px;
+}
+.sheet-heading {
+  margin: 0 0 10px;
+  font-size: var(--font-size-h2);
+  line-height: 1.1;
+  font-weight: 800;
+  color: var(--color-text-primary);
 }
 .branch-card {
-  background: var(--color-background);
-  border-radius: var(--border-radius-lg);
-  padding: 12px 14px;
+  background: transparent;
+  border-radius: 0;
+  padding: 14px 0;
   border: none;
+  border-bottom: 1px solid var(--color-border);
   text-align: left;
   cursor: pointer;
-  box-shadow: var(--shadow-sm);
+  box-shadow: none;
   color: var(--color-text-primary);
-  transition: box-shadow var(--transition-duration) var(--transition-easing);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  transition:
+    box-shadow var(--transition-duration) var(--transition-easing),
+    background-color var(--transition-duration) var(--transition-easing);
 }
 .branch-card:hover {
-  box-shadow: 0px 4px 12px rgba(0, 0, 0, 0.12);
+  background: transparent;
+}
+.branch-card-content {
+  min-width: 0;
+  flex: 1;
 }
 .branch-title {
   font-size: var(--font-size-body);
@@ -276,91 +330,83 @@ function escapeRegExp(value) {
   color: var(--color-text-primary);
 }
 .branch-address {
-  font-size: var(--font-size-small);
-  color: var(--color-text-secondary);
-  margin: 4px 0;
-}
-.branch-status {
-  font-size: var(--font-size-small);
-  font-weight: var(--font-weight-semibold);
-}
-.branch-status.open {
-  color: var(--color-success);
-}
-.branch-status.closed {
-  color: var(--color-error);
-}
-.branch-sheet {
-  position: fixed;
-  left: 12px;
-  right: 12px;
-  bottom: calc(20px + var(--tg-content-safe-area-inset-bottom, 0px));
-  background: var(--color-background);
-  border-radius: var(--border-radius-md);
-  padding: 18px 16px 16px;
-  z-index: 20;
-}
-.sheet-close {
-  position: absolute;
-  top: 10px;
-  right: 12px;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  border: none;
-  background: var(--color-background-secondary);
-  color: var(--color-text-primary);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background-color var(--transition-duration) var(--transition-easing);
-}
-.sheet-close:hover {
-  background: var(--color-border);
-}
-.sheet-title {
-  font-size: var(--font-size-body);
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-text-primary);
-  margin-bottom: 6px;
-}
-.sheet-address {
   font-size: var(--font-size-caption);
   color: var(--color-text-secondary);
-  margin-bottom: 6px;
+  margin: 2px 0 4px;
 }
-.sheet-status {
-  font-size: var(--font-size-small);
-  font-weight: var(--font-weight-semibold);
-  margin-bottom: 4px;
-}
-.sheet-status.open {
-  color: var(--color-success);
-}
-.sheet-status.closed {
-  color: var(--color-error);
-}
-.sheet-hours {
-  font-size: var(--font-size-small);
+.branch-schedule-lines {
   color: var(--color-text-secondary);
-  margin-bottom: 6px;
+  font-size: var(--font-size-caption);
+}
+.branch-chevron {
+  color: var(--color-text-secondary);
+  flex-shrink: 0;
+}
+.branch-sheet {
+  position: relative;
+  background: transparent;
+  border-radius: var(--border-radius-md);
+  padding: 4px 0 6px;
+  border: none;
+}
+.sheet-title {
+  font-size: var(--font-size-h2);
+  font-weight: 800;
+  color: var(--color-text-primary);
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sheet-back {
+  display: inline-flex;
+  align-items: center;
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-caption);
+  padding: 0;
+  cursor: pointer;
+}
+.sheet-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 14px;
+  color: var(--color-text-primary);
+}
+.sheet-address {
+  font-size: var(--font-size-body);
+  line-height: var(--font-size-body);
+  color: var(--color-text-primary);
+}
+.sheet-info {
+  font-size: var(--font-size-body);
+  line-height: var(--font-size-body);
+  color: var(--color-text-primary);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 .sheet-phone {
-  font-size: var(--font-size-small);
-  color: var(--color-text-secondary);
-  margin-bottom: 6px;
+  font-size: var(--font-size-body);
+  line-height: var(--font-size-body);
+  color: var(--color-text-primary);
+}
+.sheet-phone-row {
+  text-decoration: none;
 }
 .primary-btn {
   width: 100%;
   padding: 16px;
-  border-radius: var(--border-radius-md);
+  border-radius: var(--border-radius-lg);
   border: none;
   background: var(--color-primary);
-  font-size: var(--font-size-h3);
+  font-size: var(--font-size-body);
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-primary);
   cursor: pointer;
+  margin-top: 14px;
   transition: background-color var(--transition-duration) var(--transition-easing);
 }
 .primary-btn:hover {

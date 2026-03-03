@@ -465,6 +465,62 @@ const calcBounds = (points) => {
   ];
 };
 
+const isValidLatLng = (lat, lng) => Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
+
+const calcCenter = (coords = []) => {
+  if (!coords.length) return null;
+  const sum = coords.reduce(
+    (acc, [lat, lng]) => ({ lat: acc.lat + lat, lng: acc.lng + lng }),
+    { lat: 0, lng: 0 },
+  );
+  return { lat: sum.lat / coords.length, lng: sum.lng / coords.length };
+};
+
+const distanceSq = (a, b) => {
+  if (!a || !b) return Number.POSITIVE_INFINITY;
+  const dLat = a.lat - b.lat;
+  const dLng = a.lng - b.lng;
+  return dLat * dLat + dLng * dLng;
+};
+
+const getReferenceCenter = () => {
+  const branch = branchOptions.value.find((item) => item.id === Number(selectedBranchId.value));
+  const branchLat = Number(branch?.latitude);
+  const branchLng = Number(branch?.longitude);
+  if (Number.isFinite(branchLat) && Number.isFinite(branchLng)) {
+    return { lat: branchLat, lng: branchLng };
+  }
+  const city = referenceStore.cities.find((item) => item.id === branch?.city_id);
+  const cityLat = Number(city?.latitude);
+  const cityLng = Number(city?.longitude);
+  if (Number.isFinite(cityLat) && Number.isFinite(cityLng)) {
+    return { lat: cityLat, lng: cityLng };
+  }
+  if (mapInstance) {
+    const center = mapInstance.getCenter();
+    return { lat: Number(center?.[0]), lng: Number(center?.[1]) };
+  }
+  return null;
+};
+
+const toYandexPolygonCoords = (coords = [], referenceCenter = null) => {
+  const points = coords.filter((coord) => Array.isArray(coord) && coord.length >= 2);
+  const geoJsonOrder = points
+    .map((coord) => [Number(coord[1]), Number(coord[0])])
+    .filter(([lat, lng]) => isValidLatLng(lat, lng));
+  const legacyOrder = points
+    .map((coord) => [Number(coord[0]), Number(coord[1])])
+    .filter(([lat, lng]) => isValidLatLng(lat, lng));
+
+  if (!legacyOrder.length) return geoJsonOrder;
+  if (!geoJsonOrder.length) return legacyOrder;
+  if (!referenceCenter) return geoJsonOrder;
+
+  const geoJsonCenter = calcCenter(geoJsonOrder);
+  const legacyCenter = calcCenter(legacyOrder);
+  return distanceSq(geoJsonCenter, referenceCenter) <= distanceSq(legacyCenter, referenceCenter) ? geoJsonOrder : legacyOrder;
+};
+
 const togglePolygons = () => {
   polygonsVisible.value = !polygonsVisible.value;
   localStorage.setItem("shift_polygons_visible", polygonsVisible.value ? "true" : "false");
@@ -507,6 +563,24 @@ const initMap = async () => {
       suppressMapOpenBlock: true,
     },
   );
+  // Дополнительно отключаем все стандартные контролы/блоки Яндекс на уровне инстанса карты.
+  mapInstance.options.set("suppressMapOpenBlock", true);
+  [
+    "routeButtonControl",
+    "searchControl",
+    "trafficControl",
+    "typeSelector",
+    "fullscreenControl",
+    "zoomControl",
+    "geolocationControl",
+    "rulerControl",
+  ].forEach((controlName) => {
+    try {
+      mapInstance.controls.remove(controlName);
+    } catch (_error) {
+      // Контрол может отсутствовать в конкретной сборке API.
+    }
+  });
   renderBranchMarker();
 };
 
@@ -561,10 +635,7 @@ const loadPolygons = async () => {
     polygons.forEach((polygon) => {
       const ring = polygon?.polygon?.coordinates?.[0];
       if (!Array.isArray(ring) || ring.length < 3) return;
-      const latLngRing = ring
-        .filter((coord) => Array.isArray(coord) && coord.length >= 2)
-        .map((coord) => [Number(coord[1]), Number(coord[0])])
-        .filter((coord) => Number.isFinite(coord[0]) && Number.isFinite(coord[1]));
+      const latLngRing = toYandexPolygonCoords(ring, getReferenceCenter());
       if (latLngRing.length < 3) return;
       const name = polygon.name || `Полигон #${polygon.id || ""}`;
       const branchName = polygon.branch_name || "";

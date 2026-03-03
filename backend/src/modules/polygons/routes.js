@@ -51,6 +51,7 @@ const denyManagerWrite = (req, res) => {
   return true;
 };
 const STREETS_SEARCH_CACHE_TTL = 5 * 60;
+const CITY_BOUNDS_CACHE_TTL = 60 * 60;
 const YANDEX_GEOCODER_URL = "https://geocode-maps.yandex.ru/v1/";
 const YANDEX_SUGGEST_URL = "https://suggest-maps.yandex.ru/v1/suggest";
 const normalizeStreetName = (value) => String(value || "").trim();
@@ -198,42 +199,253 @@ const filterStreetItemsByQuery = (items = [], rawQuery = "", limit = 10) => {
     .slice(0, normalizedLimit);
   return filtered;
 };
-const searchYandexStreets = async ({ suggestApiKey, query, cityName, latitude, longitude, language, limit = 10 }) => {
+const collectCoordsFromGeoJson = (geometry, collector = []) => {
+  if (!geometry || typeof geometry !== "object") return collector;
+  const type = String(geometry.type || "");
+  const coordinates = geometry.coordinates;
+  if (!Array.isArray(coordinates)) return collector;
+
+  if (type === "Polygon") {
+    coordinates.forEach((ring) => {
+      if (!Array.isArray(ring)) return;
+      ring.forEach((coord) => {
+        if (!Array.isArray(coord) || coord.length < 2) return;
+        const lon = Number(coord[0]);
+        const lat = Number(coord[1]);
+        if (!Number.isFinite(lon) || !Number.isFinite(lat)) return;
+        collector.push([lon, lat]);
+      });
+    });
+    return collector;
+  }
+
+  if (type === "MultiPolygon") {
+    coordinates.forEach((polygon) => {
+      if (!Array.isArray(polygon)) return;
+      polygon.forEach((ring) => {
+        if (!Array.isArray(ring)) return;
+        ring.forEach((coord) => {
+          if (!Array.isArray(coord) || coord.length < 2) return;
+          const lon = Number(coord[0]);
+          const lat = Number(coord[1]);
+          if (!Number.isFinite(lon) || !Number.isFinite(lat)) return;
+          collector.push([lon, lat]);
+        });
+      });
+    });
+    return collector;
+  }
+
+  return collector;
+};
+const calcBboxFromGeoJsonRows = (rows = []) => {
+  let minLon = Number.POSITIVE_INFINITY;
+  let minLat = Number.POSITIVE_INFINITY;
+  let maxLon = Number.NEGATIVE_INFINITY;
+  let maxLat = Number.NEGATIVE_INFINITY;
+
+  rows.forEach((row) => {
+    const rawPolygon = row?.polygon;
+    if (!rawPolygon) return;
+    let parsed = null;
+    if (typeof rawPolygon === "string") {
+      try {
+        parsed = JSON.parse(rawPolygon);
+      } catch (error) {
+        parsed = null;
+      }
+    } else if (typeof rawPolygon === "object") {
+      parsed = rawPolygon;
+    }
+    if (!parsed) return;
+    const coords = collectCoordsFromGeoJson(parsed, []);
+    coords.forEach(([lon, lat]) => {
+      minLon = Math.min(minLon, lon);
+      minLat = Math.min(minLat, lat);
+      maxLon = Math.max(maxLon, lon);
+      maxLat = Math.max(maxLat, lat);
+    });
+  });
+
+  if (![minLon, minLat, maxLon, maxLat].every(Number.isFinite)) return null;
+  return { minLon, minLat, maxLon, maxLat };
+};
+const formatYandexBBox = (bounds) => {
+  if (!bounds) return "";
+  const { minLon, minLat, maxLon, maxLat } = bounds;
+  if (![minLon, minLat, maxLon, maxLat].every(Number.isFinite)) return "";
+  return `${minLon},${minLat}~${maxLon},${maxLat}`;
+};
+const isValidLonLatBounds = (bounds) => {
+  if (!bounds) return false;
+  const { minLon, minLat, maxLon, maxLat } = bounds;
+  if (![minLon, minLat, maxLon, maxLat].every(Number.isFinite)) return false;
+  if (minLon > maxLon || minLat > maxLat) return false;
+  if (minLon < -180 || maxLon > 180) return false;
+  if (minLat < -90 || maxLat > 90) return false;
+  return true;
+};
+const swapBoundsAxes = (bounds) => {
+  if (!bounds) return null;
+  return {
+    minLon: Number(bounds.minLat),
+    minLat: Number(bounds.minLon),
+    maxLon: Number(bounds.maxLat),
+    maxLat: Number(bounds.maxLon),
+  };
+};
+const boundsContainsPoint = (bounds, lat, lon) => {
+  if (!isValidLonLatBounds(bounds)) return false;
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return false;
+  return lon >= bounds.minLon && lon <= bounds.maxLon && lat >= bounds.minLat && lat <= bounds.maxLat;
+};
+const boundsCenterDistanceSq = (bounds, lat, lon) => {
+  if (!isValidLonLatBounds(bounds) || !Number.isFinite(lat) || !Number.isFinite(lon)) return Number.POSITIVE_INFINITY;
+  const centerLon = (bounds.minLon + bounds.maxLon) / 2;
+  const centerLat = (bounds.minLat + bounds.maxLat) / 2;
+  const dLon = centerLon - lon;
+  const dLat = centerLat - lat;
+  return dLon * dLon + dLat * dLat;
+};
+const normalizeBoundsByCityCenter = (bounds, cityCenter = null) => {
+  if (!isValidLonLatBounds(bounds)) return null;
+  const lat = Number(cityCenter?.latitude);
+  const lon = Number(cityCenter?.longitude);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return bounds;
+
+  const swapped = swapBoundsAxes(bounds);
+  if (!isValidLonLatBounds(swapped)) return bounds;
+
+  const directContains = boundsContainsPoint(bounds, lat, lon);
+  const swappedContains = boundsContainsPoint(swapped, lat, lon);
+  if (swappedContains && !directContains) return swapped;
+  if (directContains && !swappedContains) return bounds;
+
+  return boundsCenterDistanceSq(swapped, lat, lon) < boundsCenterDistanceSq(bounds, lat, lon) ? swapped : bounds;
+};
+const getCitySuggestBounds = async (cityId, cityCenter = null) => {
+  const cacheKey = `maps:city:suggest:bbox:${cityId}`;
+  try {
+    const cached = await redis.get(cacheKey);
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      const normalizedCached = normalizeBoundsByCityCenter(parsed, cityCenter);
+      if (normalizedCached) {
+        return normalizedCached;
+      }
+    }
+  } catch (redisError) {
+    // Redis errors are non-critical
+  }
+
+  const [rows] = await db.query(
+    `SELECT ST_AsGeoJSON(dp.polygon) AS polygon
+     FROM delivery_polygons dp
+     JOIN branches b ON b.id = dp.branch_id
+     WHERE b.city_id = ? AND dp.source = 'local'`,
+    [cityId],
+  );
+  const fromPolygons = normalizeBoundsByCityCenter(calcBboxFromGeoJsonRows(rows), cityCenter);
+  if (fromPolygons) {
+    try {
+      await redis.set(cacheKey, JSON.stringify(fromPolygons), "EX", CITY_BOUNDS_CACHE_TTL);
+    } catch (redisError) {
+      // Redis errors are non-critical
+    }
+    return fromPolygons;
+  }
+
+  const lat = Number(cityCenter?.latitude);
+  const lon = Number(cityCenter?.longitude);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  const fallback = {
+    minLon: lon - 0.35,
+    minLat: lat - 0.25,
+    maxLon: lon + 0.35,
+    maxLat: lat + 0.25,
+  };
+  return fallback;
+};
+const searchYandexStreets = async ({
+  suggestApiKey,
+  cityId,
+  query,
+  cityName,
+  latitude,
+  longitude,
+  language,
+  limit = 10,
+  sessionToken = "",
+}) => {
   const requestLimit = Math.min(Math.max(Number(limit) || 10, 1), 10);
-  const fullText = cityName ? `${query}, ${cityName}` : query;
+  const bbox = await getCitySuggestBounds(cityId, { latitude, longitude });
+  const bboxValue = formatYandexBBox(bbox);
   const baseParams = {
     apikey: suggestApiKey,
-    text: fullText,
     lang: language || "ru_RU",
     results: requestLimit,
     print_address: 1,
     strict_bounds: 1,
-  };
-  if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
-    baseParams.ll = `${longitude},${latitude}`;
-    baseParams.spn = "0.35,0.35";
-  }
-  const strictStreetParams = {
-    ...baseParams,
     types: "street,house",
   };
-  const { data: strictData } = await axios.get(YANDEX_SUGGEST_URL, {
-    params: strictStreetParams,
-    timeout: 5000,
-  });
-  const strictItems = Array.isArray(strictData?.results) ? strictData.results : [];
-  let streetItems = collectStreetNamesFromSuggest(strictItems, requestLimit);
+  if (sessionToken) {
+    baseParams.sessiontoken = sessionToken;
+  }
+  if (bboxValue) {
+    baseParams.bbox = bboxValue;
+  }
+  if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
+    baseParams.ll = `${longitude},${latitude}`;
+    baseParams.spn = "0.2,0.2";
+  }
+  const queryVariants = Array.from(
+    new Set(
+      [cityName ? `${cityName}, ${query}` : "", cityName ? `${query}, ${cityName}` : "", query]
+        .map((item) => String(item || "").trim())
+        .filter(Boolean),
+    ),
+  );
 
-  if (streetItems.length === 0) {
-    const { data } = await axios.get(YANDEX_SUGGEST_URL, {
-      params: baseParams,
-      timeout: 5000,
-    });
-    const fallbackItems = Array.isArray(data?.results) ? data.results : [];
-    streetItems = collectStreetNamesFromSuggest(fallbackItems, requestLimit);
+  const merged = [];
+  const seen = new Set();
+  const collectFromVariants = async (paramsBuilder) => {
+    for (const variant of queryVariants) {
+      const { data } = await axios.get(YANDEX_SUGGEST_URL, {
+        params: paramsBuilder(variant),
+        timeout: 5000,
+      });
+      const items = collectStreetNamesFromSuggest(Array.isArray(data?.results) ? data.results : [], requestLimit);
+      for (const item of items) {
+        const key = String(item?.label || "").toLowerCase();
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        merged.push(item);
+        if (merged.length >= requestLimit) {
+          return;
+        }
+      }
+    }
+  };
+
+  await collectFromVariants((variant) => ({ ...baseParams, text: variant }));
+
+  if (merged.length === 0) {
+    const relaxedParams = { ...baseParams };
+    delete relaxedParams.bbox;
+    delete relaxedParams.strict_bounds;
+    await collectFromVariants((variant) => ({ ...relaxedParams, text: variant }));
   }
 
-  return streetItems.slice(0, requestLimit);
+  if (merged.length === 0) {
+    const minimalParams = { ...baseParams };
+    delete minimalParams.bbox;
+    delete minimalParams.strict_bounds;
+    delete minimalParams.ll;
+    delete minimalParams.spn;
+    await collectFromVariants((variant) => ({ ...minimalParams, text: variant }));
+  }
+
+  return merged;
 };
 
 router.get("/city/:cityId", async (req, res, next) => {
@@ -350,6 +562,7 @@ router.get("/address-directory/streets", async (req, res, next) => {
   try {
     const cityId = Number(req.query?.city_id);
     const query = String(req.query?.q || "").trim();
+    const sessionToken = String(req.query?.sessiontoken || "").trim();
     const requestedLimit = Number(req.query?.limit);
     const limit = Number.isFinite(requestedLimit) ? Math.min(Math.max(Math.trunc(requestedLimit), 1), 20) : 10;
 
@@ -387,12 +600,14 @@ router.get("/address-directory/streets", async (req, res, next) => {
     }
     const yandexStreets = await searchYandexStreets({
       suggestApiKey: mapsSettings.suggestApiKey,
+      cityId,
       query,
       cityName: city.name,
       latitude: Number(city.latitude),
       longitude: Number(city.longitude),
       language: mapsSettings.language,
       limit,
+      sessionToken,
     });
     const responsePayload = {
       items: filterStreetItemsByQuery(yandexStreets, query, limit),

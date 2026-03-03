@@ -44,6 +44,7 @@ router.get("/maps-public", async (req, res, next) => {
       success: true,
       data: {
         yandex_js_api_key: String(settings?.yandex_js_api_key || "").trim(),
+        yandex_suggest_api_key: String(settings?.yandex_suggest_api_key || "").trim(),
         language: String(settings?.maps_default_language || "ru_RU").trim() || "ru_RU",
         country: String(settings?.maps_default_country || "TJ").trim() || "TJ",
       },

@@ -295,8 +295,8 @@ const initBranchMap = () => {
     container,
     {
       center,
-      zoom: 13,
-      controls: ["zoomControl"],
+      zoom: 12,
+      controls: [],
     },
     {
       suppressMapOpenBlock: true,

@@ -129,6 +129,9 @@ const GEO_PERMISSION_KEY = "geoPermission";
 const SEARCH_MIN_LENGTH = 1;
 const SEARCH_DEBOUNCE_MS = 120;
 const REVERSE_DEBOUNCE_MS = 350;
+const DEFAULT_MAP_ZOOM = 12;
+const SELECTED_ADDRESS_ZOOM = 16;
+const MIN_MAP_ZOOM = 12;
 
 let searchTimeout = null;
 let reverseTimeout = null;
@@ -141,6 +144,7 @@ let lastSearchId = 0;
 let lastReverseId = 0;
 let suppressReverseUntil = 0;
 let isProgrammaticMove = false;
+let suggestSessionToken = "";
 
 const searchCache = new Map();
 const reverseCache = new Map();
@@ -159,6 +163,10 @@ const canShowNoResults = computed(() => {
     hasQuery && !isSuggestionsLoading.value && lastSearchedQuery.value === deliveryStreet.value.trim() && !addressSuggestions.value.length,
   );
 });
+
+function createSuggestSessionToken() {
+  return `${Date.now()}_${Math.random().toString(36).slice(2, 12)}`;
+}
 
 const deliveryTimeLabel = computed(() => {
   const time = locationStore.deliveryZone?.delivery_time;
@@ -198,6 +206,7 @@ async function ensureTariffs() {
 }
 
 onMounted(async () => {
+  suggestSessionToken = createSuggestSessionToken();
   locationStore.setDeliveryType("delivery");
   await loadCityPolygons();
   await initMap();
@@ -211,7 +220,7 @@ onMounted(async () => {
     const resolved = await geocodeAddress(combinedAddress);
     if (resolved) {
       selectedLocation.value = { lat: resolved.lat, lon: resolved.lon, lng: resolved.lon };
-      setMapCenter(resolved.lat, resolved.lon, { animate: false, resolveAddress: false });
+      setMapCenter(resolved.lat, resolved.lon, { animate: false, resolveAddress: false, zoom: SELECTED_ADDRESS_ZOOM });
       mapAddressHint.value = resolved.label;
     }
   } else if (selectedLocation.value && !combinedAddress) {
@@ -258,6 +267,9 @@ function onAddressInput() {
   showSuggestions.value = true;
   selectedLocation.value = null;
   isSuggestionsLoading.value = false;
+  if (!suggestSessionToken) {
+    suggestSessionToken = createSuggestSessionToken();
+  }
 
   if (searchTimeout) {
     clearTimeout(searchTimeout);
@@ -277,6 +289,9 @@ function onAddressInput() {
 
 function onAddressFocus() {
   isAddressFocused.value = true;
+  if (!suggestSessionToken) {
+    suggestSessionToken = createSuggestSessionToken();
+  }
   showSuggestions.value = deliveryStreet.value.trim().length >= SEARCH_MIN_LENGTH;
   queueMapResize();
 }
@@ -349,22 +364,41 @@ async function requestInitialLocation() {
   }
 }
 
-function selectAddress(address) {
+async function selectAddress(address) {
   hapticFeedback("light");
   deliveryStreet.value = String(address?.label || "").trim();
   deliveryZoneError.value = "";
   showSuggestions.value = false;
   addressSuggestions.value = [];
-  if (Number.isFinite(Number(address?.lat)) && Number.isFinite(Number(address?.lon))) {
+  if (Number.isFinite(Number(address?.lat)) && Number.isFinite(Number(address?.lon ?? address?.lng))) {
     const lat = Number(address.lat);
-    const lon = Number(address.lon);
+    const lon = Number(address.lon ?? address.lng);
     selectedLocation.value = { lat, lon, lng: lon };
     mapAddressHint.value = address.label || deliveryStreet.value;
-    setMapCenter(lat, lon, { animate: true, resolveAddress: false });
-  } else {
-    selectedLocation.value = null;
+    setMapCenter(lat, lon, { animate: true, resolveAddress: false, zoom: SELECTED_ADDRESS_ZOOM });
+    getAddressInputElement()?.blur();
+    return;
   }
-  getAddressInputElement()?.blur();
+
+  try {
+    const resolved = await geocodeAddress(deliveryStreet.value || mapAddressHint.value);
+    if (resolved) {
+      selectedLocation.value = { lat: resolved.lat, lon: resolved.lon, lng: resolved.lon };
+      mapAddressHint.value = resolved.label || deliveryStreet.value;
+      setMapCenter(resolved.lat, resolved.lon, { animate: true, resolveAddress: false, zoom: SELECTED_ADDRESS_ZOOM });
+    } else {
+      selectedLocation.value = null;
+      deliveryZoneError.value = "Не удалось определить координаты выбранного адреса";
+      hapticFeedback("error");
+    }
+  } catch (error) {
+    selectedLocation.value = null;
+    deliveryZoneError.value = "Не удалось определить координаты выбранного адреса";
+    devError("Ошибка геокодирования выбранной подсказки:", error);
+    hapticFeedback("error");
+  } finally {
+    getAddressInputElement()?.blur();
+  }
 }
 
 function clearAddress() {
@@ -387,6 +421,7 @@ function clearAddress() {
   lastSearchedQuery.value = "";
   deliveryZoneError.value = "";
   selectedLocation.value = null;
+  suggestSessionToken = createSuggestSessionToken();
   getAddressInputElement()?.focus({ preventScroll: true });
 }
 
@@ -407,7 +442,7 @@ async function confirmAddress() {
     }
     mapAddressHint.value = resolved.label;
     selectedLocation.value = { lat: resolved.lat, lon: resolved.lon, lng: resolved.lon };
-    setMapCenter(resolved.lat, resolved.lon, { animate: true, resolveAddress: false });
+    setMapCenter(resolved.lat, resolved.lon, { animate: true, resolveAddress: false, zoom: SELECTED_ADDRESS_ZOOM });
   }
 
   if (!locationStore.selectedCity?.id) {
@@ -462,17 +497,19 @@ async function initMap() {
   if (!yandexMaps) return;
 
   const initial = selectedLocation.value || cityCenter.value || { lat: 55.7522, lon: 37.6156 };
+  const initialZoom = selectedLocation.value ? SELECTED_ADDRESS_ZOOM : DEFAULT_MAP_ZOOM;
   mapInstance = new yandexMaps.Map(
     mapContainerRef.value,
     {
       center: [initial.lat, initial.lon ?? initial.lng],
-      zoom: 15,
+      zoom: initialZoom,
       controls: [],
     },
     {
       suppressMapOpenBlock: true,
     },
   );
+  mapInstance.options.set("minZoom", MIN_MAP_ZOOM);
   renderCityPolygons();
   mapInstance.events.add("actionbegin", () => {
     if (!isAddressFocused.value) {
@@ -497,6 +534,7 @@ async function initMap() {
     setMapCenter(selectedLocation.value.lat, selectedLocation.value.lon ?? selectedLocation.value.lng, {
       animate: false,
       resolveAddress: false,
+      zoom: SELECTED_ADDRESS_ZOOM,
     });
   } else {
     selectedLocation.value = { lat: initial.lat, lon: initial.lon ?? initial.lng, lng: initial.lon ?? initial.lng };
@@ -575,10 +613,15 @@ function setMapCenter(lat, lon, options = {}) {
   const nextLon = Number(lon);
   if (!Number.isFinite(nextLat) || !Number.isFinite(nextLon)) return;
 
-  const { animate = true, resolveAddress = false } = options;
+  const { animate = true, resolveAddress = false, zoom = null } = options;
   isProgrammaticMove = true;
   suppressReverseUntil = Date.now() + 700;
-  mapInstance.setCenter([nextLat, nextLon], mapInstance.getZoom(), { duration: animate ? 250 : 0 });
+  const currentZoomRaw = Number(mapInstance.getZoom());
+  const currentZoom = Number.isFinite(currentZoomRaw) ? currentZoomRaw : DEFAULT_MAP_ZOOM;
+  const hasExplicitZoom = zoom !== null && zoom !== undefined && zoom !== "";
+  const requestedZoom = hasExplicitZoom ? Number(zoom) : NaN;
+  const targetZoom = Number.isFinite(requestedZoom) ? Math.max(MIN_MAP_ZOOM, requestedZoom) : currentZoom;
+  mapInstance.setCenter([nextLat, nextLon], targetZoom, { duration: animate ? 250 : 0 });
   selectedLocation.value = { lat: nextLat, lon: nextLon, lng: nextLon };
 
   if (resolveAddress) {
@@ -676,6 +719,9 @@ async function fetchAddressSuggestions(query) {
     }
     const response = await addressesAPI.searchStreetDirectory(locationStore.selectedCity.id, normalizedQuery, 10, {
       signal: suggestionsController.signal,
+      params: {
+        sessiontoken: suggestSessionToken,
+      },
     });
     if (searchId !== lastSearchId) return;
 
@@ -838,7 +884,7 @@ watch(
 .map-section {
   position: relative;
   overflow: hidden;
-  height: 52vh;
+  height: 60vh;
   background: var(--color-background-secondary);
 }
 
@@ -936,6 +982,7 @@ watch(
   border-radius: var(--border-radius-xl);
   padding: 12px;
   z-index: 20;
+  margin-top: -48px;
 }
 
 .sheet-handle {

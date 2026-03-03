@@ -325,7 +325,7 @@ const initMap = async () => {
     container,
     {
       center,
-      zoom: 13,
+      zoom: 12,
       controls: [],
     },
     {

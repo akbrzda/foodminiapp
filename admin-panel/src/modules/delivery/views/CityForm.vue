@@ -165,8 +165,8 @@ const initCityMap = () => {
     container,
     {
       center,
-      zoom: form.value.latitude ? 11 : 5,
-      controls: ["zoomControl"],
+      zoom: 12,
+      controls: [],
     },
     {
       suppressMapOpenBlock: true,
