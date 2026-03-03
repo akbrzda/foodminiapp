@@ -59,8 +59,12 @@
       <div class="menu-content menu-skeleton" v-if="menuStore.loading">
         <div class="category-section">
           <div class="skeleton skeleton-title"></div>
-          <div class="items">
-            <div v-for="index in 6" :key="`menu-item-skeleton-${index}`" class="item-card item-card-skeleton">
+          <div class="items" :class="[`layout-${effectiveMenuCardsLayout}`]">
+            <div
+              v-for="index in 6"
+              :key="`menu-item-skeleton-${index}`"
+              :class="['item-card', 'item-card-skeleton', `item-card-${effectiveMenuCardsLayout}`]"
+            >
               <div class="skeleton skeleton-image"></div>
               <div class="item-info">
                 <div class="item-text">
@@ -90,11 +94,11 @@
               {{ tag.name }}
             </button>
           </div>
-          <div class="items" :class="[`layout-${menuCardsLayout}`]">
+          <div class="items" :class="[`layout-${effectiveMenuCardsLayout}`]">
             <div
               v-for="item in getItemsByCategory(category.id)"
               :key="item.id"
-              :class="['item-card', `item-card-${menuCardsLayout}`, { disabled: isItemUnavailable(item) || !canOrder }]"
+              :class="['item-card', `item-card-${effectiveMenuCardsLayout}`, { disabled: isItemUnavailable(item) || !canOrder }]"
               @click="handleItemCardClick(item)"
             >
               <div class="item-image" v-if="item.image_url">
@@ -103,8 +107,8 @@
               <div class="item-info">
                 <div class="item-text">
                   <h3>{{ item.name }}</h3>
-                  <p class="description">{{ item.description }}</p>
                   <p class="item-weight" v-if="getDisplayWeight(item)">{{ getDisplayWeight(item) }}</p>
+                  <p class="description">{{ item.description }}</p>
                   <div class="item-badges" v-if="menuBadgesEnabled && item.badges && item.badges.length > 0">
                     <span v-for="badge in item.badges" :key="badge.code" class="item-badge" :class="`item-badge-${badge.code}`">
                       {{ badge.label }}
@@ -199,6 +203,10 @@ const deliveryEnabled = computed(() => settingsStore.deliveryEnabled);
 const pickupEnabled = computed(() => settingsStore.pickupEnabled);
 const menuBadgesEnabled = computed(() => settingsStore.menuBadgesEnabled);
 const menuCardsLayout = computed(() => settingsStore.menuCardsLayout || "horizontal");
+const effectiveMenuCardsLayout = computed(() => {
+  if (!settingsStore.loaded) return "horizontal";
+  return menuCardsLayout.value;
+});
 const canOrder = computed(() => {
   if (!ordersEnabled.value) return false;
   if (locationStore.isDelivery) return deliveryEnabled.value;
@@ -1073,7 +1081,7 @@ function goToCart() {
   flex-direction: column;
   gap: 10px;
   height: 100%;
-  min-height: 360px;
+  min-height: 320px;
 }
 .item-card.disabled {
   opacity: 0.6;
@@ -1109,7 +1117,7 @@ function goToCart() {
   flex: 1;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
+  justify-content: flex-start;
   min-width: 0;
 }
 .item-text {
@@ -1118,17 +1126,15 @@ function goToCart() {
 }
 .item-text h3 {
   font-size: var(--font-size-body);
+  line-height: var(--font-size-body);
   font-weight: var(--font-weight-regular);
   color: var(--color-text-primary);
-  margin-bottom: 4px;
 }
 .item-card.item-card-vertical .item-text h3 {
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   overflow: hidden;
-  min-height: 2.8em;
-  margin-bottom: 6px;
 }
 .description {
   font-size: var(--font-size-caption);
@@ -1139,9 +1145,8 @@ function goToCart() {
 .item-card.item-card-vertical .description {
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 5;
+  -webkit-line-clamp: 2;
   overflow: hidden;
-  margin-bottom: 6px;
 }
 .item-weight {
   font-size: var(--font-size-caption);
@@ -1203,10 +1208,27 @@ function goToCart() {
   display: flex;
   justify-content: flex-end;
   align-items: center;
+  margin-top: auto;
 }
 .item-card.item-card-vertical .item-footer {
   justify-content: flex-start;
   margin-top: 10px;
+}
+.item-card-skeleton.item-card-vertical {
+  min-height: 320px;
+}
+.item-card-skeleton.item-card-vertical .skeleton-image {
+  width: 100%;
+  max-width: none;
+  height: 170px;
+  border-radius: 14px;
+}
+.item-card-skeleton.item-card-vertical .item-info {
+  height: 100%;
+}
+.item-card-skeleton.item-card-vertical .item-footer {
+  margin-top: auto;
+  justify-content: flex-start;
 }
 .add-btn {
   padding: 8px 16px;
