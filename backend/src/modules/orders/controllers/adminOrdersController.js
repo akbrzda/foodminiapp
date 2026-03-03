@@ -193,7 +193,7 @@ export const getShiftOrders = async (req, res, next) => {
         c.timezone as city_timezone,
         CASE
           WHEN o.order_type = 'delivery' THEN DATE_ADD(o.created_at, INTERVAL (IFNULL(b.prep_time, 0) + IFNULL(b.assembly_time, 0) + IFNULL(dp.delivery_time, 0)) MINUTE)
-          WHEN o.order_type = 'pickup' THEN DATE_ADD(o.created_at, INTERVAL (IFNULL(b.prep_time, 0) + IFNULL(b.assembly_time, 0)) MINUTE)
+          WHEN o.order_type = 'pickup' THEN DATE_ADD(o.created_at, INTERVAL IFNULL(b.prep_time, 0) MINUTE)
           ELSE NULL
         END as deadline_time,
         b.name as branch_name,

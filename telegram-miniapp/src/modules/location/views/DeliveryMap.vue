@@ -17,12 +17,6 @@
           <div class="map-info-title">{{ cityName }}</div>
         </div>
         <div class="map-controls">
-          <button class="map-btn" type="button" aria-label="Увеличить масштаб карты" @click="zoomIn">
-            <Plus :size="18" />
-          </button>
-          <button class="map-btn" type="button" aria-label="Уменьшить масштаб карты" @click="zoomOut">
-            <Minus :size="18" />
-          </button>
           <button class="map-btn map-btn-primary" type="button" aria-label="Определить мою геопозицию" @click="locateUser">
             <LocateFixed :size="18" />
           </button>
@@ -174,8 +168,11 @@ function createSuggestSessionToken() {
 }
 
 const centerMarkerMinutes = computed(() => {
-  const value = Number(locationStore.deliveryZone?.delivery_time);
-  return Number.isFinite(value) && value > 0 ? Math.round(value) : 15;
+  const prep = Number(locationStore.deliveryZone?.prep_time || 0);
+  const delivery = Number(locationStore.deliveryZone?.delivery_time || 0);
+  const assembly = Number(locationStore.deliveryZone?.assembly_time || 0);
+  const total = prep + delivery + assembly;
+  return Number.isFinite(total) && total > 0 ? Math.round(total) : 15;
 });
 
 const cityCenter = computed(() => {
@@ -952,7 +949,6 @@ watch(
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 6px 12px rgba(17, 24, 39, 0.3);
   z-index: 3;
 }
 
@@ -995,7 +991,7 @@ watch(
 
 .map-overlay {
   position: absolute;
-  top: 12px;
+  bottom: 60px;
   left: 12px;
   right: 12px;
   z-index: 16;
@@ -1010,7 +1006,6 @@ watch(
   background: rgba(255, 255, 255, 0.92);
   border-radius: 16px;
   padding: 10px 14px;
-  box-shadow: var(--shadow-md);
   max-width: 75%;
 }
 
@@ -1018,7 +1013,6 @@ watch(
   font-size: 15px;
   font-weight: 700;
   color: var(--color-text-primary);
-  margin-bottom: 4px;
 }
 
 .map-info-subtitle {
@@ -1051,7 +1045,6 @@ watch(
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  box-shadow: var(--shadow-md);
   cursor: pointer;
 }
 

@@ -7,6 +7,10 @@
     <div class="form-section">
       <div class="sheet-handle"></div>
 
+      <div v-if="isLoadingBranches" class="branch-state">
+        <div class="branch-state-title">Загружаем филиалы...</div>
+      </div>
+
       <div v-if="filteredBranches.length && !selectedBranch" class="branch-list">
         <h2 class="sheet-heading">Рестораны</h2>
         <button v-for="branch in filteredBranches" :key="branch.id" class="branch-card" @click="selectBranch(branch)">
@@ -54,6 +58,11 @@
 
         <button class="primary-btn" @click="confirmPickup">Заберу отсюда</button>
       </div>
+
+      <div v-if="!isLoadingBranches && !filteredBranches.length && !selectedBranch" class="branch-state">
+        <div class="branch-state-title">Филиалы не найдены</div>
+        <div class="branch-state-subtitle">Попробуйте выбрать другой город</div>
+      </div>
     </div>
   </div>
 </template>
@@ -73,6 +82,7 @@ const locationStore = useLocationStore();
 const mapContainerRef = ref(null);
 const branches = ref([]);
 const selectedBranch = ref(null);
+const isLoadingBranches = ref(false);
 let mapInstance = null;
 let markers = [];
 let yandexMaps = null;
@@ -96,6 +106,7 @@ onUnmounted(() => {
 });
 
 async function loadBranches() {
+  isLoadingBranches.value = true;
   try {
     const response = await citiesAPI.getBranches(locationStore.selectedCity.id);
     const data = response.data.branches || [];
@@ -105,6 +116,8 @@ async function loadBranches() {
     selectedBranch.value = null;
   } catch (error) {
     devError("Не удалось загрузить филиалы:", error);
+  } finally {
+    isLoadingBranches.value = false;
   }
 }
 async function initMap() {
@@ -168,10 +181,10 @@ function createBranchMarkerSvg(branch) {
 <svg xmlns="http://www.w3.org/2000/svg" width="48" height="73" viewBox="0 0 48 73">
   <defs>
     <filter id="f" x="-20%" y="-20%" width="140%" height="160%">
-      <feDropShadow dx="0" dy="6" stdDeviation="3" flood-color="#111827" flood-opacity="0.3"/>
+    
     </filter>
   </defs>
-  <line x1="24" y1="48" x2="24" y2="73" stroke="#111827" stroke-width="3" stroke-linecap="round"/>
+  <line x1="24" y1="48" x2="24" y2="68" stroke="#111827" stroke-width="3" stroke-linecap="round"/>
   <g filter="url(#f)">
     <circle cx="24" cy="24" r="24" fill="#111827"/>
   </g>
@@ -185,8 +198,8 @@ function createBranchMarkerOptions(branch) {
   return {
     iconLayout: "default#image",
     iconImageHref: href,
-    iconImageSize: [48, 73],
-    iconImageOffset: [-24, -73],
+    iconImageSize: [48, 68],
+    iconImageOffset: [-24, -68],
   };
 }
 function confirmPickup() {
@@ -313,6 +326,20 @@ function escapeRegExp(value) {
   border-radius: 2px;
   background: var(--color-border);
   margin: 0 auto 12px;
+}
+.branch-state {
+  padding: 14px 0 18px;
+}
+.branch-state-title {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-semibold);
+  text-align: center;
+}
+.branch-state-subtitle {
+  margin-top: 6px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-caption);
 }
 .branch-list {
   max-height: min(40vh, 320px);
