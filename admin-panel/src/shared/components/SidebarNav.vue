@@ -36,13 +36,7 @@
         </div>
         <div v-if="!isCollapsed" class="min-w-0">
           <p class="truncate text-base font-semibold text-foreground">Panda Pizza</p>
-          <p class="text-xs text-muted-foreground">
-            Админ-панель |
-            <span :title="`Версия ${sidebarVersion}`">
-              <span v-if="!isCollapsed">v{{ sidebarVersion }}</span>
-              <span v-else>v</span>
-            </span>
-          </p>
+          <p class="text-xs text-muted-foreground">Админ-панель</p>
         </div>
       </div>
       <div class="flex-1 overflow-y-auto px-3 pb-3">
@@ -160,7 +154,6 @@ const props = defineProps({
 const emit = defineEmits(["navigate", "close"]);
 const authStore = useAuthStore();
 const ordersStore = useOrdersStore();
-const sidebarVersion = ref("—");
 const isManager = computed(() => authStore.role === "manager");
 const newOrdersCount = computed(() => ordersStore.newOrdersCount);
 const initials = computed(() => {
@@ -241,19 +234,6 @@ const asideClasses = computed(() => ["sidebar", props.isOpen ? "is-open" : "is-c
 const handleClose = () => {
   emit("close");
 };
-
-const loadSidebarVersion = async () => {
-  try {
-    const apiInfoResponse = await api.get("/api");
-    sidebarVersion.value = apiInfoResponse.data?.version || "—";
-  } catch (error) {
-    sidebarVersion.value = "—";
-  }
-};
-
-onMounted(() => {
-  loadSidebarVersion();
-});
 </script>
 <style scoped>
 .sidebar {
