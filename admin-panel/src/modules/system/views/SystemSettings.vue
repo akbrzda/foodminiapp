@@ -10,18 +10,42 @@
                 <RefreshCcw v-else :size="16" />
                 Сбросить
               </Button>
-              <Button variant="secondary" :disabled="moduleLoading || moduleSaving || mapsTesting" @click="testMapsSettings">
-                <Spinner v-if="mapsTesting" class="h-4 w-4" />
-                <SendHorizontal v-else :size="16" />
-                {{ mapsTesting ? "Проверка..." : "Тест Яндекс API" }}
-              </Button>
               <Button :disabled="moduleLoading || moduleSaving" @click="saveModuleSettings">
                 <Spinner v-if="moduleSaving" class="h-4 w-4" />
                 <Save v-else :size="16" />
                 {{ moduleSaving ? "Сохранение..." : "Сохранить" }}
               </Button>
             </div>
+            <div v-else-if="activeTab === 1" class="flex flex-wrap items-center gap-3">
+              <Button variant="secondary" :disabled="moduleLoading || moduleSaving || mapsTesting" @click="loadModuleSettings">
+                <Spinner v-if="moduleLoading" class="h-4 w-4" />
+                <RefreshCcw v-else :size="16" />
+                Сбросить
+              </Button>
+              <Button variant="secondary" :disabled="moduleLoading || moduleSaving || mapsTesting" @click="testMapsSettings">
+                <Spinner v-if="mapsTesting" class="h-4 w-4" />
+                <SendHorizontal v-else :size="16" />
+                {{ mapsTesting ? "Проверка..." : "Тест Яндекс API" }}
+              </Button>
+              <Button :disabled="moduleLoading || moduleSaving || mapsTesting" @click="saveMapSettings">
+                <Spinner v-if="moduleSaving" class="h-4 w-4" />
+                <Save v-else :size="16" />
+                {{ moduleSaving ? "Сохранение..." : "Сохранить" }}
+              </Button>
+            </div>
             <div v-else-if="activeTab === 2" class="flex flex-wrap items-center gap-3">
+              <Button variant="secondary" :disabled="moduleLoading || moduleSaving" @click="loadModuleSettings">
+                <Spinner v-if="moduleLoading" class="h-4 w-4" />
+                <RefreshCcw v-else :size="16" />
+                Сбросить
+              </Button>
+              <Button :disabled="moduleLoading || moduleSaving" @click="saveAppearanceSettings">
+                <Spinner v-if="moduleSaving" class="h-4 w-4" />
+                <Save v-else :size="16" />
+                {{ moduleSaving ? "Сохранение..." : "Сохранить" }}
+              </Button>
+            </div>
+            <div v-else-if="activeTab === 4" class="flex flex-wrap items-center gap-3">
               <Button variant="secondary" :disabled="telegramLoading || telegramSaving || telegramTesting" @click="loadTelegramStartSettings">
                 <Spinner v-if="telegramLoading" class="h-4 w-4" />
                 <RefreshCcw v-else :size="16" />
@@ -38,7 +62,7 @@
                 {{ telegramSaving ? "Сохранение..." : "Сохранить" }}
               </Button>
             </div>
-            <div v-else-if="activeTab === 3" class="flex flex-wrap items-center gap-3">
+            <div v-else-if="activeTab === 5" class="flex flex-wrap items-center gap-3">
               <Button
                 variant="secondary"
                 :disabled="telegramLoading || telegramSaving || telegramOrderTesting || telegramCitiesLoading"
@@ -69,9 +93,11 @@
     </Card>
 
     <Tabs v-model="activeTab">
-      <TabsList>
-        <TabsTrigger v-for="(tab, index) in tabs" :key="tab" :value="index">{{ tab }}</TabsTrigger>
-      </TabsList>
+      <div class="overflow-x-auto pb-1">
+        <TabsList class="inline-flex min-w-max whitespace-nowrap">
+          <TabsTrigger v-for="(tab, index) in tabs" :key="tab" :value="index">{{ tab }}</TabsTrigger>
+        </TabsList>
+      </div>
       <TabsContent :value="0" class="space-y-6">
         <Card v-if="moduleLoading">
           <CardContent class="space-y-3 pt-6">
@@ -149,6 +175,133 @@
       </TabsContent>
 
       <TabsContent :value="1" class="space-y-6">
+        <Card v-if="moduleLoading">
+          <CardContent class="space-y-3 pt-6">
+            <Skeleton class="h-4 w-56" />
+            <Skeleton class="h-14 w-full" />
+            <Skeleton class="h-14 w-full" />
+            <Skeleton class="h-14 w-full" />
+          </CardContent>
+        </Card>
+        <Card v-else-if="mapGroups.length">
+          <CardHeader>
+            <CardTitle>Карты и геокодинг</CardTitle>
+            <CardDescription>Ключи API и параметры локализации карт</CardDescription>
+          </CardHeader>
+          <CardContent class="space-y-6 pt-0">
+            <div class="space-y-6">
+              <div v-for="group in mapGroups" :key="`maps-${group.name}`" class="space-y-4">
+                <div class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  {{ group.name }}
+                </div>
+                <div class="space-y-3">
+                  <div
+                    v-for="item in group.items"
+                    :key="item.key"
+                    class="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-border/60 bg-background px-4 py-3"
+                  >
+                    <div class="min-w-0">
+                      <div class="text-sm font-semibold text-foreground">{{ item.label }}</div>
+                      <div class="text-xs text-muted-foreground">{{ item.description }}</div>
+                    </div>
+                    <div class="w-56">
+                      <Input
+                        v-if="item.type === 'string'"
+                        v-model="mapForm[item.key]"
+                        :type="MAPS_SECRET_KEYS.has(item.key) ? 'password' : 'text'"
+                        :autocomplete="MAPS_SECRET_KEYS.has(item.key) ? 'new-password' : 'off'"
+                        autocapitalize="none"
+                        autocorrect="off"
+                        spellcheck="false"
+                      />
+                      <Input
+                        v-else
+                        v-model.number="mapForm[item.key]"
+                        type="number"
+                        step="1"
+                        min="0"
+                        @change="normalizeInteger(mapForm, item.key)"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card v-else>
+          <CardContent class="py-8 text-center text-sm text-muted-foreground">Настройки карт не найдены</CardContent>
+        </Card>
+      </TabsContent>
+
+      <TabsContent :value="2" class="space-y-6">
+        <Card v-if="moduleLoading">
+          <CardContent class="space-y-3 pt-6">
+            <Skeleton class="h-4 w-56" />
+            <Skeleton class="h-14 w-full" />
+            <Skeleton class="h-14 w-full" />
+          </CardContent>
+        </Card>
+        <Card v-else-if="appearanceGroups.length">
+          <CardHeader>
+            <CardTitle>Оформление меню</CardTitle>
+            <CardDescription>Управление бейджами карточек и раскладкой в Mini App</CardDescription>
+          </CardHeader>
+          <CardContent class="pt-0">
+            <div class="space-y-6">
+              <div v-for="group in appearanceGroups" :key="`appearance-${group.name}`" class="space-y-4">
+                <div class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  {{ group.name }}
+                </div>
+                <div class="space-y-3">
+                  <div
+                    v-for="item in group.items"
+                    :key="item.key"
+                    class="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-border/60 bg-background px-4 py-3"
+                  >
+                    <div class="min-w-0">
+                      <div class="text-sm font-semibold text-foreground">{{ item.label }}</div>
+                      <div class="text-xs text-muted-foreground">{{ item.description }}</div>
+                    </div>
+                    <div class="w-56">
+                      <Select
+                        v-if="item.key === 'menu_cards_layout'"
+                        v-model="appearanceForm[item.key]"
+                      >
+                        <SelectTrigger class="w-full">
+                          <SelectValue placeholder="Выберите тип карточек" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="horizontal">Горизонтально (1 в ряд)</SelectItem>
+                          <SelectItem value="vertical">Вертикально (2 в ряд)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Select
+                        v-else-if="item.type === 'boolean' || typeof appearanceForm[item.key] === 'boolean'"
+                        v-model="appearanceForm[item.key]"
+                      >
+                        <SelectTrigger class="w-full">
+                          <SelectValue placeholder="Выберите статус" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem :value="true">Включено</SelectItem>
+                          <SelectItem :value="false">Выключено</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Input v-else v-model="appearanceForm[item.key]" type="text" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card v-else>
+          <CardContent class="py-8 text-center text-sm text-muted-foreground">Настройки оформления не найдены</CardContent>
+        </Card>
+      </TabsContent>
+
+      <TabsContent :value="3" class="space-y-6">
         <Card>
           <CardContent class="!p-0">
             <div class="flex flex-col gap-2 border-b border-border/60 px-4 py-3 md:flex-row md:items-center md:justify-between">
@@ -214,7 +367,7 @@
         </Card>
       </TabsContent>
 
-      <TabsContent :value="2" class="space-y-6">
+      <TabsContent :value="4" class="space-y-6">
         <Card v-if="telegramLoading">
           <CardContent class="space-y-3 pt-6">
             <Skeleton class="h-10 w-full" />
@@ -379,7 +532,7 @@
         </Card>
       </TabsContent>
 
-      <TabsContent :value="3" class="space-y-6">
+      <TabsContent :value="5" class="space-y-6">
         <Card v-if="telegramLoading || telegramCitiesLoading">
           <CardContent class="space-y-3 pt-6">
             <Skeleton class="h-10 w-full" />
@@ -645,13 +798,16 @@ import { formatNumber, normalizeBoolean } from "@/shared/utils/format.js";
 
 const moduleItems = ref([]);
 const moduleForm = ref({});
+const mapItems = ref([]);
+const mapForm = ref({});
+const appearanceItems = ref([]);
+const appearanceForm = ref({});
 const moduleLoading = ref(false);
 const moduleSaving = ref(false);
 const mapsTesting = ref(false);
-const mapsTestQuery = ref("Москва, Тверская улица, 1");
 const reasons = ref([]);
 const reasonsLoading = ref(false);
-const tabs = ["Модули", "Причины стоп-листа", "Приветственное сообщение", "Telegram заказы"];
+const tabs = ["Модули", "Карты", "Оформление", "Причины стоп-листа", "Приветственное сообщение", "Telegram заказы"];
 const activeTab = ref(0);
 const showModal = ref(false);
 const editing = ref(null);
@@ -705,6 +861,8 @@ const modalTitle = computed(() => (editing.value ? "Редактировать �
 const modalSubtitle = computed(() => (editing.value ? "Измените параметры" : "Создайте причину стоп-листа"));
 const percentKeys = new Set();
 const MAPS_SECRET_KEYS = new Set(["yandex_suggest_api_key"]);
+const MAP_SETTING_KEYS = new Set(["yandex_js_api_key", "yandex_suggest_api_key", "maps_default_language", "maps_default_country"]);
+const APPEARANCE_SETTING_KEYS = new Set(["menu_badges_enabled", "menu_cards_layout"]);
 const primitiveTypes = new Set(["boolean", "string", "number"]);
 const TELEGRAM_ORDER_PLACEHOLDERS = [
   "{{order_id}}",
@@ -814,8 +972,13 @@ const normalizeTelegramOrderNotificationForm = (value = {}) => {
 
 const applySettingsResponse = (data) => {
   const settings = data?.settings || {};
-  moduleItems.value = (data?.items || []).filter((item) => item.group !== "Интеграции" && primitiveTypes.has(item.type));
+  const primitiveItems = (data?.items || []).filter((item) => item.group !== "Интеграции" && primitiveTypes.has(item.type));
+  moduleItems.value = primitiveItems.filter((item) => !MAP_SETTING_KEYS.has(item.key) && !APPEARANCE_SETTING_KEYS.has(item.key));
+  mapItems.value = primitiveItems.filter((item) => MAP_SETTING_KEYS.has(item.key));
+  appearanceItems.value = primitiveItems.filter((item) => APPEARANCE_SETTING_KEYS.has(item.key));
   hydrateForm(moduleItems.value, moduleForm);
+  hydrateForm(mapItems.value, mapForm);
+  hydrateForm(appearanceItems.value, appearanceForm);
   telegramForm.value = normalizeTelegramForm(settings.telegram_start_message);
   telegramOrderNotificationForm.value = normalizeTelegramOrderNotificationForm(settings.telegram_new_order_notification);
   telegramUploadState.value = {
@@ -840,6 +1003,8 @@ const groupSettings = (list) => {
 
 const groupedModuleSettings = computed(() => groupSettings(moduleItems.value));
 const moduleGroups = computed(() => groupedModuleSettings.value);
+const mapGroups = computed(() => groupSettings(mapItems.value));
+const appearanceGroups = computed(() => groupSettings(appearanceItems.value));
 const telegramActiveImagesCount = computed(() => telegramForm.value.images.filter((image) => image.is_active !== false).length);
 const telegramPreviewImageUrl = computed(() => {
   return telegramForm.value.images.find((image) => image.is_active !== false)?.url || telegramForm.value.images[0]?.url || "";
@@ -901,12 +1066,48 @@ const saveModuleSettings = async () => {
   }
 };
 
+const saveMapSettings = async () => {
+  moduleSaving.value = true;
+  try {
+    const payload = {};
+    for (const [key, value] of Object.entries(mapForm.value)) {
+      payload[key] = value;
+    }
+    const response = await api.put("/api/settings/admin", { settings: payload });
+    applySettingsResponse(response.data);
+    showSuccessNotification("Настройки карт сохранены");
+  } catch (error) {
+    devError("Failed to save maps settings:", error);
+    const message = error.response?.data?.errors?.settings || "Ошибка при сохранении настроек карт";
+    showErrorNotification(message);
+  } finally {
+    moduleSaving.value = false;
+  }
+};
+
+const saveAppearanceSettings = async () => {
+  moduleSaving.value = true;
+  try {
+    const payload = {};
+    for (const [key, value] of Object.entries(appearanceForm.value)) {
+      payload[key] = value;
+    }
+    const response = await api.put("/api/settings/admin", { settings: payload });
+    applySettingsResponse(response.data);
+    showSuccessNotification("Настройки оформления сохранены");
+  } catch (error) {
+    devError("Failed to save appearance settings:", error);
+    const message = error.response?.data?.errors?.settings || "Ошибка при сохранении настроек оформления";
+    showErrorNotification(message);
+  } finally {
+    moduleSaving.value = false;
+  }
+};
+
 const testMapsSettings = async () => {
   mapsTesting.value = true;
   try {
-    const { data } = await api.post("/api/settings/admin/maps/test", {
-      query: mapsTestQuery.value,
-    });
+    const { data } = await api.post("/api/settings/admin/maps/test");
     const suggestCount = Number(data?.data?.suggest_count || 0);
     const geocodeCount = Number(data?.data?.geocode_count || 0);
     showSuccessNotification(`Яндекс API доступен: suggest ${suggestCount}, geocode ${geocodeCount}`);
@@ -1191,7 +1392,7 @@ onMounted(async () => {
 watch(
   () => activeTab.value,
   async (value) => {
-    if (value !== 2 && value !== 3) return;
+    if (value !== 4 && value !== 5) return;
     if (telegramSettingsLoaded.value) return;
     telegramCitiesLoading.value = true;
     try {

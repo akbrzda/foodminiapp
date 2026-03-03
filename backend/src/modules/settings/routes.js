@@ -13,6 +13,8 @@ const PUBLIC_SETTINGS_ALLOWLIST = new Set([
   "orders_enabled",
   "delivery_enabled",
   "pickup_enabled",
+  "menu_badges_enabled",
+  "menu_cards_layout",
   "iiko_enabled",
   "premiumbonus_enabled",
   "integration_mode",
@@ -26,6 +28,26 @@ const filterPublicSettings = (settings) => {
     }
   }
   return result;
+};
+
+const buildYandexRequestHeaders = (req) => {
+  const incomingReferer = String(req.headers?.referer || "").trim();
+  const incomingOrigin = String(req.headers?.origin || "").trim();
+  const forwardedProto = String(req.headers?.["x-forwarded-proto"] || "").split(",")[0].trim();
+  const host = String(req.headers?.host || "").trim();
+  const protocol = forwardedProto || (req.secure ? "https" : "http");
+  const fallbackOrigin = host ? `${protocol}://${host}` : "";
+  const origin = incomingOrigin || fallbackOrigin;
+  const referer = incomingReferer || (origin ? `${origin}/` : "");
+
+  const headers = {};
+  if (origin) {
+    headers.Origin = origin;
+  }
+  if (referer) {
+    headers.Referer = referer;
+  }
+  return headers;
 };
 
 router.get("/", async (req, res, next) => {
@@ -46,7 +68,7 @@ router.get("/maps-public", async (req, res, next) => {
         yandex_js_api_key: String(settings?.yandex_js_api_key || "").trim(),
         yandex_suggest_api_key: String(settings?.yandex_suggest_api_key || "").trim(),
         language: String(settings?.maps_default_language || "ru_RU").trim() || "ru_RU",
-        country: String(settings?.maps_default_country || "TJ").trim() || "TJ",
+        country: String(settings?.maps_default_country || "RU").trim() || "RU",
       },
     });
   } catch (error) {
@@ -72,7 +94,7 @@ router.post("/admin/maps/test", authenticateToken, requireRole("admin", "ceo"), 
     const geocoderKey = String(settings?.yandex_js_api_key || "").trim();
     const suggestKey = String(settings?.yandex_suggest_api_key || "").trim();
     const language = String(settings?.maps_default_language || "ru_RU").trim() || "ru_RU";
-    const query = String(req.body?.query || "Москва, Тверская улица, 1").trim();
+    const query = "Москва, Тверская улица, 1";
 
     if (!geocoderKey) {
       return res.status(400).json({ success: false, error: "Не задан yandex_js_api_key (единый ключ JS API + HTTP Геокодер)" });
@@ -80,10 +102,7 @@ router.post("/admin/maps/test", authenticateToken, requireRole("admin", "ceo"), 
     if (!suggestKey) {
       return res.status(400).json({ success: false, error: "Не задан yandex_suggest_api_key" });
     }
-    if (!query) {
-      return res.status(400).json({ success: false, error: "Укажите query для теста" });
-    }
-
+    const yandexHeaders = buildYandexRequestHeaders(req);
     const [suggestResponse, geocodeResponse] = await Promise.all([
       axios.get("https://suggest-maps.yandex.ru/v1/suggest", {
         params: {
@@ -92,6 +111,7 @@ router.post("/admin/maps/test", authenticateToken, requireRole("admin", "ceo"), 
           lang: language,
           results: 3,
         },
+        headers: yandexHeaders,
         timeout: 7000,
       }),
       axios.get("https://geocode-maps.yandex.ru/v1/", {
@@ -102,6 +122,7 @@ router.post("/admin/maps/test", authenticateToken, requireRole("admin", "ceo"), 
           results: 3,
           lang: language,
         },
+        headers: yandexHeaders,
         timeout: 7000,
       }),
     ]);
@@ -121,10 +142,11 @@ router.post("/admin/maps/test", authenticateToken, requireRole("admin", "ceo"), 
     });
   } catch (error) {
     if (error?.response) {
+      const upstreamError = error.response?.data?.error || error.response?.data?.message || "";
       return res.status(502).json({
         success: false,
         error: "Ошибка проверки Яндекс API",
-        details: error.message,
+        details: upstreamError ? `${error.message}: ${upstreamError}` : error.message,
       });
     }
     return next(error);

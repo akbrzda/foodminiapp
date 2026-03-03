@@ -67,10 +67,9 @@
   </div>
 </template>
 <script setup>
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
 import { ChevronDown, Clock, MapPin, Phone } from "lucide-vue-next";
-import PageHeader from "@/shared/components/PageHeader.vue";
 import { useLocationStore } from "@/modules/location/stores/location.js";
 import { citiesAPI } from "@/shared/api/endpoints.js";
 import { formatPhone, normalizePhone } from "@/shared/utils/phone.js";
@@ -78,6 +77,7 @@ import { hapticFeedback } from "@/shared/services/telegram.js";
 import { normalizeTariffs } from "@/shared/utils/deliveryTariffs";
 import { formatWorkHoursLines, normalizeWorkHours } from "@/shared/utils/workingHours";
 import { devError } from "@/shared/utils/logger.js";
+import { loadYandexMaps } from "@/shared/services/yandexMaps.js";
 const router = useRouter();
 const locationStore = useLocationStore();
 const branches = ref([]);
@@ -87,7 +87,7 @@ const errorMessage = ref("");
 const openBranches = ref(new Set());
 const mapRefs = new Map();
 const mapInstances = new Map();
-let leafletLoading = null;
+let yandexMaps = null;
 const cityName = computed(() => locationStore.selectedCity?.name || "");
 const polygonsByBranch = computed(() => {
   const map = new Map();
@@ -107,6 +107,11 @@ onMounted(async () => {
   }
   await loadBranches();
   await loadPolygons();
+});
+onUnmounted(() => {
+  mapInstances.forEach((map) => map?.destroy?.());
+  mapInstances.clear();
+  mapRefs.clear();
 });
 function toggleBranch(branchId) {
   hapticFeedback("light");
@@ -162,75 +167,66 @@ function queueInitMap(branchId) {
 async function initBranchMap(branchId) {
   const container = mapRefs.get(branchId);
   if (!container || mapInstances.has(branchId)) return;
-  const L = await loadLeaflet();
-  if (!L) return;
+  if (!yandexMaps) {
+    yandexMaps = await loadYandexMaps().catch((error) => {
+      devError("Не удалось загрузить карту Яндекс:", error);
+      return null;
+    });
+  }
+  if (!yandexMaps) return;
   const branch = branches.value.find((item) => item.id === branchId);
   const center = getBranchCenter(branchId);
-  const map = L.map(container, { zoomControl: false, attributionControl: false, dragging: true, scrollWheelZoom: false });
+  const map = new yandexMaps.Map(
+    container,
+    {
+      center,
+      zoom: 16,
+      controls: [],
+    },
+    {
+      suppressMapOpenBlock: true,
+    },
+  );
   mapInstances.set(branchId, map);
-  map.setView(center, 12);
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(map);
-  // Пин филиала на карте.
   if (branch) {
     const lat = Number(branch.latitude);
     const lon = Number(branch.longitude);
     if (Number.isFinite(lat) && Number.isFinite(lon)) {
-      L.marker([lat, lon], { icon: createBranchMarkerIcon(L) })
-        .addTo(map)
-        .bindPopup(branch.address || branch.displayAddress || branch.name || "Филиал", { autoPan: false });
+      const marker = new yandexMaps.Placemark([lat, lon], {
+        balloonContentBody: branch.address || branch.displayAddress || branch.name || "Филиал",
+      });
+      map.geoObjects.add(marker);
     }
   }
   const branchPolygons = getBranchPolygons(branch);
-  const bounds = L.latLngBounds();
+  const boundsPoints = [];
+  const referenceCenter = { lat: Number(center[0]), lng: Number(center[1]) };
   branchPolygons.forEach((polygon, index) => {
     const ring = getPolygonRing(polygon?.polygon);
     if (!ring) return;
-    // Для этого проекта координаты из БД уже приходят в порядке [lat, lng].
-    const coords = ring
-      .map((coord) => [Number(coord?.[0]), Number(coord?.[1])])
-      .filter((pair) => Number.isFinite(pair[0]) && Number.isFinite(pair[1]));
+    const coords = toYandexPolygonCoords(ring, referenceCenter);
     if (coords.length < 3) return;
-    const shape = L.polygon(coords, {
-      color: "#10b981",
-      fillColor: "#10b981",
-      fillOpacity: 0.15,
-      weight: 2,
-    }).addTo(map);
-    coords.forEach((pair) => bounds.extend(pair));
+    const shape = new yandexMaps.Polygon(
+      [coords],
+      {},
+      {
+        strokeColor: "#10b981",
+        fillColor: "rgba(16,185,129,0.15)",
+        fillOpacity: 0.4,
+        strokeWidth: 2,
+      },
+    );
+    map.geoObjects.add(shape);
+    boundsPoints.push(...coords);
     const popupHtml = buildTariffPopup(polygon, index + 1);
     if (popupHtml) {
-      shape.bindPopup(popupHtml, { autoPan: false });
+      shape.properties.set("balloonContentBody", popupHtml);
     }
   });
-  if (bounds.isValid()) {
-    map.fitBounds(bounds, { padding: [12, 12] });
+  const bounds = calcBounds(boundsPoints);
+  if (bounds) {
+    map.setBounds(bounds, { checkZoomRange: true, zoomMargin: 12 });
   }
-}
-function createBranchMarkerIcon(L) {
-  const pinSize = 36;
-  const headSize = 20;
-  const tailSize = 8;
-  return L.divIcon({
-    className: "fma-miniapp-branch-marker",
-    html: `
-      <div style="position:relative;width:${pinSize}px;height:${pinSize}px;">
-        <div style="
-          position:absolute;left:50%;bottom:8px;transform:translateX(-50%);
-          width:${headSize}px;height:${headSize}px;border-radius:999px;
-          background:#e53935;border:2px solid #fff;box-shadow:0 4px 12px rgba(15,23,42,.35);
-          display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:800;line-height:1;
-        ">Я</div>
-        <div style="
-          position:absolute;left:50%;bottom:2px;transform:translateX(-50%) rotate(45deg);
-          width:${tailSize}px;height:${tailSize}px;background:#e53935;
-          border-right:2px solid #fff;border-bottom:2px solid #fff;box-shadow:0 3px 10px rgba(15,23,42,.25);
-        "></div>
-      </div>
-    `,
-    iconSize: [pinSize, pinSize],
-    iconAnchor: [pinSize / 2, Math.round(pinSize * 0.95)],
-    popupAnchor: [0, -Math.round(pinSize * 0.75)],
-  });
 }
 function buildTariffPopup(polygon, index) {
   const rawTariffs = polygon?.tariffs || polygon?.delivery_tariffs || [];
@@ -279,6 +275,54 @@ function getPolygonRing(geometry) {
     return Array.isArray(geometry.coordinates[0]?.[0]) ? geometry.coordinates[0][0] : null;
   }
   return null;
+}
+function isValidLatLng(lat, lng) {
+  return Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
+}
+function calcCenter(coords = []) {
+  if (!coords.length) return null;
+  const sum = coords.reduce((acc, [lat, lng]) => ({ lat: acc.lat + lat, lng: acc.lng + lng }), { lat: 0, lng: 0 });
+  return { lat: sum.lat / coords.length, lng: sum.lng / coords.length };
+}
+function distanceSq(a, b) {
+  if (!a || !b) return Number.POSITIVE_INFINITY;
+  const dLat = a.lat - b.lat;
+  const dLng = a.lng - b.lng;
+  return dLat * dLat + dLng * dLng;
+}
+function toYandexPolygonCoords(coords = [], referenceCenter = null) {
+  const points = coords.filter((coord) => Array.isArray(coord) && coord.length >= 2);
+  const geoJsonOrder = points.map((coord) => [Number(coord[1]), Number(coord[0])]).filter(([lat, lng]) => isValidLatLng(lat, lng));
+  const legacyOrder = points.map((coord) => [Number(coord[0]), Number(coord[1])]).filter(([lat, lng]) => isValidLatLng(lat, lng));
+  if (!legacyOrder.length) return geoJsonOrder;
+  if (!geoJsonOrder.length) return legacyOrder;
+  if (!referenceCenter) return geoJsonOrder;
+  const geoJsonCenter = calcCenter(geoJsonOrder);
+  const legacyCenter = calcCenter(legacyOrder);
+  return distanceSq(geoJsonCenter, referenceCenter) <= distanceSq(legacyCenter, referenceCenter) ? geoJsonOrder : legacyOrder;
+}
+function calcBounds(coords = []) {
+  if (!Array.isArray(coords) || !coords.length) return null;
+  let minLat = Number.POSITIVE_INFINITY;
+  let minLng = Number.POSITIVE_INFINITY;
+  let maxLat = Number.NEGATIVE_INFINITY;
+  let maxLng = Number.NEGATIVE_INFINITY;
+  coords.forEach((coord) => {
+    const lat = Number(coord?.[0]);
+    const lng = Number(coord?.[1]);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+    minLat = Math.min(minLat, lat);
+    minLng = Math.min(minLng, lng);
+    maxLat = Math.max(maxLat, lat);
+    maxLng = Math.max(maxLng, lng);
+  });
+  if (!Number.isFinite(minLat) || !Number.isFinite(minLng) || !Number.isFinite(maxLat) || !Number.isFinite(maxLng)) {
+    return null;
+  }
+  return [
+    [minLat, minLng],
+    [maxLat, maxLng],
+  ];
 }
 function getPhones(branch) {
   if (!branch) return [];
@@ -329,30 +373,6 @@ function isAddressLike(value) {
 }
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\$&");
-}
-async function loadLeaflet() {
-  if (leafletLoading) return leafletLoading;
-  leafletLoading = new Promise((resolve) => {
-    if (window.L) {
-      resolve(window.L);
-      return;
-    }
-    const css = document.createElement("link");
-    css.rel = "stylesheet";
-    css.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
-    css.integrity = "sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H";
-    css.crossOrigin = "anonymous";
-    document.head.appendChild(css);
-    const script = document.createElement("script");
-    script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
-    script.integrity = "sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH";
-    script.crossOrigin = "anonymous";
-    script.async = true;
-    script.onload = () => resolve(window.L);
-    script.onerror = () => resolve(null);
-    document.body.appendChild(script);
-  });
-  return leafletLoading;
 }
 </script>
 <style scoped>

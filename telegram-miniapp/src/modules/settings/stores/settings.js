@@ -7,6 +7,8 @@ const DEFAULT_SETTINGS = {
   orders_enabled: true,
   delivery_enabled: true,
   pickup_enabled: true,
+  menu_badges_enabled: true,
+  menu_cards_layout: "horizontal",
 };
 const normalizeBoolean = (value, fallback) => {
   if (typeof value === "boolean") return value;
@@ -23,6 +25,10 @@ const normalizeNumber = (value, fallback) => {
   if (!Number.isFinite(parsed)) return fallback;
   return parsed;
 };
+const normalizeMenuLayout = (value, fallback = "horizontal") => {
+  const normalized = String(value || "").trim().toLowerCase();
+  return normalized === "vertical" ? "vertical" : fallback;
+};
 
 export const useSettingsStore = defineStore("settings", {
   state: () => ({
@@ -34,6 +40,8 @@ export const useSettingsStore = defineStore("settings", {
     ordersEnabled: (state) => state.orders_enabled,
     deliveryEnabled: (state) => state.delivery_enabled,
     pickupEnabled: (state) => state.pickup_enabled,
+    menuBadgesEnabled: (state) => state.menu_badges_enabled,
+    menuCardsLayout: (state) => state.menu_cards_layout,
   },
   actions: {
     applySettings(settings) {
@@ -42,6 +50,8 @@ export const useSettingsStore = defineStore("settings", {
         if (payload[key] !== undefined) {
           if (typeof DEFAULT_SETTINGS[key] === "boolean") {
             this[key] = normalizeBoolean(payload[key], DEFAULT_SETTINGS[key]);
+          } else if (key === "menu_cards_layout") {
+            this[key] = normalizeMenuLayout(payload[key], DEFAULT_SETTINGS[key]);
           } else if (typeof DEFAULT_SETTINGS[key] === "string") {
             this[key] = typeof payload[key] === "string" ? payload[key] : DEFAULT_SETTINGS[key];
           } else {

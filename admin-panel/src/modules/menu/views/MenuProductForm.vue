@@ -501,7 +501,7 @@
         </Card>
       </TabsContent>
       <TabsContent :value="4" class="space-y-4">
-        <Card>
+        <Card v-if="menuBadgesEnabled">
           <CardHeader>
             <CardTitle class="text-base">Бейджи карточки</CardTitle>
             <CardDescription>Отметки для отображения на карточке блюда в Mini App</CardDescription>
@@ -615,7 +615,8 @@ const badgeTouched = ref({
 });
 const draggedVariantIndex = ref(null);
 const dragOverVariantIndex = ref(null);
-const tabLabels = ["Основное", "Вариации", "Модификаторы", "Доступность и цены", "Теги и бейджи"];
+const menuBadgesEnabled = ref(true);
+const tabLabels = computed(() => ["Основное", "Вариации", "Модификаторы", "Доступность и цены", menuBadgesEnabled.value ? "Теги и бейджи" : "Теги"]);
 const allowedFulfillmentValues = ["pickup", "delivery"];
 const fulfillmentTypes = [
   { value: "pickup", label: "Самовывоз" },
@@ -833,6 +834,15 @@ const loadTags = async () => {
     tags.value = response.data.tags || [];
   } catch (error) {
     devError("Failed to load tags:", error);
+  }
+};
+const loadAppearanceSettings = async () => {
+  try {
+    const response = await api.get("/api/settings/admin");
+    menuBadgesEnabled.value = response.data?.settings?.menu_badges_enabled !== false;
+  } catch (error) {
+    devError("Failed to load appearance settings:", error);
+    menuBadgesEnabled.value = true;
   }
 };
 const loadItem = async () => {
@@ -1183,7 +1193,7 @@ const handleVariantFile = async (variant, index, file) => {
 };
 onMounted(async () => {
   try {
-    await Promise.all([referenceStore.fetchCitiesAndBranches(), loadCategories(), loadModifierGroups(), loadTags()]);
+    await Promise.all([referenceStore.fetchCitiesAndBranches(), loadCategories(), loadModifierGroups(), loadTags(), loadAppearanceSettings()]);
     await loadItem();
     updateBreadcrumbs();
   } catch (error) {

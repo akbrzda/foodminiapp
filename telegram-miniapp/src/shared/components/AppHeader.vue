@@ -42,9 +42,6 @@
               </button>
             </nav>
           </div>
-          <div class="sidebar-footer">
-            <span class="sidebar-version-link">v{{ appVersion }}</span>
-          </div>
         </div>
       </div>
     </Transition>

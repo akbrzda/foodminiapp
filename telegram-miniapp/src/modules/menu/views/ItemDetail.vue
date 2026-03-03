@@ -32,7 +32,7 @@
           <h1 class="item-name">{{ item.name }}</h1>
           <button v-if="hasKbjuData" type="button" class="kbju-info-btn" aria-label="Показать КБЖУ" @click="toggleKbjuPopup">!</button>
         </div>
-        <div v-if="item.badges && item.badges.length > 0" class="badge-row">
+        <div v-if="menuBadgesEnabled && item.badges && item.badges.length > 0" class="badge-row">
           <span v-for="badge in item.badges" :key="badge.code" class="badge-pill" :class="`badge-pill-${badge.code}`">
             {{ badge.label }}
           </span>
@@ -229,6 +229,7 @@ const isAdded = ref(false);
 const showKbjuPopup = ref(false);
 const pageTitle = computed(() => item.value?.name || "Блюдо");
 const ordersEnabled = computed(() => settingsStore.ordersEnabled);
+const menuBadgesEnabled = computed(() => settingsStore.menuBadgesEnabled);
 const canOrder = computed(() => {
   if (!ordersEnabled.value) return false;
   if (locationStore.isDelivery) return settingsStore.deliveryEnabled;

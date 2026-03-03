@@ -54,6 +54,25 @@ const STREETS_SEARCH_CACHE_TTL = 5 * 60;
 const CITY_BOUNDS_CACHE_TTL = 60 * 60;
 const YANDEX_GEOCODER_URL = "https://geocode-maps.yandex.ru/v1/";
 const YANDEX_SUGGEST_URL = "https://suggest-maps.yandex.ru/v1/suggest";
+const buildYandexRequestHeaders = (req) => {
+  const incomingReferer = String(req?.headers?.referer || "").trim();
+  const incomingOrigin = String(req?.headers?.origin || "").trim();
+  const forwardedProto = String(req?.headers?.["x-forwarded-proto"] || "").split(",")[0].trim();
+  const host = String(req?.headers?.host || "").trim();
+  const protocol = forwardedProto || (req?.secure ? "https" : "http");
+  const fallbackOrigin = host ? `${protocol}://${host}` : "";
+  const origin = incomingOrigin || fallbackOrigin;
+  const referer = incomingReferer || (origin ? `${origin}/` : "");
+
+  const headers = {};
+  if (origin) {
+    headers.Origin = origin;
+  }
+  if (referer) {
+    headers.Referer = referer;
+  }
+  return headers;
+};
 const normalizeStreetName = (value) => String(value || "").trim();
 const normalizeStreetQuery = (value) => String(value || "").trim().toLowerCase();
 const parseYandexPoint = (geoObject = {}) => {
@@ -110,7 +129,7 @@ const loadYandexMapsSettings = async () => {
     language: String(settings?.maps_default_language || "ru_RU").trim() || "ru_RU",
   };
 };
-const requestYandexGeocoder = async ({ geocoderApiKey, language, query, results = 5, kind = "" }) => {
+const requestYandexGeocoder = async ({ geocoderApiKey, language, query, results = 5, kind = "", headers = {} }) => {
   const params = {
     apikey: geocoderApiKey,
     geocode: query,
@@ -123,6 +142,7 @@ const requestYandexGeocoder = async ({ geocoderApiKey, language, query, results 
   }
   const { data } = await axios.get(YANDEX_GEOCODER_URL, {
     params,
+    headers,
     timeout: 7000,
   });
   const members = data?.response?.GeoObjectCollection?.featureMember;
@@ -376,6 +396,7 @@ const searchYandexStreets = async ({
   language,
   limit = 10,
   sessionToken = "",
+  headers = {},
 }) => {
   const requestLimit = Math.min(Math.max(Number(limit) || 10, 1), 10);
   const bbox = await getCitySuggestBounds(cityId, { latitude, longitude });
@@ -412,6 +433,7 @@ const searchYandexStreets = async ({
     for (const variant of queryVariants) {
       const { data } = await axios.get(YANDEX_SUGGEST_URL, {
         params: paramsBuilder(variant),
+        headers,
         timeout: 5000,
       });
       const items = collectStreetNamesFromSuggest(Array.isArray(data?.results) ? data.results : [], requestLimit);
@@ -598,6 +620,7 @@ router.get("/address-directory/streets", async (req, res, next) => {
     if (!mapsSettings.suggestApiKey) {
       return res.status(503).json({ error: "Yandex suggest API key is not configured" });
     }
+    const yandexHeaders = buildYandexRequestHeaders(req);
     const yandexStreets = await searchYandexStreets({
       suggestApiKey: mapsSettings.suggestApiKey,
       cityId,
@@ -608,6 +631,7 @@ router.get("/address-directory/streets", async (req, res, next) => {
       language: mapsSettings.language,
       limit,
       sessionToken,
+      headers: yandexHeaders,
     });
     const responsePayload = {
       items: filterStreetItemsByQuery(yandexStreets, query, limit),
@@ -686,12 +710,14 @@ router.post("/geocode", async (req, res, next) => {
     if (!mapsSettings.geocoderApiKey) {
       return res.status(503).json({ error: "Yandex geocoder API key is not configured" });
     }
+    const yandexHeaders = buildYandexRequestHeaders(req);
     const fullQuery = city ? `${query}, ${city}` : query;
     const geocodeItems = await requestYandexGeocoder({
       geocoderApiKey: mapsSettings.geocoderApiKey,
       language: mapsSettings.language,
       query: fullQuery,
       results: limit,
+      headers: yandexHeaders,
     });
     const items = geocodeItems.filter((item) => {
       if (!hasCenter || !hasRadius || query.length < 3) return true;
@@ -783,12 +809,14 @@ router.post("/reverse", async (req, res, next) => {
     if (!mapsSettings.geocoderApiKey) {
       return res.status(503).json({ error: "Yandex geocoder API key is not configured" });
     }
+    const yandexHeaders = buildYandexRequestHeaders(req);
     const reverseItems = await requestYandexGeocoder({
       geocoderApiKey: mapsSettings.geocoderApiKey,
       language: mapsSettings.language,
       query: `${roundedLon},${roundedLat}`,
       results: 1,
       kind: "house",
+      headers: yandexHeaders,
     });
     const first = reverseItems[0];
     if (!first) {

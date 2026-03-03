@@ -90,11 +90,11 @@
               {{ tag.name }}
             </button>
           </div>
-          <div class="items">
+          <div class="items" :class="[`layout-${menuCardsLayout}`]">
             <div
               v-for="item in getItemsByCategory(category.id)"
               :key="item.id"
-              :class="['item-card', { disabled: isItemUnavailable(item) || !canOrder }]"
+              :class="['item-card', `item-card-${menuCardsLayout}`, { disabled: isItemUnavailable(item) || !canOrder }]"
               @click="handleItemCardClick(item)"
             >
               <div class="item-image" v-if="item.image_url">
@@ -105,7 +105,7 @@
                   <h3>{{ item.name }}</h3>
                   <p class="description">{{ item.description }}</p>
                   <p class="item-weight" v-if="getDisplayWeight(item)">{{ getDisplayWeight(item) }}</p>
-                  <div class="item-badges" v-if="item.badges && item.badges.length > 0">
+                  <div class="item-badges" v-if="menuBadgesEnabled && item.badges && item.badges.length > 0">
                     <span v-for="badge in item.badges" :key="badge.code" class="item-badge" :class="`item-badge-${badge.code}`">
                       {{ badge.label }}
                     </span>
@@ -197,6 +197,8 @@ const cityName = computed(() => locationStore.selectedCity?.name || "Когал�
 const ordersEnabled = computed(() => settingsStore.ordersEnabled);
 const deliveryEnabled = computed(() => settingsStore.deliveryEnabled);
 const pickupEnabled = computed(() => settingsStore.pickupEnabled);
+const menuBadgesEnabled = computed(() => settingsStore.menuBadgesEnabled);
+const menuCardsLayout = computed(() => settingsStore.menuCardsLayout || "horizontal");
 const canOrder = computed(() => {
   if (!ordersEnabled.value) return false;
   if (locationStore.isDelivery) return deliveryEnabled.value;
@@ -1051,6 +1053,12 @@ function goToCart() {
   flex-direction: column;
   gap: 12px;
 }
+.items.layout-vertical {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  align-items: stretch;
+}
 .item-card {
   display: flex;
   position: relative;
@@ -1060,6 +1068,12 @@ function goToCart() {
   border-radius: var(--border-radius-lg);
   cursor: pointer;
   transition: transform var(--transition-duration) var(--transition-easing);
+}
+.item-card.item-card-vertical {
+  flex-direction: column;
+  gap: 10px;
+  height: 100%;
+  min-height: 360px;
 }
 .item-card.disabled {
   opacity: 0.6;
@@ -1075,6 +1089,16 @@ function goToCart() {
   max-width: 128px;
   max-height: 128px;
   flex-shrink: 0;
+}
+.item-card.item-card-vertical .item-image {
+  max-width: none;
+  max-height: none;
+  width: 100%;
+  height: 170px;
+  border-radius: 14px;
+}
+.item-card.item-card-vertical .item-image img {
+  object-fit: contain;
 }
 .item-image img {
   width: 100%;
@@ -1098,11 +1122,26 @@ function goToCart() {
   color: var(--color-text-primary);
   margin-bottom: 4px;
 }
+.item-card.item-card-vertical .item-text h3 {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  min-height: 2.8em;
+  margin-bottom: 6px;
+}
 .description {
   font-size: var(--font-size-caption);
   color: var(--color-text-secondary);
   margin-bottom: 8px;
   flex: 1;
+}
+.item-card.item-card-vertical .description {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 5;
+  overflow: hidden;
+  margin-bottom: 6px;
 }
 .item-weight {
   font-size: var(--font-size-caption);
@@ -1117,6 +1156,10 @@ function goToCart() {
   left: 8px;
   flex-wrap: wrap;
   gap: 2px;
+}
+.item-card.item-card-vertical .item-badges {
+  top: 12px;
+  left: 12px;
 }
 .item-badge {
   background: #eef2f6;
@@ -1160,6 +1203,10 @@ function goToCart() {
   display: flex;
   justify-content: flex-end;
   align-items: center;
+}
+.item-card.item-card-vertical .item-footer {
+  justify-content: flex-start;
+  margin-top: 10px;
 }
 .add-btn {
   padding: 8px 16px;

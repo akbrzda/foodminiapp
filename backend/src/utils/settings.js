@@ -28,6 +28,7 @@ const TELEGRAM_START_BUTTON_TYPES = new Set(["url", "web_app"]);
 const MAPS_API_KEY_MAX_LENGTH = 512;
 const MAPS_LANGUAGE_REGEX = /^[a-z]{2}_[A-Z]{2}$/;
 const MAPS_COUNTRY_REGEX = /^[A-Z]{2}$/;
+const MENU_CARD_LAYOUTS = new Set(["horizontal", "vertical"]);
 
 export const SETTINGS_SCHEMA = {
   bonuses_enabled: {
@@ -57,6 +58,20 @@ export const SETTINGS_SCHEMA = {
     description: "Оформление заказов на самовывоз",
     group: "Заказы",
     type: "boolean",
+  },
+  menu_badges_enabled: {
+    default: true,
+    label: "Бейджи карточек меню",
+    description: "Показывать бейджи в карточках блюд и разрешать редактирование бейджей в админке",
+    group: "Оформление",
+    type: "boolean",
+  },
+  menu_cards_layout: {
+    default: "horizontal",
+    label: "Режим карточек меню",
+    description: "horizontal — одна карточка в ряд, vertical — две карточки в ряд",
+    group: "Оформление",
+    type: "string",
   },
   telegram_start_message: {
     default: TELEGRAM_START_MESSAGE_DEFAULT,
@@ -206,9 +221,9 @@ export const SETTINGS_SCHEMA = {
     type: "string",
   },
   maps_default_country: {
-    default: "TJ",
+    default: "RU",
     label: "Страна карт по умолчанию",
-    description: "Код страны ISO 3166-1 alpha-2, например TJ или RU",
+    description: "Код страны ISO 3166-1 alpha-2, например US или RU",
     group: "Карты",
     type: "string",
   },
@@ -280,6 +295,17 @@ const validateMapsSetting = (key, value) => {
     return null;
   }
 
+  return null;
+};
+const validateAppearanceSetting = (key, value) => {
+  if (key !== "menu_cards_layout") return null;
+  if (typeof value !== "string") {
+    return "menu_cards_layout должен быть строкой";
+  }
+  const normalized = String(value || "").trim().toLowerCase();
+  if (!MENU_CARD_LAYOUTS.has(normalized)) {
+    return "menu_cards_layout должен быть horizontal или vertical";
+  }
   return null;
 };
 const TELEGRAM_START_MAX_IMAGES = 20;
@@ -578,6 +604,14 @@ export const updateSystemSettings = async (patch) => {
       if (mapsValidationError) {
         errors[key] = mapsValidationError;
         continue;
+      }
+      const appearanceValidationError = validateAppearanceSetting(key, updates[key]);
+      if (appearanceValidationError) {
+        errors[key] = appearanceValidationError;
+        continue;
+      }
+      if (key === "menu_cards_layout") {
+        updates[key] = String(updates[key]).trim().toLowerCase();
       }
     } else if (meta.type === "json") {
       if (!value || typeof value !== "object" || Array.isArray(value)) {
