@@ -28,6 +28,7 @@ const TELEGRAM_START_BUTTON_TYPES = new Set(["url", "web_app"]);
 const MAPS_API_KEY_MAX_LENGTH = 512;
 const MAPS_LANGUAGE_REGEX = /^[a-z]{2}_[A-Z]{2}$/;
 const MAPS_COUNTRY_REGEX = /^[A-Z]{2}$/;
+const MENU_CARDS_LAYOUT_VALUES = new Set(["horizontal", "vertical"]);
 
 export const SETTINGS_SCHEMA = {
   bonuses_enabled: {
@@ -57,6 +58,20 @@ export const SETTINGS_SCHEMA = {
     description: "Оформление заказов на самовывоз",
     group: "Заказы",
     type: "boolean",
+  },
+  menu_badges_enabled: {
+    default: true,
+    label: "Бейджи в меню",
+    description: "Показывать бейджи на карточках блюд в Mini App",
+    group: "Оформление",
+    type: "boolean",
+  },
+  menu_cards_layout: {
+    default: "horizontal",
+    label: "Раскладка карточек меню",
+    description: "Горизонтально (1 в ряд) или вертикально (2 в ряд)",
+    group: "Оформление",
+    type: "string",
   },
   telegram_start_message: {
     default: TELEGRAM_START_MESSAGE_DEFAULT,
@@ -280,6 +295,16 @@ const validateMapsSetting = (key, value) => {
     return null;
   }
 
+  return null;
+};
+const validateAppearanceSetting = (key, value) => {
+  if (key !== "menu_cards_layout") return null;
+  if (typeof value !== "string") {
+    return "menu_cards_layout должен быть строкой";
+  }
+  if (!MENU_CARDS_LAYOUT_VALUES.has(value)) {
+    return "menu_cards_layout должен быть horizontal или vertical";
+  }
   return null;
 };
 const TELEGRAM_START_MAX_IMAGES = 20;
@@ -577,6 +602,11 @@ export const updateSystemSettings = async (patch) => {
       const mapsValidationError = validateMapsSetting(key, updates[key]);
       if (mapsValidationError) {
         errors[key] = mapsValidationError;
+        continue;
+      }
+      const appearanceValidationError = validateAppearanceSetting(key, updates[key]);
+      if (appearanceValidationError) {
+        errors[key] = appearanceValidationError;
         continue;
       }
     } else if (meta.type === "json") {
