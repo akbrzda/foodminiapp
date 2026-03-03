@@ -93,7 +93,7 @@
     </Card>
 
     <Tabs v-model="activeTab">
-      <div class="overflow-x-auto pb-1">
+      <div class="overflow-x-auto pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
         <TabsList class="inline-flex min-w-max whitespace-nowrap">
           <TabsTrigger v-for="(tab, index) in tabs" :key="tab" :value="index">{{ tab }}</TabsTrigger>
         </TabsList>
@@ -141,8 +141,8 @@
                       <Input
                         v-else-if="item.type === 'string'"
                         v-model="moduleForm[item.key]"
-                        :type="MAPS_SECRET_KEYS.has(item.key) ? 'password' : 'text'"
-                        :autocomplete="MAPS_SECRET_KEYS.has(item.key) ? 'new-password' : 'off'"
+                        type="text"
+                        autocomplete="off"
                         autocapitalize="none"
                         autocorrect="off"
                         spellcheck="false"
@@ -208,8 +208,8 @@
                       <Input
                         v-if="item.type === 'string'"
                         v-model="mapForm[item.key]"
-                        :type="MAPS_SECRET_KEYS.has(item.key) ? 'password' : 'text'"
-                        :autocomplete="MAPS_SECRET_KEYS.has(item.key) ? 'new-password' : 'off'"
+                        type="text"
+                        autocomplete="off"
                         autocapitalize="none"
                         autocorrect="off"
                         spellcheck="false"
@@ -860,7 +860,6 @@ const { showErrorNotification, showSuccessNotification } = useNotifications();
 const modalTitle = computed(() => (editing.value ? "Редактировать причину" : "Новая причина"));
 const modalSubtitle = computed(() => (editing.value ? "Измените параметры" : "Создайте причину стоп-листа"));
 const percentKeys = new Set();
-const MAPS_SECRET_KEYS = new Set(["yandex_suggest_api_key"]);
 const MAP_SETTING_KEYS = new Set(["yandex_js_api_key", "yandex_suggest_api_key", "maps_default_language", "maps_default_country"]);
 const APPEARANCE_SETTING_KEYS = new Set(["menu_badges_enabled", "menu_cards_layout"]);
 const primitiveTypes = new Set(["boolean", "string", "number"]);

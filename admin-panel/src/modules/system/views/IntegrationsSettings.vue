@@ -48,10 +48,6 @@
           </div>
         </div>
         <template v-else>
-          <div class="hidden" aria-hidden="true">
-            <input type="text" tabindex="-1" autocomplete="username" />
-            <input type="password" tabindex="-1" autocomplete="current-password" />
-          </div>
           <FieldGroup class="grid gap-4 md:grid-cols-2">
             <Field>
               <FieldLabel>Включено</FieldLabel>
@@ -85,9 +81,9 @@
               <FieldContent>
                 <Input
                   v-model="form.iiko_api_key"
-                  type="password"
+                  type="text"
                   name="iiko_api_key_settings"
-                  autocomplete="section-iiko new-password"
+                  autocomplete="off"
                   autocapitalize="none"
                   autocorrect="off"
                   spellcheck="false"
@@ -101,9 +97,9 @@
               <FieldContent>
                 <Input
                   v-model="form.iiko_webhook_secret"
-                  type="password"
+                  type="text"
                   name="iiko_webhook_secret_settings"
-                  autocomplete="section-iiko new-password"
+                  autocomplete="off"
                   autocapitalize="none"
                   autocorrect="off"
                   spellcheck="false"
@@ -384,10 +380,6 @@
           <Skeleton class="h-9 w-40" />
         </div>
         <template v-else>
-          <div class="hidden" aria-hidden="true">
-            <input type="text" tabindex="-1" autocomplete="username" />
-            <input type="password" tabindex="-1" autocomplete="current-password" />
-          </div>
           <FieldGroup class="grid gap-4 md:grid-cols-2">
             <Field>
               <FieldLabel>Включено</FieldLabel>
@@ -427,9 +419,9 @@
               <FieldContent>
                 <Input
                   v-model="form.premiumbonus_api_token"
-                  type="password"
+                  type="text"
                   name="premiumbonus_api_token_settings"
-                  autocomplete="section-premiumbonus new-password"
+                  autocomplete="off"
                   autocapitalize="none"
                   autocorrect="off"
                   spellcheck="false"

@@ -1,5 +1,6 @@
 import db from "../config/database.js";
 import redis from "../config/redis.js";
+import { decrypt, encrypt } from "./encryption.js";
 
 const SETTINGS_CACHE_KEY = "settings";
 const SETTINGS_CACHE_TTL = 600;
@@ -29,6 +30,15 @@ const MAPS_API_KEY_MAX_LENGTH = 512;
 const MAPS_LANGUAGE_REGEX = /^[a-z]{2}_[A-Z]{2}$/;
 const MAPS_COUNTRY_REGEX = /^[A-Z]{2}$/;
 const MENU_CARDS_LAYOUT_VALUES = new Set(["horizontal", "vertical"]);
+const ENCRYPTED_SETTING_KEYS = new Set([
+  "iiko_api_token",
+  "iiko_api_key",
+  "iiko_webhook_secret",
+  "premiumbonus_api_token",
+  "yandex_js_api_key",
+  "yandex_suggest_api_key",
+]);
+const ENCRYPTED_VALUE_REGEX = /^[a-f0-9]{128}:[a-f0-9]{32}:[a-f0-9]{32}:[a-f0-9]+$/i;
 
 export const SETTINGS_SCHEMA = {
   bonuses_enabled: {
@@ -531,6 +541,7 @@ export const getSystemSettings = async () => {
 
   const [rows] = await db.query("SELECT `key`, value FROM system_settings");
   const settings = {};
+  const legacyEncryptionUpdates = [];
 
   for (const [key, meta] of Object.entries(SETTINGS_SCHEMA)) {
     settings[key] = meta.default;
@@ -538,7 +549,47 @@ export const getSystemSettings = async () => {
 
   for (const row of rows) {
     if (!SETTINGS_SCHEMA[row.key]) continue;
-    settings[row.key] = normalizeSettingValue(row.value, SETTINGS_SCHEMA[row.key].default);
+    const normalizedValue = normalizeSettingValue(row.value, SETTINGS_SCHEMA[row.key].default);
+    if (ENCRYPTED_SETTING_KEYS.has(row.key) && typeof normalizedValue === "string" && normalizedValue) {
+      if (ENCRYPTED_VALUE_REGEX.test(normalizedValue)) {
+        try {
+          settings[row.key] = decrypt(normalizedValue);
+        } catch (error) {
+          console.error(`Failed to decrypt setting ${row.key}:`, error);
+          settings[row.key] = "";
+        }
+      } else {
+        settings[row.key] = normalizedValue;
+        try {
+          legacyEncryptionUpdates.push([row.key, encrypt(normalizedValue), SETTINGS_SCHEMA[row.key].description]);
+        } catch (error) {
+          console.error(`Failed to encrypt legacy setting ${row.key}:`, error);
+        }
+      }
+      continue;
+    }
+    settings[row.key] = normalizedValue;
+  }
+
+  if (legacyEncryptionUpdates.length > 0) {
+    const connection = await db.getConnection();
+    try {
+      await connection.beginTransaction();
+      for (const [key, encryptedValue, description] of legacyEncryptionUpdates) {
+        await connection.query(
+          `INSERT INTO system_settings (\`key\`, value, description)
+           VALUES (?, ?, ?)
+           ON DUPLICATE KEY UPDATE value = VALUES(value), description = VALUES(description)`,
+          [key, JSON.stringify(encryptedValue), description],
+        );
+      }
+      await connection.commit();
+    } catch (error) {
+      await connection.rollback();
+      console.error("Failed to backfill encrypted settings:", error);
+    } finally {
+      connection.release();
+    }
   }
 
   try {
@@ -656,12 +707,16 @@ export const updateSystemSettings = async (patch) => {
   try {
     await connection.beginTransaction();
     for (const [key, value] of Object.entries(updates)) {
+      let valueToStore = value;
+      if (ENCRYPTED_SETTING_KEYS.has(key) && typeof value === "string" && value) {
+        valueToStore = ENCRYPTED_VALUE_REGEX.test(value) ? value : encrypt(value);
+      }
       await connection.query(
         `INSERT INTO system_settings (
           \`key\`, value, description
         ) VALUES (?, ?, ?)
         ON DUPLICATE KEY UPDATE value = VALUES(value), description = VALUES(description)`,
-        [key, JSON.stringify(value), SETTINGS_SCHEMA[key].description],
+        [key, JSON.stringify(valueToStore), SETTINGS_SCHEMA[key].description],
       );
     }
     await connection.commit();

@@ -213,8 +213,8 @@ const navSections = computed(() => {
       title: "Администрирование",
       visible: !isManager.value,
       items: [
-        { label: "Интеграции", to: "/integrations", icon: PlugZap },
         { label: "Настройки системы", to: "/system/settings", icon: SlidersHorizontal },
+        { label: "Интеграции", to: "/integrations", icon: PlugZap },
         { label: "Пользователи", to: "/admin-users", icon: UserCog },
         { label: "Логи", to: "/logs", icon: FileText },
       ],
