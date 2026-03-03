@@ -75,6 +75,7 @@ const branches = ref([]);
 const selectedBranch = ref(null);
 let mapInstance = null;
 let markers = [];
+let yandexMaps = null;
 const filteredBranches = computed(() => branches.value);
 onMounted(async () => {
   locationStore.setDeliveryType("pickup");
@@ -113,6 +114,7 @@ async function initMap() {
     return null;
   });
   if (!ymaps) return;
+  yandexMaps = ymaps;
   const center = getInitialMapCenter();
   mapInstance = new ymaps.Map(
     mapContainerRef.value,
@@ -125,23 +127,22 @@ async function initMap() {
       suppressMapOpenBlock: true,
     },
   );
-  setMarkers(ymaps);
+  setMarkers();
 }
-function setMarkers(ymaps) {
+function setMarkers() {
+  if (!mapInstance || !yandexMaps) return;
   markers.forEach((marker) => mapInstance.geoObjects.remove(marker));
   markers = [];
   branches.value.forEach((branch) => {
     const { lat, lon } = normalizeCoords(branch.latitude, branch.longitude);
     if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
-    const marker = new ymaps.Placemark(
+    const marker = new yandexMaps.Placemark(
       [lat, lon],
       {
         hintContent: branch.displayName || branch.name,
         balloonContent: branch.displayAddress || branch.address || "",
       },
-      {
-        preset: "islands#redIcon",
-      },
+      createBranchMarkerOptions(branch),
     );
     marker.events.add("click", () => selectBranch(branch));
     mapInstance.geoObjects.add(marker);
@@ -152,12 +153,41 @@ function selectBranch(branch) {
   hapticFeedback("light");
   selectedBranch.value = branch;
   locationStore.setBranch(branch);
+  setMarkers();
   const { lat, lon } = normalizeCoords(branch.latitude, branch.longitude);
   if (mapInstance && Number.isFinite(lat) && Number.isFinite(lon)) {
     mapInstance.setCenter([lat, lon], 16, {
       duration: 250,
     });
   }
+}
+function createBranchMarkerSvg(branch) {
+  const prepTime = Number(branch?.prep_time);
+  const minutes = Number.isFinite(prepTime) && prepTime > 0 ? Math.round(prepTime) : 15;
+  return `
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="73" viewBox="0 0 48 73">
+  <defs>
+    <filter id="f" x="-20%" y="-20%" width="140%" height="160%">
+      <feDropShadow dx="0" dy="6" stdDeviation="3" flood-color="#111827" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+  <line x1="24" y1="48" x2="24" y2="73" stroke="#111827" stroke-width="3" stroke-linecap="round"/>
+  <g filter="url(#f)">
+    <circle cx="24" cy="24" r="24" fill="#111827"/>
+  </g>
+  <text x="24" y="23" text-anchor="middle" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="13" font-weight="700">${minutes}</text>
+  <text x="24" y="34" text-anchor="middle" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="8" font-weight="700">МИН</text>
+</svg>`.trim();
+}
+function createBranchMarkerOptions(branch) {
+  const svg = createBranchMarkerSvg(branch);
+  const href = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+  return {
+    iconLayout: "default#image",
+    iconImageHref: href,
+    iconImageSize: [48, 73],
+    iconImageOffset: [-24, -73],
+  };
 }
 function confirmPickup() {
   if (!selectedBranch.value) {

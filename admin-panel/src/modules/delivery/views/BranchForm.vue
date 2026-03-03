@@ -275,6 +275,24 @@ const syncBranchMarkerPosition = () => {
   form.value.latitude = Number(coords[0]);
   form.value.longitude = Number(coords[1]);
 };
+const createAdminBranchMarkerSvg = () =>
+  `
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="73" viewBox="0 0 48 73">
+  <line x1="24" y1="36" x2="24" y2="61" stroke="#111827" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="24" cy="24" r="24" fill="#111827"/>
+  <text x="24" y="31" text-anchor="middle" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="18" font-weight="700">Я</text>
+</svg>`.trim();
+const createBranchMarkerOptions = () => {
+  const svg = createAdminBranchMarkerSvg();
+  const href = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+  return {
+    draggable: true,
+    iconLayout: "default#image",
+    iconImageHref: href,
+    iconImageSize: [48, 73],
+    iconImageOffset: [-24, -61],
+  };
+};
 
 const initBranchMap = () => {
   if (branchMap.value) {
@@ -295,7 +313,7 @@ const initBranchMap = () => {
     container,
     {
       center,
-      zoom: 12,
+      zoom: 16,
       controls: [],
     },
     {
@@ -303,10 +321,7 @@ const initBranchMap = () => {
     },
   );
   if (form.value.latitude && form.value.longitude) {
-    branchMarker.value = new yandexMaps.value.Placemark([form.value.latitude, form.value.longitude], {}, {
-      draggable: true,
-      preset: "islands#redIcon",
-    });
+    branchMarker.value = new yandexMaps.value.Placemark([form.value.latitude, form.value.longitude], {}, createBranchMarkerOptions());
     branchMap.value.geoObjects.add(branchMarker.value);
     branchMarker.value.events.add("dragend", syncBranchMarkerPosition);
   }
@@ -320,10 +335,7 @@ const initBranchMap = () => {
     if (branchMarker.value) {
       branchMarker.value.geometry.setCoordinates([lat, lon]);
     } else {
-      branchMarker.value = new yandexMaps.value.Placemark([lat, lon], {}, {
-        draggable: true,
-        preset: "islands#redIcon",
-      });
+      branchMarker.value = new yandexMaps.value.Placemark([lat, lon], {}, createBranchMarkerOptions());
       branchMap.value.geoObjects.add(branchMarker.value);
       branchMarker.value.events.add("dragend", syncBranchMarkerPosition);
     }
@@ -347,10 +359,7 @@ const geocodeAddress = async () => {
         if (branchMarker.value) {
           branchMarker.value.geometry.setCoordinates([response.data.lat, response.data.lng]);
         } else {
-          branchMarker.value = new yandexMaps.value.Placemark([response.data.lat, response.data.lng], {}, {
-            draggable: true,
-            preset: "islands#redIcon",
-          });
+          branchMarker.value = new yandexMaps.value.Placemark([response.data.lat, response.data.lng], {}, createBranchMarkerOptions());
           branchMap.value.geoObjects.add(branchMarker.value);
           branchMarker.value.events.add("dragend", syncBranchMarkerPosition);
         }

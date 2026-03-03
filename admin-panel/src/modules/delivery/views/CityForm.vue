@@ -138,6 +138,26 @@ let cityMap = null;
 let cityMarker = null;
 let yandexMaps = null;
 
+const createAdminPointMarkerSvg = (label = "Я") =>
+  `
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="73" viewBox="0 0 48 73">
+  <line x1="24" y1="36" x2="24" y2="61" stroke="#111827" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="24" cy="24" r="24" fill="#111827"/>
+  <text x="24" y="31" text-anchor="middle" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="18" font-weight="700">${label}</text>
+</svg>`.trim();
+
+const createAdminPointMarkerOptions = () => {
+  const svg = createAdminPointMarkerSvg("Я");
+  const href = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+  return {
+    draggable: true,
+    iconLayout: "default#image",
+    iconImageHref: href,
+    iconImageSize: [48, 73],
+    iconImageOffset: [-24, -61],
+  };
+};
+
 const syncMarkerPosition = () => {
   if (!cityMarker) return;
   const coords = cityMarker.geometry?.getCoordinates?.();
@@ -173,10 +193,7 @@ const initCityMap = () => {
     },
   );
   if (form.value.latitude && form.value.longitude) {
-    cityMarker = new yandexMaps.Placemark([form.value.latitude, form.value.longitude], {}, {
-      draggable: true,
-      preset: "islands#redIcon",
-    });
+    cityMarker = new yandexMaps.Placemark([form.value.latitude, form.value.longitude], {}, createAdminPointMarkerOptions());
     cityMap.geoObjects.add(cityMarker);
     cityMarker.events.add("dragend", syncMarkerPosition);
   }
@@ -190,10 +207,7 @@ const initCityMap = () => {
     if (cityMarker) {
       cityMarker.geometry.setCoordinates([lat, lon]);
     } else {
-      cityMarker = new yandexMaps.Placemark([lat, lon], {}, {
-        draggable: true,
-        preset: "islands#redIcon",
-      });
+      cityMarker = new yandexMaps.Placemark([lat, lon], {}, createAdminPointMarkerOptions());
       cityMap.geoObjects.add(cityMarker);
       cityMarker.events.add("dragend", syncMarkerPosition);
     }
@@ -214,10 +228,7 @@ const geocodeCity = async () => {
         if (cityMarker) {
           cityMarker.geometry.setCoordinates([response.data.lat, response.data.lng]);
         } else {
-          cityMarker = new yandexMaps.Placemark([response.data.lat, response.data.lng], {}, {
-            draggable: true,
-            preset: "islands#redIcon",
-          });
+          cityMarker = new yandexMaps.Placemark([response.data.lat, response.data.lng], {}, createAdminPointMarkerOptions());
           cityMap.geoObjects.add(cityMarker);
           cityMarker.events.add("dragend", syncMarkerPosition);
         }

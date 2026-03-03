@@ -164,7 +164,10 @@
                 Сбросить выбор
               </button>
             </div>
-            <div v-if="!filteredPolygons.length" class="rounded-lg border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">
+            <div
+              v-if="!filteredPolygons.length"
+              class="rounded-lg border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground"
+            >
               {{ listEmptyStateLabel }}
             </div>
             <div v-else class="max-h-60 space-y-2 overflow-y-auto pr-1">
@@ -207,13 +210,7 @@
         </div>
       </div>
     </div>
-    <Button
-      v-if="branchId && !isManager"
-      type="button"
-      size="sm"
-      class="absolute bottom-4 left-2 z-10 md:hidden"
-      @click="startDrawing"
-    >
+    <Button v-if="branchId && !isManager" type="button" size="sm" class="absolute bottom-4 left-2 z-10 md:hidden" @click="startDrawing">
       <Plus :size="16" />
       Добавить полигон
     </Button>
@@ -285,11 +282,7 @@
         </div>
       </DialogContent>
     </Dialog>
-    <Dialog
-      v-if="showMobilePolygonList"
-      :open="showMobilePolygonList"
-      @update:open="(value) => (showMobilePolygonList = value)"
-    >
+    <Dialog v-if="showMobilePolygonList" :open="showMobilePolygonList" @update:open="(value) => (showMobilePolygonList = value)">
       <DialogContent class="w-full max-w-2xl">
         <DialogHeader>
           <DialogTitle>Зоны доставки</DialogTitle>
@@ -298,20 +291,21 @@
           </DialogDescription>
         </DialogHeader>
         <div class="space-y-2">
-          <div v-if="!filteredPolygons.length" class="rounded-lg border border-dashed border-border px-3 py-5 text-center text-sm text-muted-foreground">
+          <div
+            v-if="!filteredPolygons.length"
+            class="rounded-lg border border-dashed border-border px-3 py-5 text-center text-sm text-muted-foreground"
+          >
             {{ listEmptyStateLabel }}
           </div>
           <div v-else class="max-h-[60dvh] space-y-2 overflow-y-auto pr-1">
-            <div
-              v-for="polygon in filteredPolygons"
-              :key="polygon.id"
-              class="rounded-lg border border-border bg-card px-3 py-2"
-            >
+            <div v-for="polygon in filteredPolygons" :key="polygon.id" class="rounded-lg border border-border bg-card px-3 py-2">
               <div class="flex items-start justify-between gap-3">
                 <button type="button" class="min-w-0 flex-1 text-left" @click="focusPolygonOnMap(polygon, true)">
                   <p class="truncate text-sm font-semibold text-foreground">{{ polygon.name || `Полигон #${polygon.id}` }}</p>
                   <p class="truncate text-xs text-muted-foreground">{{ polygon.branch_name || "Без филиала" }}</p>
-                  <p class="mt-1 text-[11px] text-muted-foreground">Время: {{ polygon.delivery_time || 30 }} мин · Тарифов: {{ Number(polygon.tariffs_count || 0) }}</p>
+                  <p class="mt-1 text-[11px] text-muted-foreground">
+                    Время: {{ polygon.delivery_time || 30 }} мин · Тарифов: {{ Number(polygon.tariffs_count || 0) }}
+                  </p>
                 </button>
                 <span class="rounded-full px-2 py-0.5 text-[10px] font-semibold" :class="getPolygonStatusClass(polygon)">
                   {{ getPolygonStatusLabel(polygon) }}
@@ -422,15 +416,8 @@
           </div>
         </div>
         <div class="flex gap-2">
-          <Button type="button" variant="outline" class="flex-1" :disabled="geoJsonImportSaving" @click="closeGeoJsonImportDialog">
-            Отмена
-          </Button>
-          <Button
-            type="button"
-            class="flex-1"
-            :disabled="!geoJsonImportItems.length || geoJsonImportSaving"
-            @click="confirmGeoJsonImport"
-          >
+          <Button type="button" variant="outline" class="flex-1" :disabled="geoJsonImportSaving" @click="closeGeoJsonImportDialog"> Отмена </Button>
+          <Button type="button" class="flex-1" :disabled="!geoJsonImportItems.length || geoJsonImportSaving" @click="confirmGeoJsonImport">
             <Upload :size="16" />
             {{ geoJsonImportSaving ? "Сохранение..." : `Сохранить (${geoJsonImportItems.length})` }}
           </Button>
@@ -455,12 +442,7 @@
       @transfer="transferPolygon"
       @redraw="startRedrawPolygon"
     />
-    <DeliveryTariffEditorDialog
-      :open="tariffEditorOpen"
-      :tariffs="selectedTariffs"
-      @close="tariffEditorOpen = false"
-      @save="saveTariffs"
-    />
+    <DeliveryTariffEditorDialog :open="tariffEditorOpen" :tariffs="selectedTariffs" @close="tariffEditorOpen = false" @save="saveTariffs" />
     <DeliveryTariffCopyDialog
       :open="tariffCopyOpen"
       :sources="availableTariffSources"
@@ -499,6 +481,25 @@ const MAP_ACCENT = "#ffd200";
 const MAP_ACCENT_FILL = "rgba(255, 210, 0, 0.26)";
 const MAP_DANGER = "#ef4444";
 const MAP_MUTED = "#9ca3af";
+
+const createAdminPointMarkerSvg = (label = "Я") =>
+  `
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="73" viewBox="0 0 48 73">
+  <line x1="24" y1="36" x2="24" y2="61" stroke="#111827" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="24" cy="24" r="24" fill="#111827"/>
+  <text x="24" y="31" text-anchor="middle" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="18" font-weight="700">${label}</text>
+</svg>`.trim();
+
+const createAdminPointMarkerOptions = (label = "Я") => {
+  const svg = createAdminPointMarkerSvg(label);
+  const href = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+  return {
+    iconLayout: "default#image",
+    iconImageHref: href,
+    iconImageSize: [48, 73],
+    iconImageOffset: [-24, -61],
+  };
+};
 const referenceStore = useReferenceStore();
 const authStore = useAuthStore();
 const route = useRoute();
@@ -578,9 +579,7 @@ const availableTariffSources = computed(() => {
   const pool = allPolygons.value.length ? allPolygons.value : polygons.value;
   return pool.filter(
     (polygon) =>
-      polygon.branch_id === selectedPolygon.value.branch_id &&
-      polygon.id !== selectedPolygon.value.id &&
-      Number(polygon.tariffs_count || 0) > 0,
+      polygon.branch_id === selectedPolygon.value.branch_id && polygon.id !== selectedPolygon.value.id && Number(polygon.tariffs_count || 0) > 0,
   );
 });
 let map = null;
@@ -688,10 +687,7 @@ const loadAllPolygons = async () => {
 const isValidLatLng = (lat, lng) => Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
 const calcCenter = (coords = []) => {
   if (!coords.length) return null;
-  const sum = coords.reduce(
-    (acc, [lat, lng]) => ({ lat: acc.lat + lat, lng: acc.lng + lng }),
-    { lat: 0, lng: 0 },
-  );
+  const sum = coords.reduce((acc, [lat, lng]) => ({ lat: acc.lat + lat, lng: acc.lng + lng }), { lat: 0, lng: 0 });
   return { lat: sum.lat / coords.length, lng: sum.lng / coords.length };
 };
 const distanceSq = (a, b) => {
@@ -719,12 +715,8 @@ const getReferenceCenter = () => {
 };
 const toLeafletCoords = (coords = [], referenceCenter = null) => {
   const points = coords.filter((coord) => Array.isArray(coord) && coord.length >= 2);
-  const fromGeoJson = points
-    .map((coord) => [Number(coord[1]), Number(coord[0])])
-    .filter(([lat, lng]) => isValidLatLng(lat, lng));
-  const legacyLatLng = points
-    .map((coord) => [Number(coord[0]), Number(coord[1])])
-    .filter(([lat, lng]) => isValidLatLng(lat, lng));
+  const fromGeoJson = points.map((coord) => [Number(coord[1]), Number(coord[0])]).filter(([lat, lng]) => isValidLatLng(lat, lng));
+  const legacyLatLng = points.map((coord) => [Number(coord[0]), Number(coord[1])]).filter(([lat, lng]) => isValidLatLng(lat, lng));
   if (!legacyLatLng.length) return fromGeoJson;
   if (!fromGeoJson.length) return legacyLatLng;
   if (!referenceCenter) return fromGeoJson;
@@ -842,12 +834,8 @@ const normalizePolygonRing = (ring, referenceCenter = null, preferredOrder = nul
   } else if (resolvedOrder !== "lng_lat" && hasClearlyLegacyOrder && !hasClearlyGeoOrder) {
     normalizedCoords = rawCoords.map((coord) => [coord[1], coord[0]]);
   } else if (resolvedOrder !== "lng_lat" && !hasClearlyGeoOrder && !hasClearlyLegacyOrder && referenceCenter) {
-    const geoLatLng = rawCoords
-      .map((coord) => [coord[1], coord[0]])
-      .filter(([lat, lng]) => isValidLatLng(lat, lng));
-    const legacyLatLng = rawCoords
-      .map((coord) => [coord[0], coord[1]])
-      .filter(([lat, lng]) => isValidLatLng(lat, lng));
+    const geoLatLng = rawCoords.map((coord) => [coord[1], coord[0]]).filter(([lat, lng]) => isValidLatLng(lat, lng));
+    const legacyLatLng = rawCoords.map((coord) => [coord[0], coord[1]]).filter(([lat, lng]) => isValidLatLng(lat, lng));
     const geoCenter = calcCenter(geoLatLng);
     const legacyCenter = calcCenter(legacyLatLng);
     const useLegacyOrder = distanceSq(legacyCenter, referenceCenter) < distanceSq(geoCenter, referenceCenter);
@@ -917,7 +905,8 @@ const convertFeatureToImportItems = (feature, index) => {
   if (!geometry || (geometry.type !== "Polygon" && geometry.type !== "MultiPolygon")) {
     return [];
   }
-  const baseName = typeof feature?.properties?.name === "string" && feature.properties.name.trim() ? feature.properties.name.trim() : `Импорт #${index + 1}`;
+  const baseName =
+    typeof feature?.properties?.name === "string" && feature.properties.name.trim() ? feature.properties.name.trim() : `Импорт #${index + 1}`;
   const deliveryTime = parseDeliveryTime(feature?.properties?.delivery_time);
   const tariffs = parseTariffsFromFeature(feature);
   const referenceCenter = getReferenceCenter();
@@ -1022,7 +1011,9 @@ const exportGeoJson = async () => {
   geoJsonExporting.value = true;
   try {
     const branchName = branches.value.find((branch) => branch.id === parseInt(branchId.value, 10))?.name || `branch_${branchId.value}`;
-    const polygonsForExport = polygons.value.filter((polygon) => polygon?.polygon?.type === "Polygon" && Array.isArray(polygon?.polygon?.coordinates));
+    const polygonsForExport = polygons.value.filter(
+      (polygon) => polygon?.polygon?.type === "Polygon" && Array.isArray(polygon?.polygon?.coordinates),
+    );
     if (!polygonsForExport.length) {
       showWarningNotification("Нет полигонов для экспорта");
       return;
@@ -1162,9 +1153,7 @@ const initMap = async () => {
       {
         balloonContentBody: `<strong>${selectedBranch.name}</strong><br>${selectedBranch.address || ""}`,
       },
-      {
-        preset: "islands#redIcon",
-      },
+      createAdminPointMarkerOptions("Я"),
     );
     map.geoObjects.add(branchMarker);
   }
@@ -1605,9 +1594,7 @@ const submitPolygon = async () => {
     return;
   }
   const ring = currentLayer.geometry.getCoordinates()?.[0] || [];
-  const normalizedRing = ring
-    .filter((coord) => Array.isArray(coord) && coord.length >= 2)
-    .map((coord) => [Number(coord[1]), Number(coord[0])]);
+  const normalizedRing = ring.filter((coord) => Array.isArray(coord) && coord.length >= 2).map((coord) => [Number(coord[1]), Number(coord[0])]);
   if (normalizedRing.length < 3) {
     showWarningNotification("Полигон содержит недостаточно точек");
     return;
@@ -1717,5 +1704,4 @@ onUnmounted(() => {
   yandexMaps = null;
 });
 </script>
-<style>
-</style>
+<style></style>

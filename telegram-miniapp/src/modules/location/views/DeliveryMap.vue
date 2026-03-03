@@ -2,16 +2,19 @@
   <div class="delivery-map">
     <div class="map-section">
       <div ref="mapContainerRef" class="map"></div>
-      <div class="center-marker" aria-hidden="true">
-        <MapPin class="center-marker-icon" />
+      <div class="center-marker" :class="{ 'is-loading': isMarkerLoading }" aria-hidden="true">
+        <div class="center-marker-pin">
+          <div v-if="isMarkerLoading" class="center-marker-progress"></div>
+          <div class="center-marker-badge">
+            <div class="center-marker-minutes">{{ centerMarkerMinutes }}</div>
+            <div class="center-marker-label">МИН</div>
+          </div>
+          <div class="center-marker-stem"></div>
+        </div>
       </div>
       <div class="map-overlay">
         <div v-if="cityName" class="map-info">
           <div class="map-info-title">{{ cityName }}</div>
-          <div class="map-info-subtitle">
-            Время доставки до:
-            <span class="map-info-time">{{ deliveryTimeLabel }}</span>
-          </div>
         </div>
         <div class="map-controls">
           <button class="map-btn" type="button" aria-label="Увеличить масштаб карты" @click="zoomIn">
@@ -92,7 +95,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted, reactive, watch } from "vue";
-import { LocateFixed, MapPin, Minus, Plus, X } from "lucide-vue-next";
+import { LocateFixed, Minus, Plus, X } from "lucide-vue-next";
 import { useRouter } from "vue-router";
 import { useLocationStore } from "@/modules/location/stores/location.js";
 import { addressesAPI } from "@/shared/api/endpoints.js";
@@ -142,6 +145,7 @@ let suggestionsController = null;
 let reverseController = null;
 let lastSearchId = 0;
 let lastReverseId = 0;
+let loadingReverseId = 0;
 let suppressReverseUntil = 0;
 let isProgrammaticMove = false;
 let suggestSessionToken = "";
@@ -151,6 +155,7 @@ const reverseCache = new Map();
 const isAddressFocused = ref(false);
 const preventBlurHide = ref(false);
 const isSuggestionsLoading = ref(false);
+const isMarkerLoading = ref(false);
 const lastSearchedQuery = ref("");
 
 const cityName = computed(() => locationStore.selectedCity?.name || "");
@@ -168,9 +173,9 @@ function createSuggestSessionToken() {
   return `${Date.now()}_${Math.random().toString(36).slice(2, 12)}`;
 }
 
-const deliveryTimeLabel = computed(() => {
-  const time = locationStore.deliveryZone?.delivery_time;
-  return time ? `${time} мин` : "—";
+const centerMarkerMinutes = computed(() => {
+  const value = Number(locationStore.deliveryZone?.delivery_time);
+  return Number.isFinite(value) && value > 0 ? Math.round(value) : 15;
 });
 
 const cityCenter = computed(() => {
@@ -235,6 +240,7 @@ onUnmounted(() => {
   if (reverseTimeout) clearTimeout(reverseTimeout);
   if (suggestionsController) suggestionsController.abort();
   if (reverseController) reverseController.abort();
+  isMarkerLoading.value = false;
 
   if (mapInstance) {
     mapInstance.destroy();
@@ -262,6 +268,7 @@ function onAddressInput() {
     reverseController = null;
   }
   lastReverseId += 1;
+  isMarkerLoading.value = false;
 
   deliveryZoneError.value = "";
   showSuggestions.value = true;
@@ -413,6 +420,7 @@ function clearAddress() {
     reverseController = null;
   }
   lastReverseId += 1;
+  isMarkerLoading.value = false;
 
   deliveryStreet.value = "";
   addressSuggestions.value = [];
@@ -637,17 +645,25 @@ function scheduleReverseFromCenter(lat, lon, immediate = false) {
 
   const requestId = ++lastReverseId;
   const run = async () => {
-    const suggestion = await reverseGeocode(lat, lon);
-    if (requestId !== lastReverseId || !suggestion?.label) return;
-    mapAddressHint.value = suggestion.label;
-    deliveryStreet.value = suggestion.label;
+    loadingReverseId = requestId;
+    isMarkerLoading.value = true;
+    try {
+      const suggestion = await reverseGeocode(lat, lon);
+      if (requestId !== lastReverseId || !suggestion?.label) return;
+      mapAddressHint.value = suggestion.label;
+      deliveryStreet.value = suggestion.label;
 
-    // Привязываем центр карты к точке найденного адреса (например, к ближайшему дому),
-    // чтобы центр-маркер и выбранный адрес всегда совпадали.
-    const dLat = Math.abs(Number(suggestion.lat) - Number(lat));
-    const dLon = Math.abs(Number(suggestion.lon) - Number(lon));
-    if (dLat > 0.00002 || dLon > 0.00002) {
-      setMapCenter(suggestion.lat, suggestion.lon, { animate: true, resolveAddress: false });
+      // Привязываем центр карты к точке найденного адреса (например, к ближайшему дому),
+      // чтобы центр-маркер и выбранный адрес всегда совпадали.
+      const dLat = Math.abs(Number(suggestion.lat) - Number(lat));
+      const dLon = Math.abs(Number(suggestion.lon) - Number(lon));
+      if (dLat > 0.00002 || dLon > 0.00002) {
+        setMapCenter(suggestion.lat, suggestion.lon, { animate: true, resolveAddress: false });
+      }
+    } finally {
+      if (loadingReverseId === requestId) {
+        isMarkerLoading.value = false;
+      }
     }
   };
 
@@ -901,13 +917,80 @@ watch(
   transform: translate(-50%, -100%);
   z-index: 18;
   pointer-events: none;
+  width: 48px;
+  height: 73px;
 }
 
-.center-marker-icon {
-  width: 34px;
-  height: 34px;
-  color: #ef4444;
-  filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.25));
+.center-marker-pin {
+  position: relative;
+  width: 48px;
+  height: 73px;
+}
+
+.center-marker-stem {
+  position: absolute;
+  left: 50%;
+  top: 46px;
+  transform: translateX(-50%);
+  width: 3px;
+  height: 25px;
+  border-radius: 96px;
+  background: #111827;
+  z-index: 1;
+}
+
+.center-marker-badge {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 48px;
+  height: 48px;
+  border-radius: 96px;
+  background: #111827;
+  color: #ffffff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 12px rgba(17, 24, 39, 0.3);
+  z-index: 3;
+}
+
+.center-marker-progress {
+  position: absolute;
+  left: -4px;
+  top: -4px;
+  width: 56px;
+  height: 56px;
+  border-radius: 96px;
+  background: conic-gradient(from 0deg, #ffd200 0deg, #ffd200 90deg, rgba(255, 210, 0, 0.15) 360deg);
+  animation: marker-spin 0.9s linear infinite;
+  z-index: 2;
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 0);
+  mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 0);
+}
+
+.center-marker-minutes {
+  font-size: 13px;
+  line-height: 1;
+  font-weight: 700;
+}
+
+.center-marker-label {
+  font-size: 8px;
+  line-height: 1;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+  margin-top: 1px;
+}
+
+@keyframes marker-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .map-overlay {

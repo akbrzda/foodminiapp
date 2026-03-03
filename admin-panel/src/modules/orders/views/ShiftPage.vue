@@ -149,6 +149,32 @@ const polygonsVisible = ref(localStorage.getItem("shift_polygons_visible") !== "
 const mapAccentColor = "#ffd200";
 const mapAccentFill = "rgba(255, 210, 0, 0.26)";
 
+const createShiftMarkerSvg = (minutes = 15) =>
+  `
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="73" viewBox="0 0 48 73">
+  <defs>
+    <filter id="f" x="-20%" y="-20%" width="140%" height="160%">
+      <feDropShadow dx="0" dy="6" stdDeviation="3" flood-color="#111827" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+  <line x1="24" y1="48" x2="24" y2="73" stroke="#111827" stroke-width="3" stroke-linecap="round"/>
+  <g filter="url(#f)">
+    <circle cx="24" cy="24" r="24" fill="#111827"/>
+  </g>
+  <text x="24" y="31" text-anchor="middle" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="18" font-weight="700">Я</text>
+</svg>`.trim();
+
+const createShiftMarkerOptions = (minutes = 15) => {
+  const svg = createShiftMarkerSvg(minutes);
+  const href = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+  return {
+    iconLayout: "default#image",
+    iconImageHref: href,
+    iconImageSize: [48, 73],
+    iconImageOffset: [-24, -73],
+  };
+};
+
 // Табы для списка заказов
 const tabs = computed(() => [
   { value: "active", label: "Активные", badge: activeOrders.value.length },
@@ -469,10 +495,7 @@ const isValidLatLng = (lat, lng) => Number.isFinite(lat) && Number.isFinite(lng)
 
 const calcCenter = (coords = []) => {
   if (!coords.length) return null;
-  const sum = coords.reduce(
-    (acc, [lat, lng]) => ({ lat: acc.lat + lat, lng: acc.lng + lng }),
-    { lat: 0, lng: 0 },
-  );
+  const sum = coords.reduce((acc, [lat, lng]) => ({ lat: acc.lat + lat, lng: acc.lng + lng }), { lat: 0, lng: 0 });
   return { lat: sum.lat / coords.length, lng: sum.lng / coords.length };
 };
 
@@ -505,12 +528,8 @@ const getReferenceCenter = () => {
 
 const toYandexPolygonCoords = (coords = [], referenceCenter = null) => {
   const points = coords.filter((coord) => Array.isArray(coord) && coord.length >= 2);
-  const geoJsonOrder = points
-    .map((coord) => [Number(coord[1]), Number(coord[0])])
-    .filter(([lat, lng]) => isValidLatLng(lat, lng));
-  const legacyOrder = points
-    .map((coord) => [Number(coord[0]), Number(coord[1])])
-    .filter(([lat, lng]) => isValidLatLng(lat, lng));
+  const geoJsonOrder = points.map((coord) => [Number(coord[1]), Number(coord[0])]).filter(([lat, lng]) => isValidLatLng(lat, lng));
+  const legacyOrder = points.map((coord) => [Number(coord[0]), Number(coord[1])]).filter(([lat, lng]) => isValidLatLng(lat, lng));
 
   if (!legacyOrder.length) return geoJsonOrder;
   if (!geoJsonOrder.length) return legacyOrder;
@@ -531,12 +550,6 @@ const updatePolygonsVisibility = () => {
   if (!mapInstance || !polygonsLayer) return;
   if (polygonsVisible.value) {
     mapInstance.geoObjects.add(polygonsLayer);
-    if (typeof polygonsLayer.getBounds === "function") {
-      const bounds = polygonsLayer.getBounds();
-      if (bounds) {
-        mapInstance.setBounds(bounds, { checkZoomRange: true, zoomMargin: 24 });
-      }
-    }
   } else {
     mapInstance.geoObjects.remove(polygonsLayer);
   }
@@ -556,7 +569,7 @@ const initMap = async () => {
     mapContainer,
     {
       center,
-      zoom: 12,
+      zoom: 16,
       controls: [],
     },
     {
@@ -594,7 +607,7 @@ const centerOnBranch = () => {
   if (isMobileViewport.value) {
     mobilePane.value = "map";
   }
-  mapInstance.setCenter([lat, lng], 12, { duration: 180 });
+  mapInstance.setCenter([lat, lng], 16, { duration: 180 });
 };
 const zoomInMap = () => {
   if (!mapInstance) return;
@@ -612,13 +625,7 @@ const renderBranchMarker = () => {
   if (staticBranchMarker) {
     mapInstance.geoObjects.remove(staticBranchMarker);
   }
-  staticBranchMarker = new yandexMaps.Placemark(
-    [Number(branch.latitude), Number(branch.longitude)],
-    {},
-    {
-      preset: "islands#redIcon",
-    },
-  );
+  staticBranchMarker = new yandexMaps.Placemark([Number(branch.latitude), Number(branch.longitude)], {}, createShiftMarkerOptions(15));
   mapInstance.geoObjects.add(staticBranchMarker);
 };
 
@@ -752,8 +759,8 @@ const showOrderOnMap = (order) => {
   const deliveryLat = normalizedDelivery.lat;
   const deliveryLng = normalizedDelivery.lng;
   clearOrderMap();
-  branchMarker = new yandexMaps.Placemark([branchLat, branchLng], {}, { preset: "islands#redIcon" });
-  deliveryMarker = new yandexMaps.Placemark([deliveryLat, deliveryLng], {}, { preset: "islands#blueCircleDotIcon" });
+  branchMarker = new yandexMaps.Placemark([branchLat, branchLng], {}, createShiftMarkerOptions(15));
+  deliveryMarker = new yandexMaps.Placemark([deliveryLat, deliveryLng], {}, createShiftMarkerOptions(15));
   routeLine = new yandexMaps.Polyline(
     [
       [branchLat, branchLng],
