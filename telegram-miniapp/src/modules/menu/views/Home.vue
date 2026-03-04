@@ -96,7 +96,7 @@
           </div>
           <div class="items" :class="[`layout-${effectiveMenuCardsLayout}`]">
             <div
-              v-for="(item, itemIndex) in getItemsByCategory(category.id)"
+              v-for="item in getItemsByCategory(category.id)"
               :key="item.id"
               :class="['item-card', `item-card-${effectiveMenuCardsLayout}`, { disabled: isItemUnavailable(item) || !canOrder }]"
               @click="handleItemCardClick(item)"
@@ -108,12 +108,7 @@
                 <div class="item-text">
                   <h3>{{ item.name }}</h3>
                   <p class="item-weight" v-if="getDisplayWeight(item)">{{ getDisplayWeight(item) }}</p>
-                  <p v-if="hasItemDescription(item)" class="description">{{ item.description }}</p>
-                  <p
-                    v-else-if="effectiveMenuCardsLayout === 'vertical' && shouldReserveDescriptionSlot(category.id, itemIndex)"
-                    class="description description-placeholder"
-                    aria-hidden="true"
-                  ></p>
+                  <p v-if="effectiveMenuCardsLayout !== 'vertical' && hasItemDescription(item)" class="description">{{ item.description }}</p>
                   <div class="item-badges" v-if="menuBadgesEnabled && item.badges && item.badges.length > 0">
                     <span v-for="badge in item.badges" :key="badge.code" class="item-badge" :class="`item-badge-${badge.code}`">
                       {{ badge.label }}
@@ -483,15 +478,6 @@ function getItemsByCategory(categoryId) {
 }
 function hasItemDescription(item) {
   return String(item?.description || "").trim().length > 0;
-}
-function shouldReserveDescriptionSlot(categoryId, index) {
-  const items = getItemsByCategory(categoryId);
-  const item = items[index];
-  if (!item || hasItemDescription(item)) return false;
-  const pairStart = Math.floor(index / 2) * 2;
-  const pairNeighborIndex = index === pairStart ? pairStart + 1 : pairStart;
-  const pairNeighbor = items[pairNeighborIndex];
-  return hasItemDescription(pairNeighbor);
 }
 function hasRequiredOptions(item) {
   return (item.variants && item.variants.length > 0) || (item.modifier_groups && item.modifier_groups.some((group) => group.is_required));
@@ -1098,7 +1084,6 @@ function goToCart() {
   flex-direction: column;
   gap: 10px;
   height: 100%;
-  min-height: 320px;
 }
 .item-card.disabled {
   opacity: 0.6;
@@ -1143,7 +1128,7 @@ function goToCart() {
 }
 .item-text h3 {
   font-size: var(--font-size-body);
-  line-height: var(--font-size-body);
+  line-height: 1.2;
   font-weight: var(--font-weight-regular);
   color: var(--color-text-primary);
 }
@@ -1158,17 +1143,10 @@ function goToCart() {
   line-height: 1.25;
   color: var(--color-text-secondary);
   margin-bottom: 8px;
-  flex: 1;
-}
-.item-card.item-card-vertical .description {
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 3;
   overflow: hidden;
-}
-.item-card.item-card-vertical .description-placeholder {
-  visibility: hidden;
-  min-height: 2.5em;
 }
 .item-weight {
   font-size: var(--font-size-caption);
@@ -1235,9 +1213,6 @@ function goToCart() {
 .item-card.item-card-vertical .item-footer {
   justify-content: flex-start;
   margin-top: 10px;
-}
-.item-card-skeleton.item-card-vertical {
-  min-height: 320px;
 }
 .item-card-skeleton.item-card-vertical .skeleton-image {
   width: 100%;

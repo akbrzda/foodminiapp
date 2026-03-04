@@ -96,6 +96,8 @@ export const getCandidates = async ({ cityId, branchId, fulfillmentType, cartIte
        mi.name,
        mi.description,
        mi.image_url,
+       mi.weight_value,
+       mi.weight_unit,
        mcx.category_id,
        COALESCE(mip.price, mvp_min.min_variant_price) AS min_price,
        COALESCE(vs.has_variants, 0) AS has_variants,
@@ -141,6 +143,8 @@ export const getCandidates = async ({ cityId, branchId, fulfillmentType, cartIte
     name: row.name,
     description: row.description,
     image_url: row.image_url,
+    weight_value: row.weight_value === null ? null : Number(row.weight_value),
+    weight_unit: row.weight_unit || null,
     category_id: row.category_id === null ? null : Number(row.category_id),
     min_price: Number(row.min_price),
     has_variants: Number(row.has_variants) === 1,
@@ -167,7 +171,7 @@ export const getPreferredVariants = async ({ itemIds, cityId, fulfillmentType, b
   }
 
   const [rows] = await db.query(
-    `SELECT item_id, variant_id, variant_name, price, image_url
+    `SELECT item_id, variant_id, variant_name, price, image_url, weight_value, weight_unit
      FROM (
        SELECT
          iv.item_id,
@@ -175,6 +179,8 @@ export const getPreferredVariants = async ({ itemIds, cityId, fulfillmentType, b
          iv.name AS variant_name,
          mvp.price,
          iv.image_url,
+         iv.weight_value,
+         iv.weight_unit,
          ROW_NUMBER() OVER (PARTITION BY iv.item_id ORDER BY mvp.price ASC, iv.id ASC) AS rn
        FROM item_variants iv
        JOIN menu_variant_prices mvp ON mvp.variant_id = iv.id
@@ -195,6 +201,8 @@ export const getPreferredVariants = async ({ itemIds, cityId, fulfillmentType, b
       variant_name: row.variant_name,
       price: Number(row.price),
       image_url: row.image_url || null,
+      weight_value: row.weight_value === null ? null : Number(row.weight_value),
+      weight_unit: row.weight_unit || null,
     });
   });
 

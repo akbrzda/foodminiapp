@@ -799,6 +799,40 @@ const getOrCreateVariantPriceEntry = (variant, cityId, fulfillmentType) => {
   if (!Array.isArray(variant.prices)) variant.prices = [];
   return getOrCreatePriceEntry(variant.prices, cityId, fulfillmentType, Number(variant.price) || 0);
 };
+const toFiniteNumber = (value) => {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+};
+const roundNutritionValue = (value) => {
+  return Math.round(value * 100) / 100;
+};
+const getWeightToHundredsMultiplier = (weightValue, weightUnit) => {
+  const numericWeight = toFiniteNumber(weightValue);
+  if (numericWeight === null || numericWeight <= 0) return null;
+
+  if (weightUnit === "g" || weightUnit === "ml") return numericWeight / 100;
+  if (weightUnit === "kg" || weightUnit === "l") return (numericWeight * 1000) / 100;
+
+  return null;
+};
+const calculateServingNutrition = (per100Value, weightValue, weightUnit) => {
+  const numericPer100 = toFiniteNumber(per100Value);
+  if (numericPer100 === null) return null;
+
+  const multiplier = getWeightToHundredsMultiplier(weightValue, weightUnit);
+  if (multiplier === null) return null;
+
+  return roundNutritionValue(numericPer100 * multiplier);
+};
+const syncServingNutrition = (target) => {
+  if (!target || typeof target !== "object") return;
+  const { weight_value, weight_unit } = target;
+
+  target.calories_per_serving = calculateServingNutrition(target.calories_per_100g, weight_value, weight_unit);
+  target.proteins_per_serving = calculateServingNutrition(target.proteins_per_100g, weight_value, weight_unit);
+  target.fats_per_serving = calculateServingNutrition(target.fats_per_100g, weight_value, weight_unit);
+  target.carbs_per_serving = calculateServingNutrition(target.carbs_per_100g, weight_value, weight_unit);
+};
 const goBack = () => {
   if (window.history.state?.back) {
     router.back();
@@ -1234,6 +1268,35 @@ watch(
       ensureItemPricesForCity(next);
     }
   },
+);
+watch(
+  () => [
+    form.value.weight_value,
+    form.value.weight_unit,
+    form.value.calories_per_100g,
+    form.value.proteins_per_100g,
+    form.value.fats_per_100g,
+    form.value.carbs_per_100g,
+  ],
+  () => {
+    syncServingNutrition(form.value);
+  },
+  { immediate: true },
+);
+watch(
+  () =>
+    form.value.variants.map((variant) => [
+      variant.weight_value,
+      variant.weight_unit,
+      variant.calories_per_100g,
+      variant.proteins_per_100g,
+      variant.fats_per_100g,
+      variant.carbs_per_100g,
+    ]),
+  () => {
+    form.value.variants.forEach((variant) => syncServingNutrition(variant));
+  },
+  { deep: true, immediate: true },
 );
 watch(
   () => [formTitle.value, ordersStore.newOrdersCount],

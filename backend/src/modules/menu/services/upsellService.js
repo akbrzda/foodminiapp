@@ -142,6 +142,8 @@ const buildQuickAddCandidates = (rawCandidates, variantMap) => {
           price: item.min_price,
           variant_id: null,
           variant_name: null,
+          weight_value: item.weight_value ?? null,
+          weight_unit: item.weight_unit ?? null,
         };
       }
 
@@ -154,6 +156,8 @@ const buildQuickAddCandidates = (rawCandidates, variantMap) => {
         image_url: selectedVariant.image_url || item.image_url,
         variant_id: selectedVariant.variant_id,
         variant_name: selectedVariant.variant_name,
+        weight_value: selectedVariant.weight_value ?? item.weight_value ?? null,
+        weight_unit: selectedVariant.weight_unit ?? item.weight_unit ?? null,
       };
     })
     .filter(Boolean);
@@ -254,6 +258,8 @@ export const getDynamicUpsell = async ({
     category_id: item.category_id,
     variant_id: item.variant_id,
     variant_name: item.variant_name,
+    weight_value: item.weight_value ?? null,
+    weight_unit: item.weight_unit ?? null,
     has_variants: Boolean(item.variant_id),
   }));
 

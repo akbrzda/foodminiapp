@@ -99,9 +99,8 @@
               </div>
               <div class="upsell-body">
                 <div class="upsell-name">{{ item.name }}</div>
-                <div class="upsell-variant">{{ item.variant_name || " " }}</div>
-                <div class="upsell-price">{{ formatPrice(item.price) }} ₽</div>
-                <button class="upsell-btn" type="button" @click="handleUpsellAction(item)">Добавить</button>
+                <div class="upsell-weight">{{ getItemWeight(item) || " " }}</div>
+                <button class="upsell-btn" type="button" @click="handleUpsellAction(item)">{{ formatPrice(item.price) }} ₽</button>
               </div>
             </div>
           </div>
@@ -642,65 +641,66 @@ watch(
   display: none;
 }
 .upsell-card {
-  flex: 0 0 138px;
+  flex: 0 0 142px;
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
-  overflow: hidden;
+  gap: 10px;
+  padding: 8px;
+  border-radius: var(--border-radius-lg);
   background: var(--color-background);
+  border: 1px solid var(--color-border);
   scroll-snap-align: start;
 }
 .upsell-image {
   width: 100%;
-  height: 138px;
-  flex: 0 0 138px;
+  height: 126px;
+  flex: 0 0 126px;
+  border-radius: 14px;
+  overflow: hidden;
 }
 .upsell-image img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
 }
 .upsell-body {
-  padding: 8px;
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 6px;
   flex: 1 1 auto;
 }
 .upsell-name {
-  font-size: 12px;
-  line-height: 1.25;
+  font-size: var(--font-size-body);
+  line-height: 1.2;
   color: var(--color-text-primary);
   overflow: hidden;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
 }
-.upsell-price {
-  font-size: 13px;
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-text-primary);
-  align-self: start;
-}
-.upsell-variant {
-  font-size: 11px;
-  color: var(--color-text-secondary);
-  line-height: 1.2;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.upsell-weight {
+  font-size: var(--font-size-caption);
+  color: var(--color-text-muted);
+  min-height: 1em;
 }
 .upsell-btn {
-  border: 1px solid var(--color-border);
-  border-radius: 10px;
-  background: var(--color-background-secondary);
+  margin-top: auto;
+  padding: 8px 16px;
+  border: none;
+  border-radius: var(--border-radius-md);
+  background: var(--color-primary);
   color: var(--color-text-primary);
-  padding: 6px;
-  font-size: 12px;
+  font-size: var(--font-size-body);
   font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color var(--transition-duration) var(--transition-easing);
+}
+.upsell-btn:hover {
+  background: var(--color-primary-hover);
 }
 .upsell-card-skeleton {
-  height: 276px;
+  height: 232px;
   background: linear-gradient(90deg, var(--color-background-secondary), #f3f4f7, var(--color-background-secondary));
   background-size: 200% 100%;
   animation: upsell-skeleton 1.2s ease-in-out infinite;
