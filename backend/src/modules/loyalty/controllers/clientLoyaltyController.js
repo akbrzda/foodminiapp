@@ -114,6 +114,79 @@ export function createClientLoyaltyController({ loyaltyService }) {
         next(error);
       }
     },
+
+    async sendWriteOffConfirmationCode(req, res, next) {
+      try {
+        if (!(await ensureBonusesEnabled(res))) return;
+        const settings = await getSystemSettings();
+        if (!settings.premiumbonus_enabled) {
+          return res.status(400).json({ error: "Интеграция PremiumBonus отключена" });
+        }
+
+        const purchaseAmount = Number(req.body?.purchase_amount);
+        const writeOffBonus = Number(req.body?.write_off_bonus);
+        if (!Number.isFinite(purchaseAmount) || purchaseAmount <= 0) {
+          return res.status(400).json({ error: "purchase_amount должен быть больше 0" });
+        }
+        if (!Number.isFinite(writeOffBonus) || writeOffBonus <= 0) {
+          return res.status(400).json({ error: "write_off_bonus должен быть больше 0" });
+        }
+
+        const [users] = await db.query("SELECT phone FROM users WHERE id = ?", [req.user.id]);
+        if (users.length === 0) {
+          return res.status(404).json({ error: "Пользователь не найден" });
+        }
+
+        const client = await getPremiumBonusClientOrNull();
+        if (!client) {
+          return res.status(503).json({ error: "Клиент PremiumBonus недоступен" });
+        }
+
+        const normalizedPhone = normalizePhoneForPremiumBonus(users[0].phone);
+        const result = await client.sendWriteOffConfirmationCode({
+          phone: normalizedPhone,
+          purchase_amount: Number(purchaseAmount.toFixed(2)),
+          write_off_bonus: Number(writeOffBonus.toFixed(2)),
+        });
+        return res.json(result);
+      } catch (error) {
+        next(error);
+      }
+    },
+
+    async verifyConfirmationCode(req, res, next) {
+      try {
+        if (!(await ensureBonusesEnabled(res))) return;
+        const settings = await getSystemSettings();
+        if (!settings.premiumbonus_enabled) {
+          return res.status(400).json({ error: "Интеграция PremiumBonus отключена" });
+        }
+
+        const code = String(req.body?.code || "").trim();
+        if (!code) {
+          return res.status(400).json({ error: "Код подтверждения обязателен" });
+        }
+
+        const [users] = await db.query("SELECT phone FROM users WHERE id = ?", [req.user.id]);
+        if (users.length === 0) {
+          return res.status(404).json({ error: "Пользователь не найден" });
+        }
+
+        const client = await getPremiumBonusClientOrNull();
+        if (!client) {
+          return res.status(503).json({ error: "Клиент PremiumBonus недоступен" });
+        }
+
+        const normalizedPhone = normalizePhoneForPremiumBonus(users[0].phone);
+        const result = await client.verifyConfirmationCode({
+          phone: normalizedPhone,
+          code,
+        });
+        return res.json(result);
+      } catch (error) {
+        next(error);
+      }
+    },
   };
 }
 

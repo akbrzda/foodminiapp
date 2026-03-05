@@ -60,6 +60,7 @@ export async function getIntegrationSettings() {
     iikoSyncCategoryIds: normalizeStringArray(settings.iiko_sync_category_ids),
     iikoExternalMenuId: settings.iiko_external_menu_id || "",
     iikoPriceCategoryId: settings.iiko_price_category_id || "",
+    iikoDeliveryProductId: settings.iiko_delivery_product_id || "",
     iikoPreserveLocalNames: settings.iiko_preserve_local_names !== false,
     iikoOrderTypeMapping: normalizeOrderTypeMapping(settings.iiko_order_type_mapping),
     iikoPaymentTypeMapping: normalizePaymentTypeMapping(settings.iiko_payment_type_mapping),

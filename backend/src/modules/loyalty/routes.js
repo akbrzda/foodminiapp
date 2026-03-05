@@ -11,6 +11,8 @@ export function createLoyaltyRoutes({ clientController, adminController }) {
   clientRouter.get("/history", authenticateToken, clientController.getHistory);
   clientRouter.get("/levels", authenticateToken, clientController.getLevels);
   clientRouter.post("/promocode/activate", authenticateToken, clientController.activatePromocode);
+  clientRouter.post("/confirmation/send-writeoff-code", authenticateToken, clientController.sendWriteOffConfirmationCode);
+  clientRouter.post("/confirmation/verify", authenticateToken, clientController.verifyConfirmationCode);
 
   adminRouter.get("/status", authenticateToken, requireRole("admin", "ceo"), adminController.getStatus);
   adminRouter.put("/toggle", authenticateToken, requireRole("admin", "ceo"), checkPremiumBonusIntegration, adminController.toggle);

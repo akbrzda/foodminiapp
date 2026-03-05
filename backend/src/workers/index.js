@@ -7,6 +7,8 @@ import { createTriggerWorker } from "./trigger.worker.js";
 import { createIikoMenuSyncWorker } from "./iikoMenuSync.worker.js";
 import { createIikoStopListSyncWorker } from "./iikoStopListSync.worker.js";
 import { createIikoOrderSyncWorker } from "./iikoOrderSync.worker.js";
+import { createPbClientSyncWorker } from "./pbClientSync.worker.js";
+import { createPbPurchaseSyncWorker } from "./pbPurchaseSync.worker.js";
 import { createIntegrationSchedulerWorker } from "./integrationScheduler.worker.js";
 import { createIntegrationRetryWorker } from "./integrationRetry.worker.js";
 import { createAdminActionLogsCleanupWorker } from "./adminActionLogsCleanup.worker.js";
@@ -45,9 +47,8 @@ export async function startWorkers() {
     iikoMenuSyncWorker = createIikoMenuSyncWorker(redisConnection);
     iikoStopListSyncWorker = createIikoStopListSyncWorker(redisConnection);
     iikoOrderSyncWorker = createIikoOrderSyncWorker(redisConnection);
-    // Воркеры PremiumBonus остаются отключенными до финализации контура PB.
-    // pbClientSyncWorker = createPbClientSyncWorker(redisConnection);
-    // pbPurchaseSyncWorker = createPbPurchaseSyncWorker(redisConnection);
+    pbClientSyncWorker = createPbClientSyncWorker(redisConnection);
+    pbPurchaseSyncWorker = createPbPurchaseSyncWorker(redisConnection);
     integrationSchedulerWorker = createIntegrationSchedulerWorker();
     integrationRetryWorker = createIntegrationRetryWorker();
     adminActionLogsCleanupWorker = createAdminActionLogsCleanupWorker();

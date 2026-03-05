@@ -3,6 +3,8 @@ import { findTariffForAmount } from "../../polygons/utils/deliveryTariffs.js";
 import { validateBonusUsage, getLoyaltyLevelsFromDb, getRedeemPercentForLevel } from "../../loyalty/services/loyaltyService.js";
 import { logger } from "../../../utils/logger.js";
 import { badRequest, notFound } from "../../../utils/errors.js";
+import loyaltyAdapter from "../../integrations/adapters/loyaltyAdapter.js";
+import { getSystemSettings } from "../../../utils/settings.js";
 
 // Вспомогательные функции
 const getTariffsByPolygonId = async (polygonId) => {
@@ -200,23 +202,35 @@ export const calculateOrder = async (req, res, next) => {
       });
     }
 
+    const settings = await getSystemSettings();
+    const pbExternalLoyalty =
+      settings.premiumbonus_enabled && settings.premiumbonus_auto_sync_enabled !== false && settings?.integration_mode?.loyalty === "external";
+
     // Валидация бонусов
     let bonusUsed = 0;
     if (bonus_to_use > 0) {
-      const [userRows] = await db.query("SELECT current_loyalty_level_id FROM users WHERE id = ?", [userId]);
+      if (pbExternalLoyalty) {
+        const pbCalculation = await loyaltyAdapter.calculateMaxSpend(userId, subtotal, 0, { items: validatedItems });
+        const pbMaxUsable = Number(pbCalculation?.max_usable || 0);
+        if (Number(bonus_to_use) > pbMaxUsable) {
+          return res.status(400).json({ error: `Максимально доступно к списанию по PremiumBonus: ${Math.floor(pbMaxUsable)} бонусов` });
+        }
+      } else {
+        const [userRows] = await db.query("SELECT current_loyalty_level_id FROM users WHERE id = ?", [userId]);
 
-      if (userRows.length === 0) {
-        return res.status(404).json({ error: "User not found" });
-      }
+        if (userRows.length === 0) {
+          return res.status(404).json({ error: "User not found" });
+        }
 
-      const loyaltyLevelId = userRows[0]?.current_loyalty_level_id || 1;
-      const loyaltyLevels = await getLoyaltyLevelsFromDb();
-      const maxUsePercent = getRedeemPercentForLevel(loyaltyLevelId, loyaltyLevels);
-      const bonusValidation = await validateBonusUsage(userId, bonus_to_use, subtotal, maxUsePercent);
-      if (!bonusValidation.valid) {
-        return res.status(400).json({
-          error: bonusValidation.error,
-        });
+        const loyaltyLevelId = userRows[0]?.current_loyalty_level_id || 1;
+        const loyaltyLevels = await getLoyaltyLevelsFromDb();
+        const maxUsePercent = getRedeemPercentForLevel(loyaltyLevelId, loyaltyLevels);
+        const bonusValidation = await validateBonusUsage(userId, bonus_to_use, subtotal, maxUsePercent);
+        if (!bonusValidation.valid) {
+          return res.status(400).json({
+            error: bonusValidation.error,
+          });
+        }
       }
 
       bonusUsed = bonus_to_use;

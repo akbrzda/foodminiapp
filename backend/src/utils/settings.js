@@ -174,6 +174,13 @@ export const SETTINGS_SCHEMA = {
     group: "Интеграции",
     type: "string",
   },
+  iiko_delivery_product_id: {
+    default: "",
+    label: "iiko Delivery Product ID",
+    description: "ID сервисной позиции iiko для платной доставки в составе заказа",
+    group: "Интеграции",
+    type: "string",
+  },
   iiko_preserve_local_names: {
     default: true,
     label: "Сохранять локальные названия iiko",

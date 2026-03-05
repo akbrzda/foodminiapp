@@ -88,7 +88,7 @@ export function createPremiumBonusClient({ apiUrl, apiToken, salePointId }) {
 
     async changePurchaseStatus(payload) {
       try {
-        const { data } = await requestWithRetry(() => client.post("/change-purchase-status", payload), { retries: 2 });
+        const { data } = await requestWithRetry(() => client.post("/change-purchase-status", withSalePoint(payload)), { retries: 2 });
         return data;
       } catch (error) {
         throw normalizeIntegrationError(error, "Ошибка обновления статуса покупки PremiumBonus");
@@ -97,7 +97,7 @@ export function createPremiumBonusClient({ apiUrl, apiToken, salePointId }) {
 
     async cancelPurchase(payload) {
       try {
-        const { data } = await requestWithRetry(() => client.post("/cancel-purchase", payload), { retries: 2 });
+        const { data } = await requestWithRetry(() => client.post("/cancel-purchase", withSalePoint(payload)), { retries: 2 });
         return data;
       } catch (error) {
         throw normalizeIntegrationError(error, "Ошибка отмены покупки PremiumBonus");
@@ -119,6 +119,42 @@ export function createPremiumBonusClient({ apiUrl, apiToken, salePointId }) {
         return data;
       } catch (error) {
         throw normalizeIntegrationError(error, "Ошибка активации промокода PremiumBonus");
+      }
+    },
+
+    async getSalePoints(payload = {}) {
+      try {
+        const { data } = await requestWithRetry(() => client.post("/cashbox-list", payload), { retries: 2 });
+        return data;
+      } catch (error) {
+        throw normalizeIntegrationError(error, "Ошибка получения точек продаж PremiumBonus");
+      }
+    },
+
+    async sendRegisterCode(payload) {
+      try {
+        const { data } = await requestWithRetry(() => client.post("/send-register-code", payload), { retries: 1 });
+        return data;
+      } catch (error) {
+        throw normalizeIntegrationError(error, "Ошибка отправки кода регистрации PremiumBonus");
+      }
+    },
+
+    async sendWriteOffConfirmationCode(payload) {
+      try {
+        const { data } = await requestWithRetry(() => client.post("/send-write-off-confirmation-code", payload), { retries: 1 });
+        return data;
+      } catch (error) {
+        throw normalizeIntegrationError(error, "Ошибка отправки кода подтверждения списания PremiumBonus");
+      }
+    },
+
+    async verifyConfirmationCode(payload) {
+      try {
+        const { data } = await requestWithRetry(() => client.post("/verify-confirmation-code", payload), { retries: 1 });
+        return data;
+      } catch (error) {
+        throw normalizeIntegrationError(error, "Ошибка проверки кода подтверждения PremiumBonus");
       }
     },
 

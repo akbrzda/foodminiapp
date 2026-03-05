@@ -14,6 +14,7 @@ import { findTariffForAmount } from "../../polygons/utils/deliveryTariffs.js";
 import { checkBranchIsOpen } from "../../../utils/workingHours.js";
 import { notifyNewOrder } from "../../../websocket/runtime.js";
 import ordersAdapter from "../../integrations/adapters/ordersAdapter.js";
+import loyaltyAdapter from "../../integrations/adapters/loyaltyAdapter.js";
 
 // Вспомогательные функции
 const getTariffsByPolygonId = async (polygonId) => {
@@ -517,8 +518,9 @@ export const createOrder = async (req, res, next) => {
     const effectiveBonusToUse = loyaltyEnabled ? bonus_to_use : 0;
     const iikoOrdersExternal = settings.iiko_enabled && settings?.integration_mode?.orders === "external";
     const iikoSyncStatus = iikoOrdersExternal ? "pending" : "synced";
-    const pbAutoSyncEnabled = settings.premiumbonus_enabled && settings.premiumbonus_auto_sync_enabled !== false;
-    const pbSyncStatus = pbAutoSyncEnabled ? "pending" : "synced";
+    const pbPurchasesExternal =
+      settings.premiumbonus_enabled && settings.premiumbonus_auto_sync_enabled !== false && settings?.integration_mode?.loyalty === "external";
+    const pbSyncStatus = pbPurchasesExternal ? "pending" : "synced";
 
     // Расчет стоимости заказа
     let { subtotal, bonusUsed, total, validatedItems } = await calculateOrderCost(items, {
@@ -541,6 +543,26 @@ export const createOrder = async (req, res, next) => {
       const amountForTariff = Math.floor(total);
       const { deliveryCost: resolvedCost } = await resolveDeliveryCost(deliveryPolygon.id, amountForTariff);
       deliveryCost = resolvedCost;
+    }
+
+    if (pbPurchasesExternal && effectiveBonusToUse > 0) {
+      try {
+        const pbCalculation = await loyaltyAdapter.calculateMaxSpend(req.user.id, subtotal, deliveryCost, {
+          items: validatedItems,
+        });
+        const pbMaxUsable = Number(pbCalculation?.max_usable || 0);
+        if (effectiveBonusToUse > pbMaxUsable) {
+          await connection.rollback();
+          return res.status(400).json({
+            error: `Максимально доступно к списанию по PremiumBonus: ${Math.floor(pbMaxUsable)} бонусов`,
+          });
+        }
+      } catch (pbValidationError) {
+        await connection.rollback();
+        return res.status(503).json({
+          error: pbValidationError?.message || "Не удалось проверить лимит списания PremiumBonus",
+        });
+      }
     }
 
     const finalTotal = total + deliveryCost;
@@ -858,6 +880,23 @@ export const createOrder = async (req, res, next) => {
         }
       } catch (syncError) {
         logger.error("Ошибка постановки заказа в очередь синхронизации iiko", {
+          orderId,
+          error: syncError?.message || String(syncError),
+        });
+      }
+    }
+
+    if (pbPurchasesExternal) {
+      try {
+        const syncJob = await ordersAdapter.enqueuePurchaseSync(orderId, "create", { source: "order-create" });
+        if (!syncJob?.skipped) {
+          logger.info("Покупка поставлена в очередь синхронизации PremiumBonus", {
+            orderId,
+            jobId: syncJob.jobId || null,
+          });
+        }
+      } catch (syncError) {
+        logger.error("Ошибка постановки покупки в очередь синхронизации PremiumBonus", {
           orderId,
           error: syncError?.message || String(syncError),
         });

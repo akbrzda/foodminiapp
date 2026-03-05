@@ -10,6 +10,7 @@ import {
 import { getSystemSettings } from "../../../utils/settings.js";
 import { notifyOrderStatusUpdate } from "../../../websocket/runtime.js";
 import { addTelegramNotification } from "../../../queues/config.js";
+import ordersAdapter from "../../integrations/adapters/ordersAdapter.js";
 
 // Вспомогательные функции для работы с временными зонами
 const getTimeZoneOffset = (date, timeZone) => {
@@ -663,6 +664,35 @@ export const updateOrderStatus = async (req, res, next, forcedStatus = null) => 
       settings.premiumbonus_enabled
     ) {
       logger.info("Статус заказа изменен локально при активной внешней интеграции", { orderId, status });
+    }
+
+    const pbPurchasesExternal =
+      settings.premiumbonus_enabled && settings.premiumbonus_auto_sync_enabled !== false && settings?.integration_mode?.loyalty === "external";
+    if (pbPurchasesExternal && oldStatus !== status) {
+      await db.query(
+        "UPDATE orders SET pb_sync_status = 'pending', pb_sync_error = NULL, pb_last_sync_at = NOW() WHERE id = ?",
+        [orderId],
+      );
+      const hasPbPurchaseId = String(updatedOrders[0]?.pb_purchase_id || "").trim().length > 0;
+      const pbAction = status === "cancelled" ? (hasPbPurchaseId ? "cancel" : "create") : hasPbPurchaseId ? "status" : "create";
+      try {
+        const syncJob = await ordersAdapter.enqueuePurchaseSync(orderId, pbAction, { source: "admin-status-update" });
+        if (!syncJob?.skipped) {
+          logger.info("Покупка поставлена в очередь синхронизации PremiumBonus после смены статуса", {
+            orderId,
+            status,
+            action: pbAction,
+            jobId: syncJob.jobId || null,
+          });
+        }
+      } catch (syncError) {
+        logger.error("Ошибка постановки PB-синхронизации после смены статуса", {
+          orderId,
+          status,
+          action: pbAction,
+          error: syncError?.message || String(syncError),
+        });
+      }
     }
 
     res.json({ order: updatedOrders[0] });

@@ -14,6 +14,26 @@ function toNumber(value, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function mapOrderItemsToPremiumBonus(items = []) {
+  return (Array.isArray(items) ? items : [])
+    .map((item) => {
+      const quantity = Number(item?.quantity) || 0;
+      const unitPrice = Number(item?.item_price) || 0;
+      const amount = Number(item?.subtotal);
+      const resolvedAmount = Number.isFinite(amount) ? amount : unitPrice * quantity;
+      if (quantity <= 0 || resolvedAmount <= 0) return null;
+
+      return {
+        name: String(item?.item_name || item?.name || "").trim() || "Позиция",
+        external_item_id: String(item?.iiko_item_id || item?.item_id || item?.id || "").trim() || undefined,
+        amount: Number(resolvedAmount.toFixed(2)),
+        quantity: Number(quantity.toFixed(3)),
+        type: "product",
+      };
+    })
+    .filter(Boolean);
+}
+
 function mapPbPurchasesToTransactions(list = []) {
   const transactions = [];
   for (const purchase of Array.isArray(list) ? list : []) {
@@ -102,7 +122,7 @@ export class LoyaltyAdapter {
     };
   }
 
-  async calculateMaxSpend(userId, orderTotal, deliveryCost) {
+  async calculateMaxSpend(userId, orderTotal, deliveryCost, options = {}) {
     const mode = await this.getMode();
     if (mode === "local") {
       return localLoyaltyService.calculateMaxSpend(userId, orderTotal, deliveryCost);
@@ -115,11 +135,30 @@ export class LoyaltyAdapter {
     const client = await getPremiumBonusClientOrNull();
     if (!client) throw new Error("Клиент PremiumBonus недоступен");
 
-    return client.purchaseRequest({
+    const payload = {
       identificator: normalizedPhone || users[0].pb_client_id,
-      order_total: Number(orderTotal) || 0,
-      delivery_cost: Number(deliveryCost) || 0,
-    });
+      items: mapOrderItemsToPremiumBonus(options?.items),
+      discount: Number(options?.discount) || 0,
+      promocode: String(options?.promocode || "").trim() || undefined,
+    };
+    if (!Array.isArray(payload.items) || payload.items.length === 0) {
+      payload.items = [
+        {
+          name: "Заказ",
+          amount: Number(orderTotal) || 0,
+          quantity: 1,
+          type: "product",
+        },
+      ];
+    }
+
+    const data = await client.purchaseRequest(payload);
+    return {
+      max_usable: Number(data?.write_off_available || 0),
+      user_balance: Number(data?.balance || 0),
+      max_percent: null,
+      raw: data,
+    };
   }
 }
 

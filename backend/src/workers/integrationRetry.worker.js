@@ -1,4 +1,4 @@
-import { retryFailedSyncs } from "../modules/integrations/services/syncProcessors.js";
+import { reconcileIikoOrderStatuses, retryFailedSyncs } from "../modules/integrations/services/syncProcessors.js";
 import { getIntegrationSettings } from "../modules/integrations/services/integrationConfigService.js";
 import { logger } from "../utils/logger.js";
 
@@ -16,6 +16,9 @@ export function createIntegrationRetryWorker() {
           const iikoRetryEnabled = settings.iikoEnabled && settings.iikoAutoSyncEnabled;
           const premiumBonusRetryEnabled = settings.premiumbonusEnabled && settings.premiumbonusAutoSyncEnabled;
           if (!iikoRetryEnabled && !premiumBonusRetryEnabled) return;
+          if (iikoRetryEnabled) {
+            await reconcileIikoOrderStatuses({ limit: 150 });
+          }
           await retryFailedSyncs();
         } catch (error) {
           logger.error("Ошибка планировщика retry интеграций", { error: error.message });

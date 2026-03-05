@@ -330,6 +330,30 @@ export async function updateAdminIntegrationSettings(patch) {
       ...previousIntegrationMode,
       ...incomingIntegrationMode,
       menu: "external",
+      orders: "external",
+    };
+  }
+
+  const hasPremiumBonusEnabledPatch = Object.prototype.hasOwnProperty.call(nextPatch, "premiumbonus_enabled");
+  const normalizedPremiumBonusEnabled =
+    nextPatch.premiumbonus_enabled === true ||
+    nextPatch.premiumbonus_enabled === 1 ||
+    String(nextPatch.premiumbonus_enabled || "").trim().toLowerCase() === "true";
+
+  if (hasPremiumBonusEnabledPatch && normalizedPremiumBonusEnabled) {
+    const previousIntegrationMode =
+      previousSettings?.integration_mode && typeof previousSettings.integration_mode === "object"
+        ? previousSettings.integration_mode
+        : { menu: "local", orders: "local", loyalty: "local" };
+    const incomingIntegrationMode =
+      nextPatch?.integration_mode && typeof nextPatch.integration_mode === "object"
+        ? nextPatch.integration_mode
+        : previousIntegrationMode;
+
+    nextPatch.integration_mode = {
+      ...previousIntegrationMode,
+      ...incomingIntegrationMode,
+      loyalty: "external",
     };
   }
 

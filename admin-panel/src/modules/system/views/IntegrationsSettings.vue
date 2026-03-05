@@ -137,6 +137,23 @@
               </FieldContent>
             </Field>
             <Field>
+              <FieldLabel>ID позиции доставки iiko</FieldLabel>
+              <FieldContent>
+                <Input
+                  v-model="form.iiko_delivery_product_id"
+                  type="text"
+                  name="iiko_delivery_product_id_settings"
+                  autocomplete="off"
+                  autocapitalize="none"
+                  autocorrect="off"
+                  spellcheck="false"
+                  data-lpignore="true"
+                  data-1p-ignore="true"
+                  placeholder="UUID сервисной позиции доставки"
+                />
+              </FieldContent>
+            </Field>
+            <Field>
               <FieldLabel>Сохранять локальные названия</FieldLabel>
               <FieldContent>
                 <Select v-model="form.iiko_preserve_local_names">
@@ -738,6 +755,7 @@ const form = ref({
   iiko_sync_category_ids: [],
   iiko_external_menu_id: "",
   iiko_price_category_id: "",
+  iiko_delivery_product_id: "",
   iiko_preserve_local_names: true,
   iiko_order_type_mapping: {},
   iiko_payment_type_mapping: {},
@@ -873,6 +891,7 @@ const applyForm = (settings = {}) => {
     iiko_sync_category_ids: categories,
     iiko_external_menu_id: String(settings.iiko_external_menu_id || ""),
     iiko_price_category_id: String(settings.iiko_price_category_id || ""),
+    iiko_delivery_product_id: String(settings.iiko_delivery_product_id || ""),
     iiko_webhook_secret: String(settings.iiko_webhook_secret || ""),
     iiko_preserve_local_names: settings.iiko_preserve_local_names !== false,
     iiko_order_type_mapping: normalizeOrderTypeMapping(settings.iiko_order_type_mapping),

@@ -678,6 +678,9 @@ async function submitOrder() {
         const balanceResponse = await bonusesAPI.getBalance();
         const freshBalance = Math.max(0, Math.floor(Number(balanceResponse.data?.balance || 0)));
         bonusToUse = Math.min(bonusToUse, freshBalance);
+        const maxSpendResponse = await bonusesAPI.calculateMaxSpend(summarySubtotal.value, deliveryCostForSummary.value || 0);
+        const maxUsable = Math.max(0, Math.floor(Number(maxSpendResponse.data?.max_usable || 0)));
+        bonusToUse = Math.min(bonusToUse, maxUsable);
         if (bonusToUse <= 0) {
           cartStore.resetBonusUsage();
         } else if (bonusToUse !== cartStore.bonusUsage.bonusToUse) {
