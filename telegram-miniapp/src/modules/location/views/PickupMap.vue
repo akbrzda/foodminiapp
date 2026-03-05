@@ -69,7 +69,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from "vue";
 import { ArrowLeft, ChevronRight, Clock3, MapPin, Phone } from "lucide-vue-next";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { useLocationStore } from "@/modules/location/stores/location.js";
 import { formatPhone, normalizePhone } from "@/shared/utils/phone.js";
 import { citiesAPI } from "@/shared/api/endpoints.js";
@@ -78,6 +78,7 @@ import { loadYandexMaps } from "@/shared/services/yandexMaps.js";
 import { formatWorkHoursLines, normalizeWorkHours } from "@/shared/utils/workingHours";
 import { devError } from "@/shared/utils/logger.js";
 const router = useRouter();
+const route = useRoute();
 const locationStore = useLocationStore();
 const mapContainerRef = ref(null);
 const branches = ref([]);
@@ -208,6 +209,10 @@ function confirmPickup() {
     return;
   }
   hapticFeedback("success");
+  if (route.query.returnTo === "checkout") {
+    router.push("/checkout");
+    return;
+  }
   router.push("/");
 }
 function getCityCenter() {

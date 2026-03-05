@@ -6,11 +6,9 @@
       <template v-else>
         <div class="order-type-tabs">
           <button v-if="deliveryEnabled" class="order-tab" :class="{ active: orderType === 'delivery' }" @click="selectOrderType('delivery')">
-            <Truck :size="18" />
             Доставка
           </button>
           <button v-if="pickupEnabled" class="order-tab" :class="{ active: orderType === 'pickup' }" @click="selectOrderType('pickup')">
-            <Store :size="18" />
             Самовывоз
           </button>
         </div>
@@ -24,7 +22,6 @@
       <div v-if="ordersEnabled && orderType === 'delivery'" class="delivery-form">
         <h2 class="section-title">Адрес доставки</h2>
         <div class="form-group">
-          <label class="label">Улица, дом</label>
           <div class="address-row">
             <span class="address-text" :class="{ 'address-placeholder': !deliveryAddress }">
               {{ deliveryAddress || "Укажите адрес" }}
@@ -59,32 +56,24 @@
       </div>
 
       <div v-if="ordersEnabled && orderType === 'pickup'" class="pickup-form">
-        <h2 class="section-title">Выберите филиал</h2>
-        <div v-if="loadingBranches" class="branches-list branches-list-skeleton">
-          <div v-for="index in 3" :key="`branch-skeleton-${index}`" class="branch-card branch-card-skeleton">
-            <div class="skeleton skeleton-line skeleton-w-58"></div>
-            <div class="skeleton skeleton-line skeleton-w-84"></div>
-            <div class="skeleton skeleton-line skeleton-w-36"></div>
-          </div>
+        <h2 class="section-title">Филиал самовывоза</h2>
+        <div v-if="loadingBranches" class="pickup-branch-card branch-card-skeleton">
+          <div class="skeleton skeleton-line skeleton-w-58"></div>
+          <div class="skeleton skeleton-line skeleton-w-84"></div>
+          <div class="skeleton skeleton-line skeleton-w-36"></div>
         </div>
-        <div v-else class="branches-list">
-          <button
-            v-for="branch in branches"
-            :key="branch.id"
-            :class="['branch-card', { active: selectedBranch?.id === branch.id }]"
-            @click="selectBranch(branch)"
-          >
-            <h3>{{ branch.name }}</h3>
-            <p class="branch-address">{{ branch.address }}</p>
-            <p class="branch-status" :class="{ closed: !branch.isOpen }">
-              {{ branch.isOpen ? "Открыто" : "Закрыто" }}
-            </p>
-            <a v-if="branch.phone" class="branch-phone" :href="`tel:${normalizePhone(branch.phone)}`" @click.stop>
-              <Phone :size="14" />
-              {{ formatPhone(branch.phone) }}
-            </a>
-          </button>
-        </div>
+        <button v-else class="pickup-branch-card" type="button" @click="openPickupMap">
+          <template v-if="selectedBranch">
+            <h3>{{ selectedBranch.name }}</h3>
+            <p class="branch-address">{{ selectedBranch.address }}</p>
+            <span class="pickup-change-hint">Нажмите, чтобы выбрать другой филиал</span>
+          </template>
+          <template v-else>
+            <h3>Филиал не выбран</h3>
+            <p class="branch-address">Нажмите, чтобы открыть карту и выбрать филиал</p>
+            <span class="pickup-change-hint">Выбрать филиал</span>
+          </template>
+        </button>
       </div>
 
       <div v-if="ordersEnabled && orderType && (orderType === 'pickup' ? selectedBranch : inDeliveryZone)">
@@ -576,6 +565,10 @@ function openDeliveryMap() {
   hapticFeedback("light");
   router.push("/delivery-map");
 }
+function openPickupMap() {
+  hapticFeedback("light");
+  router.push({ name: "PickupMap", query: { returnTo: "checkout" } });
+}
 async function loadBranches() {
   if (!locationStore.selectedCity) return;
   try {
@@ -591,17 +584,22 @@ async function loadBranches() {
         work_hours: normalizeWorkHours(branch.work_hours || branch.working_hours),
       };
     });
+    locationStore.setBranches(branches.value);
+    const selectedId = selectedBranch.value?.id || locationStore.selectedBranch?.id;
+    if (!selectedId) return;
+    const matchedBranch = branches.value.find((branch) => branch.id === selectedId);
+    if (!matchedBranch) {
+      selectedBranch.value = null;
+      locationStore.setBranch(null);
+      return;
+    }
+    selectedBranch.value = matchedBranch;
+    locationStore.setBranch(matchedBranch);
   } catch (error) {
     devError("Не удалось загрузить филиалы:", error);
   } finally {
     loadingBranches.value = false;
   }
-}
-function selectBranch(branch) {
-  hapticFeedback("light");
-  selectedBranch.value = branch;
-  locationStore.setBranch(branch);
-  applyBranchTimes(branch);
 }
 function applyBranchTimes(branch) {
   prepTime.value = parseInt(branch?.prep_time || 0);
@@ -841,8 +839,8 @@ async function submitOrder() {
   transition: background-color var(--transition-duration) var(--transition-easing);
 }
 .order-tab.active {
-  background: var(--color-primary);
-  color: var(--color-text-primary);
+  background: var(--color-text-primary);
+  color: var(--color-background);
 }
 .order-tab:not(.active):hover {
   background: var(--color-background-secondary);
@@ -975,12 +973,8 @@ async function submitOrder() {
   margin-bottom: 12px;
   font-weight: var(--font-weight-semibold);
 }
-.branches-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.branch-card {
+.pickup-branch-card {
+  width: 100%;
   padding: 12px;
   background: var(--color-background);
   border: 1px solid var(--color-border);
@@ -989,20 +983,17 @@ async function submitOrder() {
   cursor: pointer;
   transition: all 0.2s;
 }
-.branch-card.active {
-  border-color: var(--color-primary);
-  background: var(--color-primary);
-}
-.branch-card h3 {
+.pickup-branch-card h3 {
   font-size: var(--font-size-h3);
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-primary);
-  margin: 0 0 4px 0;
+}
+.pickup-branch-card:hover {
+  border-color: var(--color-primary);
 }
 .branch-address {
   font-size: var(--font-size-body);
-  color: var(--color-text-secondary);
-  margin: 4px 0;
+  color: var(--color-text-primary);
 }
 .branch-status {
   font-size: var(--font-size-caption);
@@ -1016,10 +1007,16 @@ async function submitOrder() {
 .branch-phone {
   font-size: var(--font-size-caption);
   color: var(--color-text-secondary);
-  margin: 4px 0 0 0;
+  margin: 4px 0 8px 0;
   display: inline-flex;
   align-items: center;
   gap: 6px;
+}
+.pickup-change-hint {
+  display: block;
+  margin-top: 4px;
+  font-size: var(--font-size-caption);
+  color: var(--color-text-secondary);
 }
 .branch-card-skeleton {
   cursor: default;

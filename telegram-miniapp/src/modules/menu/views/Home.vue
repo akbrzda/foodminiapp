@@ -14,7 +14,7 @@
         </div>
         <div class="location-actions">
           <button @click="openDeliverySelector" class="action-pill">
-            <span class="action-text">{{ actionButtonText }}</span>
+            <span class="action-text"> {{ actionButtonText }}</span>
           </button>
         </div>
       </template>
@@ -840,23 +840,30 @@ function goToCart() {
 .location-tabs {
   display: flex;
   gap: 10px;
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  padding: 2px;
   margin-bottom: 12px;
 }
 .pill-tab {
-  width: 100%;
-  padding: 8px 18px;
-  border: 1px solid var(--color-border);
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: none;
   border-radius: var(--border-radius-md);
-  background: var(--color-background);
+  background: transparent;
+  color: var(--color-text-primary);
   font-size: var(--font-size-body);
   font-weight: var(--font-weight-semibold);
-  color: var(--color-text-primary);
   cursor: pointer;
-  transition: all var(--transition-duration) var(--transition-easing);
+  transition: background-color var(--transition-duration) var(--transition-easing);
 }
 .pill-tab.active {
   background: var(--color-text-primary);
-  border-color: var(--color-text-primary);
   color: var(--color-background);
 }
 .pill-tab:hover:not(.active) {
@@ -869,16 +876,21 @@ function goToCart() {
 }
 .action-pill {
   width: 100%;
-  padding: 8px 14px;
+  padding: 12px 16px;
   border: none;
-  background: var(--color-primary);
+  background: var(--color-background-secondary);
   color: var(--color-text-primary);
   border-radius: var(--border-radius-md);
   font-size: var(--font-size-body);
+  line-height: 1;
   font-weight: var(--font-weight-semibold);
   cursor: pointer;
   white-space: nowrap;
   transition: background-color var(--transition-duration) var(--transition-easing);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  justify-content: center;
 }
 .action-text {
   display: inline-block;
@@ -888,7 +900,8 @@ function goToCart() {
   vertical-align: bottom;
 }
 .action-pill:hover {
-  background: var(--color-primary-hover);
+  background: var(--color-text-primary);
+  color: var(--color-background);
 }
 .action-pill:active {
   transform: scale(0.98);
