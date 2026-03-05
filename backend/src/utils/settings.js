@@ -209,6 +209,13 @@ export const SETTINGS_SCHEMA = {
     group: "Интеграции",
     type: "boolean",
   },
+  premiumbonus_auto_sync_enabled: {
+    default: true,
+    label: "Автосинк PremiumBonus",
+    description: "Разрешает автоматическую синхронизацию клиентов и покупок PremiumBonus",
+    group: "Интеграции",
+    type: "boolean",
+  },
   premiumbonus_api_url: {
     default: "",
     label: "PremiumBonus API URL",

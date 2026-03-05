@@ -4,6 +4,7 @@ import { devError } from "@/shared/utils/logger.js";
 
 const DEFAULT_SETTINGS = {
   bonuses_enabled: true,
+  premiumbonus_enabled: false,
   orders_enabled: true,
   delivery_enabled: true,
   pickup_enabled: true,
@@ -36,7 +37,8 @@ export const useSettingsStore = defineStore("settings", {
     loaded: false,
   }),
   getters: {
-    bonusesEnabled: (state) => state.bonuses_enabled,
+    bonusesEnabled: (state) => state.bonuses_enabled || state.premiumbonus_enabled,
+    premiumbonusEnabled: (state) => state.premiumbonus_enabled,
     ordersEnabled: (state) => state.orders_enabled,
     deliveryEnabled: (state) => state.delivery_enabled,
     pickupEnabled: (state) => state.pickup_enabled,

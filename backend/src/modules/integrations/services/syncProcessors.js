@@ -4,12 +4,92 @@ import { getIikoClientOrNull, getIntegrationSettings, getPremiumBonusClientOrNul
 import { INTEGRATION_MODULE, INTEGRATION_TYPE, MAX_SYNC_ATTEMPTS, SYNC_STATUS } from "../constants.js";
 import { finishIntegrationEvent, logIntegrationEvent, startIntegrationEvent } from "./integrationLoggerService.js";
 import { notifyMenuUpdated } from "../../../websocket/runtime.js";
+import { decryptEmail } from "../../../utils/encryption.js";
 
 const nowIso = () => new Date().toISOString();
 
 function nextSyncState(attempts) {
   if (attempts >= MAX_SYNC_ATTEMPTS) return SYNC_STATUS.FAILED;
   return SYNC_STATUS.ERROR;
+}
+
+function extractPremiumBonusClientId(payload) {
+  if (!payload || typeof payload !== "object") return null;
+  return payload.client_id || payload.clientId || payload.id || payload?.buyer?.client_id || null;
+}
+
+function isPremiumBonusBuyerFound(info) {
+  if (!info || typeof info !== "object") return false;
+  if (info.success === false) return false;
+  if (info.is_registered === true) return true;
+  if (extractPremiumBonusClientId(info)) return true;
+  return false;
+}
+
+function isBuyerNotFoundError(error) {
+  const status = Number(error?.status || error?.response?.status || 0);
+  const message = String(error?.message || "").toLowerCase();
+  if (status === 404) return true;
+  if (status === 400 && (message.includes("не найден") || message.includes("not found"))) return true;
+  return false;
+}
+
+function parseGroupPercent(rawName) {
+  const source = String(rawName || "")
+    .trim()
+    .replace(",", ".");
+  if (!source) return null;
+  const match = source.match(/(\d+(?:\.\d+)?)\s*%/);
+  if (!match) return null;
+  const value = Number(match[1]);
+  return Number.isFinite(value) ? value : null;
+}
+
+function normalizePhoneForPremiumBonus(value) {
+  const digits = String(value || "").replace(/[^\d]/g, "");
+  if (digits.length === 11 && digits.startsWith("7")) return digits;
+  if (digits.length === 10) return `7${digits}`;
+  return digits;
+}
+
+function parsePbBalance(info) {
+  if (!info || typeof info !== "object") return 0;
+  const direct = Number(info.balance);
+  if (Number.isFinite(direct)) return direct;
+  const accumulated = Number(info.balance_bonus_accumulated || 0);
+  const present = Number(info.balance_bonus_present || 0);
+  const action = Number(info.balance_bonus_action || 0);
+  const total = accumulated + present + action;
+  return Number.isFinite(total) ? total : 0;
+}
+
+async function resolvePbGroupForLocalLevel(client, localLevelPercent) {
+  if (!Number.isFinite(localLevelPercent)) return null;
+  const groupsResponse = await client.buyerGroups({});
+  const groups = Array.isArray(groupsResponse?.list) ? groupsResponse.list : [];
+  let exact = null;
+  for (const group of groups) {
+    const percent = parseGroupPercent(group?.name);
+    if (!Number.isFinite(percent)) continue;
+    if (Number(percent) === Number(localLevelPercent)) {
+      exact = group;
+      break;
+    }
+  }
+  return exact;
+}
+
+async function resolveLocalLevelByPercent(percent) {
+  if (!Number.isFinite(percent)) return null;
+  const [rows] = await db.query(
+    `SELECT id, name, earn_percentage
+     FROM loyalty_levels
+     WHERE is_enabled = 1 AND earn_percentage = ?
+     LIMIT 1`,
+    [Number(percent)],
+  );
+  if (!rows.length) return null;
+  return rows[0];
 }
 
 export async function markOrderIikoSync(orderId, patch) {
@@ -567,22 +647,124 @@ export async function processPremiumBonusClientSync(userId, source = "queue") {
   }
 
   try {
-    const info = await client.buyerInfo({ identificator: user.pb_client_id || user.phone });
-    let pbClientId = info?.client_id || user.pb_client_id || null;
-    let responsePayload = info;
+    if (!user.phone) {
+      throw new Error("У пользователя отсутствует телефон для синхронизации с PremiumBonus");
+    }
 
-    if (!info?.is_registered) {
-      const registrationPayload = {
-        phone: user.phone,
-        first_name: user.first_name,
-        last_name: user.last_name,
-        email: user.email,
-        birth_date: user.date_of_birth,
-        external_id: user.pb_external_id || `foodminiapp_user_${user.id}`,
-      };
-      const registration = await client.registerBuyer(registrationPayload);
-      pbClientId = registration?.client_id || pbClientId;
+    const normalizedExternalId = String(user.pb_external_id || "").trim() || `foodminiapp_user_${user.id}`;
+    if (!String(user.pb_external_id || "").trim()) {
+      await db.query("UPDATE users SET pb_external_id = ? WHERE id = ?", [normalizedExternalId, userId]);
+    }
+
+    const normalizedPhone = normalizePhoneForPremiumBonus(user.phone);
+    if (!normalizedPhone || normalizedPhone.length < 11) {
+      throw new Error("У пользователя отсутствует корректный телефон для синхронизации с PremiumBonus");
+    }
+
+    const email = user.email ? decryptEmail(user.email) : null;
+    const baseProfilePayload = {
+      phone: normalizedPhone,
+      external_id: normalizedExternalId,
+      name: user.first_name || undefined,
+      surname: user.last_name || undefined,
+      birth_date: user.date_of_birth || undefined,
+      email: email || undefined,
+    };
+
+    let info = null;
+    try {
+      info = await client.buyerInfo({ identificator: normalizedPhone || user.pb_client_id });
+    } catch (error) {
+      if (!isBuyerNotFoundError(error)) {
+        throw error;
+      }
+    }
+
+    let pbClientId = extractPremiumBonusClientId(info) || user.pb_client_id || null;
+    let responsePayload = info;
+    const buyerFound = isPremiumBonusBuyerFound(info);
+
+    if (buyerFound) {
+      responsePayload = await client.editBuyer(baseProfilePayload);
+      if (responsePayload?.success === false) {
+        throw new Error(responsePayload?.error_description || "PremiumBonus вернул ошибку при синхронизации покупателя");
+      }
+      pbClientId = extractPremiumBonusClientId(responsePayload) || pbClientId;
+    } else {
+      const registration = await client.registerBuyer(baseProfilePayload);
+      if (registration?.success === false) {
+        throw new Error(registration?.error_description || "PremiumBonus вернул ошибку при регистрации покупателя");
+      }
+      pbClientId = extractPremiumBonusClientId(registration) || pbClientId;
       responsePayload = registration;
+    }
+
+    let effectiveInfo = null;
+    try {
+      effectiveInfo = await client.buyerInfo({ identificator: normalizedPhone || pbClientId });
+    } catch (refreshError) {
+      effectiveInfo = info;
+    }
+
+    const pbBalance = parsePbBalance(effectiveInfo);
+    const localBalance = Number(user.loyalty_balance || 0);
+    if (Number.isFinite(pbBalance) && pbBalance > localBalance) {
+      await db.query("UPDATE users SET loyalty_balance = ? WHERE id = ?", [pbBalance, userId]);
+    }
+
+    const [levelRows] = await db.query(
+      `SELECT id, name, earn_percentage
+       FROM loyalty_levels
+       WHERE id = ?
+       LIMIT 1`,
+      [user.current_loyalty_level_id || null],
+    );
+    const localLevel = levelRows[0] || null;
+    const localLevelPercent = Number(localLevel?.earn_percentage);
+    const pbLevelPercent = parseGroupPercent(effectiveInfo?.group_name);
+
+    if (Number.isFinite(localLevelPercent) && Number.isFinite(pbLevelPercent)) {
+      if (localLevelPercent > pbLevelPercent) {
+        const targetPbGroup = await resolvePbGroupForLocalLevel(client, localLevelPercent);
+        if (targetPbGroup?.id) {
+          const updatePayload = {
+            ...baseProfilePayload,
+            group_id: String(targetPbGroup.id),
+          };
+          const updateResponse = await client.editBuyer(updatePayload);
+          if (updateResponse?.success === false) {
+            throw new Error(updateResponse?.error_description || "PremiumBonus вернул ошибку при синхронизации уровня покупателя");
+          }
+          responsePayload = updateResponse;
+        }
+      } else if (pbLevelPercent > localLevelPercent) {
+        const targetLocalLevel = await resolveLocalLevelByPercent(pbLevelPercent);
+        if (targetLocalLevel?.id) {
+          await db.query("UPDATE users SET current_loyalty_level_id = ? WHERE id = ?", [targetLocalLevel.id, userId]);
+        }
+      }
+    }
+
+    if (Number.isFinite(localBalance) && Number.isFinite(pbBalance) && localBalance > pbBalance) {
+      await logIntegrationEvent({
+        integrationType: INTEGRATION_TYPE.PREMIUMBONUS,
+        module: INTEGRATION_MODULE.CLIENTS,
+        action: "sync_client_balance_warning",
+        status: "active",
+        entityType: "user",
+        entityId: userId,
+        requestData: {
+          source,
+          localBalance,
+          pbBalance,
+          phone: user.phone,
+        },
+        responseData: {
+          note: "Локальный баланс выше PB. Автоматическая запись баланса в PB не выполнена: отсутствует прямой endpoint.",
+        },
+        attempts: nextAttempts,
+        durationMs: Date.now() - startedAt,
+      });
     }
 
     await markUserPbSync(userId, {

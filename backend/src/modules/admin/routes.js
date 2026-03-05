@@ -310,7 +310,7 @@ router.get("/clients", requireRole("admin", "manager", "ceo"), async (req, res, 
       params.push(city_id);
     }
     const query = `
-      SELECT u.id, u.phone, u.first_name, u.last_name, u.email, u.telegram_id, u.loyalty_balance,
+      SELECT u.id, u.phone, u.first_name, u.last_name, u.email, u.telegram_id, u.loyalty_balance, u.pb_client_id,
              COALESCE(oc.orders_count, 0) as orders_count,
              lo.created_at as last_order_at,
              c.name as city_name
@@ -357,7 +357,7 @@ router.get("/clients/:id", requireRole("admin", "manager", "ceo"), async (req, r
       return res.status(403).json({ error: "You do not have access to this user" });
     }
     const [users] = await db.query(
-      `SELECT u.id, u.phone, u.first_name, u.last_name, u.email, u.telegram_id, u.loyalty_balance, u.created_at,
+      `SELECT u.id, u.phone, u.first_name, u.last_name, u.email, u.telegram_id, u.loyalty_balance, u.pb_client_id, u.created_at,
               c.name as city_name
        FROM users u
        LEFT JOIN orders o ON o.id = (
@@ -398,7 +398,7 @@ router.put("/clients/:id", requireRole("admin", "manager", "ceo"), async (req, r
       userId,
     ]);
     const [updated] = await db.query(
-      `SELECT u.id, u.phone, u.first_name, u.last_name, u.email, u.telegram_id, u.loyalty_balance, u.created_at,
+      `SELECT u.id, u.phone, u.first_name, u.last_name, u.email, u.telegram_id, u.loyalty_balance, u.pb_client_id, u.created_at,
               c.name as city_name
        FROM users u
        LEFT JOIN orders o ON o.id = (

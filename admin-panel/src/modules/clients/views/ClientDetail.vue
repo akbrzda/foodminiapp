@@ -45,8 +45,13 @@
           </Field>
         </FieldGroup>
         <div class="flex flex-wrap items-center justify-between gap-3">
-          <div class="text-sm text-muted-foreground">
-            Бонусный баланс: <strong class="text-foreground">{{ formatNumber(client?.loyalty_balance) }}</strong>
+          <div class="space-y-1 text-sm text-muted-foreground">
+            <div>
+              Бонусный баланс: <strong class="text-foreground">{{ formatNumber(client?.loyalty_balance) }}</strong>
+            </div>
+            <div>
+              ID PremiumBonus: <strong class="text-foreground">{{ client?.pb_client_id || "—" }}</strong>
+            </div>
           </div>
           <Button @click="saveClient" :disabled="saving">
             <Spinner v-if="saving" class="h-4 w-4" />

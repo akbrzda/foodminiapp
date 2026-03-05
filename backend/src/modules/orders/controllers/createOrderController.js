@@ -513,10 +513,12 @@ export const createOrder = async (req, res, next) => {
     }
 
     const fulfillmentType = order_type === "pickup" ? "pickup" : "delivery";
-    const effectiveBonusToUse = settings.bonuses_enabled ? bonus_to_use : 0;
+    const loyaltyEnabled = settings.bonuses_enabled || settings.premiumbonus_enabled;
+    const effectiveBonusToUse = loyaltyEnabled ? bonus_to_use : 0;
     const iikoOrdersExternal = settings.iiko_enabled && settings?.integration_mode?.orders === "external";
     const iikoSyncStatus = iikoOrdersExternal ? "pending" : "synced";
-    const pbSyncStatus = settings.premiumbonus_enabled ? "pending" : "synced";
+    const pbAutoSyncEnabled = settings.premiumbonus_enabled && settings.premiumbonus_auto_sync_enabled !== false;
+    const pbSyncStatus = pbAutoSyncEnabled ? "pending" : "synced";
 
     // Расчет стоимости заказа
     let { subtotal, bonusUsed, total, validatedItems } = await calculateOrderCost(items, {

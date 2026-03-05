@@ -65,6 +65,7 @@ export async function getIntegrationSettings() {
     iikoPaymentTypeMapping: normalizePaymentTypeMapping(settings.iiko_payment_type_mapping),
     iikoWebhookSecret: settings.iiko_webhook_secret || "",
     premiumbonusEnabled: Boolean(settings.premiumbonus_enabled),
+    premiumbonusAutoSyncEnabled: settings.premiumbonus_auto_sync_enabled !== false,
     premiumbonusApiUrl: settings.premiumbonus_api_url || "",
     premiumbonusApiToken: settings.premiumbonus_api_token || "",
     premiumbonusSalePointId: settings.premiumbonus_sale_point_id || "",

@@ -13,7 +13,9 @@ export function createIntegrationRetryWorker() {
       interval = setInterval(async () => {
         try {
           const settings = await getIntegrationSettings();
-          if (!settings.iikoEnabled || !settings.iikoAutoSyncEnabled) return;
+          const iikoRetryEnabled = settings.iikoEnabled && settings.iikoAutoSyncEnabled;
+          const premiumBonusRetryEnabled = settings.premiumbonusEnabled && settings.premiumbonusAutoSyncEnabled;
+          if (!iikoRetryEnabled && !premiumBonusRetryEnabled) return;
           await retryFailedSyncs();
         } catch (error) {
           logger.error("Ошибка планировщика retry интеграций", { error: error.message });

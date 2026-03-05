@@ -7,6 +7,7 @@ import { getSystemSettings } from "../../utils/settings.js";
 import { grantRegistrationBonus } from "../loyalty/services/loyaltyService.js";
 import { addToBlacklist } from "../../middleware/tokenBlacklist.js";
 import { logger } from "../../utils/logger.js";
+import { processPremiumBonusClientSync } from "../integrations/services/syncProcessors.js";
 import {
   encryptEmail,
   encryptAddress,
@@ -35,7 +36,8 @@ router.post("/register", async (req, res, next) => {
     }
 
     const systemSettings = await getSystemSettings();
-    const pbSyncStatus = systemSettings.premiumbonus_enabled ? "pending" : "synced";
+    const pbAutoSyncEnabled = systemSettings.premiumbonus_enabled && systemSettings.premiumbonus_auto_sync_enabled !== false;
+    const pbSyncStatus = pbAutoSyncEnabled ? "pending" : "synced";
     const loyaltyMode = systemSettings.premiumbonus_enabled ? "premiumbonus" : "local";
 
     const [existingUsers] = await db.query("SELECT * FROM users WHERE phone = ?", [normalizedPhone]);
@@ -59,7 +61,7 @@ router.post("/register", async (req, res, next) => {
         updates.push("registration_type = 'miniapp'");
       }
       if (systemSettings.premiumbonus_enabled) {
-        updates.push("pb_sync_status = 'pending'");
+        updates.push(`pb_sync_status = '${pbAutoSyncEnabled ? "pending" : "synced"}'`);
         updates.push("loyalty_mode = 'premiumbonus'");
       }
 
@@ -78,8 +80,15 @@ router.post("/register", async (req, res, next) => {
 
       // Дешифрование перед отправкой клиенту
       const decryptedUser = decryptUserData(updatedUsers[0]);
-      if (systemSettings.premiumbonus_enabled) {
-        logger.info("Авто-синхронизация клиента PremiumBonus при регистрации отключена", { userId: user.id, source: "register-existing" });
+      if (pbAutoSyncEnabled) {
+        try {
+          await processPremiumBonusClientSync(user.id, "register-existing");
+        } catch (pbError) {
+          logger.warn("Не удалось синхронизировать существующего клиента с PremiumBonus", {
+            userId: user.id,
+            error: pbError?.message || String(pbError),
+          });
+        }
       }
       return res.json({ user: decryptedUser });
     }
@@ -103,11 +112,15 @@ router.post("/register", async (req, res, next) => {
       if (systemSettings.bonuses_enabled && !systemSettings.premiumbonus_enabled) {
         await grantRegistrationBonus(result.insertId, null);
       }
-      if (systemSettings.premiumbonus_enabled) {
-        logger.info("Авто-синхронизация клиента PremiumBonus при регистрации отключена", {
-          userId: result.insertId,
-          source: "register-new",
-        });
+      if (pbAutoSyncEnabled) {
+        try {
+          await processPremiumBonusClientSync(result.insertId, "register-new");
+        } catch (pbError) {
+          logger.warn("Не удалось синхронизировать нового клиента с PremiumBonus", {
+            userId: result.insertId,
+            error: pbError?.message || String(pbError),
+          });
+        }
       }
     } catch (bonusError) {
       logger.error("Failed to grant registration bonus", { error: bonusError });
@@ -122,6 +135,19 @@ router.post("/register", async (req, res, next) => {
 router.get("/profile", authenticateToken, async (req, res, next) => {
   try {
     const userId = req.user.id;
+    const systemSettings = await getSystemSettings();
+    const pbAutoSyncEnabled = systemSettings.premiumbonus_enabled && systemSettings.premiumbonus_auto_sync_enabled !== false;
+    if (pbAutoSyncEnabled) {
+      try {
+        await processPremiumBonusClientSync(userId, "profile-get");
+      } catch (pbError) {
+        logger.warn("Не удалось синхронизировать клиента с PremiumBonus при открытии профиля", {
+          userId,
+          error: pbError?.message || String(pbError),
+        });
+      }
+    }
+
     const [users] = await db.query(
       `SELECT u.id, u.telegram_id, u.phone, u.first_name, u.last_name, u.email, u.date_of_birth,
               u.loyalty_balance, u.current_loyalty_level_id, u.loyalty_joined_at, u.created_at, u.updated_at
@@ -290,8 +316,18 @@ router.put("/profile", authenticateToken, async (req, res, next) => {
 
     const systemSettings = await getSystemSettings();
     if (systemSettings.premiumbonus_enabled) {
-      await db.query("UPDATE users SET pb_sync_status = 'pending', loyalty_mode = 'premiumbonus' WHERE id = ?", [userId]);
-      logger.info("Авто-синхронизация клиента PremiumBonus при обновлении профиля отключена", { userId, source: "profile-update" });
+      const pbAutoSyncEnabled = systemSettings.premiumbonus_auto_sync_enabled !== false;
+      await db.query("UPDATE users SET pb_sync_status = ?, loyalty_mode = 'premiumbonus' WHERE id = ?", [pbAutoSyncEnabled ? "pending" : "synced", userId]);
+      if (pbAutoSyncEnabled) {
+        try {
+          await processPremiumBonusClientSync(userId, "profile-update");
+        } catch (pbError) {
+          logger.warn("Не удалось синхронизировать профиль клиента с PremiumBonus", {
+            userId,
+            error: pbError?.message || String(pbError),
+          });
+        }
+      }
     }
 
     const [updatedUsers] = await db.query(

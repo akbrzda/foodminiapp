@@ -494,6 +494,10 @@
               <PlugZap :size="16" />
               Тест PremiumBonus
             </Button>
+            <Button variant="outline" :disabled="pbAutoSyncToggleLoading || loading || saving" @click="togglePbAutoSync">
+              <RefreshCcw v-if="pbAutoSyncToggleLoading" class="h-4 w-4 animate-spin" />
+              {{ form.premiumbonus_auto_sync_enabled ? "Отключить автосинк PB" : "Включить автосинк PB" }}
+            </Button>
           </div>
         </template>
       </CardContent>
@@ -525,6 +529,19 @@
             <div class="text-xs text-muted-foreground">
               Статус: {{ form.iiko_auto_sync_enabled ? "включен" : "выключен" }}. При выключении останавливаются планировщик меню/стоп-листа,
               автопостановка заказов в очередь iiko и фоновый retry.
+            </div>
+          </div>
+          <div class="rounded-lg border border-border/60 p-3 md:col-span-3">
+            <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <div class="font-medium">Автосинк PremiumBonus</div>
+              <Button variant="outline" size="sm" :disabled="pbAutoSyncToggleLoading || loading || saving" @click="togglePbAutoSync">
+                <RefreshCcw v-if="pbAutoSyncToggleLoading" class="h-4 w-4 animate-spin" />
+                {{ form.premiumbonus_auto_sync_enabled ? "Отключить автосинк" : "Включить автосинк" }}
+              </Button>
+            </div>
+            <div class="text-xs text-muted-foreground">
+              Статус: {{ form.premiumbonus_auto_sync_enabled ? "включен" : "выключен" }}. При выключении останавливаются автосинхронизация
+              клиентов/покупок PremiumBonus и фоновый retry.
             </div>
           </div>
           <div class="rounded-lg border border-border/60 p-3">
@@ -710,6 +727,7 @@ const overviewLoading = ref(false);
 const manualLoading = ref({ menu: false, stoplist: false });
 const testLoading = ref({ iiko: false, pb: false });
 const autoSyncToggleLoading = ref(false);
+const pbAutoSyncToggleLoading = ref(false);
 const orderPaymentOptionsLoading = ref(false);
 const form = ref({
   iiko_enabled: false,
@@ -724,6 +742,7 @@ const form = ref({
   iiko_order_type_mapping: {},
   iiko_payment_type_mapping: {},
   premiumbonus_enabled: false,
+  premiumbonus_auto_sync_enabled: true,
   premiumbonus_api_url: "",
   premiumbonus_api_token: "",
   premiumbonus_sale_point_id: "",
@@ -850,6 +869,7 @@ const applyForm = (settings = {}) => {
     iiko_enabled: Boolean(settings.iiko_enabled),
     iiko_auto_sync_enabled: settings.iiko_auto_sync_enabled !== false,
     premiumbonus_enabled: Boolean(settings.premiumbonus_enabled),
+    premiumbonus_auto_sync_enabled: settings.premiumbonus_auto_sync_enabled !== false,
     iiko_sync_category_ids: categories,
     iiko_external_menu_id: String(settings.iiko_external_menu_id || ""),
     iiko_price_category_id: String(settings.iiko_price_category_id || ""),
@@ -1250,6 +1270,25 @@ const toggleIikoAutoSync = async () => {
     showErrorNotification(error?.response?.data?.error || "Не удалось переключить автосинк iiko");
   } finally {
     autoSyncToggleLoading.value = false;
+  }
+};
+
+const togglePbAutoSync = async () => {
+  pbAutoSyncToggleLoading.value = true;
+  try {
+    const nextValue = !form.value.premiumbonus_auto_sync_enabled;
+    await api.put("/api/admin/integrations/settings", {
+      settings: {
+        premiumbonus_auto_sync_enabled: nextValue,
+      },
+    });
+    form.value.premiumbonus_auto_sync_enabled = nextValue;
+    showSuccessNotification(nextValue ? "Автосинк PremiumBonus включен" : "Автосинк PremiumBonus выключен");
+    await Promise.all([loadStatus({ silent: true }), loadQueues({ silent: true }), loadSyncLogs({ silent: true })]);
+  } catch (error) {
+    showErrorNotification(error?.response?.data?.error || "Не удалось переключить автосинк PremiumBonus");
+  } finally {
+    pbAutoSyncToggleLoading.value = false;
   }
 };
 

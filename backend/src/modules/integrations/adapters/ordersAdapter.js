@@ -9,7 +9,7 @@ export class OrdersAdapter {
 
   async isPremiumBonusEnabled() {
     const settings = await getIntegrationSettings();
-    return settings.premiumbonusEnabled && settings?.integrationMode?.loyalty === "external";
+    return settings.premiumbonusEnabled && settings.premiumbonusAutoSyncEnabled && settings?.integrationMode?.loyalty === "external";
   }
 
   async enqueueOrderSync(orderId, payload = {}) {

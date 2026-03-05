@@ -4,9 +4,17 @@ import loyaltyAdapter from "../../integrations/adapters/loyaltyAdapter.js";
 import { getPremiumBonusClientOrNull } from "../../integrations/services/integrationConfigService.js";
 import db from "../../../config/database.js";
 
+const normalizePhoneForPremiumBonus = (value) => {
+  const digits = String(value || "").replace(/[^\d]/g, "");
+  if (digits.length === 11 && digits.startsWith("7")) return digits;
+  if (digits.length === 10) return `7${digits}`;
+  return digits;
+};
+
 const ensureBonusesEnabled = async (res) => {
   const settings = await getSystemSettings();
-  if (!settings.bonuses_enabled) {
+  const loyaltyEnabled = Boolean(settings.bonuses_enabled) || Boolean(settings.premiumbonus_enabled);
+  if (!loyaltyEnabled) {
     res.status(403).json({ error: "Бонусная система отключена" });
     return false;
   }
@@ -95,9 +103,10 @@ export function createClientLoyaltyController({ loyaltyService }) {
           return res.status(503).json({ error: "Клиент PremiumBonus недоступен" });
         }
 
+        const normalizedPhone = normalizePhoneForPremiumBonus(users[0].phone);
         const result = await client.activatePromocode({
-          identificator: users[0].pb_client_id || users[0].phone,
-          promocode: code,
+          phone: normalizedPhone,
+          code,
         });
 
         return res.json(result);

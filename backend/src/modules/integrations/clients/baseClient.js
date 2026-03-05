@@ -12,7 +12,7 @@ export class IntegrationApiError extends Error {
   }
 }
 
-export function createHttpClient({ baseURL, token, timeout = DEFAULT_TIMEOUT, extraHeaders = {} }) {
+export function createHttpClient({ baseURL, token, timeout = DEFAULT_TIMEOUT, extraHeaders = {}, authMode = "bearer" }) {
   const headers = {
     "Content-Type": "application/json",
     ...extraHeaders,
@@ -20,7 +20,11 @@ export function createHttpClient({ baseURL, token, timeout = DEFAULT_TIMEOUT, ex
 
   if (token) {
     const normalizedToken = String(token).trim();
-    headers.Authorization = /^Bearer\s+/i.test(normalizedToken) ? normalizedToken : `Bearer ${normalizedToken}`;
+    if (authMode === "raw") {
+      headers.Authorization = normalizedToken;
+    } else {
+      headers.Authorization = /^Bearer\s+/i.test(normalizedToken) ? normalizedToken : `Bearer ${normalizedToken}`;
+    }
   }
 
   return axios.create({

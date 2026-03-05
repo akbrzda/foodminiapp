@@ -1,14 +1,35 @@
 import { createHttpClient, normalizeIntegrationError, requestWithRetry } from "./baseClient.js";
 
 export function createPremiumBonusClient({ apiUrl, apiToken, salePointId }) {
+  const normalizedApiUrl = String(apiUrl || "").trim().replace(/\/+$/, "");
+  const normalizedSalePointId = String(salePointId || "").trim();
   const client = createHttpClient({
-    baseURL: apiUrl,
+    baseURL: normalizedApiUrl,
     token: apiToken,
     timeout: 20000,
+    authMode: "raw",
     extraHeaders: {
       "X-Sale-Point-Id": salePointId || "",
     },
   });
+
+  const withSalePoint = (payload = {}) => {
+    if (!normalizedSalePointId) return payload;
+    if (payload && typeof payload === "object" && !Array.isArray(payload) && !payload.sale_point_id) {
+      return {
+        ...payload,
+        sale_point_id: normalizedSalePointId,
+      };
+    }
+    return payload;
+  };
+
+  const normalizePhoneForPremiumBonus = (value) => {
+    const digits = String(value || "").replace(/[^\d]/g, "");
+    if (digits.length === 11 && digits.startsWith("7")) return digits;
+    if (digits.length === 10) return `7${digits}`;
+    return digits;
+  };
 
   return {
     async ping() {
@@ -22,7 +43,7 @@ export function createPremiumBonusClient({ apiUrl, apiToken, salePointId }) {
 
     async buyerInfo(payload) {
       try {
-        const { data } = await requestWithRetry(() => client.post("/buyer-info", payload), { retries: 2 });
+        const { data } = await requestWithRetry(() => client.post("/buyer-info", withSalePoint(payload)), { retries: 2 });
         return data;
       } catch (error) {
         throw normalizeIntegrationError(error, "Ошибка получения клиента PremiumBonus");
@@ -49,7 +70,7 @@ export function createPremiumBonusClient({ apiUrl, apiToken, salePointId }) {
 
     async purchaseRequest(payload) {
       try {
-        const { data } = await requestWithRetry(() => client.post("/purchase-request", payload), { retries: 1 });
+        const { data } = await requestWithRetry(() => client.post("/purchase-request", withSalePoint(payload)), { retries: 1 });
         return data;
       } catch (error) {
         throw normalizeIntegrationError(error, "Ошибка расчета выгоды PremiumBonus");
@@ -58,7 +79,7 @@ export function createPremiumBonusClient({ apiUrl, apiToken, salePointId }) {
 
     async createPurchase(payload) {
       try {
-        const { data } = await requestWithRetry(() => client.post("/purchase", payload), { retries: 2 });
+        const { data } = await requestWithRetry(() => client.post("/purchase", withSalePoint(payload)), { retries: 2 });
         return data;
       } catch (error) {
         throw normalizeIntegrationError(error, "Ошибка создания покупки PremiumBonus");
@@ -103,7 +124,24 @@ export function createPremiumBonusClient({ apiUrl, apiToken, salePointId }) {
 
     async transactionHistory(payload) {
       try {
-        const { data } = await requestWithRetry(() => client.post("/buyer-operations", payload), { retries: 1 });
+        const source = payload && typeof payload === "object" ? payload : {};
+        let phone = normalizePhoneForPremiumBonus(source.phone);
+
+        if (!phone) {
+          const identificator = String(source.identificator || "").trim();
+          if (/^\+?\d{10,15}$/.test(identificator)) {
+            phone = normalizePhoneForPremiumBonus(identificator);
+          } else if (identificator) {
+            const info = await requestWithRetry(() => client.post("/buyer-info", withSalePoint({ identificator })), { retries: 1 });
+            phone = normalizePhoneForPremiumBonus(info?.data?.phone || info?.phone);
+          }
+        }
+
+        if (!phone || phone.length !== 11) {
+          throw new Error("Не удалось определить телефон для запроса истории PremiumBonus");
+        }
+
+        const { data } = await requestWithRetry(() => client.post("/buyer/purchase-list", withSalePoint({ phone })), { retries: 1 });
         return data;
       } catch (error) {
         throw normalizeIntegrationError(error, "Ошибка истории транзакций PremiumBonus");
