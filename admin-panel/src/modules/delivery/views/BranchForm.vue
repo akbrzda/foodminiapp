@@ -52,6 +52,16 @@
                 <p class="text-xs text-muted-foreground">
                   Привязка к iiko задает только связь. Локальные данные филиала (название, адрес, контакт и график) не перезаписываются автоматически.
                 </p>
+                <div class="grid gap-2 rounded-md border border-border/60 bg-muted/20 p-3 text-xs text-muted-foreground md:grid-cols-2">
+                  <div class="space-y-1">
+                    <div class="font-semibold uppercase tracking-wide">Terminal/POS ID</div>
+                    <div class="break-all text-foreground">{{ form.iiko_terminal_group_id || "Не привязан" }}</div>
+                  </div>
+                  <div class="space-y-1">
+                    <div class="font-semibold uppercase tracking-wide">Organization ID</div>
+                    <div class="break-all text-foreground">{{ form.iiko_organization_id || "Не привязан" }}</div>
+                  </div>
+                </div>
               </FieldContent>
             </Field>
             <Field>
@@ -453,6 +463,14 @@ const submitBranch = async () => {
       phoneError.value = "Некорректный номер телефона";
       return;
     }
+    const iikoTerminalGroupId = String(form.value.iiko_terminal_group_id || "").trim();
+    const iikoOrganizationId = String(form.value.iiko_organization_id || "").trim();
+    const hasIikoTerminal = Boolean(iikoTerminalGroupId);
+    const hasIikoOrganization = Boolean(iikoOrganizationId);
+    if (hasIikoTerminal !== hasIikoOrganization) {
+      showErrorNotification("Для привязки iiko заполните оба поля: Terminal/POS ID и Organization ID");
+      return;
+    }
     const workingHours = {};
     form.value.working_hours.forEach((schedule) => {
       if (schedule.day && schedule.open && schedule.close) {
@@ -469,8 +487,8 @@ const submitBranch = async () => {
       prep_time: form.value.prep_time || 0,
       assembly_time: form.value.assembly_time || 0,
       is_active: form.value.is_active,
-      iiko_terminal_group_id: form.value.iiko_terminal_group_id ? String(form.value.iiko_terminal_group_id) : "",
-      iiko_organization_id: form.value.iiko_organization_id ? String(form.value.iiko_organization_id) : "",
+      iiko_terminal_group_id: iikoTerminalGroupId,
+      iiko_organization_id: iikoOrganizationId,
     };
     if (isEditing.value) {
       await api.put(`/api/cities/admin/${cityId.value}/branches/${branchId.value}`, payload);

@@ -4,6 +4,19 @@ import { authenticateToken, requireRole, checkCityAccess } from "../../middlewar
 import { getIikoClientOrNull } from "../integrations/services/integrationConfigService.js";
 const router = express.Router();
 
+const normalizeIikoBindingId = (value) => String(value || "").trim();
+const validateIikoBranchBinding = ({ terminalGroupId = "", organizationId = "" }) => {
+  const hasTerminal = Boolean(terminalGroupId);
+  const hasOrganization = Boolean(organizationId);
+  if (hasTerminal === hasOrganization) {
+    return { valid: true };
+  }
+  return {
+    valid: false,
+    error: "Для привязки к iiko необходимо заполнить оба поля: Terminal/POS ID и Organization ID",
+  };
+};
+
 const DAY_MAP = {
   monday: "monday",
   mon: "monday",
@@ -464,7 +477,16 @@ router.post("/admin/:cityId/branches", authenticateToken, requireRole("admin", "
       return res.status(404).json({ error: "City not found" });
     }
 
-    const iikoTerminalGroupId = String(iiko_terminal_group_id || "").trim();
+    const iikoTerminalGroupId = normalizeIikoBindingId(iiko_terminal_group_id);
+    const branchIikoOrganizationId = normalizeIikoBindingId(iiko_organization_id);
+    const iikoBindingValidation = validateIikoBranchBinding({
+      terminalGroupId: iikoTerminalGroupId,
+      organizationId: branchIikoOrganizationId,
+    });
+    if (!iikoBindingValidation.valid) {
+      return res.status(400).json({ error: iikoBindingValidation.error });
+    }
+
     if (iikoTerminalGroupId) {
       const [existsRows] = await db.query("SELECT id FROM branches WHERE iiko_terminal_group_id = ? LIMIT 1", [iikoTerminalGroupId]);
       if (existsRows.length > 0) {
@@ -482,8 +504,8 @@ router.post("/admin/:cityId/branches", authenticateToken, requireRole("admin", "
     const branchLatitude = latitude || null;
     const branchLongitude = longitude || null;
     const branchWorkingHours = working_hours || null;
-    const branchIikoOrganizationId = String(iiko_organization_id || "").trim() || null;
     const branchIikoTerminalGroupId = iikoTerminalGroupId || null;
+    const branchIikoOrganizationIdDb = branchIikoOrganizationId || null;
     const branchIikoSyncedAt = branchIikoTerminalGroupId ? new Date() : null;
 
     const [result] = await db.query(
@@ -501,7 +523,7 @@ router.post("/admin/:cityId/branches", authenticateToken, requireRole("admin", "
         branchWorkingHours ? JSON.stringify(branchWorkingHours) : null,
         prep_time || 0,
         assembly_time || 0,
-        branchIikoOrganizationId,
+        branchIikoOrganizationIdDb,
         branchIikoTerminalGroupId,
         branchIikoSyncedAt,
       ],
@@ -540,15 +562,33 @@ router.put(
         iiko_terminal_group_id,
         iiko_organization_id,
       } = req.body;
-      const [branches] = await db.query("SELECT id, iiko_terminal_group_id FROM branches WHERE id = ? AND city_id = ?", [branchId, cityId]);
+      const [branches] = await db.query("SELECT id, iiko_terminal_group_id, iiko_organization_id FROM branches WHERE id = ? AND city_id = ?", [
+        branchId,
+        cityId,
+      ]);
       if (branches.length === 0) {
         return res.status(404).json({ error: "Branch not found" });
       }
       const currentBranch = branches[0];
       const updates = [];
       const values = [];
+      const hasIikoTerminalPatch = iiko_terminal_group_id !== undefined;
+      const hasIikoOrganizationPatch = iiko_organization_id !== undefined;
+      const incomingIikoTerminalGroupId = normalizeIikoBindingId(iiko_terminal_group_id);
+      const incomingIikoOrganizationId = normalizeIikoBindingId(iiko_organization_id);
+      const currentIikoTerminalGroupId = normalizeIikoBindingId(currentBranch.iiko_terminal_group_id);
+      const currentIikoOrganizationId = normalizeIikoBindingId(currentBranch.iiko_organization_id);
 
-      const incomingIikoTerminalGroupId = String(iiko_terminal_group_id || "").trim();
+      const nextIikoTerminalGroupId = hasIikoTerminalPatch ? incomingIikoTerminalGroupId : currentIikoTerminalGroupId;
+      const nextIikoOrganizationId = hasIikoOrganizationPatch ? incomingIikoOrganizationId : currentIikoOrganizationId;
+
+      const iikoBindingValidation = validateIikoBranchBinding({
+        terminalGroupId: nextIikoTerminalGroupId,
+        organizationId: nextIikoOrganizationId,
+      });
+      if (!iikoBindingValidation.valid) {
+        return res.status(400).json({ error: iikoBindingValidation.error });
+      }
 
       if (incomingIikoTerminalGroupId) {
         const [duplicateRows] = await db.query("SELECT id FROM branches WHERE iiko_terminal_group_id = ? AND id <> ? LIMIT 1", [
@@ -567,9 +607,9 @@ router.put(
         updates.push("iiko_synced_at = NULL");
       }
 
-      if (iiko_organization_id !== undefined) {
+      if (hasIikoOrganizationPatch) {
         updates.push("iiko_organization_id = ?");
-        values.push(String(iiko_organization_id || "").trim() || null);
+        values.push(incomingIikoOrganizationId || null);
       }
 
       if (name !== undefined) {

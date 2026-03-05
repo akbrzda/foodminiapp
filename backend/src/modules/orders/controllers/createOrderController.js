@@ -13,6 +13,7 @@ import { getSystemSettings } from "../../../utils/settings.js";
 import { findTariffForAmount } from "../../polygons/utils/deliveryTariffs.js";
 import { checkBranchIsOpen } from "../../../utils/workingHours.js";
 import { notifyNewOrder } from "../../../websocket/runtime.js";
+import ordersAdapter from "../../integrations/adapters/ordersAdapter.js";
 
 // Вспомогательные функции
 const getTariffsByPolygonId = async (polygonId) => {
@@ -572,6 +573,29 @@ export const createOrder = async (req, res, next) => {
       return res.status(400).json({ error: "Не удалось определить филиал доставки" });
     }
 
+    if (iikoOrdersExternal) {
+      const [branchRows] = await connection.query(
+        `SELECT id, iiko_organization_id, iiko_terminal_group_id
+         FROM branches
+         WHERE id = ?
+         LIMIT 1`,
+        [resolvedBranchId],
+      );
+      if (branchRows.length === 0) {
+        await connection.rollback();
+        return res.status(400).json({ error: "Филиал заказа не найден" });
+      }
+
+      const branchIikoOrganizationId = String(branchRows[0].iiko_organization_id || "").trim();
+      const branchIikoTerminalGroupId = String(branchRows[0].iiko_terminal_group_id || "").trim();
+      if (!branchIikoOrganizationId || !branchIikoTerminalGroupId) {
+        await connection.rollback();
+        return res.status(400).json({
+          error: "Филиал не настроен для iiko: заполните Terminal/POS ID и Organization ID в настройках филиала",
+        });
+      }
+    }
+
     // Создание/обновление адреса доставки
     let resolvedDeliveryAddressId = delivery_address_id || null;
     if (order_type === "delivery" && !resolvedDeliveryAddressId && deliveryLatitude && deliveryLongitude) {
@@ -821,9 +845,21 @@ export const createOrder = async (req, res, next) => {
       logger.error("Failed to queue Telegram notification", { error: queueError });
     }
 
-    // Временно отключено: авто-синхронизация внешних интеграций (кроме ручного sync меню).
-    if (iikoOrdersExternal || settings.premiumbonus_enabled) {
-      logger.info("Авто-синхронизация интеграций по созданию заказа отключена", { orderId });
+    if (iikoOrdersExternal) {
+      try {
+        const syncJob = await ordersAdapter.enqueueOrderSync(orderId, { source: "order-create" });
+        if (!syncJob?.skipped) {
+          logger.info("Заказ поставлен в очередь синхронизации iiko", {
+            orderId,
+            jobId: syncJob.jobId || null,
+          });
+        }
+      } catch (syncError) {
+        logger.error("Ошибка постановки заказа в очередь синхронизации iiko", {
+          orderId,
+          error: syncError?.message || String(syncError),
+        });
+      }
     }
 
     res.status(201).json({

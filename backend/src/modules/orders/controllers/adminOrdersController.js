@@ -662,7 +662,7 @@ export const updateOrderStatus = async (req, res, next, forcedStatus = null) => 
       (settings.iiko_enabled && settings?.integration_mode?.orders === "external") ||
       settings.premiumbonus_enabled
     ) {
-      logger.info("Авто-синхронизация интеграций по изменению статуса заказа отключена", { orderId, status });
+      logger.info("Статус заказа изменен локально при активной внешней интеграции", { orderId, status });
     }
 
     res.json({ order: updatedOrders[0] });

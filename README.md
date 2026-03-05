@@ -27,4 +27,4 @@ FoodMiniApp закрывает полный цикл заказа еды в Tele
 - **Backend:** Node.js, Express, WebSocket, BullMQ, Axios, Winston.
 - **DB/Cache:** MySQL 8 + PostGIS, Redis.
 - **Инфраструктура:** Docker Compose (локально), Linux, Apache, pm2.
-- **Интеграции:** Telegram Bot API, Telegram Mini App SDK, iiko Addresses, Nominatim (OpenStreetMap).
+- **Интеграции:** Telegram Bot API, Telegram Mini App SDK, iiko (меню/стоп-лист/заказы), сервисы геокодинга (Nominatim/Yandex).
