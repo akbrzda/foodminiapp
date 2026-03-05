@@ -935,6 +935,40 @@ async function applyMenuMerge(candidate, resolvedBy, targetLocalIdOverride = nul
   }
 }
 
+async function runMenuRelationsIntegrityPass(connection) {
+  await connection.query(
+    `DELETE mmvp
+     FROM menu_modifier_variant_prices mmvp
+     LEFT JOIN modifiers m ON m.id = mmvp.modifier_id
+     LEFT JOIN item_variants iv ON iv.id = mmvp.variant_id
+     WHERE m.id IS NULL OR iv.id IS NULL`,
+  );
+
+  await connection.query(
+    `DELETE img
+     FROM item_modifier_groups img
+     LEFT JOIN menu_items mi ON mi.id = img.item_id
+     LEFT JOIN modifier_groups mg ON mg.id = img.modifier_group_id
+     WHERE mi.id IS NULL OR mg.id IS NULL`,
+  );
+
+  await connection.query(
+    `DELETE mic
+     FROM menu_item_categories mic
+     LEFT JOIN menu_items mi ON mi.id = mic.item_id
+     LEFT JOIN menu_categories mc ON mc.id = mic.category_id
+     WHERE mi.id IS NULL OR mc.id IS NULL`,
+  );
+
+  await connection.query(
+    `DELETE midm
+     FROM menu_item_disabled_modifiers midm
+     LEFT JOIN menu_items mi ON mi.id = midm.item_id
+     LEFT JOIN modifiers m ON m.id = midm.modifier_id
+     WHERE mi.id IS NULL OR m.id IS NULL`,
+  );
+}
+
 async function deactivateAllUnlinkedMenuEntities() {
   await db.query("UPDATE menu_categories SET is_active = 0 WHERE COALESCE(NULLIF(TRIM(iiko_category_id), ''), NULL) IS NULL");
   await db.query("UPDATE menu_category_cities mcc JOIN menu_categories mc ON mc.id = mcc.category_id SET mcc.is_active = 0 WHERE mc.is_active = 0");
@@ -1003,6 +1037,17 @@ export async function resolveMappingCandidate({ candidateId, action, resolvedBy,
   if (normalizedAction === "confirm") {
     if (candidate.module === "menu") {
       await applyMenuMerge(candidate, resolvedBy, targetLocalId);
+      const connection = await db.getConnection();
+      try {
+        await connection.beginTransaction();
+        await runMenuRelationsIntegrityPass(connection);
+        await connection.commit();
+      } catch (error) {
+        await connection.rollback();
+        throw error;
+      } finally {
+        connection.release();
+      }
     } else {
       await db.query(
         `UPDATE integration_mapping_candidates

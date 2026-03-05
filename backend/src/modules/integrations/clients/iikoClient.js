@@ -581,6 +581,22 @@ export function createIikoClient({ apiUrl, apiLogin, apiKey, organizationId }) {
       }
     },
 
+    async getCommandStatus(payload) {
+      try {
+        const requestPayload = { ...payload };
+        if (!requestPayload.organizationId) {
+          requestPayload.organizationId = await getPrimaryOrganizationId();
+        }
+        const { data } = await requestWithRetry(
+          () => withAuthorizedRequest((client) => client.post("/api/1/commands/status", requestPayload)),
+          { retries: 2, baseDelayMs: 1000 },
+        );
+        return data;
+      } catch (error) {
+        throw normalizeIntegrationError(error, "Ошибка получения статуса команды iiko");
+      }
+    },
+
     async getOrganizations() {
       try {
         return await getOrganizations();

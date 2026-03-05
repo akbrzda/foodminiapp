@@ -833,8 +833,12 @@ const applyForm = (settings = {}) => {
       result[option.key] = {
         payment_type_id: String(row.payment_type_id || row.paymentTypeId || row.id || "").trim(),
         payment_type_kind: String(row.payment_type_kind || row.paymentTypeKind || option.fallbackPaymentTypeKind).trim(),
+        payment_processing_type: String(row.payment_processing_type || row.paymentProcessingType || "").trim(),
         name: String(row.name || "").trim(),
         is_processed_externally: row.is_processed_externally === true || row.isProcessedExternally === true,
+        terminal_group_ids: Array.isArray(row.terminal_group_ids)
+          ? row.terminal_group_ids.map((value) => String(value || "").trim()).filter(Boolean)
+          : [],
       };
     }
     return result;
@@ -888,8 +892,10 @@ const updatePaymentTypeMapping = (localPaymentMethod, selectedId) => {
     mapping[localPaymentMethod] = {
       payment_type_id: matched.id,
       payment_type_kind: matched.payment_type_kind || "",
+      payment_processing_type: matched.payment_processing_type || "",
       name: matched.name || "",
       is_processed_externally: String(matched.payment_processing_type || "").toLowerCase() === "external",
+      terminal_group_ids: Array.isArray(matched.terminal_group_ids) ? matched.terminal_group_ids : [],
     };
   }
   form.value.iiko_payment_type_mapping = mapping;

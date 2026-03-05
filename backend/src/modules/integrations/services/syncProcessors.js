@@ -58,10 +58,13 @@ async function loadOrderWithItems(orderId) {
   const [orders] = await db.query(
     `SELECT o.*,
             u.phone AS user_phone,
+            c.name AS city_name,
+            c.timezone AS city_timezone,
             b.iiko_organization_id AS branch_iiko_organization_id,
             b.iiko_terminal_group_id AS branch_iiko_terminal_group_id
      FROM orders o
      LEFT JOIN users u ON u.id = o.user_id
+     LEFT JOIN cities c ON c.id = o.city_id
      LEFT JOIN branches b ON b.id = o.branch_id
      WHERE o.id = ?`,
     [orderId],
@@ -93,6 +96,119 @@ const DEFAULT_PAYMENT_KIND_BY_LOCAL_METHOD = {
   cash: "Cash",
   card: "Card",
 };
+const COMMAND_STATUS_POLL_ATTEMPTS = 4;
+const COMMAND_STATUS_POLL_DELAY_MS = 1500;
+const ORDER_PRESENCE_POLL_ATTEMPTS = 3;
+const ORDER_PRESENCE_POLL_DELAY_MS = 1200;
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function parseDesiredTime(rawValue, userTimezoneOffset) {
+  const value = String(rawValue || "").trim();
+  if (!value) return null;
+
+  const hasTimezone = /(?:Z|[+-]\d{2}:\d{2})$/i.test(value);
+  if (hasTimezone) {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  const normalized = value.replace("T", " ");
+  const localMatch = normalized.match(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})(?::(\d{2}))?$/);
+  if (localMatch) {
+    const year = Number(localMatch[1]);
+    const month = Number(localMatch[2]);
+    const day = Number(localMatch[3]);
+    const hours = Number(localMatch[4]);
+    const minutes = Number(localMatch[5]);
+    const seconds = Number(localMatch[6] || 0);
+    const offsetMinutes = Number.isFinite(Number(userTimezoneOffset)) ? Number(userTimezoneOffset) : 0;
+    const utcTimestamp = Date.UTC(year, month - 1, day, hours, minutes, seconds, 0) + offsetMinutes * 60 * 1000;
+    const parsed = new Date(utcTimestamp);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  const fallback = new Date(value);
+  return Number.isNaN(fallback.getTime()) ? null : fallback;
+}
+
+function formatDateTimeForIiko(date, timezone) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return null;
+  const targetTimezone = String(timezone || "").trim();
+  if (!targetTimezone) return null;
+
+  const formatter = new Intl.DateTimeFormat("en-GB", {
+    timeZone: targetTimezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+    fractionalSecondDigits: 3,
+  });
+  const parts = formatter.formatToParts(date);
+  const getPart = (type) => parts.find((part) => part.type === type)?.value || "";
+  const year = getPart("year");
+  const month = getPart("month");
+  const day = getPart("day");
+  const hour = getPart("hour");
+  const minute = getPart("minute");
+  const second = getPart("second");
+  const fraction = getPart("fractionalSecond") || "000";
+  if (!year || !month || !day || !hour || !minute || !second) return null;
+  return `${year}-${month}-${day} ${hour}:${minute}:${second}.${fraction}`;
+}
+
+function resolveCompleteBefore(order) {
+  const desired = parseDesiredTime(order?.desired_time, order?.user_timezone_offset);
+  if (!desired) return null;
+  return formatDateTimeForIiko(desired, order?.city_timezone);
+}
+
+function resolveDeliveryPoint(order) {
+  const isDelivery = String(order?.order_type || "").trim().toLowerCase() === "delivery";
+  if (!isDelivery) return null;
+
+  const street = String(order?.delivery_street || "").trim();
+  const house = String(order?.delivery_house || "").trim();
+  if (!street || !house) return null;
+
+  const address = {
+    type: "legacy",
+    street: {
+      name: street,
+      ...(order?.city_name ? { city: String(order.city_name).trim() } : {}),
+    },
+    house,
+  };
+
+  const entrance = String(order?.delivery_entrance || "").trim();
+  const floor = String(order?.delivery_floor || "").trim();
+  const apartment = String(order?.delivery_apartment || "").trim();
+  const intercom = String(order?.delivery_intercom || "").trim();
+  if (entrance) address.entrance = entrance;
+  if (floor) address.floor = floor;
+  if (apartment) address.flat = apartment;
+  if (intercom) address.doorphone = intercom;
+
+  const latitude = Number(order?.delivery_latitude);
+  const longitude = Number(order?.delivery_longitude);
+  const hasCoordinates = Number.isFinite(latitude) && Number.isFinite(longitude);
+
+  return {
+    address,
+    ...(hasCoordinates
+      ? {
+          coordinates: {
+            latitude,
+            longitude,
+          },
+        }
+      : {}),
+  };
+}
 
 function resolveOrderTypePayload(orderType, settings) {
   const localOrderType = String(orderType || "").trim().toLowerCase();
@@ -110,7 +226,7 @@ function resolveOrderTypePayload(orderType, settings) {
   };
 }
 
-function resolvePaymentPayload(order, settings) {
+function resolvePaymentPayload(order, settings, terminalGroupId) {
   const localPaymentMethod = String(order?.payment_method || "").trim().toLowerCase();
   const mapping = settings?.iikoPaymentTypeMapping?.[localPaymentMethod] || {};
   const paymentTypeId = String(mapping.paymentTypeId || "").trim();
@@ -122,15 +238,65 @@ function resolvePaymentPayload(order, settings) {
   }
 
   const paymentTypeKind = String(mapping.paymentTypeKind || "").trim() || DEFAULT_PAYMENT_KIND_BY_LOCAL_METHOD[localPaymentMethod] || "Cash";
+  const paymentProcessingType = String(mapping.paymentProcessingType || "").trim().toLowerCase();
+  const mappedTerminalGroups = Array.isArray(mapping.terminalGroupIds) ? mapping.terminalGroupIds : [];
+
+  if (mappedTerminalGroups.length > 0 && terminalGroupId && !mappedTerminalGroups.includes(terminalGroupId)) {
+    throw new Error("Выбранный тип оплаты iiko недоступен для terminal group филиала");
+  }
+
+  let isProcessedExternally = mapping.isProcessedExternally === true;
+  if (paymentProcessingType === "external" && !isProcessedExternally) {
+    isProcessedExternally = true;
+  }
+  if (paymentProcessingType === "internal" && isProcessedExternally) {
+    throw new Error("Тип оплаты iiko поддерживает только внутреннюю обработку, external-флаг недопустим");
+  }
 
   return [
     {
       paymentTypeKind,
       paymentTypeId,
       sum,
-      isProcessedExternally: mapping.isProcessedExternally === true,
+      isProcessedExternally,
     },
   ];
+}
+
+async function isOrderPresentInIiko(client, organizationId, iikoOrderId) {
+  if (!iikoOrderId) return false;
+  const response = await client.getOrderStatus({
+    organizationId,
+    orderIds: [iikoOrderId],
+    sourceKeys: ["foodminiapp"],
+  });
+  const orders = Array.isArray(response?.orders) ? response.orders : [];
+  return orders.some((row) => String(row?.id || "").trim() === String(iikoOrderId).trim());
+}
+
+async function waitForCommandCompletion(client, organizationId, correlationId) {
+  const normalizedCorrelationId = String(correlationId || "").trim();
+  if (!normalizedCorrelationId) {
+    return { state: "unknown" };
+  }
+
+  for (let attempt = 0; attempt < COMMAND_STATUS_POLL_ATTEMPTS; attempt += 1) {
+    const statusPayload = await client.getCommandStatus({
+      organizationId,
+      correlationId: normalizedCorrelationId,
+    });
+    const state = String(statusPayload?.state || "").trim().toLowerCase();
+    if (state === "success") return { state: "success" };
+    if (state === "error") {
+      const reason = statusPayload?.errorReason || statusPayload?.exception || "Команда завершилась ошибкой";
+      throw new Error(`iiko commands/status: ${String(reason)}`);
+    }
+    if (attempt < COMMAND_STATUS_POLL_ATTEMPTS - 1) {
+      await sleep(COMMAND_STATUS_POLL_DELAY_MS);
+    }
+  }
+
+  return { state: "inprogress" };
 }
 
 export async function processIikoOrderSync(orderId, source = "queue") {
@@ -152,6 +318,7 @@ export async function processIikoOrderSync(orderId, source = "queue") {
   }
 
   const nextAttempts = (Number(order.iiko_sync_attempts) || 0) + 1;
+  let createdIikoOrderId = String(order.iiko_order_id || "").trim() || null;
 
   try {
     const normalizePhone = (rawPhone) => {
@@ -186,6 +353,20 @@ export async function processIikoOrderSync(orderId, source = "queue") {
       throw new Error("Невозможно синхронизировать заказ в iiko: для филиала не задан iiko_terminal_group_id");
     }
 
+    if (createdIikoOrderId) {
+      const existsInIiko = await isOrderPresentInIiko(client, resolvedOrganizationId, createdIikoOrderId);
+      if (existsInIiko) {
+        await markOrderIikoSync(orderId, {
+          status: SYNC_STATUS.SYNCED,
+          error: null,
+          attempts: nextAttempts,
+          iikoOrderId: createdIikoOrderId,
+        });
+        return { synced: true, iikoOrderId: createdIikoOrderId, reused: true };
+      }
+      throw new Error("Заказ уже отправлен в iiko, но еще не подтвержден. Повторная отправка заблокирована до подтверждения");
+    }
+
     const iikoItems = items
       .map((item) => {
         const productId = String(item.iiko_item_id || "").trim();
@@ -213,7 +394,12 @@ export async function processIikoOrderSync(orderId, source = "queue") {
     }
 
     const resolvedOrderTypePayload = resolveOrderTypePayload(order.order_type, integrationSettings);
-    const resolvedPayments = resolvePaymentPayload(order, integrationSettings);
+    const resolvedPayments = resolvePaymentPayload(order, integrationSettings, resolvedTerminalGroupId);
+    const deliveryPoint = resolveDeliveryPoint(order);
+    if (String(order.order_type || "").trim().toLowerCase() === "delivery" && !deliveryPoint) {
+      throw new Error("Невозможно синхронизировать заказ в iiko: отсутствует корректный deliveryPoint для доставки");
+    }
+    const completeBefore = resolveCompleteBefore(order);
 
     const payload = {
       organizationId: resolvedOrganizationId,
@@ -222,6 +408,8 @@ export async function processIikoOrderSync(orderId, source = "queue") {
         externalNumber: String(order.order_number || order.id),
         phone,
         ...resolvedOrderTypePayload,
+        ...(completeBefore ? { completeBefore } : {}),
+        ...(deliveryPoint ? { deliveryPoint } : {}),
         comment: order.comment || null,
         sourceKey: "foodminiapp",
         items: iikoItems,
@@ -230,13 +418,42 @@ export async function processIikoOrderSync(orderId, source = "queue") {
     };
 
     const response = await client.createOrder(payload);
-    const iikoOrderId = response?.orderId || response?.id || null;
+    const orderInfo = response?.orderInfo && typeof response.orderInfo === "object" ? response.orderInfo : null;
+    const correlationId = String(response?.correlationId || "").trim();
+    const creationStatus = String(orderInfo?.creationStatus || response?.creationStatus || "Success")
+      .trim()
+      .toLowerCase();
+    createdIikoOrderId = String(orderInfo?.id || response?.orderId || response?.id || "").trim() || null;
+
+    if (!createdIikoOrderId) {
+      throw new Error("iiko не вернул id заказа (orderInfo.id)");
+    }
+
+    if (creationStatus === "error") {
+      const errorDetails = orderInfo?.errorInfo?.message || orderInfo?.errorInfo?.code || "Ошибка создания заказа в iiko";
+      throw new Error(`iiko creationStatus=Error: ${String(errorDetails)}`);
+    }
+
+    if (creationStatus === "inprogress") {
+      await waitForCommandCompletion(client, resolvedOrganizationId, correlationId);
+      let visible = false;
+      for (let attempt = 0; attempt < ORDER_PRESENCE_POLL_ATTEMPTS; attempt += 1) {
+        visible = await isOrderPresentInIiko(client, resolvedOrganizationId, createdIikoOrderId);
+        if (visible) break;
+        if (attempt < ORDER_PRESENCE_POLL_ATTEMPTS - 1) {
+          await sleep(ORDER_PRESENCE_POLL_DELAY_MS);
+        }
+      }
+      if (!visible) {
+        throw new Error("Создание заказа в iiko еще не завершено. Заказ сохранен с ожиданием подтверждения");
+      }
+    }
 
     await markOrderIikoSync(orderId, {
       status: SYNC_STATUS.SYNCED,
       error: null,
       attempts: nextAttempts,
-      iikoOrderId,
+      iikoOrderId: createdIikoOrderId,
     });
 
     await logIntegrationEvent({
@@ -252,7 +469,7 @@ export async function processIikoOrderSync(orderId, source = "queue") {
       durationMs: Date.now() - startedAt,
     });
 
-    return { synced: true, iikoOrderId };
+    return { synced: true, iikoOrderId: createdIikoOrderId };
   } catch (error) {
     const failedStatus = nextSyncState(nextAttempts);
 
@@ -260,6 +477,7 @@ export async function processIikoOrderSync(orderId, source = "queue") {
       status: failedStatus,
       error: error.message,
       attempts: nextAttempts,
+      iikoOrderId: createdIikoOrderId,
     });
 
     await logIntegrationEvent({
@@ -634,6 +852,9 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
   const priceCategoryId = String(integrationSettings.iikoPriceCategoryId || "").trim();
   const preserveLocalNames = integrationSettings.iikoPreserveLocalNames !== false;
   const useExternalMenuFilter = Boolean(externalMenuId);
+  const requestedCityId = Number(cityId);
+  const isCityScopedSync = Number.isFinite(requestedCityId) && requestedCityId > 0;
+  const isFullCatalogSync = !useCategoryFilter && !isCityScopedSync;
   if (!useExternalMenuFilter) {
     throw new Error("Не выбран iiko_external_menu_id. Синхронизация меню выполняется через /api/2/menu/by_id.");
   }
@@ -765,13 +986,17 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
 
     const connection = await db.getConnection();
     let stats = { categories: 0, items: 0, variants: 0, modifierGroups: 0, modifiers: 0 };
+    const syncedCategoryExternalIds = new Set();
+    const syncedItemExternalIds = new Set();
+    const syncedVariantExternalIds = new Set();
+    const syncedModifierGroupExternalIds = new Set();
+    const syncedModifierExternalIds = new Set();
 
     try {
       await connection.beginTransaction();
 
     const [citiesRows] = await connection.query("SELECT id FROM cities ORDER BY id");
     const allCityIds = citiesRows.map((row) => Number(row.id)).filter(Number.isFinite);
-    const requestedCityId = Number(cityId);
     const targetCityIds = Number.isFinite(requestedCityId) && requestedCityId > 0 ? [requestedCityId] : allCityIds;
 
     const sizeNameById = new Map();
@@ -792,6 +1017,7 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
       if (processedCategoryIds.has(iikoId)) continue;
       processedCategoryIds.add(iikoId);
       if (useCategoryFilter && !selectedCategoryIds.has(iikoId)) continue;
+      syncedCategoryExternalIds.add(iikoId);
 
       const name = normalizeDisplayName(category.name || category.title || category.caption, `Категория ${iikoId}`);
       const sortOrder = Number(category.sort_order || category.order || 0);
@@ -803,12 +1029,11 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
       if (existing.length > 0) {
         localCategoryId = existing[0].id;
         const resolvedName = preserveLocalNames ? existing[0].name : name;
-        const resolvedIsActive = preserveLocalNames ? Number(existing[0].is_active) : isActive;
         await connection.query(
           `UPDATE menu_categories
            SET name = ?, image_url = COALESCE(?, image_url), sort_order = ?, is_active = ?, iiko_synced_at = NOW()
            WHERE id = ?`,
-          [resolvedName, imageUrl, sortOrder, resolvedIsActive, localCategoryId],
+          [resolvedName, imageUrl, sortOrder, isActive, localCategoryId],
         );
       } else {
         const [inserted] = await connection.query(
@@ -822,21 +1047,12 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
       localCategoryIdByIikoId.set(iikoId, localCategoryId);
 
       for (const targetCityId of targetCityIds) {
-        if (preserveLocalNames) {
-          await connection.query(
-            `INSERT INTO menu_category_cities (category_id, city_id, is_active)
-             VALUES (?, ?, ?)
-             ON DUPLICATE KEY UPDATE is_active = is_active`,
-            [localCategoryId, targetCityId, isActive ? 1 : 0],
-          );
-        } else {
-          await connection.query(
-            `INSERT INTO menu_category_cities (category_id, city_id, is_active)
-             VALUES (?, ?, ?)
-             ON DUPLICATE KEY UPDATE is_active = VALUES(is_active)`,
-            [localCategoryId, targetCityId, isActive ? 1 : 0],
-          );
-        }
+        await connection.query(
+          `INSERT INTO menu_category_cities (category_id, city_id, is_active)
+           VALUES (?, ?, ?)
+           ON DUPLICATE KEY UPDATE is_active = VALUES(is_active)`,
+          [localCategoryId, targetCityId, isActive ? 1 : 0],
+        );
       }
 
       stats.categories += 1;
@@ -847,6 +1063,7 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
       if (!iikoItemId) continue;
       if (String(item.orderItemType || "").toLowerCase() === "modifier") continue;
       if (String(item.type || "").toLowerCase() === "modifier") continue;
+      syncedItemExternalIds.add(iikoItemId);
       const iikoCategoryIds = useExternalMenuFilter
         ? [...(externalMenuCategoryIdsByItemId.get(iikoItemId) || [])]
         : extractIikoItemCategoryIds(item);
@@ -911,7 +1128,6 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
       if (existing.length > 0) {
         localItemId = existing[0].id;
         const resolvedName = preserveLocalNames ? existing[0].name : name;
-        const resolvedIsActive = preserveLocalNames ? Number(existing[0].is_active) : isActive;
         await connection.query(
           `UPDATE menu_items
            SET name = ?, description = ?, composition = ?, image_url = COALESCE(?, image_url), price = ?, sort_order = ?, is_active = ?,
@@ -925,7 +1141,7 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
             imageUrl,
             basePrice,
             sortOrder,
-            resolvedIsActive,
+            isActive,
             weightValue,
             weightUnit,
             caloriesPer100g,
@@ -986,21 +1202,12 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
       }
 
       for (const targetCityId of targetCityIds) {
-        if (preserveLocalNames) {
-          await connection.query(
-            `INSERT INTO menu_item_cities (item_id, city_id, is_active)
-             VALUES (?, ?, ?)
-             ON DUPLICATE KEY UPDATE is_active = is_active`,
-            [localItemId, targetCityId, isActive ? 1 : 0],
-          );
-        } else {
-          await connection.query(
-            `INSERT INTO menu_item_cities (item_id, city_id, is_active)
-             VALUES (?, ?, ?)
-             ON DUPLICATE KEY UPDATE is_active = VALUES(is_active)`,
-            [localItemId, targetCityId, isActive ? 1 : 0],
-          );
-        }
+        await connection.query(
+          `INSERT INTO menu_item_cities (item_id, city_id, is_active)
+           VALUES (?, ?, ?)
+           ON DUPLICATE KEY UPDATE is_active = VALUES(is_active)`,
+          [localItemId, targetCityId, isActive ? 1 : 0],
+        );
       }
       for (const targetCityId of targetCityIds) {
         for (const fulfillmentType of ["delivery", "pickup"]) {
@@ -1085,6 +1292,7 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
       for (const variant of itemVariants) {
         const iikoVariantId = normalizeIikoId(variant.id || variant.variant_id || variant.sizeId || variant.size_id);
         if (!iikoVariantId) continue;
+        syncedVariantExternalIds.add(iikoVariantId);
         syncedVariantIds.push(iikoVariantId);
 
         const variantName = normalizeDisplayName(variant.name, `Вариант ${iikoVariantId}`);
@@ -1236,7 +1444,7 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
           const groupIsActive = rawGroup?.isHidden ? 0 : 1;
 
           let localGroupId = null;
-          if (!seenModifierGroupExternalIds.has(groupExternalId)) {
+            if (!seenModifierGroupExternalIds.has(groupExternalId)) {
             const [existingGroup] = await connection.query("SELECT id, name FROM modifier_groups WHERE iiko_modifier_group_id = ? LIMIT 1", [
               groupExternalId,
             ]);
@@ -1258,8 +1466,9 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
               );
               localGroupId = insertedGroup.insertId;
             }
-            seenModifierGroupExternalIds.add(groupExternalId);
-            stats.modifierGroups += 1;
+              seenModifierGroupExternalIds.add(groupExternalId);
+              syncedModifierGroupExternalIds.add(groupExternalId);
+              stats.modifierGroups += 1;
           } else {
             const [groupRows] = await connection.query("SELECT id FROM modifier_groups WHERE iiko_modifier_group_id = ? LIMIT 1", [groupExternalId]);
             if (groupRows.length > 0) {
@@ -1325,6 +1534,7 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
                 localModifierId = insertedModifier.insertId;
               }
               seenModifierExternalIds.add(modifierExternalId);
+              syncedModifierExternalIds.add(modifierExternalId);
               stats.modifiers += 1;
             } else {
               const [modifierRows] = await connection.query("SELECT id FROM modifiers WHERE iiko_modifier_id = ? LIMIT 1", [modifierExternalId]);
@@ -1361,9 +1571,46 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
       }
     }
 
-    // Local-first: при инкрементальных revision и ручной фильтрации категорий
-    // не удаляем локальные записи по отсутствию в текущем ответе.
-    // iiko-признак удаления обрабатывается на уровне самих объектов (isDeleted/is_active).
+      // Для полного синка без фильтров дополнительно деактивируем локальные iiko-сущности,
+      // отсутствующие в актуальном ответе внешнего меню.
+      // Для частичных синков (по категориям/городу) эту деактивацию пропускаем.
+      if (isFullCatalogSync) {
+        const deactivateByIikoIds = async (tableName, externalField, syncedIds = []) => {
+          if (!Array.isArray(syncedIds) || syncedIds.length === 0) {
+            await connection.query(
+              `UPDATE ${tableName}
+               SET is_active = 0, iiko_synced_at = NOW()
+               WHERE COALESCE(NULLIF(TRIM(${externalField}), ''), NULL) IS NOT NULL`,
+            );
+            return;
+          }
+          const placeholders = syncedIds.map(() => "?").join(", ");
+          await connection.query(
+            `UPDATE ${tableName}
+             SET is_active = 0, iiko_synced_at = NOW()
+             WHERE COALESCE(NULLIF(TRIM(${externalField}), ''), NULL) IS NOT NULL
+               AND ${externalField} NOT IN (${placeholders})`,
+            syncedIds,
+          );
+        };
+
+        await deactivateByIikoIds("menu_categories", "iiko_category_id", [...syncedCategoryExternalIds]);
+        await deactivateByIikoIds("menu_items", "iiko_item_id", [...syncedItemExternalIds]);
+        await deactivateByIikoIds("item_variants", "iiko_variant_id", [...syncedVariantExternalIds]);
+        await deactivateByIikoIds("modifier_groups", "iiko_modifier_group_id", [...syncedModifierGroupExternalIds]);
+        await deactivateByIikoIds("modifiers", "iiko_modifier_id", [...syncedModifierExternalIds]);
+
+        await connection.query(
+          `UPDATE menu_category_cities mcc
+           JOIN menu_categories mc ON mc.id = mcc.category_id
+           SET mcc.is_active = CASE WHEN mc.is_active = 1 THEN mcc.is_active ELSE 0 END`,
+        );
+        await connection.query(
+          `UPDATE menu_item_cities mic
+           JOIN menu_items mi ON mi.id = mic.item_id
+           SET mic.is_active = CASE WHEN mi.is_active = 1 THEN mic.is_active ELSE 0 END`,
+        );
+      }
 
       await connection.commit();
 
@@ -1464,7 +1711,6 @@ export async function processIikoStopListSync(reason = "manual", branchId = null
   if (!client) throw new Error("Клиент iiko недоступен");
 
   const startedAt = Date.now();
-  const data = await client.getStopList({});
   const resolveTerminalGroupId = (value = {}) =>
     String(value?.terminalGroupId || value?.terminal_group_id || value?.terminalGroup?.id || "").trim();
   const resolveEntityIds = (value = {}) => {
@@ -1608,6 +1854,11 @@ export async function processIikoStopListSync(reason = "manual", branchId = null
     terminalGroupId: String(row.iiko_terminal_group_id || "").trim(),
   }));
   const targetBranchIds = targetBranches.map((row) => row.id).filter(Number.isFinite);
+  const terminalGroupsIds = targetBranches.map((row) => row.terminalGroupId).filter(Boolean);
+
+  const data = await client.getStopList({
+    ...(terminalGroupsIds.length > 0 ? { terminalGroupsIds } : {}),
+  });
 
   const allExternalIdsSet = new Set();
   for (const [terminalGroupId, idsMap] of entryMap.entries()) {

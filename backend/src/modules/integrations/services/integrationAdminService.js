@@ -268,16 +268,29 @@ export async function getIikoOrderPaymentMappingOptions() {
 
   const paymentTypesById = new Map();
   for (const row of Array.isArray(paymentTypesRaw) ? paymentTypesRaw : []) {
+    const terminalGroupIds = Array.isArray(row?.terminalGroups)
+      ? row.terminalGroups
+          .map((group) => String(group?.id || group?.terminalGroupId || group?.terminal_group_id || "").trim())
+          .filter(Boolean)
+      : [];
     const mapped = {
       id: String(row?.id || "").trim(),
       name: normalizeDisplayName(row?.name || row?.caption || row?.title, "Способ оплаты"),
       payment_type_kind: String(row?.paymentTypeKind || row?.payment_type_kind || "").trim(),
       payment_processing_type: String(row?.paymentProcessingType || row?.payment_processing_type || "").trim(),
+      terminal_group_ids: terminalGroupIds,
       is_deleted: row?.isDeleted === true || row?.deleted === true,
     };
     if (!mapped.id || mapped.is_deleted) continue;
     if (!paymentTypesById.has(mapped.id)) {
       paymentTypesById.set(mapped.id, mapped);
+      continue;
+    }
+    const current = paymentTypesById.get(mapped.id);
+    for (const terminalGroupId of mapped.terminal_group_ids) {
+      if (!current.terminal_group_ids.includes(terminalGroupId)) {
+        current.terminal_group_ids.push(terminalGroupId);
+      }
     }
   }
   const paymentTypes = Array.from(paymentTypesById.values()).sort((a, b) => a.name.localeCompare(b.name, "ru"));

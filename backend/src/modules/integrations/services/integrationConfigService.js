@@ -33,13 +33,19 @@ export async function getIntegrationSettings() {
       if (!rawMapping || typeof rawMapping !== "object" || Array.isArray(rawMapping)) continue;
       const paymentTypeId = String(rawMapping.payment_type_id || rawMapping.id || "").trim();
       const paymentTypeKind = String(rawMapping.payment_type_kind || rawMapping.paymentTypeKind || "").trim();
+      const paymentProcessingType = String(rawMapping.payment_processing_type || rawMapping.paymentProcessingType || "").trim();
       const name = String(rawMapping.name || "").trim();
       const isProcessedExternally = rawMapping.is_processed_externally === true || rawMapping.isProcessedExternally === true;
+      const terminalGroupIds = Array.isArray(rawMapping.terminal_group_ids)
+        ? rawMapping.terminal_group_ids.map((value) => String(value || "").trim()).filter(Boolean)
+        : [];
       result[String(localPaymentMethod || "").trim()] = {
         paymentTypeId,
         paymentTypeKind,
+        paymentProcessingType,
         name,
         isProcessedExternally,
+        terminalGroupIds,
       };
     }
     return result;
