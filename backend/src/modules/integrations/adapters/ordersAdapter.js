@@ -4,7 +4,7 @@ import { enqueueIikoOrderSync, enqueuePremiumBonusPurchaseSync } from "../../../
 export class OrdersAdapter {
   async isIikoEnabled() {
     const settings = await getIntegrationSettings();
-    return settings.iikoEnabled && settings?.integrationMode?.orders === "external";
+    return settings.iikoEnabled && settings.iikoAutoSyncEnabled && settings?.integrationMode?.orders === "external";
   }
 
   async isPremiumBonusEnabled() {

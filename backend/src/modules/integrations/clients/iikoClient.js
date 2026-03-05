@@ -183,6 +183,31 @@ export function createIikoClient({ apiUrl, apiLogin, apiKey, organizationId }) {
     if (Array.isArray(payload)) return payload;
     return [];
   };
+  const extractOrderTypes = (payload) => {
+    if (!payload || typeof payload !== "object") return [];
+    const result = [];
+    const rows = Array.isArray(payload.orderTypes) ? payload.orderTypes : [];
+    for (const row of rows) {
+      if (!row || typeof row !== "object") continue;
+      const organizationIdValue = row.organizationId || row.organization_id || null;
+      const items = Array.isArray(row.items) ? row.items : [];
+      for (const item of items) {
+        if (!item || typeof item !== "object") continue;
+        result.push({
+          ...item,
+          organizationId: item.organizationId || item.organization_id || organizationIdValue,
+        });
+      }
+    }
+    return result;
+  };
+  const extractPaymentTypes = (payload) => {
+    if (!payload || typeof payload !== "object") return [];
+    if (Array.isArray(payload.paymentTypes)) return payload.paymentTypes;
+    if (Array.isArray(payload.payment_types)) return payload.payment_types;
+    if (Array.isArray(payload.items)) return payload.items;
+    return [];
+  };
 
   const normalizeOrganizationId = (org) => org?.id || org?.organizationId || org?.organization_id || null;
 
@@ -585,6 +610,56 @@ export function createIikoClient({ apiUrl, apiLogin, apiKey, organizationId }) {
         return extractTerminalGroups(data);
       } catch (error) {
         throw normalizeIntegrationError(error, "Ошибка получения списка филиалов iiko");
+      }
+    },
+
+    async getOrderTypes(payload = {}) {
+      try {
+        const useConfiguredOrganization = payload?.useConfiguredOrganization !== false;
+        const organizationIds =
+          Array.isArray(payload?.organizationIds) && payload.organizationIds.length > 0
+            ? payload.organizationIds
+            : await getOrganizationIds({ useConfiguredOrganization });
+        if (!organizationIds.length) {
+          throw new Error("Не найдено доступных организаций iiko");
+        }
+        const { data } = await requestWithRetry(
+          () =>
+            withAuthorizedRequest((client) =>
+              client.post("/api/1/deliveries/order_types", {
+                organizationIds,
+              }),
+            ),
+          { retries: 2, baseDelayMs: 1200 },
+        );
+        return extractOrderTypes(data);
+      } catch (error) {
+        throw normalizeIntegrationError(error, "Ошибка получения типов заказа iiko");
+      }
+    },
+
+    async getPaymentTypes(payload = {}) {
+      try {
+        const useConfiguredOrganization = payload?.useConfiguredOrganization !== false;
+        const organizationIds =
+          Array.isArray(payload?.organizationIds) && payload.organizationIds.length > 0
+            ? payload.organizationIds
+            : await getOrganizationIds({ useConfiguredOrganization });
+        if (!organizationIds.length) {
+          throw new Error("Не найдено доступных организаций iiko");
+        }
+        const { data } = await requestWithRetry(
+          () =>
+            withAuthorizedRequest((client) =>
+              client.post("/api/1/payment_types", {
+                organizationIds,
+              }),
+            ),
+          { retries: 2, baseDelayMs: 1200 },
+        );
+        return extractPaymentTypes(data);
+      } catch (error) {
+        throw normalizeIntegrationError(error, "Ошибка получения типов оплаты iiko");
       }
     },
 

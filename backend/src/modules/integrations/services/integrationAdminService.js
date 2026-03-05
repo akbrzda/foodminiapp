@@ -202,6 +202,97 @@ export async function getIikoNomenclatureOverview(options = {}) {
   };
 }
 
+export async function getIikoOrderPaymentMappingOptions() {
+  const settings = await getIntegrationSettings();
+  const orderTypeMapping = settings.iikoOrderTypeMapping || {};
+  const paymentTypeMapping = settings.iikoPaymentTypeMapping || {};
+  const client = await getIikoClientOrNull();
+
+  if (!client) {
+    return {
+      orderTypes: [],
+      paymentTypes: [],
+      mappings: {
+        order_types: orderTypeMapping,
+        payment_methods: paymentTypeMapping,
+      },
+      warnings: {
+        client: "Интеграция iiko выключена или не настроена",
+      },
+    };
+  }
+
+  const warnings = {};
+  let orderTypesRaw = [];
+  let paymentTypesRaw = [];
+
+  try {
+    orderTypesRaw = await client.getOrderTypes({ useConfiguredOrganization: false });
+  } catch (error) {
+    warnings.orderTypes = error?.message || "Не удалось получить типы заказа iiko";
+  }
+
+  try {
+    paymentTypesRaw = await client.getPaymentTypes({ useConfiguredOrganization: false });
+  } catch (error) {
+    warnings.paymentTypes = error?.message || "Не удалось получить способы оплаты iiko";
+  }
+
+  const orderTypesById = new Map();
+  for (const row of Array.isArray(orderTypesRaw) ? orderTypesRaw : []) {
+    const mapped = {
+      id: String(row?.id || "").trim(),
+      name: normalizeDisplayName(row?.name || row?.caption || row?.title, "Тип заказа"),
+      order_service_type: String(row?.orderServiceType || row?.order_service_type || "").trim(),
+      organization_id: String(row?.organizationId || row?.organization_id || "").trim() || null,
+      is_deleted: row?.isDeleted === true || row?.deleted === true,
+      is_default: row?.isDefault === true || row?.default === true,
+    };
+    if (!mapped.id || mapped.is_deleted) continue;
+
+    if (!orderTypesById.has(mapped.id)) {
+      orderTypesById.set(mapped.id, {
+        ...mapped,
+        organization_ids: mapped.organization_id ? [mapped.organization_id] : [],
+      });
+      continue;
+    }
+
+    const current = orderTypesById.get(mapped.id);
+    if (mapped.organization_id && !current.organization_ids.includes(mapped.organization_id)) {
+      current.organization_ids.push(mapped.organization_id);
+    }
+    current.is_default = current.is_default || mapped.is_default;
+  }
+  const orderTypes = Array.from(orderTypesById.values()).sort((a, b) => a.name.localeCompare(b.name, "ru"));
+
+  const paymentTypesById = new Map();
+  for (const row of Array.isArray(paymentTypesRaw) ? paymentTypesRaw : []) {
+    const mapped = {
+      id: String(row?.id || "").trim(),
+      name: normalizeDisplayName(row?.name || row?.caption || row?.title, "Способ оплаты"),
+      payment_type_kind: String(row?.paymentTypeKind || row?.payment_type_kind || "").trim(),
+      payment_processing_type: String(row?.paymentProcessingType || row?.payment_processing_type || "").trim(),
+      is_deleted: row?.isDeleted === true || row?.deleted === true,
+    };
+    if (!mapped.id || mapped.is_deleted) continue;
+    if (!paymentTypesById.has(mapped.id)) {
+      paymentTypesById.set(mapped.id, mapped);
+    }
+  }
+  const paymentTypes = Array.from(paymentTypesById.values()).sort((a, b) => a.name.localeCompare(b.name, "ru"));
+
+  return {
+    orderTypes,
+    paymentTypes,
+    mappings: {
+      order_types: orderTypeMapping,
+      payment_methods: paymentTypeMapping,
+    },
+    warnings,
+  };
+}
+
 export async function updateAdminIntegrationSettings(patch) {
   const previousSettings = await getSystemSettings();
   const nextPatch = { ...(patch || {}) };

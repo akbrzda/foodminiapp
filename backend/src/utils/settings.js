@@ -111,6 +111,13 @@ export const SETTINGS_SCHEMA = {
     group: "Интеграции",
     type: "boolean",
   },
+  iiko_auto_sync_enabled: {
+    default: true,
+    label: "Автосинк iiko",
+    description: "Разрешает автоматическую синхронизацию iiko по расписанию и при создании заказа",
+    group: "Интеграции",
+    type: "boolean",
+  },
   iiko_api_url: {
     default: "",
     label: "iiko API URL",
@@ -173,6 +180,20 @@ export const SETTINGS_SCHEMA = {
     description: "Не перезаписывать локально измененные названия при синхронизации меню iiko",
     group: "Интеграции",
     type: "boolean",
+  },
+  iiko_order_type_mapping: {
+    default: {},
+    label: "Маппинг типов заказа iiko",
+    description: "Сопоставление локальных типов заказа с типами iiko",
+    group: "Интеграции",
+    type: "json",
+  },
+  iiko_payment_type_mapping: {
+    default: {},
+    label: "Маппинг способов оплаты iiko",
+    description: "Сопоставление локальных способов оплаты с типами оплат iiko",
+    group: "Интеграции",
+    type: "json",
   },
   iiko_webhook_secret: {
     default: "",

@@ -15,7 +15,7 @@ export function createIntegrationSchedulerWorker() {
       const menuMode = String(settings?.integrationMode?.menu || "local")
         .trim()
         .toLowerCase();
-      if (!settings.iikoEnabled || menuMode !== "external") return;
+      if (!settings.iikoEnabled || !settings.iikoAutoSyncEnabled || menuMode !== "external") return;
       await enqueueIikoMenuSync({ reason: "scheduled" });
     } catch (error) {
       logger.error("Ошибка планировщика sync-iiko-menu", { error: error.message });
@@ -28,7 +28,7 @@ export function createIntegrationSchedulerWorker() {
       const menuMode = String(settings?.integrationMode?.menu || "local")
         .trim()
         .toLowerCase();
-      if (!settings.iikoEnabled || menuMode !== "external") return;
+      if (!settings.iikoEnabled || !settings.iikoAutoSyncEnabled || menuMode !== "external") return;
       await enqueueIikoStopListSync({ reason: "scheduled" });
     } catch (error) {
       logger.error("Ошибка планировщика sync-iiko-stoplist", { error: error.message });

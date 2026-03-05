@@ -4,6 +4,7 @@ import { logger } from "../../utils/logger.js";
 import {
   getAdminIntegrationSettings,
   getIikoReadiness,
+  getIikoOrderPaymentMappingOptions,
   listIikoMappingCandidates,
   listIikoManualMappingTargets,
   getIikoNomenclatureOverview,
@@ -41,6 +42,15 @@ router.get("/iiko/nomenclature-overview", async (req, res, next) => {
       externalMenuId: req.query?.external_menu_id,
       priceCategoryId: req.query?.price_category_id,
     });
+    return res.json(data);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/iiko/order-payment-options", async (req, res, next) => {
+  try {
+    const data = await getIikoOrderPaymentMappingOptions();
     return res.json(data);
   } catch (error) {
     next(error);

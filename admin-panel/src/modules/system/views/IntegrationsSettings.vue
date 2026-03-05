@@ -185,6 +185,64 @@
               Сопоставление завершено. Модуль меню готов к работе в интеграционном режиме.
             </div>
           </div>
+          <div class="space-y-3 rounded-lg border border-border/60 p-3">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div class="text-sm font-medium">Маппинг типов заказа и способов оплаты</div>
+              <Button type="button" variant="outline" size="sm" :disabled="orderPaymentOptionsLoading" @click="loadIikoOrderPaymentOptions">
+                <RefreshCcw :size="14" />
+                Обновить справочники iiko
+              </Button>
+            </div>
+            <div v-if="orderPaymentOptionsLoading" class="space-y-2">
+              <Skeleton v-for="index in 4" :key="`order-payment-mapping-skeleton-${index}`" class="h-10 w-full" />
+            </div>
+            <template v-else>
+              <div class="space-y-2">
+                <div class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Типы заказа</div>
+                <div class="space-y-2">
+                  <div v-for="option in LOCAL_ORDER_TYPE_OPTIONS" :key="`order-type-${option.key}`" class="grid gap-2 md:grid-cols-2">
+                    <div class="flex items-center rounded-md border border-border/60 px-3 text-sm">{{ option.label }}</div>
+                    <Select :model-value="getSelectedOrderTypeId(option.key)" @update:model-value="(value) => updateOrderTypeMapping(option.key, value)">
+                      <SelectTrigger>
+                        <SelectValue placeholder="Выберите тип заказа iiko" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">Не сопоставлено</SelectItem>
+                        <SelectItem v-for="iikoType in iikoOrderTypes" :key="`iiko-order-type-${option.key}-${iikoType.id}`" :value="iikoType.id">
+                          {{ iikoType.name }} ({{ iikoType.order_service_type || "—" }})
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+              <div class="space-y-2">
+                <div class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Способы оплаты</div>
+                <div class="space-y-2">
+                  <div v-for="option in LOCAL_PAYMENT_METHOD_OPTIONS" :key="`payment-method-${option.key}`" class="grid gap-2 md:grid-cols-2">
+                    <div class="flex items-center rounded-md border border-border/60 px-3 text-sm">{{ option.label }}</div>
+                    <Select :model-value="getSelectedPaymentTypeId(option.key)" @update:model-value="(value) => updatePaymentTypeMapping(option.key, value)">
+                      <SelectTrigger>
+                        <SelectValue placeholder="Выберите оплату iiko" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">Не сопоставлено</SelectItem>
+                        <SelectItem v-for="iikoType in iikoPaymentTypes" :key="`iiko-payment-type-${option.key}-${iikoType.id}`" :value="iikoType.id">
+                          {{ iikoType.name }} ({{ iikoType.payment_type_kind || "—" }})
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+              <div class="text-xs text-muted-foreground">
+                Выбранные сопоставления сохраняются в настройках интеграции и используются при отправке заказа в iiko.
+              </div>
+            </template>
+            <div v-if="orderPaymentWarningsList.length" class="rounded-md border border-amber-500/40 bg-amber-500/5 p-2 text-xs text-amber-700">
+              <div v-for="warning in orderPaymentWarningsList" :key="warning">{{ warning }}</div>
+            </div>
+          </div>
           <Field>
             <FieldLabel>Категории для синхронизации</FieldLabel>
             <FieldContent>
@@ -456,6 +514,19 @@
           </div>
         </div>
         <div v-else class="grid gap-3 md:grid-cols-3">
+          <div class="rounded-lg border border-border/60 p-3 md:col-span-3">
+            <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <div class="font-medium">Автосинк iiko</div>
+              <Button variant="outline" size="sm" :disabled="autoSyncToggleLoading || loading || saving" @click="toggleIikoAutoSync">
+                <RefreshCcw v-if="autoSyncToggleLoading" class="h-4 w-4 animate-spin" />
+                {{ form.iiko_auto_sync_enabled ? "Отключить автосинк" : "Включить автосинк" }}
+              </Button>
+            </div>
+            <div class="text-xs text-muted-foreground">
+              Статус: {{ form.iiko_auto_sync_enabled ? "включен" : "выключен" }}. При выключении останавливаются планировщик меню/стоп-листа,
+              автопостановка заказов в очередь iiko и фоновый retry.
+            </div>
+          </div>
           <div class="rounded-lg border border-border/60 p-3">
             <div class="font-medium">Заказы iiko</div>
             <div class="text-muted-foreground">synced: {{ syncStatus.iikoOrders?.synced || 0 }}</div>
@@ -638,8 +709,11 @@ const retryLoading = ref(false);
 const overviewLoading = ref(false);
 const manualLoading = ref({ menu: false, stoplist: false });
 const testLoading = ref({ iiko: false, pb: false });
+const autoSyncToggleLoading = ref(false);
+const orderPaymentOptionsLoading = ref(false);
 const form = ref({
   iiko_enabled: false,
+  iiko_auto_sync_enabled: true,
   iiko_api_url: "",
   iiko_api_key: "",
   iiko_webhook_secret: "",
@@ -647,6 +721,8 @@ const form = ref({
   iiko_external_menu_id: "",
   iiko_price_category_id: "",
   iiko_preserve_local_names: true,
+  iiko_order_type_mapping: {},
+  iiko_payment_type_mapping: {},
   premiumbonus_enabled: false,
   premiumbonus_api_url: "",
   premiumbonus_api_token: "",
@@ -687,6 +763,19 @@ const mappingOptionsLoadingByCandidate = ref({});
 const onboardingDialogOpen = ref(false);
 const onboardingLoading = ref(false);
 const currentIikoEnabled = ref(false);
+const iikoOrderTypes = ref([]);
+const iikoPaymentTypes = ref([]);
+const orderPaymentWarningsList = ref([]);
+
+const LOCAL_ORDER_TYPE_OPTIONS = [
+  { key: "delivery", label: "Доставка", fallbackOrderServiceType: "DeliveryByCourier" },
+  { key: "pickup", label: "Самовывоз", fallbackOrderServiceType: "DeliveryByClient" },
+];
+
+const LOCAL_PAYMENT_METHOD_OPTIONS = [
+  { key: "cash", label: "Наличные", fallbackPaymentTypeKind: "Cash" },
+  { key: "card", label: "Карта", fallbackPaymentTypeKind: "Card" },
+];
 
 const menuReadiness = computed(() => readiness.value?.modules?.menu || null);
 const stopListReadiness = computed(() => readiness.value?.modules?.stoplist || null);
@@ -694,18 +783,21 @@ const stopListReadiness = computed(() => readiness.value?.modules?.stoplist || n
 const formatDateTime = (value) => {
   if (!value) return "—";
   const raw = String(value).trim();
+  const hasTimezoneSuffix = /(?:Z|[+-]\d{2}:\d{2})$/i.test(raw);
 
-  // Для логов интеграций сервер может отдавать ISO-дату в UTC,
-  // но фактически время уже локальное. Убираем TZ-суффикс,
-  // чтобы не получать повторный сдвиг (+N часов) в браузере.
-  const normalized = raw
-    .replace("T", " ")
-    .replace(/(\.\d+)?Z$/, "")
-    .replace(/([+-]\d{2}:\d{2})$/, "");
+  let date = new Date(raw);
+  if (!hasTimezoneSuffix) {
+    const withUtcSuffix = raw.includes("T") ? `${raw}Z` : `${raw.replace(" ", "T")}Z`;
+    const utcDate = new Date(withUtcSuffix);
+    if (!Number.isNaN(utcDate.getTime())) {
+      date = utcDate;
+    }
+  }
 
-  const date = new Date(normalized);
   if (Number.isNaN(date.getTime())) return raw;
-  return date.toLocaleString("ru-RU");
+  return date.toLocaleString("ru-RU", {
+    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+  });
 };
 
 const resolveLogStatusClass = (status) => {
@@ -718,19 +810,89 @@ const applyForm = (settings = {}) => {
   const categories = Array.isArray(settings.iiko_sync_category_ids)
     ? settings.iiko_sync_category_ids.map((value) => String(value || "").trim()).filter(Boolean)
     : [];
+  const normalizeOrderTypeMapping = (value) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+    const result = {};
+    for (const option of LOCAL_ORDER_TYPE_OPTIONS) {
+      const row = value?.[option.key];
+      if (!row || typeof row !== "object" || Array.isArray(row)) continue;
+      result[option.key] = {
+        order_type_id: String(row.order_type_id || row.orderTypeId || row.id || "").trim(),
+        order_service_type: String(row.order_service_type || row.orderServiceType || option.fallbackOrderServiceType).trim(),
+        name: String(row.name || "").trim(),
+      };
+    }
+    return result;
+  };
+  const normalizePaymentTypeMapping = (value) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+    const result = {};
+    for (const option of LOCAL_PAYMENT_METHOD_OPTIONS) {
+      const row = value?.[option.key];
+      if (!row || typeof row !== "object" || Array.isArray(row)) continue;
+      result[option.key] = {
+        payment_type_id: String(row.payment_type_id || row.paymentTypeId || row.id || "").trim(),
+        payment_type_kind: String(row.payment_type_kind || row.paymentTypeKind || option.fallbackPaymentTypeKind).trim(),
+        name: String(row.name || "").trim(),
+        is_processed_externally: row.is_processed_externally === true || row.isProcessedExternally === true,
+      };
+    }
+    return result;
+  };
+
   form.value = {
     ...form.value,
     ...settings,
     iiko_enabled: Boolean(settings.iiko_enabled),
+    iiko_auto_sync_enabled: settings.iiko_auto_sync_enabled !== false,
     premiumbonus_enabled: Boolean(settings.premiumbonus_enabled),
     iiko_sync_category_ids: categories,
     iiko_external_menu_id: String(settings.iiko_external_menu_id || ""),
     iiko_price_category_id: String(settings.iiko_price_category_id || ""),
     iiko_webhook_secret: String(settings.iiko_webhook_secret || ""),
     iiko_preserve_local_names: settings.iiko_preserve_local_names !== false,
+    iiko_order_type_mapping: normalizeOrderTypeMapping(settings.iiko_order_type_mapping),
+    iiko_payment_type_mapping: normalizePaymentTypeMapping(settings.iiko_payment_type_mapping),
     integration_mode: settings.integration_mode || { menu: "local", orders: "local", loyalty: "local" },
   };
   currentIikoEnabled.value = Boolean(settings.iiko_enabled);
+};
+
+const getSelectedOrderTypeId = (localOrderType) => String(form.value.iiko_order_type_mapping?.[localOrderType]?.order_type_id || "");
+
+const getSelectedPaymentTypeId = (localPaymentMethod) => String(form.value.iiko_payment_type_mapping?.[localPaymentMethod]?.payment_type_id || "");
+
+const updateOrderTypeMapping = (localOrderType, selectedId) => {
+  const mapping = { ...(form.value.iiko_order_type_mapping || {}) };
+  const id = String(selectedId || "").trim();
+  const matched = iikoOrderTypes.value.find((row) => row.id === id);
+  if (!id || !matched) {
+    delete mapping[localOrderType];
+  } else {
+    mapping[localOrderType] = {
+      order_type_id: matched.id,
+      order_service_type: matched.order_service_type || "",
+      name: matched.name || "",
+    };
+  }
+  form.value.iiko_order_type_mapping = mapping;
+};
+
+const updatePaymentTypeMapping = (localPaymentMethod, selectedId) => {
+  const mapping = { ...(form.value.iiko_payment_type_mapping || {}) };
+  const id = String(selectedId || "").trim();
+  const matched = iikoPaymentTypes.value.find((row) => row.id === id);
+  if (!id || !matched) {
+    delete mapping[localPaymentMethod];
+  } else {
+    mapping[localPaymentMethod] = {
+      payment_type_id: matched.id,
+      payment_type_kind: matched.payment_type_kind || "",
+      name: matched.name || "",
+      is_processed_externally: String(matched.payment_processing_type || "").toLowerCase() === "external",
+    };
+  }
+  form.value.iiko_payment_type_mapping = mapping;
 };
 
 const resolveReadinessLabel = (status) => {
@@ -821,6 +983,23 @@ const loadIikoOverview = async (paramsOverride = null) => {
     showErrorNotification(error?.response?.data?.error || "Не удалось загрузить обзор меню iiko");
   } finally {
     overviewLoading.value = false;
+  }
+};
+
+const loadIikoOrderPaymentOptions = async () => {
+  orderPaymentOptionsLoading.value = true;
+  try {
+    const { data } = await api.get("/api/admin/integrations/iiko/order-payment-options");
+    iikoOrderTypes.value = Array.isArray(data?.orderTypes) ? data.orderTypes : [];
+    iikoPaymentTypes.value = Array.isArray(data?.paymentTypes) ? data.paymentTypes : [];
+    orderPaymentWarningsList.value = Object.values(data?.warnings || {})
+      .filter(Boolean)
+      .map((value) => String(value));
+  } catch (error) {
+    orderPaymentWarningsList.value = [];
+    showErrorNotification(error?.response?.data?.error || "Не удалось загрузить типы заказа и оплаты iiko");
+  } finally {
+    orderPaymentOptionsLoading.value = false;
   }
 };
 
@@ -992,8 +1171,7 @@ const loadSyncLogs = async ({ silent = false } = {}) => {
 const loadAll = async () => {
   await loadSettings();
   await Promise.all([loadStatus(), loadQueues(), loadSyncLogs(), loadReadiness()]);
-  await loadMappingCandidates();
-  await loadIikoOverview();
+  await Promise.all([loadMappingCandidates(), loadIikoOverview(), loadIikoOrderPaymentOptions()]);
 };
 
 const refreshLiveData = async () => {
@@ -1047,6 +1225,25 @@ const saveSettings = async () => {
     showErrorNotification(error?.response?.data?.error || "Не удалось сохранить настройки");
   } finally {
     saving.value = false;
+  }
+};
+
+const toggleIikoAutoSync = async () => {
+  autoSyncToggleLoading.value = true;
+  try {
+    const nextValue = !form.value.iiko_auto_sync_enabled;
+    await api.put("/api/admin/integrations/settings", {
+      settings: {
+        iiko_auto_sync_enabled: nextValue,
+      },
+    });
+    form.value.iiko_auto_sync_enabled = nextValue;
+    showSuccessNotification(nextValue ? "Автосинк iiko включен" : "Автосинк iiko выключен");
+    await Promise.all([loadStatus({ silent: true }), loadQueues({ silent: true }), loadSyncLogs({ silent: true })]);
+  } catch (error) {
+    showErrorNotification(error?.response?.data?.error || "Не удалось переключить автосинк iiko");
+  } finally {
+    autoSyncToggleLoading.value = false;
   }
 };
 
@@ -1193,10 +1390,12 @@ const isBusy = () =>
   loading.value ||
   saving.value ||
   retryLoading.value ||
+  autoSyncToggleLoading.value ||
   manualLoading.value.menu ||
   testLoading.value.iiko ||
   testLoading.value.pb ||
   overviewLoading.value ||
+  orderPaymentOptionsLoading.value ||
   readinessLoading.value ||
   mappingLoading.value ||
   onboardingLoading.value;

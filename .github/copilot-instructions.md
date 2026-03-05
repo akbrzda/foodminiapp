@@ -143,13 +143,6 @@ Migrations are executed via `backend/src/scripts/migrate.js`, which tracks execu
 - [ ] Show applied discount in total amount
 ```
 
-## Using MCP Context7
-
-- **Always run** `mcp context7` before starting work on a task
-- Study the context of related files before making changes
-- Don't improvise without understanding the existing architecture
-- Use context to understand dependencies between modules
-
 ## Code Commenting
 
 ### Rules:

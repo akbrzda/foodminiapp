@@ -10,9 +10,44 @@ export async function getIntegrationSettings() {
       .map((item) => String(item || "").trim())
       .filter(Boolean);
   };
+  const normalizeOrderTypeMapping = (value) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+    const result = {};
+    for (const [localOrderType, rawMapping] of Object.entries(value)) {
+      if (!rawMapping || typeof rawMapping !== "object" || Array.isArray(rawMapping)) continue;
+      const orderTypeId = String(rawMapping.order_type_id || rawMapping.id || "").trim();
+      const orderServiceType = String(rawMapping.order_service_type || rawMapping.orderServiceType || "").trim();
+      const name = String(rawMapping.name || "").trim();
+      result[String(localOrderType || "").trim()] = {
+        orderTypeId,
+        orderServiceType,
+        name,
+      };
+    }
+    return result;
+  };
+  const normalizePaymentTypeMapping = (value) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+    const result = {};
+    for (const [localPaymentMethod, rawMapping] of Object.entries(value)) {
+      if (!rawMapping || typeof rawMapping !== "object" || Array.isArray(rawMapping)) continue;
+      const paymentTypeId = String(rawMapping.payment_type_id || rawMapping.id || "").trim();
+      const paymentTypeKind = String(rawMapping.payment_type_kind || rawMapping.paymentTypeKind || "").trim();
+      const name = String(rawMapping.name || "").trim();
+      const isProcessedExternally = rawMapping.is_processed_externally === true || rawMapping.isProcessedExternally === true;
+      result[String(localPaymentMethod || "").trim()] = {
+        paymentTypeId,
+        paymentTypeKind,
+        name,
+        isProcessedExternally,
+      };
+    }
+    return result;
+  };
 
   return {
     iikoEnabled: Boolean(settings.iiko_enabled),
+    iikoAutoSyncEnabled: settings.iiko_auto_sync_enabled !== false,
     iikoApiUrl: settings.iiko_api_url || "",
     iikoApiKey: settings.iiko_api_key || "",
     iikoOrganizationId: settings.iiko_organization_id || "",
@@ -20,6 +55,8 @@ export async function getIntegrationSettings() {
     iikoExternalMenuId: settings.iiko_external_menu_id || "",
     iikoPriceCategoryId: settings.iiko_price_category_id || "",
     iikoPreserveLocalNames: settings.iiko_preserve_local_names !== false,
+    iikoOrderTypeMapping: normalizeOrderTypeMapping(settings.iiko_order_type_mapping),
+    iikoPaymentTypeMapping: normalizePaymentTypeMapping(settings.iiko_payment_type_mapping),
     iikoWebhookSecret: settings.iiko_webhook_secret || "",
     premiumbonusEnabled: Boolean(settings.premiumbonus_enabled),
     premiumbonusApiUrl: settings.premiumbonus_api_url || "",

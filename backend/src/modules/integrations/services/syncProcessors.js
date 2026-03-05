@@ -83,6 +83,56 @@ async function loadOrderWithItems(orderId) {
   return { order, items };
 }
 
+const DEFAULT_ORDER_SERVICE_TYPE_BY_LOCAL_TYPE = {
+  delivery: "DeliveryByCourier",
+  pickup: "DeliveryByClient",
+};
+const ALLOWED_ORDER_SERVICE_TYPES = new Set(["DeliveryByCourier", "DeliveryByClient"]);
+
+const DEFAULT_PAYMENT_KIND_BY_LOCAL_METHOD = {
+  cash: "Cash",
+  card: "Card",
+};
+
+function resolveOrderTypePayload(orderType, settings) {
+  const localOrderType = String(orderType || "").trim().toLowerCase();
+  const mapping = settings?.iikoOrderTypeMapping?.[localOrderType] || {};
+  const mappedOrderTypeId = String(mapping.orderTypeId || "").trim();
+  const mappedOrderServiceType = String(mapping.orderServiceType || "").trim();
+  const fallbackOrderServiceType = DEFAULT_ORDER_SERVICE_TYPE_BY_LOCAL_TYPE[localOrderType] || "DeliveryByCourier";
+
+  if (mappedOrderTypeId) {
+    return { orderTypeId: mappedOrderTypeId };
+  }
+
+  return {
+    orderServiceType: ALLOWED_ORDER_SERVICE_TYPES.has(mappedOrderServiceType) ? mappedOrderServiceType : fallbackOrderServiceType,
+  };
+}
+
+function resolvePaymentPayload(order, settings) {
+  const localPaymentMethod = String(order?.payment_method || "").trim().toLowerCase();
+  const mapping = settings?.iikoPaymentTypeMapping?.[localPaymentMethod] || {};
+  const paymentTypeId = String(mapping.paymentTypeId || "").trim();
+  if (!paymentTypeId) return null;
+
+  const sum = Number(order?.total);
+  if (!Number.isFinite(sum) || sum < 0) {
+    return null;
+  }
+
+  const paymentTypeKind = String(mapping.paymentTypeKind || "").trim() || DEFAULT_PAYMENT_KIND_BY_LOCAL_METHOD[localPaymentMethod] || "Cash";
+
+  return [
+    {
+      paymentTypeKind,
+      paymentTypeId,
+      sum,
+      isProcessedExternally: mapping.isProcessedExternally === true,
+    },
+  ];
+}
+
 export async function processIikoOrderSync(orderId, source = "queue") {
   const startedAt = Date.now();
   const integrationSettings = await getIntegrationSettings();
@@ -162,16 +212,20 @@ export async function processIikoOrderSync(orderId, source = "queue") {
       throw new Error("Невозможно синхронизировать заказ в iiko: отсутствует маппинг iiko_item_id у позиций заказа");
     }
 
+    const resolvedOrderTypePayload = resolveOrderTypePayload(order.order_type, integrationSettings);
+    const resolvedPayments = resolvePaymentPayload(order, integrationSettings);
+
     const payload = {
       organizationId: resolvedOrganizationId,
       terminalGroupId: resolvedTerminalGroupId,
       order: {
         externalNumber: String(order.order_number || order.id),
         phone,
-        orderServiceType: order.order_type === "pickup" ? "DeliveryByClient" : "DeliveryByCourier",
+        ...resolvedOrderTypePayload,
         comment: order.comment || null,
         sourceKey: "foodminiapp",
         items: iikoItems,
+        ...(resolvedPayments ? { payments: resolvedPayments } : {}),
       },
     };
 
