@@ -58,48 +58,6 @@ Migrations are executed via `backend/src/scripts/migrate.js`, which tracks execu
 
 ---
 
-## CHANGELOG.md Maintenance
-
-### Criteria for Significant Changes:
-
-✅ **Add**:
-
-- New features/modules
-- API endpoint changes
-- DB migrations with new tables
-- Critical security fixes
-- Breaking changes
-- New integrations (payments, delivery, etc.)
-
-❌ **Don't Add**:
-
-- Minor UI changes (sizes, paddings, colors)
-- Refactoring without functional changes
-- Typo fixes
-- Dependency updates without functional changes
-- Comment changes
-
-**Entry Format**:
-
-```markdown
-## [YYYY-MM-DD]
-
-### Added
-
-- Promotions and promo codes module with rule configuration
-- Integration with Stripe payment system
-
-### Changed
-
-- Bonus API now returns transaction history
-- Updated loyalty level calculation algorithm
-
-### Fixed
-
-- Critical error in birthday bonus accrual
-- Issue with order duplication on slow internet
-```
-
 ## TASKS.md Management
 
 ### Task Management Rules:
@@ -590,9 +548,7 @@ console.log("✅ All environment variables loaded");
 - [ ] Responsive design checked (320px, 768px, 1024px)
 - [ ] Accessibility: `alt` for images, `label` for inputs, ARIA attributes
 - [ ] No code duplication (extract to `utils/`, `composables/`, or separate components)
-- [ ] Updated `COMMIT.md` with change description
 - [ ] If migration — updated `schema.sql`
-- [ ] If major change — added entry to `CHANGELOG.md`
 
 ## File Organization
 
@@ -738,8 +694,6 @@ Use these links when working with specific technologies:
 - `docs/menu.md` — complete technical specification of menu management
 - `docs/doc.md` — complete project technical specification
 - `TASKS.md` — current tasks and work plan
-- `COMMIT.md` — accumulated changes for next commit
-- `CHANGELOG.md` — history of significant project changes
 
 ### Database:
 
@@ -775,5 +729,4 @@ Use these links when working with specific technologies:
 ✅ Add backend validation for all input data  
 ✅ Check responsive design on mobile devices  
 ✅ Document complex business logic in comments  
-✅ Update `COMMIT.md` after each significant update  
 ✅ Use uniform API response format (`{success, data/error}`)

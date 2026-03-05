@@ -83,7 +83,42 @@ async function loadOrderWithItems(orderId) {
     [orderId],
   );
 
-  return { order, items };
+  const orderItemIds = items.map((item) => Number(item.id)).filter(Number.isFinite);
+  if (orderItemIds.length === 0) {
+    return { order, items };
+  }
+
+  const placeholders = orderItemIds.map(() => "?").join(",");
+  const [modifierRows] = await db.query(
+    `SELECT oim.order_item_id,
+            oim.modifier_id,
+            oim.modifier_name,
+            oim.modifier_price,
+            oim.modifier_weight,
+            oim.modifier_weight_unit,
+            m.iiko_modifier_id
+     FROM order_item_modifiers oim
+     LEFT JOIN modifiers m ON m.id = oim.modifier_id
+     WHERE oim.order_item_id IN (${placeholders})`,
+    orderItemIds,
+  );
+
+  const modifiersByOrderItemId = new Map();
+  for (const row of modifierRows) {
+    const itemId = Number(row.order_item_id);
+    if (!Number.isFinite(itemId)) continue;
+    if (!modifiersByOrderItemId.has(itemId)) {
+      modifiersByOrderItemId.set(itemId, []);
+    }
+    modifiersByOrderItemId.get(itemId).push(row);
+  }
+
+  const itemsWithModifiers = items.map((item) => ({
+    ...item,
+    modifiers: modifiersByOrderItemId.get(Number(item.id)) || [],
+  }));
+
+  return { order, items: itemsWithModifiers };
 }
 
 const DEFAULT_ORDER_SERVICE_TYPE_BY_LOCAL_TYPE = {
@@ -372,12 +407,34 @@ export async function processIikoOrderSync(orderId, source = "queue") {
         const productId = String(item.iiko_item_id || "").trim();
         if (!productId) return null;
 
+        const itemModifiers = Array.isArray(item.modifiers)
+          ? item.modifiers
+              .map((modifier) => {
+                const modifierProductId = String(modifier?.iiko_modifier_id || "").trim();
+                if (!modifierProductId) return null;
+                const modifierAmount = Number(modifier?.amount) || 1;
+                const modifierPriceRaw = Number(modifier?.modifier_price);
+                const modifierPayload = {
+                  productId: modifierProductId,
+                  amount: modifierAmount,
+                };
+
+                if (Number.isFinite(modifierPriceRaw)) {
+                  modifierPayload.price = modifierPriceRaw;
+                }
+
+                return modifierPayload;
+              })
+              .filter(Boolean)
+          : [];
+
         const payloadItem = {
           type: "Product",
           productId,
           amount: Number(item.quantity) || 1,
           price: Number(item.item_price) || 0,
           comment: item.variant_name || null,
+          ...(itemModifiers.length > 0 ? { modifiers: itemModifiers } : {}),
         };
 
         const productSizeId = extractProductSizeId(item.iiko_variant_id);
@@ -1786,8 +1843,6 @@ export async function processIikoStopListSync(reason = "manual", branchId = null
   };
 
   const autoReason = "Синхронизация стоп-листа из iiko";
-  const topLevelContainers = resolveTopLevelContainers(data);
-  const entryMap = new Map();
 
   const pushEntry = (terminalGroupIdRaw, item) => {
     const key = String(terminalGroupIdRaw || "").trim();
@@ -1827,17 +1882,6 @@ export async function processIikoStopListSync(reason = "manual", branchId = null
     }
   };
 
-  if (topLevelContainers.length > 0) {
-    for (const container of topLevelContainers) {
-      collectEntries(container, "");
-    }
-  } else {
-    const fallbackItems = resolveContainerItems(data);
-    for (const item of fallbackItems) {
-      collectEntries(item, "");
-    }
-  }
-
   const requestedBranchId = Number(branchId);
   const branchFilter = Number.isFinite(requestedBranchId) && requestedBranchId > 0 ? requestedBranchId : null;
   const [branches] = await db.query(
@@ -1859,6 +1903,19 @@ export async function processIikoStopListSync(reason = "manual", branchId = null
   const data = await client.getStopList({
     ...(terminalGroupsIds.length > 0 ? { terminalGroupsIds } : {}),
   });
+  const topLevelContainers = resolveTopLevelContainers(data);
+  const entryMap = new Map();
+
+  if (topLevelContainers.length > 0) {
+    for (const container of topLevelContainers) {
+      collectEntries(container, "");
+    }
+  } else {
+    const fallbackItems = resolveContainerItems(data);
+    for (const item of fallbackItems) {
+      collectEntries(item, "");
+    }
+  }
 
   const allExternalIdsSet = new Set();
   for (const [terminalGroupId, idsMap] of entryMap.entries()) {

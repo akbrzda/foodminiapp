@@ -440,18 +440,7 @@ export function createIikoClient({ apiUrl, apiLogin, apiKey, organizationId }) {
 
     async getExternalMenus(payload = {}) {
       try {
-        const useConfiguredOrganization = payload?.useConfiguredOrganization !== false;
-        const organizationIds =
-          Array.isArray(payload?.organizationIds) && payload.organizationIds.length > 0
-            ? payload.organizationIds
-            : await getOrganizationIds({ useConfiguredOrganization });
-
-        const requestPayload = {
-          organizationIds,
-          ...payload,
-        };
-
-        const { data } = await requestWithRetry(() => withAuthorizedRequest((client) => client.post("/api/2/menu", requestPayload)), {
+        const { data } = await requestWithRetry(() => withAuthorizedRequest((client) => client.post("/api/2/menu")), {
           retries: 2,
           baseDelayMs: 1200,
         });

@@ -16,9 +16,35 @@ import {
 const router = express.Router();
 
 function isValidWebhookSignature(req, secret) {
-  if (!secret) return true;
-  const signature = req.headers["x-iiko-signature"] || req.headers["x-webhook-signature"];
-  return signature === secret;
+  const normalizedSecret = String(secret || "").trim();
+  if (!normalizedSecret) return true;
+
+  const normalizeHeaderValues = (value) => {
+    if (!value) return [];
+    if (Array.isArray(value)) {
+      return value.map((item) => String(item || "").trim()).filter(Boolean);
+    }
+    return [String(value || "").trim()].filter(Boolean);
+  };
+
+  const candidates = [
+    ...normalizeHeaderValues(req.headers.authorization),
+    ...normalizeHeaderValues(req.headers["x-iiko-signature"]),
+    ...normalizeHeaderValues(req.headers["x-webhook-signature"]),
+  ];
+
+  return candidates.some((candidate) => {
+    const normalizedCandidate = String(candidate || "").trim();
+    if (!normalizedCandidate) return false;
+    if (normalizedCandidate === normalizedSecret) return true;
+
+    const bearerPrefix = "Bearer ";
+    if (normalizedCandidate.startsWith(bearerPrefix)) {
+      return normalizedCandidate.slice(bearerPrefix.length).trim() === normalizedSecret;
+    }
+
+    return false;
+  });
 }
 
 async function processLocalBonusStatusChange(order, oldStatus, newStatus) {
@@ -68,14 +94,17 @@ router.post("/order-status", async (req, res, next) => {
     }
 
     const payload = req.body || {};
-    const orderInfoPayload = payload?.orderInfo && typeof payload.orderInfo === "object" ? payload.orderInfo : {};
-    const iikoOrderId = payload.order_id || payload.id || orderInfoPayload.id || null;
-    const externalNumber = payload.external_number || payload.externalNumber || orderInfoPayload.externalNumber || null;
+    const eventInfoPayload = payload?.eventInfo && typeof payload.eventInfo === "object" ? payload.eventInfo : {};
+    const orderInfoPayload = payload?.orderInfo && typeof payload.orderInfo === "object" ? payload.orderInfo : eventInfoPayload;
+    const orderPayload = orderInfoPayload?.order && typeof orderInfoPayload.order === "object" ? orderInfoPayload.order : {};
+    const iikoOrderId = payload.order_id || payload.id || orderInfoPayload.id || orderPayload.id || null;
+    const externalNumber =
+      payload.external_number || payload.externalNumber || orderInfoPayload.externalNumber || orderPayload.externalNumber || orderPayload.number || null;
     const iikoStatus =
       payload.status ||
       payload.order_status ||
       orderInfoPayload.status ||
-      (orderInfoPayload.order && orderInfoPayload.order.status) ||
+      orderPayload.status ||
       null;
 
     if (!iikoOrderId || !iikoStatus) {
@@ -175,7 +204,12 @@ router.post("/stoplist", async (req, res, next) => {
     }
 
     const payload = req.body || {};
-    const updates = Array.isArray(payload?.terminalGroupsStopListsUpdates) ? payload.terminalGroupsStopListsUpdates : [];
+    const eventInfoPayload = payload?.eventInfo && typeof payload.eventInfo === "object" ? payload.eventInfo : {};
+    const updates = Array.isArray(payload?.terminalGroupsStopListsUpdates)
+      ? payload.terminalGroupsStopListsUpdates
+      : Array.isArray(eventInfoPayload?.terminalGroupsStopListsUpdates)
+        ? eventInfoPayload.terminalGroupsStopListsUpdates
+        : [];
     const terminalGroupIds = updates
       .map((update) => String(update?.id || update?.terminalGroupId || update?.terminal_group_id || "").trim())
       .filter(Boolean);

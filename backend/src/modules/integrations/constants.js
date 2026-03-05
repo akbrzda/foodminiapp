@@ -27,19 +27,26 @@ export const ORDER_STATUS_MAP_TO_IIKO = {
   pending: "Unconfirmed",
   confirmed: "WaitCooking",
   preparing: "CookingStarted",
-  ready: "CookingCompleted",
+  // Локальный "ready" в iiko ближе всего к ожиданию выдачи/курьера.
+  ready: "Waiting",
   delivering: "OnWay",
   completed: "Delivered",
   cancelled: "Cancelled",
 };
 
-export const IIKO_STATUS_MAP_TO_LOCAL = {
-  Unconfirmed: "pending",
-  WaitCooking: "confirmed",
-  CookingStarted: "preparing",
-  CookingCompleted: "ready",
-  OnWay: "delivering",
-  Delivered: "completed",
-  Closed: "completed",
-  Cancelled: "cancelled",
+const IIKO_STATUSES_GROUPED_BY_LOCAL = {
+  pending: ["Unconfirmed"],
+  confirmed: ["WaitCooking", "ReadyForCooking"],
+  preparing: ["CookingStarted"],
+  ready: ["CookingCompleted", "Waiting"],
+  delivering: ["OnWay"],
+  completed: ["Delivered", "Closed"],
+  cancelled: ["Cancelled"],
 };
+
+export const IIKO_STATUS_MAP_TO_LOCAL = Object.entries(IIKO_STATUSES_GROUPED_BY_LOCAL).reduce((acc, [localStatus, iikoStatuses]) => {
+  for (const iikoStatus of iikoStatuses) {
+    acc[iikoStatus] = localStatus;
+  }
+  return acc;
+}, {});
