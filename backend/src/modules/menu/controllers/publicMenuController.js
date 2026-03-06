@@ -5,6 +5,7 @@ import { getIntegrationSettings } from "../../integrations/services/integrationC
 import { getDynamicUpsell } from "../services/upsellService.js";
 
 const MENU_CACHE_TTL = 300;
+const MENU_CACHE_VERSION = "v2";
 const NEW_BADGE_DAYS = 14;
 const HIT_BADGE_SALES_THRESHOLD = 50;
 
@@ -14,12 +15,11 @@ const buildSourceScope = (integrationSettings) => {
     .toLowerCase();
   const useIikoSource = Boolean(integrationSettings?.iikoEnabled) && menuMode === "external";
 
-  const categoryFilter = useIikoSource
-    ? "AND COALESCE(NULLIF(TRIM(mc.iiko_category_id), ''), NULL) IS NOT NULL"
-    : "AND COALESCE(NULLIF(TRIM(mc.iiko_category_id), ''), NULL) IS NULL";
-  const itemFilter = useIikoSource
-    ? "AND COALESCE(NULLIF(TRIM(mi.iiko_item_id), ''), NULL) IS NOT NULL"
-    : "AND COALESCE(NULLIF(TRIM(mi.iiko_item_id), ''), NULL) IS NULL";
+  // В local-режиме не отсекаем сущности по наличию iiko-id:
+  // после синка iiko локальные позиции сохраняют внешние идентификаторы и
+  // должны оставаться видимыми при отключенной интеграции.
+  const categoryFilter = useIikoSource ? "AND COALESCE(NULLIF(TRIM(mc.iiko_category_id), ''), NULL) IS NOT NULL" : "";
+  const itemFilter = useIikoSource ? "AND COALESCE(NULLIF(TRIM(mi.iiko_item_id), ''), NULL) IS NOT NULL" : "";
 
   return {
     source: useIikoSource ? "iiko" : "local",
@@ -150,7 +150,7 @@ export const getMenu = async (req, res, next) => {
     const cityId = Number(city_id);
     const integration = await getIntegrationSettings();
     const sourceScope = buildSourceScope(integration);
-    const cacheKeyParts = [`menu:city:${city_id}`, `mode:${sourceScope.source}`];
+    const cacheKeyParts = [`menu:${MENU_CACHE_VERSION}:city:${city_id}`, `mode:${sourceScope.source}`];
     if (branch_id) cacheKeyParts.push(`branch:${branch_id}`);
     if (fulfillment_type) cacheKeyParts.push(`fulfillment:${fulfillment_type}`);
     const cacheKey = cacheKeyParts.join(":");

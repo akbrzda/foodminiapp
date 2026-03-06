@@ -232,6 +232,8 @@ export async function getBalanceSummary(userId) {
   return {
     balance: parseFloat(snapshot.loyalty_balance) || 0,
     total_spent_60_days: totalSpent,
+    total_spent_all_time: totalSpent,
+    period_days: LOYALTY_LEVEL_PERIOD_DAYS,
     current_level: currentLevel,
     next_level: nextLevel,
     progress_to_next_level: progress,
@@ -286,6 +288,7 @@ export async function getLevelsSummary(userId) {
     current_level: currentLevel,
     next_level: nextLevel,
     total_spent_60_days: totalSpent,
+    total_spent_all_time: totalSpent,
     progress_to_next_level: progress,
     amount_to_next_level: amount_to_next,
     levels: sortedLevels,
@@ -313,6 +316,7 @@ export async function getAdminUserLoyalty(userId) {
     user,
     stats: {
       total_spent_60_days: Math.floor(totalSpent),
+      total_spent_all_time: Math.floor(totalSpent),
       total_earned: Math.floor(summary.total_earned || 0),
       total_spent: Math.floor(summary.total_spent || 0),
       total_expired: Math.floor(summary.total_expired || 0),
@@ -320,6 +324,7 @@ export async function getAdminUserLoyalty(userId) {
       amount_to_next_level: Math.floor(amount_to_next),
       current_level: currentLevel,
       next_level: nextLevel,
+      period_days: LOYALTY_LEVEL_PERIOD_DAYS,
     },
     transactions,
     level_history: levelHistory,

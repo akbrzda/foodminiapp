@@ -23,10 +23,16 @@ CREATE TABLE `loyalty_levels` (
   `earn_percentage` int NOT NULL,
   `max_spend_percentage` int NOT NULL,
   `is_enabled` tinyint(1) NOT NULL DEFAULT '1',
+  `sort_order` int NOT NULL DEFAULT '0',
+  `pb_group_id` varchar(255) DEFAULT NULL,
+  `pb_group_name` varchar(120) DEFAULT NULL,
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uniq_loyalty_threshold` (`threshold_amount`)
+  UNIQUE KEY `uniq_loyalty_threshold` (`threshold_amount`),
+  UNIQUE KEY `uniq_loyalty_levels_pb_group_id` (`pb_group_id`),
+  KEY `idx_loyalty_levels_sort_order` (`sort_order`),
+  KEY `idx_loyalty_levels_pb_group_name` (`pb_group_name`)
 ) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb3;
 
 
@@ -1103,10 +1109,10 @@ CREATE TABLE `broadcast_queue` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 
-INSERT INTO `loyalty_levels` (`id`, `name`, `threshold_amount`, `earn_percentage`, `max_spend_percentage`, `is_enabled`) VALUES
-(1, 'Бронза', 0.00, 3, 25, 1),
-(2, 'Серебро', 10000.00, 5, 25, 1),
-(3, 'Золото', 20000.00, 7, 25, 1);
+INSERT INTO `loyalty_levels` (`id`, `name`, `threshold_amount`, `earn_percentage`, `max_spend_percentage`, `is_enabled`, `sort_order`, `pb_group_id`, `pb_group_name`) VALUES
+(1, 'Бронза', 0.00, 3, 25, 1, 10, NULL, NULL),
+(2, 'Серебро', 10000.00, 5, 25, 1, 20, NULL, NULL),
+(3, 'Золото', 20000.00, 7, 25, 1, 30, NULL, NULL);
 
 INSERT INTO `order_number_sequence` (`id`, `last_number`) VALUES (1, 0);
 

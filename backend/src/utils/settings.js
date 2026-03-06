@@ -251,6 +251,20 @@ export const SETTINGS_SCHEMA = {
     group: "Интеграции",
     type: "string",
   },
+  premiumbonus_trigger_adjust_earn_event_name: {
+    default: "",
+    label: "PB Trigger Earn Event",
+    description: "Название события PremiumBonus для ручного начисления (admin adjust earn)",
+    group: "Интеграции",
+    type: "string",
+  },
+  premiumbonus_trigger_adjust_spend_event_name: {
+    default: "",
+    label: "PB Trigger Spend Event",
+    description: "Название события PremiumBonus для ручного списания (admin adjust spend)",
+    group: "Интеграции",
+    type: "string",
+  },
   yandex_js_api_key: {
     default: "",
     label: "Yandex JS API Key",

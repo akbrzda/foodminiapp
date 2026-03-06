@@ -38,10 +38,12 @@ export const useLoyaltyStore = defineStore("loyalty", {
       this.totalSpent = normalizeSpend(amount);
       this.updatedAt = Date.now();
     },
-    applyLevels(levelsFromApi = []) {
+    applyLevels(levelsFromApi = [], options = {}) {
       if (!Array.isArray(levelsFromApi) || levelsFromApi.length === 0) {
         this.levels = LOYALTY_LEVELS;
-        this.fallbackRedeemPercent = MAX_BONUS_REDEEM_PERCENT;
+        this.fallbackRedeemPercent = Number.isFinite(Number(options?.fallbackRedeemPercent))
+          ? Number(options.fallbackRedeemPercent)
+          : MAX_BONUS_REDEEM_PERCENT;
         return;
       }
       const normalized = levelsFromApi
@@ -54,9 +56,12 @@ export const useLoyaltyStore = defineStore("loyalty", {
           redeemPercent: Number(level.maxSpendPercent),
         }))
         .sort((a, b) => a.threshold - b.threshold);
+      const externalFallbackRedeemPercent = Number(options?.fallbackRedeemPercent);
       const fallbackRedeemPercent = Number.isFinite(normalized[0]?.redeemPercent)
         ? normalized[0].redeemPercent
-        : MAX_BONUS_REDEEM_PERCENT;
+        : Number.isFinite(externalFallbackRedeemPercent)
+          ? externalFallbackRedeemPercent
+          : MAX_BONUS_REDEEM_PERCENT;
       this.levels = normalized.map((level, index) => {
         const next = normalized[index + 1];
         const min = Math.max(0, level.threshold);
@@ -78,10 +83,16 @@ export const useLoyaltyStore = defineStore("loyalty", {
       this.loading = true;
       try {
         const response = await bonusesAPI.getLevels();
-        const totalSpent = response.data?.total_spent_60_days ?? 0;
+        const totalSpent = response.data?.total_spent_all_time ?? response.data?.total_spent_60_days ?? 0;
         this.setTotalSpent(totalSpent);
-        this.periodDays = response.data?.period_days || 60;
-        this.applyLevels(response.data?.levels || []);
+        if (Object.prototype.hasOwnProperty.call(response.data || {}, "period_days")) {
+          this.periodDays = response.data?.period_days;
+        } else {
+          this.periodDays = 60;
+        }
+        this.applyLevels(response.data?.levels || [], {
+          fallbackRedeemPercent: response.data?.max_spend_percent,
+        });
       } catch (error) {
         devError("Не удалось обновить данные лояльности:", error);
       } finally {

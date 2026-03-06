@@ -16,7 +16,9 @@ export function createLoyaltyRoutes({ clientController, adminController }) {
 
   adminRouter.get("/status", authenticateToken, requireRole("admin", "ceo"), adminController.getStatus);
   adminRouter.put("/toggle", authenticateToken, requireRole("admin", "ceo"), checkPremiumBonusIntegration, adminController.toggle);
-  adminRouter.post("/adjust", authenticateToken, requireRole("admin", "ceo"), checkPremiumBonusIntegration, adminController.adjust);
+  adminRouter.post("/adjust", authenticateToken, requireRole("admin", "ceo"), adminController.adjust);
+  adminRouter.get("/levels", authenticateToken, requireRole("admin", "ceo"), adminController.getLevels);
+  adminRouter.put("/levels", authenticateToken, requireRole("admin", "ceo"), adminController.saveLevels);
   adminRouter.get("/users/:id/loyalty", authenticateToken, requireRole("admin", "manager", "ceo"), adminController.getUserLoyalty);
 
   return { clientRouter, adminRouter };

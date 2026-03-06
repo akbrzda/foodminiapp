@@ -7,6 +7,7 @@ import { telegramQueue, imageQueue, getQueueStats, getFailedJobs, retryFailedJob
 import { getSystemSettings } from "../../utils/settings.js";
 import { logger } from "../../utils/logger.js";
 import { decryptUserData, encryptEmail, encryptPhone } from "../../utils/encryption.js";
+import loyaltyAdapter from "../integrations/adapters/loyaltyAdapter.js";
 const router = express.Router();
 router.use(authenticateToken);
 const ADMIN_LOGIN_ATTEMPTS_PREFIX = "auth:admin:attempts";
@@ -355,6 +356,17 @@ router.get("/clients/:id", requireRole("admin", "manager", "ceo"), async (req, r
     const hasAccess = await ensureManagerClientAccess(req, userId);
     if (!hasAccess) {
       return res.status(403).json({ error: "You do not have access to this user" });
+    }
+    const settings = await getSystemSettings();
+    const loyaltyMode = String(settings?.integration_mode?.loyalty || "local")
+      .trim()
+      .toLowerCase();
+    if (settings.premiumbonus_enabled && loyaltyMode === "external") {
+      try {
+        await loyaltyAdapter.getUserBalance(Number(userId));
+      } catch (error) {
+        // В режиме буфера не блокируем ответ админки при недоступности PB.
+      }
     }
     const [users] = await db.query(
       `SELECT u.id, u.phone, u.first_name, u.last_name, u.email, u.telegram_id, u.loyalty_balance, u.pb_client_id, u.created_at,

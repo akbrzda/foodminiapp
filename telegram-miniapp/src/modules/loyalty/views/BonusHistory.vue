@@ -85,7 +85,10 @@
               <span class="progress-fill" :style="{ width: `${progressPercent}%` }"></span>
             </div>
             <div class="progress-caption" v-if="nextLevel">
-              До обновления статуса — {{ formatPrice(amountToNextLevel) }} ₽ за последние {{ levelCalculationDays }} дней
+              <template v-if="isAllTimeLevelCalculation">
+                До обновления статуса — {{ formatPrice(amountToNextLevel) }} ₽ за всё время
+              </template>
+              <template v-else> До обновления статуса — {{ formatPrice(amountToNextLevel) }} ₽ за последние {{ levelCalculationDays }} дней </template>
             </div>
             <div class="progress-caption" v-else>У вас максимальный статус</div>
           </div>
@@ -127,19 +130,29 @@
               <p>У вас пока нет операций с бонусами</p>
             </div>
             <div class="transactions" v-else>
-              <div v-for="transaction in transactions" :key="transaction.id" class="transaction-item">
+              <div
+                v-for="transaction in transactions"
+                :key="transaction.id"
+                class="transaction-item"
+                :class="{ 'transaction-item--pending': isPendingEarn(transaction) }"
+              >
                 <div class="transaction-icon" :class="getTransactionClass(transaction.type)">
                   <Plus v-if="isEarnType(transaction.type)" :size="20" />
                   <Minus v-else-if="transaction.type === 'spend'" :size="20" />
                   <X v-else :size="20" />
                 </div>
                 <div class="transaction-info">
-                  <div class="transaction-title">{{ getTransactionTitle(transaction) }}</div>
-                  <div class="transaction-date">{{ formatCalendarDateTime(transaction.created_at) }}</div>
-                  <div v-if="isActiveEarn(transaction)" class="transaction-expire">Действует до {{ formatDateShort(transaction.expires_at) }}</div>
+                  <div class="transaction-title" :class="{ 'transaction-text--muted': isPendingEarn(transaction) }">{{ getTransactionTitle(transaction) }}</div>
+                  <div class="transaction-date" :class="{ 'transaction-text--muted': isPendingEarn(transaction) }">
+                    {{ formatCalendarDateTime(transaction.created_at) }}
+                  </div>
+                  <div v-if="isPendingEarn(transaction)" class="transaction-pending">
+                    Активация через {{ getActivationCountdown(transaction) }}
+                  </div>
+                  <div v-else-if="isActiveEarn(transaction)" class="transaction-expire">Действует до {{ formatDateShort(transaction.expires_at) }}</div>
                   <div v-else-if="transaction.expires_at && new Date(transaction.expires_at) < new Date()" class="transaction-expired">Истек</div>
                 </div>
-                <div class="transaction-amount" :class="getTransactionClass(transaction.type)">
+                <div class="transaction-amount" :class="[getTransactionClass(transaction.type), { muted: isPendingEarn(transaction) }]">
                   {{ getTransactionSign(transaction.type) }}{{ formatPrice(Math.abs(transaction.amount)) }} ₽
                 </div>
               </div>
@@ -154,7 +167,7 @@
   </div>
 </template>
 <script setup>
-import { computed, ref, onMounted } from "vue";
+import { computed, ref, onMounted, onBeforeUnmount } from "vue";
 import { X, Plus, Minus, Award, Trophy, AlertTriangle, Info } from "lucide-vue-next";
 import PageHeader from "@/shared/components/PageHeader.vue";
 import { bonusesAPI } from "@/shared/api/endpoints.js";
@@ -168,11 +181,15 @@ const bonusBalance = ref(0);
 const transactions = ref([]);
 const expiringBonuses = ref([]);
 const totalExpiring = ref(0);
+const inactiveBonusAmount = ref(0);
+const inactiveBonusActivationText = ref("");
 const loading = ref(true);
 const loadingMore = ref(false);
 const expiringDaysThreshold = 14;
 const historyPage = ref(1);
 const historyHasMore = ref(false);
+const nowTs = ref(Date.now());
+const timerId = ref(null);
 
 const loyaltyStore = useLoyaltyStore();
 const settingsStore = useSettingsStore();
@@ -187,6 +204,7 @@ const progressPercent = computed(() => Math.round(loyaltyStore.progressToNextLev
 const amountToNextLevel = computed(() => loyaltyStore.amountToNextLevel);
 
 const levelCalculationDays = computed(() => loyaltyStore.periodDays || 60);
+const isAllTimeLevelCalculation = computed(() => !Number.isFinite(Number(loyaltyStore.periodDays)) || Number(loyaltyStore.periodDays) <= 0);
 
 const formattedLevels = computed(() =>
   loyaltyStore.levels.map((level) => ({
@@ -209,7 +227,17 @@ onMounted(async () => {
     loading.value = false;
     return;
   }
+  timerId.value = setInterval(() => {
+    nowTs.value = Date.now();
+  }, 1000);
   await Promise.all([loadData(), loyaltyStore.refreshFromProfile()]);
+});
+
+onBeforeUnmount(() => {
+  if (timerId.value) {
+    clearInterval(timerId.value);
+    timerId.value = null;
+  }
 });
 
 async function loadData() {
@@ -222,7 +250,9 @@ async function loadData() {
     bonusBalance.value = balanceResponse.data.balance || 0;
     expiringBonuses.value = balanceResponse.data.expiring_bonuses || [];
     totalExpiring.value = balanceResponse.data.total_expiring || 0;
-    transactions.value = historyResponse.data.transactions || [];
+    inactiveBonusAmount.value = Math.max(0, Number(balanceResponse.data?.bonus_inactive || 0));
+    inactiveBonusActivationText.value = String(balanceResponse.data?.bonus_next_activation_text || "").trim();
+    transactions.value = markPendingEarnTransactions(sortTransactions(historyResponse.data.transactions || []), inactiveBonusAmount.value);
     historyHasMore.value = Boolean(historyResponse.data.has_more);
   } catch (error) {
     devError("Не удалось загрузить данные бонусов:", error);
@@ -238,7 +268,7 @@ async function loadMoreHistory() {
     const nextPage = historyPage.value + 1;
     const response = await bonusesAPI.getHistory({ page: nextPage, limit: 20 });
     const newItems = response.data.transactions || [];
-    transactions.value = [...transactions.value, ...newItems];
+    transactions.value = markPendingEarnTransactions(sortTransactions([...transactions.value, ...newItems]), inactiveBonusAmount.value);
     historyPage.value = nextPage;
     historyHasMore.value = Boolean(response.data.has_more);
   } catch (error) {
@@ -250,10 +280,50 @@ async function loadMoreHistory() {
 
 const isEarnType = (type) => ["earn", "registration", "birthday", "adjustment"].includes(type);
 
+const isExplicitPendingTransaction = (transaction) => {
+  if (!isEarnType(transaction?.type)) return false;
+  if (String(transaction?.status || "").toLowerCase() === "pending") return true;
+  if (!transaction?.activate_at) return false;
+  const activateAt = new Date(transaction.activate_at).getTime();
+  if (Number.isNaN(activateAt)) return false;
+  return activateAt > nowTs.value;
+};
+
 const isActiveEarn = (transaction) => {
   if (!isEarnType(transaction.type)) return false;
+  if (isPendingEarn(transaction)) return false;
   if (!transaction.expires_at) return false;
   return new Date(transaction.expires_at) > new Date();
+};
+
+const isPendingEarn = (transaction) => {
+  if (!isEarnType(transaction?.type)) return false;
+  if (transaction?._pending === true) return true;
+  if (String(transaction?.status || "").toLowerCase() === "pending") return true;
+  if (!transaction?.activate_at) return false;
+  const activateAt = new Date(transaction.activate_at).getTime();
+  if (Number.isNaN(activateAt)) return false;
+  return activateAt > nowTs.value;
+};
+
+const getActivationCountdown = (transaction) => {
+  const activateAt = new Date(transaction?.activate_at || "").getTime();
+  if (!Number.isFinite(activateAt) || Number.isNaN(activateAt)) {
+    const fallbackText = String(inactiveBonusActivationText.value || "").trim();
+    if (!fallbackText) return "по правилам программы";
+    const marker = "через";
+    const markerIndex = fallbackText.toLowerCase().indexOf(marker);
+    if (markerIndex >= 0) {
+      return fallbackText.slice(markerIndex + marker.length).trim() || fallbackText;
+    }
+    return fallbackText;
+  }
+  const diffMs = Math.max(0, activateAt - nowTs.value);
+  const totalSec = Math.floor(diffMs / 1000);
+  const hours = Math.floor(totalSec / 3600);
+  const minutes = Math.floor((totalSec % 3600) / 60);
+  const seconds = totalSec % 60;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 };
 
 function getTransactionClass(type) {
@@ -291,6 +361,48 @@ function getTransactionTitle(transaction) {
 function formatDateShort(dateString) {
   if (!dateString) return "";
   return formatDateByTz(new Date(dateString), { day: "numeric", month: "short" });
+}
+
+function sortTransactions(list = []) {
+  return [...list].sort((a, b) => {
+    const diff = new Date(b?.created_at || 0).getTime() - new Date(a?.created_at || 0).getTime();
+    if (diff !== 0) return diff;
+    const sameOrder = String(a?.order_id || "") && String(a?.order_id || "") === String(b?.order_id || "");
+    if (sameOrder && a?.type !== b?.type) {
+      if (a?.type === "earn") return -1;
+      if (b?.type === "earn") return 1;
+    }
+    const idDiff = Number(b?.id || 0) - Number(a?.id || 0);
+    if (idDiff !== 0) return idDiff;
+    if (a?.type === b?.type) return 0;
+    if (a?.type === "earn") return -1;
+    if (b?.type === "earn") return 1;
+    return 0;
+  });
+}
+
+function markPendingEarnTransactions(list = [], inactiveAmount = 0) {
+  const base = Array.isArray(list) ? [...list] : [];
+  if (!base.length) return [];
+
+  if (base.some((tx) => isExplicitPendingTransaction(tx))) {
+    return base;
+  }
+
+  let remainingInactive = Math.max(0, Number(inactiveAmount) || 0);
+  if (remainingInactive <= 0) return base;
+
+  return base.map((tx) => {
+    if (!isEarnType(tx?.type) || remainingInactive <= 0) return tx;
+    const amount = Math.max(0, Math.abs(Number(tx?.amount) || 0));
+    if (amount <= 0) return tx;
+
+    remainingInactive = Math.max(0, remainingInactive - amount);
+    return {
+      ...tx,
+      _pending: true,
+    };
+  });
 }
 </script>
 
@@ -710,6 +822,14 @@ function formatDateShort(dateString) {
 .transaction-item:hover {
   border-color: var(--color-border-hover);
 }
+.transaction-item--pending {
+  background: var(--color-background-secondary);
+  border-color: var(--color-border);
+}
+.transaction-item--pending .transaction-icon {
+  background: rgba(158, 158, 158, 0.12) !important;
+  color: var(--color-text-muted) !important;
+}
 .transaction-icon {
   width: 40px;
   height: 40px;
@@ -755,6 +875,14 @@ function formatDateShort(dateString) {
   font-size: var(--font-size-caption);
   color: var(--color-text-secondary);
 }
+.transaction-text--muted {
+  color: var(--color-text-muted);
+}
+.transaction-pending {
+  margin-top: 4px;
+  font-size: var(--font-size-caption);
+  color: var(--color-text-muted);
+}
 .transaction-expire {
   font-size: var(--font-size-caption);
   color: #4caf50;
@@ -789,6 +917,9 @@ function formatDateShort(dateString) {
 
 .transaction-amount.other {
   color: var(--color-text-secondary);
+}
+.transaction-amount.muted {
+  color: var(--color-text-muted);
 }
 .loading,
 .empty {

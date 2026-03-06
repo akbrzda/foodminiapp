@@ -525,6 +525,26 @@
                 />
               </FieldContent>
             </Field>
+            <Field>
+              <FieldLabel>Trigger event (начисление)</FieldLabel>
+              <FieldContent>
+                <Input
+                  v-model="form.premiumbonus_trigger_adjust_earn_event_name"
+                  placeholder="manual_bonus_earn"
+                  autocomplete="off"
+                />
+              </FieldContent>
+            </Field>
+            <Field>
+              <FieldLabel>Trigger event (списание)</FieldLabel>
+              <FieldContent>
+                <Input
+                  v-model="form.premiumbonus_trigger_adjust_spend_event_name"
+                  placeholder="manual_bonus_spend"
+                  autocomplete="off"
+                />
+              </FieldContent>
+            </Field>
           </FieldGroup>
           <div class="flex gap-2">
             <Button variant="secondary" :disabled="testLoading.pb" @click="testPb">
@@ -785,6 +805,8 @@ const form = ref({
   premiumbonus_api_url: "",
   premiumbonus_api_token: "",
   premiumbonus_sale_point_id: "",
+  premiumbonus_trigger_adjust_earn_event_name: "",
+  premiumbonus_trigger_adjust_spend_event_name: "",
   integration_mode: { menu: "local", orders: "local", loyalty: "local" },
 });
 const iikoOverview = ref({
@@ -910,6 +932,8 @@ const applyForm = (settings = {}) => {
     iiko_auto_sync_enabled: settings.iiko_auto_sync_enabled !== false,
     premiumbonus_enabled: Boolean(settings.premiumbonus_enabled),
     premiumbonus_auto_sync_enabled: settings.premiumbonus_auto_sync_enabled !== false,
+    premiumbonus_trigger_adjust_earn_event_name: String(settings.premiumbonus_trigger_adjust_earn_event_name || ""),
+    premiumbonus_trigger_adjust_spend_event_name: String(settings.premiumbonus_trigger_adjust_spend_event_name || ""),
     iiko_sync_category_ids: categories,
     iiko_external_menu_id: String(settings.iiko_external_menu_id || ""),
     iiko_price_category_id: String(settings.iiko_price_category_id || ""),

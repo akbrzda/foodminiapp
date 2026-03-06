@@ -115,7 +115,10 @@ export async function getLoyaltyHistory(userId, limit, offset, { connection = nu
          AND lt.type <> 'spend'
          AND NOT (lt.type = 'earn' AND lt.order_id IS NULL AND lt.status = 'cancelled' AND lt.description IS NULL)
      ) as transactions
-     ORDER BY transactions.created_at DESC
+     ORDER BY
+       transactions.created_at DESC,
+       CASE WHEN transactions.type = 'earn' THEN 0 ELSE 1 END ASC,
+       transactions.id DESC
      LIMIT ? OFFSET ?`,
     [userId, userId, limit, offset],
   );
@@ -129,7 +132,10 @@ export async function getLoyaltyTransactions(userId, limit = 50, { connection = 
      FROM loyalty_transactions lt
      LEFT JOIN orders o ON lt.order_id = o.id
      WHERE lt.user_id = ?
-     ORDER BY lt.created_at DESC
+     ORDER BY
+       lt.created_at DESC,
+       CASE WHEN lt.type = 'earn' THEN 0 ELSE 1 END ASC,
+       lt.id DESC
      LIMIT ?`,
     [userId, limit],
   );

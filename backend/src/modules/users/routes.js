@@ -62,7 +62,7 @@ router.post("/register", async (req, res, next) => {
       }
       if (systemSettings.premiumbonus_enabled) {
         updates.push(`pb_sync_status = '${pbAutoSyncEnabled ? "pending" : "synced"}'`);
-        updates.push("loyalty_mode = 'premiumbonus'");
+        updates.push(`loyalty_mode = '${loyaltyMode}'`);
       }
 
       if (updates.length > 0) {
@@ -317,7 +317,11 @@ router.put("/profile", authenticateToken, async (req, res, next) => {
     const systemSettings = await getSystemSettings();
     if (systemSettings.premiumbonus_enabled) {
       const pbAutoSyncEnabled = systemSettings.premiumbonus_auto_sync_enabled !== false;
-      await db.query("UPDATE users SET pb_sync_status = ?, loyalty_mode = 'premiumbonus' WHERE id = ?", [pbAutoSyncEnabled ? "pending" : "synced", userId]);
+      await db.query("UPDATE users SET pb_sync_status = ?, loyalty_mode = ? WHERE id = ?", [
+        pbAutoSyncEnabled ? "pending" : "synced",
+        "premiumbonus",
+        userId,
+      ]);
       if (pbAutoSyncEnabled) {
         try {
           await processPremiumBonusClientSync(userId, "profile-update");

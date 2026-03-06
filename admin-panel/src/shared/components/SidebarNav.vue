@@ -123,6 +123,7 @@ import {
   MapPinned,
   Megaphone,
   BellRing,
+  Award,
   PlugZap,
   SlidersHorizontal,
   Tag,
@@ -215,6 +216,7 @@ const navSections = computed(() => {
       items: [
         { label: "Настройки системы", to: "/system/settings", icon: SlidersHorizontal },
         { label: "Интеграции", to: "/integrations", icon: PlugZap },
+        { label: "Уровни лояльности", to: "/loyalty-levels", icon: Award },
         { label: "Пользователи", to: "/admin-users", icon: UserCog },
         { label: "Логи", to: "/logs", icon: FileText },
       ],

@@ -122,6 +122,15 @@ export function createPremiumBonusClient({ apiUrl, apiToken, salePointId }) {
       }
     },
 
+    async buyerBonus(payload) {
+      try {
+        const { data } = await requestWithRetry(() => client.post("/buyer-bonus", withSalePoint(payload)), { retries: 1 });
+        return data;
+      } catch (error) {
+        throw normalizeIntegrationError(error, "Ошибка получения бонусных пакетов PremiumBonus");
+      }
+    },
+
     async statusTransitionInfo(payload) {
       try {
         const { data } = await requestWithRetry(() => client.post("/buyer/status-transition-info", withSalePoint(payload)), { retries: 1 });
@@ -137,6 +146,15 @@ export function createPremiumBonusClient({ apiUrl, apiToken, salePointId }) {
         return data;
       } catch (error) {
         throw normalizeIntegrationError(error, "Ошибка активации промокода PremiumBonus");
+      }
+    },
+
+    async trigger(payload) {
+      try {
+        const { data } = await requestWithRetry(() => client.post("/trigger", withSalePoint(payload)), { retries: 1 });
+        return data;
+      } catch (error) {
+        throw normalizeIntegrationError(error, "Ошибка запуска триггера PremiumBonus");
       }
     },
 

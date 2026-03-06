@@ -76,8 +76,8 @@
             <div class="text-base font-semibold text-foreground">{{ loyaltyStats?.current_level?.name || "—" }}</div>
           </div>
           <div class="rounded-xl border border-border/60 bg-background px-4 py-3">
-            <div class="text-xs text-muted-foreground">Сумма за 60 дней</div>
-            <div class="text-base font-semibold text-foreground">{{ formatNumber(loyaltyStats?.total_spent_60_days || 0) }}</div>
+            <div class="text-xs text-muted-foreground">{{ totalSpentLabel }}</div>
+            <div class="text-base font-semibold text-foreground">{{ formatNumber(totalSpentValue) }}</div>
           </div>
           <div class="rounded-xl border border-border/60 bg-background px-4 py-3">
             <div class="text-xs text-muted-foreground">До следующего уровня</div>
@@ -299,6 +299,14 @@ const clientNameForTitle = computed(() => {
   if (!client.value) return "Клиент";
   const parts = [client.value.first_name, client.value.last_name].filter(Boolean).join(" ");
   return parts ? `Клиент: ${parts}` : "Клиент";
+});
+const totalSpentValue = computed(() => loyaltyStats.value?.total_spent_all_time ?? loyaltyStats.value?.total_spent_60_days ?? 0);
+const totalSpentLabel = computed(() => {
+  const periodDays = Number(loyaltyStats.value?.period_days);
+  if (Number.isFinite(periodDays) && periodDays > 0) {
+    return `Сумма за ${periodDays} дней`;
+  }
+  return "Сумма заказов";
 });
 const updateBreadcrumbs = () => {
   const name = [client.value?.first_name, client.value?.last_name].filter(Boolean).join(" ").trim();

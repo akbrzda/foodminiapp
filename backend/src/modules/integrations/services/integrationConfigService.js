@@ -71,6 +71,8 @@ export async function getIntegrationSettings() {
     premiumbonusApiUrl: settings.premiumbonus_api_url || "",
     premiumbonusApiToken: settings.premiumbonus_api_token || "",
     premiumbonusSalePointId: settings.premiumbonus_sale_point_id || "",
+    premiumbonusTriggerAdjustEarnEventName: String(settings.premiumbonus_trigger_adjust_earn_event_name || "").trim(),
+    premiumbonusTriggerAdjustSpendEventName: String(settings.premiumbonus_trigger_adjust_spend_event_name || "").trim(),
     integrationMode: settings.integration_mode || { menu: "local", orders: "local", loyalty: "local" },
   };
 }
