@@ -39,6 +39,7 @@ const resolveDeliveryCost = async (polygonId, amount) => {
 export const calculateOrder = async (req, res, next) => {
   try {
     const { items, bonus_to_use = 0, city_id, polygon_id } = req.body;
+    const normalizedBonusToUse = Math.max(0, Math.floor(Number(bonus_to_use) || 0));
 
     if (!items || !Array.isArray(items) || items.length === 0) {
       throw badRequest("Items are required");
@@ -208,11 +209,11 @@ export const calculateOrder = async (req, res, next) => {
 
     // Валидация бонусов
     let bonusUsed = 0;
-    if (bonus_to_use > 0) {
+    if (normalizedBonusToUse > 0) {
       if (pbExternalLoyalty) {
         const pbCalculation = await loyaltyAdapter.calculateMaxSpend(userId, subtotal, 0, { items: validatedItems });
         const pbMaxUsable = Number(pbCalculation?.max_usable || 0);
-        if (Number(bonus_to_use) > pbMaxUsable) {
+        if (normalizedBonusToUse > pbMaxUsable) {
           return res.status(400).json({ error: `Максимально доступно к списанию по PremiumBonus: ${Math.floor(pbMaxUsable)} бонусов` });
         }
       } else {
@@ -225,7 +226,7 @@ export const calculateOrder = async (req, res, next) => {
         const loyaltyLevelId = userRows[0]?.current_loyalty_level_id || 1;
         const loyaltyLevels = await getLoyaltyLevelsFromDb();
         const maxUsePercent = getRedeemPercentForLevel(loyaltyLevelId, loyaltyLevels);
-        const bonusValidation = await validateBonusUsage(userId, bonus_to_use, subtotal, maxUsePercent);
+        const bonusValidation = await validateBonusUsage(userId, normalizedBonusToUse, subtotal, maxUsePercent);
         if (!bonusValidation.valid) {
           return res.status(400).json({
             error: bonusValidation.error,
@@ -233,7 +234,7 @@ export const calculateOrder = async (req, res, next) => {
         }
       }
 
-      bonusUsed = bonus_to_use;
+      bonusUsed = normalizedBonusToUse;
     }
 
     const total = subtotal - bonusUsed;

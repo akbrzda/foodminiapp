@@ -252,6 +252,26 @@
                   </div>
                 </div>
               </div>
+              <div class="space-y-2">
+                <div class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Скидка бонусов (чек)</div>
+                <div class="grid gap-2 md:grid-cols-2">
+                  <div class="flex items-center rounded-md border border-border/60 px-3 text-sm">Списание бонусов</div>
+                  <Select v-model="form.iiko_bonus_discount_type_id">
+                    <SelectTrigger>
+                      <SelectValue placeholder="Выберите скидку iiko" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">Не сопоставлено</SelectItem>
+                      <SelectItem v-for="discount in iikoDiscountTypes" :key="`iiko-discount-type-${discount.id}`" :value="discount.id">
+                        {{ discount.name }} ({{ discount.mode || "—" }})
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div class="text-xs text-muted-foreground">
+                  Если выбрано — списание бонусов уйдёт в iiko как строка скидки (`discountsInfo`). Если нет — как отдельная оплата `bonus` (fallback).
+                </div>
+              </div>
               <div class="text-xs text-muted-foreground">
                 Выбранные сопоставления сохраняются в настройках интеграции и используются при отправке заказа в iiko.
               </div>
@@ -759,6 +779,7 @@ const form = ref({
   iiko_preserve_local_names: true,
   iiko_order_type_mapping: {},
   iiko_payment_type_mapping: {},
+  iiko_bonus_discount_type_id: "",
   premiumbonus_enabled: false,
   premiumbonus_auto_sync_enabled: true,
   premiumbonus_api_url: "",
@@ -802,6 +823,7 @@ const onboardingLoading = ref(false);
 const currentIikoEnabled = ref(false);
 const iikoOrderTypes = ref([]);
 const iikoPaymentTypes = ref([]);
+const iikoDiscountTypes = ref([]);
 const orderPaymentWarningsList = ref([]);
 
 const LOCAL_ORDER_TYPE_OPTIONS = [
@@ -896,6 +918,7 @@ const applyForm = (settings = {}) => {
     iiko_preserve_local_names: settings.iiko_preserve_local_names !== false,
     iiko_order_type_mapping: normalizeOrderTypeMapping(settings.iiko_order_type_mapping),
     iiko_payment_type_mapping: normalizePaymentTypeMapping(settings.iiko_payment_type_mapping),
+    iiko_bonus_discount_type_id: String(settings.iiko_bonus_discount_type_id || ""),
     integration_mode: settings.integration_mode || { menu: "local", orders: "local", loyalty: "local" },
   };
   currentIikoEnabled.value = Boolean(settings.iiko_enabled);
@@ -1037,11 +1060,13 @@ const loadIikoOrderPaymentOptions = async () => {
     const { data } = await api.get("/api/admin/integrations/iiko/order-payment-options");
     iikoOrderTypes.value = Array.isArray(data?.orderTypes) ? data.orderTypes : [];
     iikoPaymentTypes.value = Array.isArray(data?.paymentTypes) ? data.paymentTypes : [];
+    iikoDiscountTypes.value = Array.isArray(data?.discountTypes) ? data.discountTypes : [];
     orderPaymentWarningsList.value = Object.values(data?.warnings || {})
       .filter(Boolean)
       .map((value) => String(value));
   } catch (error) {
     orderPaymentWarningsList.value = [];
+    iikoDiscountTypes.value = [];
     showErrorNotification(error?.response?.data?.error || "Не удалось загрузить типы заказа и оплаты iiko");
   } finally {
     orderPaymentOptionsLoading.value = false;

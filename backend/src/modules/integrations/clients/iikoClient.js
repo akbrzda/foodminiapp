@@ -208,6 +208,27 @@ export function createIikoClient({ apiUrl, apiLogin, apiKey, organizationId }) {
     if (Array.isArray(payload.items)) return payload.items;
     return [];
   };
+  const extractDiscountTypes = (payload) => {
+    if (!payload || typeof payload !== "object") return [];
+    if (Array.isArray(payload.discounts)) {
+      const result = [];
+      for (const row of payload.discounts) {
+        if (!row || typeof row !== "object") continue;
+        const organizationIdValue = row.organizationId || row.organization_id || null;
+        const items = Array.isArray(row.items) ? row.items : [];
+        for (const item of items) {
+          if (!item || typeof item !== "object") continue;
+          result.push({
+            ...item,
+            organizationId: item.organizationId || item.organization_id || organizationIdValue,
+          });
+        }
+      }
+      return result;
+    }
+    if (Array.isArray(payload.items)) return payload.items;
+    return [];
+  };
 
   const normalizeOrganizationId = (org) => org?.id || org?.organizationId || org?.organization_id || null;
 
@@ -665,6 +686,31 @@ export function createIikoClient({ apiUrl, apiLogin, apiKey, organizationId }) {
         return extractPaymentTypes(data);
       } catch (error) {
         throw normalizeIntegrationError(error, "Ошибка получения типов оплаты iiko");
+      }
+    },
+
+    async getDiscountTypes(payload = {}) {
+      try {
+        const useConfiguredOrganization = payload?.useConfiguredOrganization !== false;
+        const organizationIds =
+          Array.isArray(payload?.organizationIds) && payload.organizationIds.length > 0
+            ? payload.organizationIds
+            : await getOrganizationIds({ useConfiguredOrganization });
+        if (!organizationIds.length) {
+          throw new Error("Не найдено доступных организаций iiko");
+        }
+        const { data } = await requestWithRetry(
+          () =>
+            withAuthorizedRequest((client) =>
+              client.post("/api/1/discounts", {
+                organizationIds,
+              }),
+            ),
+          { retries: 2, baseDelayMs: 1200 },
+        );
+        return extractDiscountTypes(data);
+      } catch (error) {
+        throw normalizeIntegrationError(error, "Ошибка получения типов скидок iiko");
       }
     },
 

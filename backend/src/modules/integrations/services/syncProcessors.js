@@ -52,15 +52,22 @@ function normalizePhoneForPremiumBonus(value) {
   return digits;
 }
 
+function normalizeBonusAmount(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return 0;
+  if (parsed < 0) return Math.ceil(parsed);
+  return Math.floor(parsed);
+}
+
 function parsePbBalance(info) {
   if (!info || typeof info !== "object") return 0;
   const direct = Number(info.balance);
-  if (Number.isFinite(direct)) return direct;
+  if (Number.isFinite(direct)) return normalizeBonusAmount(direct);
   const accumulated = Number(info.balance_bonus_accumulated || 0);
   const present = Number(info.balance_bonus_present || 0);
   const action = Number(info.balance_bonus_action || 0);
   const total = accumulated + present + action;
-  return Number.isFinite(total) ? total : 0;
+  return Number.isFinite(total) ? normalizeBonusAmount(total) : 0;
 }
 
 function mapOrderStatusToPremiumBonusStatus(status) {
@@ -73,8 +80,8 @@ function mapOrderStatusToPremiumBonusStatus(status) {
   return "not_approved";
 }
 
-function mapOrderItemsToPremiumBonusPurchaseItems(items = []) {
-  return (Array.isArray(items) ? items : [])
+function mapOrderItemsToPremiumBonusPurchaseItems(items = [], options = {}) {
+  const mappedItems = (Array.isArray(items) ? items : [])
     .map((item) => {
       const quantity = Number(item?.quantity) || 0;
       const unitPrice = Number(item?.item_price) || 0;
@@ -91,6 +98,26 @@ function mapOrderItemsToPremiumBonusPurchaseItems(items = []) {
       };
     })
     .filter(Boolean);
+
+  const deliveryCost = Number(options?.deliveryCost || 0);
+  if (Number.isFinite(deliveryCost) && deliveryCost > 0) {
+    mappedItems.push({
+      name: "Доставка",
+      external_item_id: String(options?.deliveryExternalId || "delivery").trim(),
+      amount: Number(deliveryCost.toFixed(2)),
+      quantity: 1,
+      type: "product",
+    });
+  }
+
+  return mappedItems;
+}
+
+function assertPremiumBonusSuccess(response, fallbackMessage) {
+  if (response?.success === false) {
+    const errorDescription = String(response?.error_description || response?.error || "").trim();
+    throw new Error(errorDescription || fallbackMessage);
+  }
 }
 
 async function resolvePbGroupForLocalLevel(client, localLevelPercent) {
@@ -371,6 +398,22 @@ function resolveOrderTypePayload(orderType, settings) {
   };
 }
 
+function resolveCommentWithCashChange(order) {
+  const baseComment = String(order?.comment || "").trim();
+  const paymentMethod = String(order?.payment_method || "")
+    .trim()
+    .toLowerCase();
+  if (paymentMethod !== "cash") {
+    return baseComment || null;
+  }
+
+  const changeFrom = Number(order?.change_from);
+  const cashLine = Number.isFinite(changeFrom) && changeFrom > 0 ? `Сдача с: ${changeFrom}` : "Без сдачи";
+
+  if (!baseComment) return cashLine;
+  return `${baseComment}\n${cashLine}`;
+}
+
 function resolvePaymentPayload(order, settings, terminalGroupId) {
   const localPaymentMethod = String(order?.payment_method || "").trim().toLowerCase();
   const mapping = settings?.iikoPaymentTypeMapping?.[localPaymentMethod] || {};
@@ -398,12 +441,69 @@ function resolvePaymentPayload(order, settings, terminalGroupId) {
     throw new Error("Тип оплаты iiko поддерживает только внутреннюю обработку, external-флаг недопустим");
   }
 
-  return [
+  const payments = [
     {
       paymentTypeKind,
       paymentTypeId,
       sum,
       isProcessedExternally,
+    },
+  ];
+
+  // Отдельная передача списанных бонусов в iiko через дополнительный тип оплаты "bonus".
+  // Используется как fallback, если не настроена скидка iikoBonusDiscountTypeId.
+  const hasBonusDiscountType = String(settings?.iikoBonusDiscountTypeId || "").trim().length > 0;
+  const bonusSpent = Number(order?.bonus_spent);
+  const normalizedBonusSpent = Number.isFinite(bonusSpent) ? Number(bonusSpent.toFixed(2)) : 0;
+  if (normalizedBonusSpent > 0 && !hasBonusDiscountType) {
+    const bonusMapping = settings?.iikoPaymentTypeMapping?.bonus || {};
+    const bonusPaymentTypeId = String(bonusMapping.paymentTypeId || "").trim();
+    if (bonusPaymentTypeId) {
+      const bonusPaymentTypeKind = String(bonusMapping.paymentTypeKind || "").trim() || "Card";
+      const bonusProcessingType = String(bonusMapping.paymentProcessingType || "").trim().toLowerCase();
+      const bonusMappedTerminalGroups = Array.isArray(bonusMapping.terminalGroupIds) ? bonusMapping.terminalGroupIds : [];
+
+      if (bonusMappedTerminalGroups.length > 0 && terminalGroupId && !bonusMappedTerminalGroups.includes(terminalGroupId)) {
+        throw new Error("Бонусный тип оплаты iiko недоступен для terminal group филиала");
+      }
+
+      let bonusIsProcessedExternally = bonusMapping.isProcessedExternally === true;
+      if (bonusProcessingType === "external" && !bonusIsProcessedExternally) {
+        bonusIsProcessedExternally = true;
+      }
+      if (bonusProcessingType === "internal" && bonusIsProcessedExternally) {
+        throw new Error("Бонусный тип оплаты iiko поддерживает только внутреннюю обработку, external-флаг недопустим");
+      }
+
+      payments.push({
+        paymentTypeKind: bonusPaymentTypeKind,
+        paymentTypeId: bonusPaymentTypeId,
+        sum: normalizedBonusSpent,
+        isProcessedExternally: bonusIsProcessedExternally,
+      });
+    }
+  }
+
+  return payments;
+}
+
+function resolveDiscountsInfoPayload(order, settings) {
+  const discountTypeId = String(settings?.iikoBonusDiscountTypeId || "").trim();
+  if (!discountTypeId) return null;
+
+  const bonusSpent = Number(order?.bonus_spent);
+  const normalizedBonusSpent = Number.isFinite(bonusSpent) ? Number(bonusSpent.toFixed(2)) : 0;
+  if (normalizedBonusSpent <= 0) return null;
+
+  return [
+    {
+      discounts: [
+        {
+          discountTypeId,
+          sum: normalizedBonusSpent,
+          type: "RMS",
+        },
+      ],
     },
   ];
 }
@@ -413,7 +513,6 @@ async function isOrderPresentInIiko(client, organizationId, iikoOrderId) {
   const response = await client.getOrderStatus({
     organizationId,
     orderIds: [iikoOrderId],
-    sourceKeys: ["foodminiapp"],
   });
   const orders = Array.isArray(response?.orders) ? response.orders : [];
   return orders.some((row) => String(row?.id || "").trim() === String(iikoOrderId).trim());
@@ -580,6 +679,7 @@ export async function processIikoOrderSync(orderId, source = "queue") {
 
     const resolvedOrderTypePayload = resolveOrderTypePayload(order.order_type, integrationSettings);
     const resolvedPayments = resolvePaymentPayload(order, integrationSettings, resolvedTerminalGroupId);
+    const resolvedDiscountsInfo = resolveDiscountsInfoPayload(order, integrationSettings);
     const deliveryPoint = resolveDeliveryPoint(order);
     if (String(order.order_type || "").trim().toLowerCase() === "delivery" && !deliveryPoint) {
       throw new Error("Невозможно синхронизировать заказ в iiko: отсутствует корректный deliveryPoint для доставки");
@@ -595,10 +695,11 @@ export async function processIikoOrderSync(orderId, source = "queue") {
         ...resolvedOrderTypePayload,
         ...(completeBefore ? { completeBefore } : {}),
         ...(deliveryPoint ? { deliveryPoint } : {}),
-        comment: order.comment || null,
+        comment: resolveCommentWithCashChange(order),
         sourceKey: "foodminiapp",
         items: iikoItems,
         ...(resolvedPayments ? { payments: resolvedPayments } : {}),
+        ...(resolvedDiscountsInfo ? { discountsInfo: resolvedDiscountsInfo } : {}),
       },
     };
 
@@ -877,7 +978,8 @@ export async function processPremiumBonusPurchaseSync(orderId, action = "create"
   }
 
   try {
-    const customerIdentificator = user.pb_client_id || normalizePhoneForPremiumBonus(user.phone);
+    const normalizedPhone = normalizePhoneForPremiumBonus(user.phone);
+    const customerIdentificator = normalizedPhone || user.pb_client_id;
     if (!customerIdentificator) {
       throw new Error("У пользователя заказа отсутствует идентификатор для PremiumBonus");
     }
@@ -885,27 +987,41 @@ export async function processPremiumBonusPurchaseSync(orderId, action = "create"
     const payloadBase = {
       external_purchase_id: String(order.id),
       identificator: customerIdentificator,
-      write_off_bonus: Number(order.bonus_spent || 0),
-      items: mapOrderItemsToPremiumBonusPurchaseItems(items),
+      phone: normalizedPhone || undefined,
+      write_off_bonus: normalizeBonusAmount(order.bonus_spent),
+      items: mapOrderItemsToPremiumBonusPurchaseItems(items, { deliveryCost: Number(order.delivery_cost || 0) }),
       purchase_status: mapOrderStatusToPremiumBonusStatus(order.status),
     };
     if (payloadBase.items.length === 0) {
       throw new Error("Невозможно синхронизировать покупку PremiumBonus: пустой состав заказа");
     }
+    let requestPayload = payloadBase;
 
     if (action === "create") {
       response = await client.createPurchase(payloadBase);
+      assertPremiumBonusSuccess(response, "PremiumBonus вернул ошибку при создании покупки");
     } else if (action === "status") {
-      response = await client.changePurchaseStatus({
+      requestPayload = {
         purchase_id: order.pb_purchase_id || undefined,
         external_purchase_id: String(order.id),
         purchase_status: mapOrderStatusToPremiumBonusStatus(order.status),
-      });
+      };
+      try {
+        response = await client.changePurchaseStatus(requestPayload);
+        assertPremiumBonusSuccess(response, "PremiumBonus вернул ошибку при обновлении статуса покупки");
+      } catch (statusError) {
+        // Fallback: некоторые конфигурации PB не проводят change-status без карты.
+        response = await client.createPurchase(payloadBase);
+        assertPremiumBonusSuccess(response, "PremiumBonus вернул ошибку при fallback-создании покупки");
+        requestPayload = payloadBase;
+      }
     } else if (action === "cancel") {
-      response = await client.cancelPurchase({
+      requestPayload = {
         purchase_id: order.pb_purchase_id || undefined,
         external_purchase_id: String(order.id),
-      });
+      };
+      response = await client.cancelPurchase(requestPayload);
+      assertPremiumBonusSuccess(response, "PremiumBonus вернул ошибку при отмене покупки");
     } else {
       throw new Error("Неизвестное действие синхронизации покупки");
     }
@@ -924,7 +1040,7 @@ export async function processPremiumBonusPurchaseSync(orderId, action = "create"
       status: "success",
       entityType: "order",
       entityId: orderId,
-      requestData: payloadBase,
+      requestData: requestPayload,
       responseData: response,
       attempts: nextAttempts,
       durationMs: Date.now() - startedAt,
@@ -1900,7 +2016,18 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
            JOIN menu_items mi ON mi.id = mic.item_id
            SET mic.is_active = CASE WHEN mi.is_active = 1 THEN mic.is_active ELSE 0 END`,
         );
+
       }
+
+      // Удаляем связи позиций с деактивированными iiko-категориями,
+      // чтобы в админке не оставалось "разброса" товаров по архивным дублям.
+      await connection.query(
+        `DELETE mic
+         FROM menu_item_categories mic
+         JOIN menu_categories mc ON mc.id = mic.category_id
+         WHERE mc.is_active = 0
+           AND COALESCE(NULLIF(TRIM(mc.iiko_category_id), ''), NULL) IS NOT NULL`,
+      );
 
       await connection.commit();
 
@@ -2546,7 +2673,6 @@ export async function reconcileIikoOrderStatuses({ limit = 100 } = {}) {
       payload = await client.getOrderStatus({
         organizationId,
         orderIds,
-        sourceKeys: ["foodminiapp"],
       });
     } catch (error) {
       await logIntegrationEvent({
@@ -2579,7 +2705,7 @@ export async function reconcileIikoOrderStatuses({ limit = 100 } = {}) {
       const iikoStatus = statusByIikoOrderId.get(localIikoOrderId);
       if (!iikoStatus) continue;
 
-      const mappedStatus = IIKO_STATUS_MAP_TO_LOCAL[iikoStatus] || null;
+      const mappedStatus = IIKO_STATUS_MAP_TO_LOCAL[iikoStatus] || IIKO_STATUS_MAP_TO_LOCAL[String(iikoStatus).toLowerCase()] || null;
       if (!mappedStatus || mappedStatus === localOrder.status) continue;
 
       await db.query("UPDATE orders SET status = ?, iiko_sync_status = ?, iiko_sync_error = NULL, iiko_last_sync_at = NOW() WHERE id = ?", [
@@ -2587,7 +2713,9 @@ export async function reconcileIikoOrderStatuses({ limit = 100 } = {}) {
         SYNC_STATUS.SYNCED,
         localOrder.id,
       ]);
-      await db.query("UPDATE orders SET pb_sync_status = 'pending', pb_sync_error = NULL, pb_last_sync_at = NOW() WHERE id = ?", [localOrder.id]);
+      await db.query("UPDATE orders SET pb_sync_status = 'pending', pb_sync_error = NULL, pb_sync_attempts = 0, pb_last_sync_at = NOW() WHERE id = ?", [
+        localOrder.id,
+      ]);
       updated += 1;
 
       await logIntegrationEvent({

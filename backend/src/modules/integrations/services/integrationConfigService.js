@@ -64,6 +64,7 @@ export async function getIntegrationSettings() {
     iikoPreserveLocalNames: settings.iiko_preserve_local_names !== false,
     iikoOrderTypeMapping: normalizeOrderTypeMapping(settings.iiko_order_type_mapping),
     iikoPaymentTypeMapping: normalizePaymentTypeMapping(settings.iiko_payment_type_mapping),
+    iikoBonusDiscountTypeId: String(settings.iiko_bonus_discount_type_id || "").trim(),
     iikoWebhookSecret: settings.iiko_webhook_secret || "",
     premiumbonusEnabled: Boolean(settings.premiumbonus_enabled),
     premiumbonusAutoSyncEnabled: settings.premiumbonus_auto_sync_enabled !== false,

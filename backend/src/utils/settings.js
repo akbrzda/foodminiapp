@@ -202,6 +202,13 @@ export const SETTINGS_SCHEMA = {
     group: "Интеграции",
     type: "json",
   },
+  iiko_bonus_discount_type_id: {
+    default: "",
+    label: "iiko Bonus Discount Type ID",
+    description: "ID типа скидки iiko для списания бонусов (order.discountsInfo)",
+    group: "Интеграции",
+    type: "string",
+  },
   iiko_webhook_secret: {
     default: "",
     label: "iiko Webhook Secret",

@@ -670,7 +670,7 @@ export const updateOrderStatus = async (req, res, next, forcedStatus = null) => 
       settings.premiumbonus_enabled && settings.premiumbonus_auto_sync_enabled !== false && settings?.integration_mode?.loyalty === "external";
     if (pbPurchasesExternal && oldStatus !== status) {
       await db.query(
-        "UPDATE orders SET pb_sync_status = 'pending', pb_sync_error = NULL, pb_last_sync_at = NOW() WHERE id = ?",
+        "UPDATE orders SET pb_sync_status = 'pending', pb_sync_error = NULL, pb_sync_attempts = 0, pb_last_sync_at = NOW() WHERE id = ?",
         [orderId],
       );
       const hasPbPurchaseId = String(updatedOrders[0]?.pb_purchase_id || "").trim().length > 0;

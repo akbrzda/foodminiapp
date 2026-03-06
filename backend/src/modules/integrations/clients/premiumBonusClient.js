@@ -95,6 +95,15 @@ export function createPremiumBonusClient({ apiUrl, apiToken, salePointId }) {
       }
     },
 
+    async setPurchaseExternalId(payload) {
+      try {
+        const { data } = await requestWithRetry(() => client.post("/purchase-set-external-id", withSalePoint(payload)), { retries: 2 });
+        return data;
+      } catch (error) {
+        throw normalizeIntegrationError(error, "Ошибка обновления external_purchase_id в PremiumBonus");
+      }
+    },
+
     async cancelPurchase(payload) {
       try {
         const { data } = await requestWithRetry(() => client.post("/cancel-purchase", withSalePoint(payload)), { retries: 2 });
@@ -110,6 +119,15 @@ export function createPremiumBonusClient({ apiUrl, apiToken, salePointId }) {
         return data;
       } catch (error) {
         throw normalizeIntegrationError(error, "Ошибка получения групп PremiumBonus");
+      }
+    },
+
+    async statusTransitionInfo(payload) {
+      try {
+        const { data } = await requestWithRetry(() => client.post("/buyer/status-transition-info", withSalePoint(payload)), { retries: 1 });
+        return data;
+      } catch (error) {
+        throw normalizeIntegrationError(error, "Ошибка получения переходов статусов PremiumBonus");
       }
     },
 

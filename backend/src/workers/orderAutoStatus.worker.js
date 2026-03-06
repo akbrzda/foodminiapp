@@ -3,6 +3,7 @@ import { earnBonuses, cancelOrderBonuses, getLoyaltyLevelsFromDb } from "../modu
 import { getSystemSettings } from "../utils/settings.js";
 import { logger } from "../utils/logger.js";
 import { addTelegramNotification } from "../queues/config.js";
+import ordersAdapter from "../modules/integrations/adapters/ordersAdapter.js";
 
 const AUTO_STATUS_INTERVAL_MS = 60 * 1000;
 const PROCESS_WINDOW_MINUTES = 5;
@@ -103,6 +104,27 @@ async function updateOrderStatus(order, localDate) {
   }
   await logger.order.statusChanged(order.id, order.status, newStatus, "system");
   await notifyStatusChange(order.id, order.user_id, order.status, newStatus, order.order_type, order.order_number, order.branch_id, order.city_id);
+
+  const settings = await getSystemSettings();
+  const pbPurchasesExternal =
+    settings.premiumbonus_enabled && settings.premiumbonus_auto_sync_enabled !== false && settings?.integration_mode?.loyalty === "external";
+  if (pbPurchasesExternal && order.status !== newStatus) {
+    await db.query("UPDATE orders SET pb_sync_status = 'pending', pb_sync_error = NULL, pb_sync_attempts = 0, pb_last_sync_at = NOW() WHERE id = ?", [
+      order.id,
+    ]);
+    const [currentRows] = await db.query("SELECT pb_purchase_id FROM orders WHERE id = ? LIMIT 1", [order.id]);
+    const hasPbPurchaseId = String(currentRows[0]?.pb_purchase_id || "").trim().length > 0;
+    const pbAction = newStatus === "cancelled" ? (hasPbPurchaseId ? "cancel" : "create") : hasPbPurchaseId ? "status" : "create";
+    try {
+      await ordersAdapter.enqueuePurchaseSync(order.id, pbAction, { source: "auto-status-worker" });
+    } catch (syncError) {
+      logger.error("Ошибка постановки PB-синхронизации из auto-status worker", {
+        orderId: order.id,
+        action: pbAction,
+        error: syncError?.message || String(syncError),
+      });
+    }
+  }
 }
 
 async function processOffset(offsetMinutes, nowUtc) {

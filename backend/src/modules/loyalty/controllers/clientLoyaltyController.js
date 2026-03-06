@@ -11,6 +11,13 @@ const normalizePhoneForPremiumBonus = (value) => {
   return digits;
 };
 
+const normalizeBonusAmount = (value) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return 0;
+  if (parsed < 0) return Math.ceil(parsed);
+  return Math.floor(parsed);
+};
+
 const ensureBonusesEnabled = async (res) => {
   const settings = await getSystemSettings();
   const loyaltyEnabled = Boolean(settings.bonuses_enabled) || Boolean(settings.premiumbonus_enabled);
@@ -72,7 +79,7 @@ export function createClientLoyaltyController({ loyaltyService }) {
         if (!(await ensureBonusesEnabled(res))) return;
         const settings = await getSystemSettings();
         const data = settings.premiumbonus_enabled
-          ? await loyaltyAdapter.getUserBalance(req.user.id)
+          ? await loyaltyAdapter.getLevelsSummary(req.user.id)
           : await loyaltyService.getLevelsSummary(req.user.id);
         res.json(data);
       } catch (error) {
@@ -124,11 +131,11 @@ export function createClientLoyaltyController({ loyaltyService }) {
         }
 
         const purchaseAmount = Number(req.body?.purchase_amount);
-        const writeOffBonus = Number(req.body?.write_off_bonus);
+        const writeOffBonus = normalizeBonusAmount(req.body?.write_off_bonus);
         if (!Number.isFinite(purchaseAmount) || purchaseAmount <= 0) {
           return res.status(400).json({ error: "purchase_amount должен быть больше 0" });
         }
-        if (!Number.isFinite(writeOffBonus) || writeOffBonus <= 0) {
+        if (writeOffBonus <= 0) {
           return res.status(400).json({ error: "write_off_bonus должен быть больше 0" });
         }
 
@@ -146,7 +153,7 @@ export function createClientLoyaltyController({ loyaltyService }) {
         const result = await client.sendWriteOffConfirmationCode({
           phone: normalizedPhone,
           purchase_amount: Number(purchaseAmount.toFixed(2)),
-          write_off_bonus: Number(writeOffBonus.toFixed(2)),
+          write_off_bonus: writeOffBonus,
         });
         return res.json(result);
       } catch (error) {

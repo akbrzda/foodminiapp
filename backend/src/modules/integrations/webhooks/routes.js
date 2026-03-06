@@ -32,6 +32,7 @@ function isValidWebhookSignature(req, secret) {
     ...normalizeHeaderValues(req.headers.authorization),
     ...normalizeHeaderValues(req.headers["x-iiko-signature"]),
     ...normalizeHeaderValues(req.headers["x-webhook-signature"]),
+    ...normalizeHeaderValues(req.headers["x-api-key"]),
   ];
 
   return candidates.some((candidate) => {
@@ -122,7 +123,7 @@ async function processOrderStatusWebhookPayload(payload = {}) {
     return { ok: false, statusCode: 400, error: "order_id и status обязательны" };
   }
 
-  const mappedStatus = IIKO_STATUS_MAP_TO_LOCAL[iikoStatus] || null;
+  const mappedStatus = IIKO_STATUS_MAP_TO_LOCAL[iikoStatus] || IIKO_STATUS_MAP_TO_LOCAL[String(iikoStatus).toLowerCase()] || null;
   let orders = [];
   if (iikoOrderId) {
     const [rows] = await db.query(
@@ -170,7 +171,7 @@ async function processOrderStatusWebhookPayload(payload = {}) {
     const oldStatus = order.status;
     await db.query("UPDATE orders SET status = ?, iiko_sync_status = ?, updated_at = NOW() WHERE id = ?", [mappedStatus, SYNC_STATUS.SYNCED, order.id]);
     await db.query(
-      "UPDATE orders SET pb_sync_status = 'pending', pb_sync_error = NULL, pb_last_sync_at = NOW() WHERE id = ?",
+      "UPDATE orders SET pb_sync_status = 'pending', pb_sync_error = NULL, pb_sync_attempts = 0, pb_last_sync_at = NOW() WHERE id = ?",
       [order.id],
     );
     try {
@@ -313,6 +314,22 @@ router.post("/event", async (req, res, next) => {
     }
 
     if (!isValidWebhookSignature(req, settings.iikoWebhookSecret)) {
+      await logIntegrationEvent({
+        integrationType: INTEGRATION_TYPE.IIKO,
+        module: INTEGRATION_MODULE.ORDERS,
+        action: "webhook_signature_rejected",
+        status: "failed",
+        errorMessage: "Неверная подпись webhook",
+        requestData: {
+          path: "/event",
+          headers: {
+            authorization: req.headers.authorization || null,
+            x_iiko_signature: req.headers["x-iiko-signature"] || null,
+            x_webhook_signature: req.headers["x-webhook-signature"] || null,
+            x_api_key: req.headers["x-api-key"] || null,
+          },
+        },
+      });
       return res.status(401).json({ error: "Неверная подпись webhook" });
     }
 
@@ -363,6 +380,22 @@ router.post("/order-status", async (req, res, next) => {
     }
 
     if (!isValidWebhookSignature(req, settings.iikoWebhookSecret)) {
+      await logIntegrationEvent({
+        integrationType: INTEGRATION_TYPE.IIKO,
+        module: INTEGRATION_MODULE.ORDERS,
+        action: "webhook_signature_rejected",
+        status: "failed",
+        errorMessage: "Неверная подпись webhook",
+        requestData: {
+          path: "/order-status",
+          headers: {
+            authorization: req.headers.authorization || null,
+            x_iiko_signature: req.headers["x-iiko-signature"] || null,
+            x_webhook_signature: req.headers["x-webhook-signature"] || null,
+            x_api_key: req.headers["x-api-key"] || null,
+          },
+        },
+      });
       return res.status(401).json({ error: "Неверная подпись webhook" });
     }
     const result = await processOrderStatusWebhookPayload(req.body || {});
@@ -383,6 +416,22 @@ router.post("/stoplist", async (req, res, next) => {
     }
 
     if (!isValidWebhookSignature(req, settings.iikoWebhookSecret)) {
+      await logIntegrationEvent({
+        integrationType: INTEGRATION_TYPE.IIKO,
+        module: INTEGRATION_MODULE.STOPLIST,
+        action: "webhook_signature_rejected",
+        status: "failed",
+        errorMessage: "Неверная подпись webhook",
+        requestData: {
+          path: "/stoplist",
+          headers: {
+            authorization: req.headers.authorization || null,
+            x_iiko_signature: req.headers["x-iiko-signature"] || null,
+            x_webhook_signature: req.headers["x-webhook-signature"] || null,
+            x_api_key: req.headers["x-api-key"] || null,
+          },
+        },
+      });
       return res.status(401).json({ error: "Неверная подпись webhook" });
     }
     const result = await processStopListWebhookPayload(req.body || {});

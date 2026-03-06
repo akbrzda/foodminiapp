@@ -47,6 +47,7 @@ const IIKO_STATUSES_GROUPED_BY_LOCAL = {
 export const IIKO_STATUS_MAP_TO_LOCAL = Object.entries(IIKO_STATUSES_GROUPED_BY_LOCAL).reduce((acc, [localStatus, iikoStatuses]) => {
   for (const iikoStatus of iikoStatuses) {
     acc[iikoStatus] = localStatus;
+    acc[String(iikoStatus).toLowerCase()] = localStatus;
   }
   return acc;
 }, {});

@@ -225,6 +225,7 @@ export async function getIikoOrderPaymentMappingOptions() {
   const warnings = {};
   let orderTypesRaw = [];
   let paymentTypesRaw = [];
+  let discountTypesRaw = [];
 
   try {
     orderTypesRaw = await client.getOrderTypes({ useConfiguredOrganization: false });
@@ -236,6 +237,12 @@ export async function getIikoOrderPaymentMappingOptions() {
     paymentTypesRaw = await client.getPaymentTypes({ useConfiguredOrganization: false });
   } catch (error) {
     warnings.paymentTypes = error?.message || "Не удалось получить способы оплаты iiko";
+  }
+
+  try {
+    discountTypesRaw = await client.getDiscountTypes({ useConfiguredOrganization: false });
+  } catch (error) {
+    warnings.discountTypes = error?.message || "Не удалось получить скидки iiko";
   }
 
   const orderTypesById = new Map();
@@ -295,12 +302,41 @@ export async function getIikoOrderPaymentMappingOptions() {
   }
   const paymentTypes = Array.from(paymentTypesById.values()).sort((a, b) => a.name.localeCompare(b.name, "ru"));
 
+  const discountTypesById = new Map();
+  for (const row of Array.isArray(discountTypesRaw) ? discountTypesRaw : []) {
+    const mapped = {
+      id: String(row?.id || "").trim(),
+      name: normalizeDisplayName(row?.name || row?.caption || row?.title, "Скидка"),
+      mode: String(row?.mode || "").trim(),
+      organization_id: String(row?.organizationId || row?.organization_id || "").trim() || null,
+      is_deleted: row?.isDeleted === true || row?.deleted === true,
+      is_manual: row?.isManual === true,
+      is_card: row?.isCard === true,
+      is_automatic: row?.isAutomatic === true,
+    };
+    if (!mapped.id || mapped.is_deleted) continue;
+    if (!discountTypesById.has(mapped.id)) {
+      discountTypesById.set(mapped.id, {
+        ...mapped,
+        organization_ids: mapped.organization_id ? [mapped.organization_id] : [],
+      });
+      continue;
+    }
+    const current = discountTypesById.get(mapped.id);
+    if (mapped.organization_id && !current.organization_ids.includes(mapped.organization_id)) {
+      current.organization_ids.push(mapped.organization_id);
+    }
+  }
+  const discountTypes = Array.from(discountTypesById.values()).sort((a, b) => a.name.localeCompare(b.name, "ru"));
+
   return {
     orderTypes,
     paymentTypes,
+    discountTypes,
     mappings: {
       order_types: orderTypeMapping,
       payment_methods: paymentTypeMapping,
+      bonus_discount_type_id: settings.iikoBonusDiscountTypeId || "",
     },
     warnings,
   };
@@ -309,6 +345,18 @@ export async function getIikoOrderPaymentMappingOptions() {
 export async function updateAdminIntegrationSettings(patch) {
   const previousSettings = await getSystemSettings();
   const nextPatch = { ...(patch || {}) };
+  const hasExternalMenuIdPatch = Object.prototype.hasOwnProperty.call(nextPatch, "iiko_external_menu_id");
+  if (hasExternalMenuIdPatch) {
+    const previousExternalMenuId = String(previousSettings?.iiko_external_menu_id || "").trim();
+    const nextExternalMenuId = String(nextPatch?.iiko_external_menu_id || "").trim();
+    const externalMenuChanged = previousExternalMenuId !== nextExternalMenuId;
+    const hasCategoryIdsPatch = Object.prototype.hasOwnProperty.call(nextPatch, "iiko_sync_category_ids");
+    // При смене внешнего меню старые ID категорий становятся нерелевантны
+    // и могут приводить к частичному sync/дублям. Сбрасываем фильтр.
+    if (externalMenuChanged && !hasCategoryIdsPatch) {
+      nextPatch.iiko_sync_category_ids = [];
+    }
+  }
 
   const hasIikoEnabledPatch = Object.prototype.hasOwnProperty.call(nextPatch, "iiko_enabled");
   const normalizedIikoEnabled =

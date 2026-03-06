@@ -329,6 +329,7 @@ export const createOrder = async (req, res, next) => {
       delivery_latitude,
       delivery_longitude,
     } = req.body;
+    const normalizedBonusToUse = Math.max(0, Math.floor(Number(bonus_to_use) || 0));
     const normalizedComment = typeof comment === "string" && comment.trim() ? comment.trim() : null;
 
     // Валидация основных полей
@@ -515,7 +516,7 @@ export const createOrder = async (req, res, next) => {
 
     const fulfillmentType = order_type === "pickup" ? "pickup" : "delivery";
     const loyaltyEnabled = settings.bonuses_enabled || settings.premiumbonus_enabled;
-    const effectiveBonusToUse = loyaltyEnabled ? bonus_to_use : 0;
+    const effectiveBonusToUse = loyaltyEnabled ? normalizedBonusToUse : 0;
     const iikoOrdersExternal = settings.iiko_enabled && settings?.integration_mode?.orders === "external";
     const iikoSyncStatus = iikoOrdersExternal ? "pending" : "synced";
     const pbPurchasesExternal =
