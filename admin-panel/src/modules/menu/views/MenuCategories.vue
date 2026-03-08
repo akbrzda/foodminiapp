@@ -294,7 +294,7 @@ const defaultSource = ref("local");
 const isSourceWatcherReady = ref(false);
 const filters = reactive({
   search: "",
-  status: "all",
+  status: "active",
   cityId: "all",
   source: "",
 });
@@ -388,7 +388,7 @@ const onPageSizeChange = (value) => {
 const resetFilters = () => {
   const nextSource = defaultSource.value || "local";
   filters.search = "";
-  filters.status = "all";
+  filters.status = "active";
   filters.cityId = "all";
   filters.source = nextSource;
   page.value = 1;

@@ -4,10 +4,21 @@
       <CardContent>
         <PageHeader title="Стоп-лист" description="Управление временно недоступными блюдами по филиалам">
           <template #actions>
-            <Button @click="openModal()">
-              <Plus :size="16" />
-              Добавить
-            </Button>
+            <div class="flex flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+              <div class="rounded-lg border border-border/60 bg-muted/20 px-3 py-2 text-left">
+                <div class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Последняя синхронизация iiko</div>
+                <div class="text-sm font-medium text-foreground">{{ stopListSyncLabel }}</div>
+                <div class="text-xs text-muted-foreground">{{ stopListSyncStatusLabel }}</div>
+              </div>
+              <Button variant="secondary" :disabled="syncLoading" @click="syncStopListNow">
+                <RefreshCcw :size="16" />
+                {{ syncLoading ? "Синхронизация..." : "Синхронизировать стоп-лист" }}
+              </Button>
+              <Button @click="openModal()">
+                <Plus :size="16" />
+                Добавить
+              </Button>
+            </div>
           </template>
         </PageHeader>
       </CardContent>
@@ -395,7 +406,7 @@
 <script setup>
 import { devError } from "@/shared/utils/logger";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { Plus, Save, Trash2 } from "lucide-vue-next";
+import { Plus, RefreshCcw, Save, Trash2 } from "lucide-vue-next";
 import api from "@/shared/api/client.js";
 import Badge from "@/shared/components/ui/badge/Badge.vue";
 import BackButton from "@/shared/components/BackButton.vue";
@@ -427,8 +438,10 @@ const stopList = ref([]);
 const page = ref(1);
 const pageSize = ref(20);
 const reasons = ref([]);
+const stopListSyncInfo = ref(null);
 const showModal = ref(false);
 const saving = ref(false);
+const syncLoading = ref(false);
 const step = ref(1);
 const modifiers = ref([]);
 const categories = ref([]);
@@ -448,6 +461,7 @@ const removeDate = ref("");
 const removeHour = ref("00");
 const removeMinute = ref("00");
 let nowInterval = null;
+let stopListSyncPollController = null;
 const form = ref({
   branch_id: "",
   type: "",
@@ -546,6 +560,19 @@ const allProductsSelected = computed(() => {
   if (allProductIds.value.length === 0) return false;
   return allProductIds.value.every((id) => selectedProductIds.value.includes(id));
 });
+const stopListSyncLabel = computed(() => {
+  if (!stopListSyncInfo.value?.created_at) return "Еще не запускалась";
+  return formatStopCreatedAt(stopListSyncInfo.value.created_at);
+});
+const stopListSyncStatusLabel = computed(() => {
+  const status = String(stopListSyncInfo.value?.status || "").trim();
+  if (syncLoading.value) return "Синхронизация выполняется, список обновится автоматически";
+  if (!status) return "Нет записей о синхронизации";
+  if (status === "success") return "Последний запуск завершился успешно";
+  if (status === "active") return "Последний запуск еще выполняется";
+  if (status === "error" || status === "failed") return "Последний запуск завершился с ошибкой";
+  return `Статус: ${status}`;
+});
 const getBranchName = (branchId) => {
   return referenceStore.branches.find((b) => b.id === branchId)?.name || "Неизвестно";
 };
@@ -595,6 +622,48 @@ const loadStopList = async ({ preservePage = false } = {}) => {
   } finally {
     isLoading.value = false;
   }
+};
+const loadStopListSyncInfo = async () => {
+  try {
+    const response = await api.get("/api/admin/integrations/sync-logs", {
+      params: {
+        integrationType: "iiko",
+        module: "stoplist",
+        limit: 1,
+      },
+    });
+    stopListSyncInfo.value = response.data?.rows?.[0] || null;
+    return stopListSyncInfo.value;
+  } catch (error) {
+    devError("Failed to load stop list sync info:", error);
+    stopListSyncInfo.value = null;
+    return null;
+  }
+};
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const waitForStopListSyncCompletion = async ({ previousLogId = 0 } = {}) => {
+  const startedAt = Date.now();
+  const timeoutMs = 90000;
+  const pollIntervalMs = 2000;
+
+  while (Date.now() - startedAt < timeoutMs) {
+    if (stopListSyncPollController?.cancelled) {
+      return { cancelled: true };
+    }
+
+    const latestLog = await loadStopListSyncInfo();
+    const latestLogId = Number(latestLog?.id || 0);
+    const latestStatus = String(latestLog?.status || "").trim();
+    const isNewRun = latestLogId > Number(previousLogId || 0);
+
+    if (isNewRun && ["success", "failed", "error"].includes(latestStatus)) {
+      return { completed: true, status: latestStatus, log: latestLog };
+    }
+
+    await sleep(pollIntervalMs);
+  }
+
+  return { completed: false, timedOut: true };
 };
 const onPageSizeChange = (value) => {
   pageSize.value = value;
@@ -836,10 +905,43 @@ const removeFromStopList = async (item) => {
     showErrorNotification(`Ошибка: ${error.response?.data?.error || error.message}`);
   }
 };
+const syncStopListNow = async () => {
+  syncLoading.value = true;
+  try {
+    const previousLogId = Number(stopListSyncInfo.value?.id || 0);
+    stopListSyncPollController = { cancelled: false };
+
+    await api.post("/api/admin/integrations/iiko/sync-stoplist");
+    const syncResult = await waitForStopListSyncCompletion({ previousLogId });
+
+    if (syncResult?.cancelled) {
+      return;
+    }
+
+    if (syncResult?.status === "success") {
+      await loadStopList({ preservePage: true });
+      showSuccessNotification("Стоп-лист синхронизирован");
+      return;
+    }
+
+    if (syncResult?.status === "failed" || syncResult?.status === "error") {
+      showErrorNotification(syncResult?.log?.error_message || "Синхронизация стоп-листа завершилась с ошибкой");
+      return;
+    }
+
+    await loadStopList({ preservePage: true });
+    showSuccessNotification("Задача синхронизации запущена. Обновление списка может завершиться чуть позже");
+  } catch (error) {
+    showErrorNotification(error?.response?.data?.error || error?.response?.data?.reason || "Не удалось запустить синхронизацию стоп-листа");
+  } finally {
+    stopListSyncPollController = null;
+    syncLoading.value = false;
+  }
+};
 onMounted(async () => {
   try {
     await referenceStore.fetchCitiesAndBranches();
-    await loadReasons();
+    await Promise.all([loadReasons(), loadStopListSyncInfo()]);
     if (shouldRestore.value) {
       const context = restoreContext();
       if (context) {
@@ -863,6 +965,9 @@ onMounted(async () => {
 });
 onBeforeUnmount(() => {
   if (nowInterval) clearInterval(nowInterval);
+  if (stopListSyncPollController) {
+    stopListSyncPollController.cancelled = true;
+  }
 });
 watch([removeDate, removeHour, removeMinute, () => form.value.auto_remove], () => {
   syncRemoveAt();

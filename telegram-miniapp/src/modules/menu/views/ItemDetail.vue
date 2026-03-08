@@ -426,7 +426,8 @@ async function loadItem() {
     }
     const fulfillmentType = locationStore.isPickup ? "pickup" : "delivery";
     const cityId = locationStore.selectedCity?.id || null;
-    const response = await menuAPI.getItemDetails(route.params.id, { city_id: cityId, fulfillment_type: fulfillmentType });
+    const branchId = locationStore.selectedBranch?.id || null;
+    const response = await menuAPI.getItemDetails(route.params.id, { cityId, branchId, fulfillmentType });
     item.value = response.data.item;
   } catch (err) {
     devError("Не удалось загрузить блюдо:", err);

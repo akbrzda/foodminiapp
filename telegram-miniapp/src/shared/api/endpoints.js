@@ -46,7 +46,11 @@ export const menuAPI = {
   getItems(categoryId) {
     return api.get(`/menu/categories/${categoryId}/products`);
   },
-  getItemDetails(itemId, params = {}) {
+  getItemDetails(itemId, { cityId, branchId, fulfillmentType } = {}) {
+    const params = {};
+    if (cityId) params.city_id = cityId;
+    if (branchId) params.branch_id = branchId;
+    if (fulfillmentType) params.fulfillment_type = fulfillmentType;
     return api.get(`/menu/products/${itemId}`, { params });
   },
   getModifiers(itemId) {

@@ -73,6 +73,49 @@ function normalizeBonusAmount(value) {
   return Math.floor(parsed);
 }
 
+function normalizeBooleanFlag(value) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") {
+    if (value === 1) return true;
+    if (value === 0) return false;
+  }
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["true", "1", "yes", "y"].includes(normalized)) return true;
+    if (["false", "0", "no", "n"].includes(normalized)) return false;
+  }
+  return null;
+}
+
+function resolvePriceAmount(value) {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return toNumberOrNull(value.price ?? value.value ?? value.amount);
+  }
+  return toNumberOrNull(value);
+}
+
+function resolveIikoPriceFromRows(rows = [], preferredOrganizationIds = []) {
+  const normalizedRows = Array.isArray(rows) ? rows.filter((row) => row && typeof row === "object") : [];
+  if (normalizedRows.length === 0) return null;
+
+  const normalizedPreferredIds = preferredOrganizationIds.map((id) => String(id || "").trim()).filter(Boolean);
+  for (const organizationId of normalizedPreferredIds) {
+    const matchedRow = normalizedRows.find((row) => {
+      const rowOrganizationId = String(row.organizationId || row.organization_id || "").trim();
+      return rowOrganizationId && rowOrganizationId === organizationId;
+    });
+    const matchedPrice = resolvePriceAmount(matchedRow);
+    if (matchedPrice !== null) return matchedPrice;
+  }
+
+  for (const row of normalizedRows) {
+    const price = resolvePriceAmount(row);
+    if (price !== null) return price;
+  }
+
+  return null;
+}
+
 function parsePbBalance(info) {
   if (!info || typeof info !== "object") return 0;
   const direct = Number(info.balance);
@@ -1309,7 +1352,7 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
   const useExternalMenuFilter = Boolean(externalMenuId);
   const requestedCityId = Number(cityId);
   const isCityScopedSync = Number.isFinite(requestedCityId) && requestedCityId > 0;
-  const isFullCatalogSync = !useCategoryFilter && !isCityScopedSync;
+  const canDeactivateMissingExternalItems = !isCityScopedSync;
   if (!useExternalMenuFilter) {
     throw new Error("Не выбран iiko_external_menu_id. Синхронизация меню выполняется через /api/2/menu/by_id.");
   }
@@ -1345,12 +1388,10 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
     }));
 
     const pickSizePrice = (size = {}) => {
-      const prices = Array.isArray(size?.prices) ? size.prices : [];
-      if (prices.length === 0) return 0;
-      const firstPrice = toNumberOrNull(prices[0]?.price);
-      return firstPrice ?? 0;
+      return resolveIikoPriceFromRows(size?.prices || []);
     };
 
+    const allExternalMenuItemIds = new Set();
     const normalizedItemsById = new Map();
     const scopedItemIds = new Set();
     for (const category of menuCategories) {
@@ -1359,6 +1400,7 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
     for (const menuItem of categoryItems) {
       const itemId = normalizeIikoId(menuItem?.itemId || menuItem?.id || menuItem?.productId);
       if (!itemId) continue;
+      allExternalMenuItemIds.add(itemId);
       if (useCategoryFilter && externalCategoryId && !selectedCategoryIds.has(externalCategoryId)) {
         continue;
       }
@@ -1382,6 +1424,7 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
           sizeName: firstNonEmptyString(size?.sizeName, size?.name, size?.code),
           price: resolvedPrice,
           priceValue: resolvedPrice,
+          prices: Array.isArray(size?.prices) ? size.prices : [],
           is_active: size?.isHidden ? 0 : 1,
           image_url: size?.buttonImageUrl || null,
           portionWeight: toNumberOrNull(size?.portionWeightGrams),
@@ -1453,6 +1496,28 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
     const [citiesRows] = await connection.query("SELECT id FROM cities ORDER BY id");
     const allCityIds = citiesRows.map((row) => Number(row.id)).filter(Number.isFinite);
     const targetCityIds = Number.isFinite(requestedCityId) && requestedCityId > 0 ? [requestedCityId] : allCityIds;
+    const [cityOrganizationRows] = await connection.query(
+      `SELECT city_id, iiko_organization_id
+       FROM branches
+       WHERE city_id IN (${targetCityIds.map(() => "?").join(",")})
+         AND iiko_organization_id IS NOT NULL
+         AND iiko_organization_id <> ''
+       ORDER BY city_id, id`,
+      targetCityIds,
+    );
+    const cityOrganizationIds = new Map();
+    for (const row of cityOrganizationRows) {
+      const cityKey = Number(row.city_id);
+      const organizationId = String(row.iiko_organization_id || "").trim();
+      if (!Number.isFinite(cityKey) || !organizationId) continue;
+      if (!cityOrganizationIds.has(cityKey)) {
+        cityOrganizationIds.set(cityKey, []);
+      }
+      const current = cityOrganizationIds.get(cityKey);
+      if (!current.includes(organizationId)) {
+        current.push(organizationId);
+      }
+    }
 
     const sizeNameById = new Map();
     for (const size of sizes) {
@@ -1476,7 +1541,13 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
 
       const name = normalizeDisplayName(category.name || category.title || category.caption, `Категория ${iikoId}`);
       const sortOrder = Number(category.sort_order || category.order || 0);
-      const isActive = category.is_active === false || category.isDeleted === true ? 0 : 1;
+      const categoryDisabled =
+        normalizeBooleanFlag(category.is_active) === false ||
+        normalizeBooleanFlag(category.isActive) === false ||
+        normalizeBooleanFlag(category.active) === false ||
+        normalizeBooleanFlag(category.isDeleted) === true ||
+        normalizeBooleanFlag(category.deleted) === true;
+      const isActive = categoryDisabled ? 0 : 1;
       const imageUrl = category.image_url || category.image || category.imageLinks?.[0]?.href || null;
 
       const [existing] = await connection.query("SELECT id, name, is_active FROM menu_categories WHERE iiko_category_id = ? LIMIT 1", [iikoId]);
@@ -1540,12 +1611,23 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
         resolveImageUrl(item?.imageLinks?.small) ||
         null;
       const sizePricesRaw = Array.isArray(item.sizePrices) ? item.sizePrices : Array.isArray(item.size_prices) ? item.size_prices : [];
-      const hasIncludedSize = sizePricesRaw.some((sizePrice) => sizePrice?.price?.isIncludedInMenu !== false);
-      const isIncludedInMenu = typeof item.isIncludedInMenu === "boolean" ? item.isIncludedInMenu : sizePricesRaw.length > 0 ? hasIncludedSize : true;
-      const isActive = item.is_active === false || item.isDeleted === true || isIncludedInMenu === false ? 0 : 1;
+      const hasIncludedSize = sizePricesRaw.some((sizePrice) => normalizeBooleanFlag(sizePrice?.price?.isIncludedInMenu) !== false);
+      const explicitIncludedInMenu =
+        normalizeBooleanFlag(item.isIncludedInMenu) ??
+        normalizeBooleanFlag(item.includedInMenu) ??
+        normalizeBooleanFlag(item.price?.isIncludedInMenu);
+      const isIncludedInMenu = explicitIncludedInMenu ?? (sizePricesRaw.length > 0 ? hasIncludedSize : true);
+      const itemDisabled =
+        normalizeBooleanFlag(item.is_active) === false ||
+        normalizeBooleanFlag(item.isActive) === false ||
+        normalizeBooleanFlag(item.active) === false ||
+        normalizeBooleanFlag(item.isDeleted) === true ||
+        normalizeBooleanFlag(item.deleted) === true ||
+        isIncludedInMenu === false;
+      const isActive = itemDisabled ? 0 : 1;
       const directPrice = toNumberOrNull(item.price ?? item.base_price);
-      const fallbackSizePrice = sizePricesRaw.length > 0 ? toNumberOrNull(sizePricesRaw[0]?.price ?? sizePricesRaw[0]?.priceValue) : null;
-      const basePrice = directPrice ?? fallbackSizePrice ?? 0;
+      const fallbackSizePrice = sizePricesRaw.length > 0 ? resolveIikoPriceFromRows(sizePricesRaw[0]?.prices || [], []) : null;
+      const basePrice = directPrice ?? fallbackSizePrice;
       const sortOrder = Number(item.sort_order || item.order || 0);
       const nutrition = item.nutritionalValues || item.nutritional_values || item.nutrition || {};
       const nutritionPer100 =
@@ -1578,11 +1660,12 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
         toNumberOrNull(item.carbohydratesFullAmount ?? nutritionPerServing.carbohydrates ?? nutritionPerServing.carbs) ??
         calcServingNutrition(carbsPer100g, weightValue);
 
-      const [existing] = await connection.query("SELECT id, name, is_active FROM menu_items WHERE iiko_item_id = ? LIMIT 1", [iikoItemId]);
+      const [existing] = await connection.query("SELECT id, name, is_active, price FROM menu_items WHERE iiko_item_id = ? LIMIT 1", [iikoItemId]);
       let localItemId = null;
       if (existing.length > 0) {
         localItemId = existing[0].id;
         const resolvedName = preserveLocalNames ? existing[0].name : name;
+        const storedBasePrice = toNumberOrNull(existing[0].price);
         await connection.query(
           `UPDATE menu_items
            SET name = ?, description = ?, composition = ?, image_url = COALESCE(?, image_url), price = ?, sort_order = ?, is_active = ?,
@@ -1594,7 +1677,7 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
             description,
             composition,
             imageUrl,
-            basePrice,
+            basePrice ?? storedBasePrice ?? 0,
             sortOrder,
             isActive,
             weightValue,
@@ -1621,7 +1704,7 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
             name,
             description,
             composition,
-            basePrice,
+            basePrice ?? 0,
             imageUrl,
             sortOrder,
             isActive,
@@ -1665,12 +1748,24 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
         );
       }
       for (const targetCityId of targetCityIds) {
+        const preferredOrganizationIds = cityOrganizationIds.get(Number(targetCityId)) || [];
+        const cityItemPrice = directPrice ?? resolveIikoPriceFromRows(sizePricesRaw[0]?.prices || [], preferredOrganizationIds);
+        if (cityItemPrice === null) {
+          await connection.query(
+            `DELETE FROM menu_item_prices
+             WHERE item_id = ?
+               AND city_id = ?
+               AND fulfillment_type IN ('delivery', 'pickup')`,
+            [localItemId, targetCityId],
+          );
+          continue;
+        }
         for (const fulfillmentType of ["delivery", "pickup"]) {
           await connection.query(
             `INSERT INTO menu_item_prices (item_id, city_id, fulfillment_type, price)
              VALUES (?, ?, ?, ?)
              ON DUPLICATE KEY UPDATE price = VALUES(price)`,
-            [localItemId, targetCityId, fulfillmentType, basePrice],
+            [localItemId, targetCityId, fulfillmentType, cityItemPrice],
           );
         }
       }
@@ -1705,8 +1800,8 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
                 ) ||
                 (sizeId ? sizeNameById.get(toLookupKey(sizeId)) : null) ||
                 (sizePricesRaw.length > 1 ? `Вариант ${index + 1}` : "Стандарт");
-              const variantPrice = toNumberOrNull(sizePrice.price ?? sizePrice.priceValue);
-              const variantIncluded = sizePrice?.price?.isIncludedInMenu !== false;
+              const variantPrice = resolveIikoPriceFromRows(sizePrice.prices || []);
+              const variantIncluded = normalizeBooleanFlag(sizePrice?.price?.isIncludedInMenu) !== false;
               const variantNutritionPer100 = sizePrice?.nutritionalValues || {};
               const variantWeightUnit = normalizeWeightUnit(sizePrice?.measureUnitType || item.weight_unit || item.measureUnit || item.unit) || weightUnit;
               const variantWeightValue = normalizeWeightValue(sizePrice?.portionWeight, variantWeightUnit);
@@ -1718,6 +1813,7 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
                 id: sizeId ? `${iikoItemId}_${sizeId}` : `${iikoItemId}_size_${index + 1}`,
                 name: variantName,
                 price: variantPrice ?? basePrice,
+                prices: Array.isArray(sizePrice.prices) ? sizePrice.prices : [],
                 sort_order: index,
                 is_active: isActive === 1 && variantIncluded,
                 image_url:
@@ -1766,11 +1862,12 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
         const variantFatsPerServing = toNumberOrNull(variant.fats_per_serving) ?? calcServingNutrition(variantFatsPer100g, variantWeightValue);
         const variantCarbsPerServing = toNumberOrNull(variant.carbs_per_serving) ?? calcServingNutrition(variantCarbsPer100g, variantWeightValue);
 
-        const [existingVariant] = await connection.query("SELECT id, name FROM item_variants WHERE iiko_variant_id = ? LIMIT 1", [iikoVariantId]);
+        const [existingVariant] = await connection.query("SELECT id, name, price FROM item_variants WHERE iiko_variant_id = ? LIMIT 1", [iikoVariantId]);
         let localVariantId = null;
         if (existingVariant.length > 0) {
           localVariantId = existingVariant[0].id;
           const resolvedVariantName = preserveLocalNames ? existingVariant[0].name : variantName;
+          const storedVariantPrice = toNumberOrNull(existingVariant[0].price);
           await connection.query(
             `UPDATE item_variants
              SET item_id = ?, name = ?, price = ?, image_url = COALESCE(?, image_url),
@@ -1781,7 +1878,7 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
             [
               localItemId,
               resolvedVariantName,
-              variantPrice,
+              variantPrice ?? storedVariantPrice ?? basePrice ?? 0,
               variantImage,
               variantWeightValue,
               variantWeightUnit,
@@ -1807,7 +1904,7 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
             [
               localItemId,
               variantName,
-              variantPrice,
+              variantPrice ?? basePrice ?? 0,
               variantImage,
               variantWeightValue,
               variantWeightUnit,
@@ -1832,6 +1929,7 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
             id: Number(localVariantId),
             price: variantPrice,
             isActive: variantActive,
+            prices: Array.isArray(variant.prices) ? variant.prices : [],
           });
         }
         stats.variants += 1;
@@ -1859,12 +1957,24 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
 
       for (const variantRow of syncedVariantRows) {
         for (const targetCityId of targetCityIds) {
+          const preferredOrganizationIds = cityOrganizationIds.get(Number(targetCityId)) || [];
+          const cityVariantPrice = resolveIikoPriceFromRows(variantRow.prices || [], preferredOrganizationIds);
+          if (cityVariantPrice === null) {
+            await connection.query(
+              `DELETE FROM menu_variant_prices
+               WHERE variant_id = ?
+                 AND city_id = ?
+                 AND fulfillment_type IN ('delivery', 'pickup')`,
+              [variantRow.id, targetCityId],
+            );
+            continue;
+          }
           for (const fulfillmentType of ["delivery", "pickup"]) {
             await connection.query(
               `INSERT INTO menu_variant_prices (variant_id, city_id, fulfillment_type, price)
                VALUES (?, ?, ?, ?)
                ON DUPLICATE KEY UPDATE price = VALUES(price)`,
-              [variantRow.id, targetCityId, fulfillmentType, variantRow.price],
+              [variantRow.id, targetCityId, fulfillmentType, cityVariantPrice],
             );
           }
         }
@@ -2026,10 +2136,31 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
       }
     }
 
+      // Внешнее меню iiko приходит целиком, поэтому отсутствующие в нем блюда
+      // нужно деактивировать даже при локальном фильтре по категориям.
+      if (canDeactivateMissingExternalItems) {
+        if (allExternalMenuItemIds.size > 0) {
+          const itemPlaceholders = [...allExternalMenuItemIds].map(() => "?").join(", ");
+          await connection.query(
+            `UPDATE menu_items
+             SET is_active = 0, iiko_synced_at = NOW()
+             WHERE COALESCE(NULLIF(TRIM(iiko_item_id), ''), NULL) IS NOT NULL
+               AND iiko_item_id NOT IN (${itemPlaceholders})`,
+            [...allExternalMenuItemIds],
+          );
+        } else {
+          await connection.query(
+            `UPDATE menu_items
+             SET is_active = 0, iiko_synced_at = NOW()
+             WHERE COALESCE(NULLIF(TRIM(iiko_item_id), ''), NULL) IS NOT NULL`,
+          );
+        }
+      }
+
       // Для полного синка без фильтров дополнительно деактивируем локальные iiko-сущности,
       // отсутствующие в актуальном ответе внешнего меню.
-      // Для частичных синков (по категориям/городу) эту деактивацию пропускаем.
-      if (isFullCatalogSync) {
+      // Для частичных синков по городу эту деактивацию пропускаем.
+      if (!useCategoryFilter && canDeactivateMissingExternalItems) {
         const deactivateByIikoIds = async (tableName, externalField, syncedIds = []) => {
           if (!Array.isArray(syncedIds) || syncedIds.length === 0) {
             await connection.query(
@@ -2076,6 +2207,15 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
          JOIN menu_categories mc ON mc.id = mic.category_id
          WHERE mc.is_active = 0
            AND COALESCE(NULLIF(TRIM(mc.iiko_category_id), ''), NULL) IS NOT NULL`,
+      );
+
+      await connection.query(
+        `DELETE mc
+         FROM menu_categories mc
+         LEFT JOIN menu_item_categories mic ON mic.category_id = mc.id
+         WHERE mc.is_active = 0
+           AND COALESCE(NULLIF(TRIM(mc.iiko_category_id), ''), NULL) IS NOT NULL
+           AND mic.category_id IS NULL`,
       );
 
       await connection.commit();

@@ -64,6 +64,29 @@ function buildItemBadges(item, soldCount = 0) {
   return badges.slice(0, 2);
 }
 
+function parseNumericPrice(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function hasPositivePrice(value) {
+  const price = parseNumericPrice(value);
+  return price !== null && price > 0;
+}
+
+function isVariantVisibleInPublicMenu(variant) {
+  if (!variant) return false;
+  return hasPositivePrice(variant.price);
+}
+
+function isItemVisibleInPublicMenu(item) {
+  if (!item) return false;
+  if (Array.isArray(item.variants) && item.variants.length > 0) {
+    return item.variants.some((variant) => isVariantVisibleInPublicMenu(variant));
+  }
+  return hasPositivePrice(item.price);
+}
+
 async function getCompletedSalesByItemIds(itemIds = []) {
   const normalizedIds = itemIds.map((id) => Number(id)).filter(Number.isFinite);
   if (normalizedIds.length === 0) return new Map();
@@ -400,16 +423,12 @@ export const getMenu = async (req, res, next) => {
         await attachVariantPricesToModifiers(modifierGroups, variants);
         item.modifier_groups = modifierGroups;
 
-        // Фильтрация товаров без цен
-        if (fulfillment_type) {
-          if (item.variants.length > 0) {
-            item.variants = item.variants.filter((variant) => variant.price !== null && variant.price !== undefined);
-            if (item.variants.length === 0) {
-              continue;
-            }
-          } else if (item.price === null || item.price === undefined) {
-            continue;
-          }
+        if (item.variants.length > 0) {
+          item.variants = item.variants.filter((variant) => isVariantVisibleInPublicMenu(variant));
+        }
+
+        if (!isItemVisibleInPublicMenu(item)) {
+          continue;
         }
 
         availableItems.push(item);
@@ -555,7 +574,7 @@ export const getCategoryItems = async (req, res, next) => {
 export const getItemById = async (req, res, next) => {
   try {
     const itemId = req.params.id;
-    const { city_id, fulfillment_type } = req.query;
+    const { city_id, branch_id, fulfillment_type } = req.query;
     const fulfillmentType = fulfillment_type || "delivery";
     const integration = await getIntegrationSettings();
     const sourceScope = buildSourceScope(integration);
@@ -564,9 +583,13 @@ export const getItemById = async (req, res, next) => {
       `SELECT mi.id,
               COALESCE(
                 (
-                  SELECT JSON_ARRAYAGG(mic.category_id ORDER BY mic.sort_order, mic.category_id)
-                  FROM menu_item_categories mic
-                  WHERE mic.item_id = mi.id
+                  SELECT JSON_ARRAYAGG(sorted_categories.category_id)
+                  FROM (
+                    SELECT mic.category_id
+                    FROM menu_item_categories mic
+                    WHERE mic.item_id = mi.id
+                    ORDER BY mic.sort_order, mic.category_id
+                  ) AS sorted_categories
                 ),
                 JSON_ARRAY()
               ) AS category_ids,
@@ -615,6 +638,23 @@ export const getItemById = async (req, res, next) => {
       item.price = prices.length > 0 ? prices[0].price : null;
     }
 
+    if (branch_id) {
+      const [stopList] = await db.query(
+        `SELECT id
+         FROM menu_stop_list
+         WHERE branch_id = ?
+           AND entity_type = 'item'
+           AND entity_id = ?
+           AND (remove_at IS NULL OR remove_at > NOW())
+           AND (fulfillment_types IS NULL OR JSON_CONTAINS(fulfillment_types, JSON_QUOTE(?)))
+         LIMIT 1`,
+        [branch_id, itemId, fulfillmentType],
+      );
+      item.in_stop_list = stopList.length > 0;
+    } else {
+      item.in_stop_list = false;
+    }
+
     // Получение вариантов
     const [variants] = await db.query(
       `SELECT id, item_id, name, price, image_url, weight_value, weight_unit, sort_order, is_active
@@ -636,6 +676,36 @@ export const getItemById = async (req, res, next) => {
         );
         variant.price = variantPrices.length > 0 ? variantPrices[0].price : null;
       }
+    }
+
+    for (const variant of variants) {
+      if (branch_id) {
+        const [stopList] = await db.query(
+          `SELECT id
+           FROM menu_stop_list
+           WHERE branch_id = ?
+             AND entity_type = 'variant'
+             AND entity_id = ?
+             AND (remove_at IS NULL OR remove_at > NOW())
+             AND (fulfillment_types IS NULL OR JSON_CONTAINS(fulfillment_types, JSON_QUOTE(?)))
+           LIMIT 1`,
+          [branch_id, variant.id, fulfillmentType],
+        );
+        variant.in_stop_list = stopList.length > 0;
+      } else {
+        variant.in_stop_list = false;
+      }
+    }
+
+    const visibleVariants = variants.filter((variant) => isVariantVisibleInPublicMenu(variant));
+    if (visibleVariants.length > 0) {
+      item.variants = visibleVariants;
+    } else {
+      item.variants = [];
+    }
+
+    if (!isItemVisibleInPublicMenu(item)) {
+      return res.status(404).json({ error: "Item not found" });
     }
 
     // Получение групп модификаторов
@@ -690,7 +760,7 @@ export const getItemById = async (req, res, next) => {
     res.json({
       item: {
         ...item,
-        variants: variants,
+        variants: item.variants,
         modifier_groups: modifierGroups,
       },
     });

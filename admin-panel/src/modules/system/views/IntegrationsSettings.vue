@@ -324,10 +324,6 @@
               <RefreshCcw :size="16" />
               Синхронизировать меню
             </Button>
-            <Button variant="secondary" :disabled="manualLoading.stoplist" @click="syncStopListNow">
-              <RefreshCcw :size="16" />
-              Синхронизировать стоп-лист
-            </Button>
           </div>
           <div class="space-y-3 rounded-lg border border-border/60 p-3">
             <div class="flex flex-wrap items-center justify-between gap-2">
@@ -781,7 +777,7 @@ const activeTab = ref("iiko");
 const saving = ref(false);
 const retryLoading = ref(false);
 const overviewLoading = ref(false);
-const manualLoading = ref({ menu: false, stoplist: false });
+const manualLoading = ref({ menu: false });
 const testLoading = ref({ iiko: false, pb: false });
 const autoSyncToggleLoading = ref(false);
 const pbAutoSyncToggleLoading = ref(false);
@@ -1422,18 +1418,6 @@ const syncMenuNow = async () => {
     showErrorNotification(error?.response?.data?.error || error?.response?.data?.reason || "Не удалось запустить синхронизацию меню");
   } finally {
     manualLoading.value.menu = false;
-  }
-};
-
-const syncStopListNow = async () => {
-  manualLoading.value.stoplist = true;
-  try {
-    await api.post("/api/admin/integrations/iiko/sync-stoplist");
-    showSuccessNotification("Задача синхронизации стоп-листа поставлена в очередь");
-  } catch (error) {
-    showErrorNotification(error?.response?.data?.error || error?.response?.data?.reason || "Не удалось запустить синхронизацию стоп-листа");
-  } finally {
-    manualLoading.value.stoplist = false;
   }
 };
 
