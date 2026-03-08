@@ -128,7 +128,18 @@
     </Card>
     <Card>
       <CardContent class="!p-0">
-        <div class="border-b border-border/60 px-4 py-3 text-sm font-semibold text-foreground">История заказов</div>
+        <div class="border-b border-border/60 px-4 py-3">
+          <div class="text-sm font-semibold text-foreground">История заказов</div>
+        </div>
+        <div class="p-4 pb-0">
+          <Tabs v-model="ordersTab">
+            <TabsList class="grid w-full grid-cols-3">
+              <TabsTrigger value="completed">Завершенные ({{ ordersSummary.completed }})</TabsTrigger>
+              <TabsTrigger value="active">Активные ({{ ordersSummary.active }})</TabsTrigger>
+              <TabsTrigger value="cancelled">Отмененные ({{ ordersSummary.cancelled }})</TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
         <div v-if="ordersLoading" class="p-4">
           <div class="space-y-2">
             <Skeleton class="h-6 w-full" />
@@ -136,32 +147,120 @@
             <Skeleton class="h-6 w-full" />
           </div>
         </div>
-        <Table v-else>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Заказ</TableHead>
-              <TableHead>Дата</TableHead>
-              <TableHead>Статус</TableHead>
-              <TableHead>Позиции</TableHead>
-              <TableHead class="text-right">Сумма</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            <TableRow v-for="order in orders" :key="order.id" class="cursor-pointer" @click="openOrder(order.id)">
-              <TableCell class="font-medium">#{{ order.order_number }}</TableCell>
-              <TableCell class="text-muted-foreground">{{ formatDateTime(order.created_at) }}</TableCell>
-              <TableCell>
-                <Badge variant="secondary" :style="getOrderStatusBadge(order.status).style">
-                  {{ getOrderStatusBadge(order.status).label }}
-                </Badge>
-              </TableCell>
-              <TableCell>{{ formatNumber(order.items_count || 0) }}</TableCell>
-              <TableCell class="text-right">{{ formatCurrency(order.total) }}</TableCell>
-            </TableRow>
-          </TableBody>
-        </Table>
+        <div v-else-if="orders.length === 0" class="p-4">
+          <div class="rounded-xl border border-dashed border-border/60 px-4 py-8 text-center text-sm text-muted-foreground">
+            В этой вкладке пока нет заказов.
+          </div>
+        </div>
+        <div v-else>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Заказ</TableHead>
+                <TableHead>Дата</TableHead>
+                <TableHead>Статус</TableHead>
+                <TableHead>Позиции</TableHead>
+                <TableHead class="text-right">Сумма</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow v-for="order in orders" :key="order.id" class="cursor-pointer" @click="openOrder(order.id)">
+                <TableCell class="font-medium">#{{ order.order_number }}</TableCell>
+                <TableCell class="text-muted-foreground">{{ formatDateTime(order.created_at) }}</TableCell>
+                <TableCell>
+                  <Badge variant="secondary" :style="getOrderStatusBadge(order.status).style">
+                    {{ getOrderStatusBadge(order.status).label }}
+                  </Badge>
+                </TableCell>
+                <TableCell>{{ formatNumber(order.items_count || 0) }}</TableCell>
+                <TableCell class="text-right">{{ formatCurrency(order.total) }}</TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </div>
+        <div v-if="ordersPagination.total > ordersPagination.limit" class="p-4 pt-0">
+          <TablePagination
+            :total="ordersPagination.total"
+            :page="ordersPagination.page"
+            :page-size="ordersPagination.limit"
+            :page-size-options="[10]"
+            @update:page="onOrdersPageChange"
+          />
+        </div>
       </CardContent>
     </Card>
+    <div class="grid gap-6 lg:grid-cols-2">
+      <Card class="min-h-[280px]">
+        <CardHeader>
+          <CardTitle>Любимые категории</CardTitle>
+          <CardDescription>Категории, которые клиент заказывает чаще всего</CardDescription>
+        </CardHeader>
+        <CardContent class="p-3">
+          <div v-if="clientLoading" class="space-y-3">
+            <Skeleton class="h-20 w-full rounded-xl" />
+            <Skeleton class="h-20 w-full rounded-xl" />
+            <Skeleton class="h-20 w-full rounded-xl" />
+          </div>
+          <div v-else-if="favoriteCategories.length" class="space-y-3">
+            <div
+              v-for="category in favoriteCategories"
+              :key="category.id || category.name"
+              class="rounded-xl border border-border/60 bg-background px-4 py-3"
+            >
+              <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                  <div class="truncate text-sm font-semibold text-foreground">{{ category.name }}</div>
+                  <div class="mt-1 text-xs text-muted-foreground">{{ formatFavoriteLastOrdered(category.last_ordered_at) }}</div>
+                </div>
+                <Badge variant="secondary">{{ formatNumber(category.total_quantity || 0) }} шт.</Badge>
+              </div>
+              <div class="mt-2 text-xs text-muted-foreground">{{ formatFavoriteOrdersCount(category.orders_count) }}</div>
+            </div>
+          </div>
+          <div
+            v-else
+            class="flex min-h-[180px] items-center justify-center rounded-xl border border-dashed border-border/60 px-4 py-6 text-center text-sm text-muted-foreground"
+          >
+            Пока нет данных
+          </div>
+        </CardContent>
+      </Card>
+      <Card class="min-h-[280px]">
+        <CardHeader>
+          <CardTitle>Любимые блюда</CardTitle>
+          <CardDescription>Топ позиций по количеству в заказах</CardDescription>
+        </CardHeader>
+        <CardContent class="p-3">
+          <div v-if="clientLoading" class="space-y-3">
+            <Skeleton class="h-20 w-full rounded-xl" />
+            <Skeleton class="h-20 w-full rounded-xl" />
+            <Skeleton class="h-20 w-full rounded-xl" />
+          </div>
+          <div v-else-if="favoriteDishes.length" class="space-y-3">
+            <div
+              v-for="dish in favoriteDishes"
+              :key="`${dish.name}-${dish.last_ordered_at || 'none'}`"
+              class="rounded-xl border border-border/60 bg-background px-4 py-3"
+            >
+              <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                  <div class="truncate text-sm font-semibold text-foreground">{{ dish.name }}</div>
+                  <div class="mt-1 text-xs text-muted-foreground">{{ formatFavoriteLastOrdered(dish.last_ordered_at) }}</div>
+                </div>
+                <Badge variant="secondary">{{ formatNumber(dish.total_quantity || 0) }} шт.</Badge>
+              </div>
+              <div class="mt-2 text-xs text-muted-foreground">{{ formatFavoriteOrdersCount(dish.orders_count) }}</div>
+            </div>
+          </div>
+          <div
+            v-else
+            class="flex min-h-[180px] items-center justify-center rounded-xl border border-dashed border-border/60 px-4 py-6 text-center text-sm text-muted-foreground"
+          >
+            Пока нет данных
+          </div>
+        </CardContent>
+      </Card>
+    </div>
     <Card>
       <CardContent class="!p-0">
         <div class="border-b border-border/60 px-4 py-3 text-sm font-semibold text-foreground">История бонусов</div>
@@ -259,6 +358,7 @@ import CardHeader from "@/shared/components/ui/card/CardHeader.vue";
 import CardTitle from "@/shared/components/ui/card/CardTitle.vue";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/shared/components/ui/dialog/index.js";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/components/ui/select/index.js";
+import { Tabs, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
 import Input from "@/shared/components/ui/input/Input.vue";
 import Table from "@/shared/components/ui/table/Table.vue";
 import TableBody from "@/shared/components/ui/table/TableBody.vue";
@@ -272,6 +372,7 @@ import { Field, FieldContent, FieldGroup, FieldLabel } from "@/shared/components
 import Progress from "@/shared/components/ui/progress/Progress.vue";
 import Skeleton from "@/shared/components/ui/skeleton/Skeleton.vue";
 import Spinner from "@/shared/components/ui/spinner/Spinner.vue";
+import TablePagination from "@/shared/components/TablePagination.vue";
 import BackButton from "@/shared/components/BackButton.vue";
 const route = useRoute();
 const router = useRouter();
@@ -279,7 +380,22 @@ const { showErrorNotification, showSuccessNotification } = useNotifications();
 const ordersStore = useOrdersStore();
 const clientId = route.params.id;
 const client = ref(null);
+const clientLoading = ref(false);
+const favoriteDishes = ref([]);
+const favoriteCategories = ref([]);
 const orders = ref([]);
+const ordersTab = ref("completed");
+const ordersSummary = reactive({
+  active: 0,
+  completed: 0,
+  cancelled: 0,
+});
+const ordersPagination = reactive({
+  total: 0,
+  page: 1,
+  limit: 10,
+  totalPages: 1,
+});
 const bonuses = ref([]);
 const loyaltyStats = ref(null);
 const loyaltyHistory = ref([]);
@@ -367,25 +483,67 @@ const getOrderStatusBadge = (status) => {
     style: styles[status] || { backgroundColor: "#E0E0E0", color: "#666666" },
   };
 };
+const formatFavoriteOrdersCount = (count) => {
+  const normalizedCount = Number(count) || 0;
+  if (normalizedCount === 1) return "1 заказ";
+  if (normalizedCount >= 2 && normalizedCount <= 4) return `${normalizedCount} заказа`;
+  return `${normalizedCount} заказов`;
+};
+const formatFavoriteLastOrdered = (value) => {
+  if (!value) return "Дата последнего заказа неизвестна";
+  return `Последний заказ: ${formatDateTime(value)}`;
+};
 const loadClient = async () => {
-  const response = await api.get(`/api/admin/clients/${clientId}`);
-  client.value = response.data.user;
-  Object.assign(form, {
-    first_name: client.value.first_name || "",
-    last_name: client.value.last_name || "",
-    phone: client.value.phone ? formatPhoneInput(client.value.phone) : "",
-    email: client.value.email || "",
-  });
-  updateBreadcrumbs();
+  clientLoading.value = true;
+  try {
+    const response = await api.get(`/api/admin/clients/${clientId}`);
+    client.value = response.data.user;
+    favoriteDishes.value = response.data.favorites?.dishes || [];
+    favoriteCategories.value = response.data.favorites?.categories || [];
+    Object.assign(form, {
+      first_name: client.value.first_name || "",
+      last_name: client.value.last_name || "",
+      phone: client.value.phone ? formatPhoneInput(client.value.phone) : "",
+      email: client.value.email || "",
+    });
+    updateBreadcrumbs();
+  } finally {
+    clientLoading.value = false;
+  }
 };
 const loadOrders = async () => {
   ordersLoading.value = true;
   try {
-    const response = await api.get(`/api/admin/clients/${clientId}/orders`);
+    const response = await api.get(`/api/admin/clients/${clientId}/orders`, {
+      params: {
+        status_group: ordersTab.value,
+        page: ordersPagination.page,
+        limit: ordersPagination.limit,
+      },
+    });
     orders.value = response.data.orders || [];
+    ordersSummary.active = Number(response.data.summary?.active || 0);
+    ordersSummary.completed = Number(response.data.summary?.completed || 0);
+    ordersSummary.cancelled = Number(response.data.summary?.cancelled || 0);
+    ordersPagination.total = Number(response.data.pagination?.total || 0);
+    ordersPagination.page = Number(response.data.pagination?.page || 1);
+    ordersPagination.limit = Number(response.data.pagination?.limit || 10);
+    ordersPagination.totalPages = Number(response.data.pagination?.totalPages || 1);
   } finally {
     ordersLoading.value = false;
   }
+};
+const reloadOrdersWithNotification = async () => {
+  try {
+    await loadOrders();
+  } catch (error) {
+    devError("Ошибка загрузки заказов:", error);
+    showErrorNotification("Ошибка загрузки заказов");
+  }
+};
+const onOrdersPageChange = (page) => {
+  ordersPagination.page = page;
+  reloadOrdersWithNotification();
 };
 const loadLoyalty = async () => {
   bonusesLoading.value = true;
@@ -509,4 +667,8 @@ watch(
     updateBreadcrumbs();
   },
 );
+watch(ordersTab, async () => {
+  ordersPagination.page = 1;
+  await reloadOrdersWithNotification();
+});
 </script>

@@ -382,8 +382,74 @@ router.get("/clients/:id", requireRole("admin", "manager", "ceo"), async (req, r
     if (users.length === 0) {
       return res.status(404).json({ error: "User not found" });
     }
+    const favoritesParams = [userId];
+    let favoritesWhereClause = "WHERE o.user_id = ? AND o.status != 'cancelled'";
+
+    if (req.user.role === "manager") {
+      const cityIds = getManagerCityIds(req);
+      if (!cityIds || cityIds.length === 0) {
+        return res.status(403).json({ error: "You do not have access to this user" });
+      }
+      favoritesWhereClause += " AND o.city_id IN (?)";
+      favoritesParams.push(cityIds);
+    }
+
+    const [favoriteDishes, favoriteCategories] = await Promise.all([
+      db.query(
+        `
+        SELECT
+          COALESCE(
+            NULLIF(
+              TRIM(
+                MAX(CASE WHEN oi.item_name IS NOT NULL AND TRIM(oi.item_name) != '' THEN oi.item_name ELSE NULL END)
+              ),
+              ''
+            ),
+            CONCAT('Блюдо #', COALESCE(MAX(oi.item_id), MAX(oi.id)))
+          ) as name,
+          SUM(oi.quantity) as total_quantity,
+          COUNT(DISTINCT oi.order_id) as orders_count,
+          MAX(o.created_at) as last_ordered_at
+        FROM order_items oi
+        JOIN orders o ON o.id = oi.order_id
+        ${favoritesWhereClause}
+        GROUP BY CASE
+          WHEN oi.item_id IS NOT NULL THEN CONCAT('id:', oi.item_id)
+          ELSE CONCAT('name:', LOWER(TRIM(COALESCE(oi.item_name, ''))))
+        END
+        ORDER BY total_quantity DESC, orders_count DESC, last_ordered_at DESC
+        LIMIT 5
+        `,
+        favoritesParams,
+      ),
+      db.query(
+        `
+        SELECT
+          mc.id,
+          mc.name,
+          COUNT(DISTINCT o.id) as orders_count,
+          SUM(oi.quantity) as total_quantity,
+          MAX(o.created_at) as last_ordered_at
+        FROM orders o
+        JOIN order_items oi ON oi.order_id = o.id
+        JOIN menu_item_categories mic ON mic.item_id = oi.item_id
+        JOIN menu_categories mc ON mc.id = mic.category_id
+        ${favoritesWhereClause}
+        GROUP BY mc.id, mc.name
+        ORDER BY total_quantity DESC, orders_count DESC, last_ordered_at DESC
+        LIMIT 5
+        `,
+        favoritesParams,
+      ),
+    ]);
     const decryptedUser = decryptUserData(users[0]);
-    res.json({ user: decryptedUser });
+    res.json({
+      user: decryptedUser,
+      favorites: {
+        dishes: favoriteDishes[0] || [],
+        categories: favoriteCategories[0] || [],
+      },
+    });
   } catch (error) {
     next(error);
   }
@@ -446,31 +512,78 @@ router.delete("/clients/:id", requireRole("admin", "manager", "ceo"), async (req
 router.get("/clients/:id/orders", requireRole("admin", "manager", "ceo"), async (req, res, next) => {
   try {
     const userId = req.params.id;
-    let whereClause = "WHERE o.user_id = ?";
-    const params = [userId];
+    const statusGroup = String(req.query.status_group || "active").trim().toLowerCase();
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.max(1, Math.min(100, parseInt(req.query.limit, 10) || 10));
+    const offset = (page - 1) * limit;
+    const statusGroups = {
+      active: ["pending", "confirmed", "preparing", "ready", "delivering"],
+      completed: ["completed"],
+      cancelled: ["cancelled"],
+    };
+    const selectedStatuses = statusGroups[statusGroup] || statusGroups.active;
+    let baseWhereClause = "WHERE o.user_id = ?";
+    const baseParams = [userId];
     if (req.user.role === "manager") {
       const cityIds = getManagerCityIds(req);
       if (!cityIds || cityIds.length === 0) {
         return res.status(403).json({ error: "You do not have access to this user" });
       }
-      whereClause += " AND o.city_id IN (?)";
-      params.push(cityIds);
+      baseWhereClause += " AND o.city_id IN (?)";
+      baseParams.push(cityIds);
     }
-    const [orders] = await db.query(
-      `
-      SELECT o.id, o.order_number, o.total, o.status, o.created_at,
-             (SELECT COUNT(*) FROM order_items WHERE order_id = o.id) as items_count,
-             c.name as city_name, b.name as branch_name
-      FROM orders o
-      LEFT JOIN cities c ON o.city_id = c.id
-      LEFT JOIN branches b ON o.branch_id = b.id
-      ${whereClause}
-      ORDER BY o.created_at DESC
-      LIMIT 20
-      `,
-      params,
-    );
-    res.json({ orders });
+    const whereClause = `${baseWhereClause} AND o.status IN (?)`;
+    const [[orders], [totalRows], [summaryRows]] = await Promise.all([
+      db.query(
+        `
+        SELECT o.id, o.order_number, o.total, o.status, o.created_at,
+               (SELECT COUNT(*) FROM order_items WHERE order_id = o.id) as items_count,
+               c.name as city_name, b.name as branch_name
+        FROM orders o
+        LEFT JOIN cities c ON o.city_id = c.id
+        LEFT JOIN branches b ON o.branch_id = b.id
+        ${whereClause}
+        ORDER BY o.created_at DESC
+        LIMIT ? OFFSET ?
+        `,
+        [...baseParams, selectedStatuses, limit, offset],
+      ),
+      db.query(
+        `
+        SELECT COUNT(*) as total
+        FROM orders o
+        ${whereClause}
+        `,
+        [...baseParams, selectedStatuses],
+      ),
+      db.query(
+        `
+        SELECT
+          SUM(CASE WHEN o.status IN ('pending', 'confirmed', 'preparing', 'ready', 'delivering') THEN 1 ELSE 0 END) as active,
+          SUM(CASE WHEN o.status = 'completed' THEN 1 ELSE 0 END) as completed,
+          SUM(CASE WHEN o.status = 'cancelled' THEN 1 ELSE 0 END) as cancelled
+        FROM orders o
+        ${baseWhereClause}
+        `,
+        baseParams,
+      ),
+    ]);
+    const total = Number(totalRows[0]?.total || 0);
+    const summary = summaryRows[0] || {};
+    res.json({
+      orders,
+      summary: {
+        active: Number(summary.active || 0),
+        completed: Number(summary.completed || 0),
+        cancelled: Number(summary.cancelled || 0),
+      },
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.max(1, Math.ceil(total / limit)),
+      },
+    });
   } catch (error) {
     next(error);
   }
