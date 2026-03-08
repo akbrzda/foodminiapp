@@ -287,6 +287,63 @@ CREATE TABLE `admin_users` (
 ) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 
+CREATE TABLE `admin_roles` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `code` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `name` varchar(120) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `is_system` tinyint(1) NOT NULL DEFAULT '0',
+  `is_active` tinyint(1) NOT NULL DEFAULT '1',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_admin_roles_code` (`code`),
+  KEY `idx_admin_roles_active` (`is_active`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+CREATE TABLE `admin_permissions` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `code` varchar(120) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `module` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `action` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `description` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `is_active` tinyint(1) NOT NULL DEFAULT '1',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_admin_permissions_code` (`code`),
+  KEY `idx_admin_permissions_module` (`module`),
+  KEY `idx_admin_permissions_active` (`is_active`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+CREATE TABLE `admin_role_permissions` (
+  `role_id` int NOT NULL,
+  `permission_id` int NOT NULL,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`role_id`,`permission_id`),
+  KEY `idx_admin_role_permissions_permission` (`permission_id`),
+  CONSTRAINT `fk_admin_role_permissions_role` FOREIGN KEY (`role_id`) REFERENCES `admin_roles` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_admin_role_permissions_permission` FOREIGN KEY (`permission_id`) REFERENCES `admin_permissions` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+CREATE TABLE `admin_user_permission_overrides` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `admin_user_id` int NOT NULL,
+  `permission_id` int NOT NULL,
+  `effect` enum('allow','deny') COLLATE utf8mb4_unicode_ci NOT NULL,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_admin_user_permission_override` (`admin_user_id`,`permission_id`),
+  KEY `idx_admin_user_permission_effect` (`effect`),
+  KEY `idx_admin_user_permission_permission` (`permission_id`),
+  CONSTRAINT `fk_admin_user_permission_overrides_user` FOREIGN KEY (`admin_user_id`) REFERENCES `admin_users` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_admin_user_permission_overrides_permission` FOREIGN KEY (`permission_id`) REFERENCES `admin_permissions` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
 CREATE TABLE `delivery_polygons` (
   `id` int NOT NULL AUTO_INCREMENT,
   `branch_id` int NOT NULL,
@@ -1115,5 +1172,43 @@ INSERT INTO `loyalty_levels` (`id`, `name`, `threshold_amount`, `earn_percentage
 (3, 'Золото', 20000.00, 7, 25, 1, 30, NULL, NULL);
 
 INSERT INTO `order_number_sequence` (`id`, `last_number`) VALUES (1, 0);
+
+INSERT INTO `admin_roles` (`id`, `code`, `name`, `is_system`, `is_active`) VALUES
+(1, 'ceo', 'CEO', 1, 1),
+(2, 'admin', 'Администратор', 1, 1),
+(3, 'manager', 'Менеджер', 1, 1);
+
+INSERT INTO `admin_permissions` (`id`, `code`, `module`, `action`, `description`, `is_active`) VALUES
+(1, 'dashboard.view', 'dashboard', 'view', 'Просмотр дашборда', 1),
+(2, 'orders.view', 'orders', 'view', 'Просмотр заказов', 1),
+(3, 'orders.manage', 'orders', 'manage', 'Управление заказами', 1),
+(4, 'orders.delete', 'orders', 'delete', 'Удаление заказов', 1),
+(5, 'clients.view', 'clients', 'view', 'Просмотр клиентов', 1),
+(6, 'clients.manage', 'clients', 'manage', 'Редактирование клиентов', 1),
+(7, 'clients.loyalty.adjust', 'clients', 'loyalty_adjust', 'Ручная корректировка бонусов', 1),
+(8, 'locations.cities.manage', 'locations', 'cities_manage', 'Управление городами', 1),
+(9, 'locations.branches.view', 'locations', 'branches_view', 'Просмотр филиалов', 1),
+(10, 'locations.branches.manage', 'locations', 'branches_manage', 'Управление филиалами', 1),
+(11, 'locations.delivery_zones.view', 'locations', 'delivery_zones_view', 'Просмотр зон доставки', 1),
+(12, 'locations.delivery_zones.manage', 'locations', 'delivery_zones_manage', 'Управление зонами доставки', 1),
+(13, 'menu.products.manage', 'menu', 'products_manage', 'Управление блюдами', 1),
+(14, 'menu.categories.manage', 'menu', 'categories_manage', 'Управление категориями', 1),
+(15, 'menu.modifiers.manage', 'menu', 'modifiers_manage', 'Управление модификаторами', 1),
+(16, 'menu.tags.manage', 'menu', 'tags_manage', 'Управление тегами', 1),
+(17, 'menu.stop_list.manage', 'menu', 'stop_list_manage', 'Управление стоп-листом', 1),
+(18, 'marketing.broadcasts.manage', 'marketing', 'broadcasts_manage', 'Управление рассылками', 1),
+(19, 'marketing.campaigns.manage', 'marketing', 'campaigns_manage', 'Управление кампаниями подписки', 1),
+(20, 'system.settings.manage', 'system', 'settings_manage', 'Управление системными настройками', 1),
+(21, 'system.integrations.manage', 'system', 'integrations_manage', 'Управление интеграциями', 1),
+(22, 'system.loyalty_levels.manage', 'system', 'loyalty_levels_manage', 'Управление уровнями лояльности', 1),
+(23, 'system.admin_users.manage', 'system', 'admin_users_manage', 'Управление admin-users', 1),
+(24, 'system.logs.view', 'system', 'logs_view', 'Просмотр административных логов', 1),
+(25, 'system.queues.manage', 'system', 'queues_manage', 'Управление очередями', 1),
+(26, 'system.access.manage', 'system', 'access_manage', 'Управление ролями и доступами', 1);
+
+INSERT INTO `admin_role_permissions` (`role_id`, `permission_id`) VALUES
+(1, 1), (1, 2), (1, 3), (1, 4), (1, 5), (1, 6), (1, 7), (1, 8), (1, 9), (1, 10), (1, 11), (1, 12), (1, 13), (1, 14), (1, 15), (1, 16), (1, 17), (1, 18), (1, 19), (1, 20), (1, 21), (1, 22), (1, 23), (1, 24), (1, 25), (1, 26),
+(2, 1), (2, 2), (2, 3), (2, 4), (2, 5), (2, 6), (2, 7), (2, 8), (2, 9), (2, 10), (2, 11), (2, 12), (2, 13), (2, 14), (2, 15), (2, 16), (2, 17), (2, 18), (2, 19), (2, 20), (2, 21), (2, 22), (2, 23), (2, 24), (2, 25), (2, 26),
+(3, 1), (3, 2), (3, 3), (3, 5), (3, 6), (3, 9), (3, 11), (3, 12), (3, 17);
 
 SET FOREIGN_KEY_CHECKS=1;

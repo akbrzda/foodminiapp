@@ -2,6 +2,7 @@ import jwt from "jsonwebtoken";
 import { isBlacklisted } from "./tokenBlacklist.js";
 import { logger } from "../utils/logger.js";
 import { JWT_ISSUER, JWT_ACCESS_AUDIENCES, extractBearerToken, getJwtSecret } from "../config/auth.js";
+import { canPermission, getDefaultRolePermissions } from "../modules/access/index.js";
 
 const normalizeCityIds = (value) => {
   if (Array.isArray(value)) {
@@ -28,6 +29,14 @@ const normalizeCityIds = (value) => {
   }
   return [];
 };
+
+const normalizePermissions = (value, role) => {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item).trim()).filter(Boolean);
+  }
+  return getDefaultRolePermissions(role);
+};
+
 export const authenticateToken = async (req, res, next) => {
   try {
     // Пытаемся получить токен из cookie (приоритет) или header
@@ -58,6 +67,7 @@ export const authenticateToken = async (req, res, next) => {
     req.user = {
       ...user,
       cities: normalizeCityIds(user?.cities),
+      permissions: normalizePermissions(user?.permissions, user?.role),
     };
     next();
   } catch (error) {
@@ -71,6 +81,7 @@ export const authenticateToken = async (req, res, next) => {
     });
   }
 };
+
 export const requireRole = (...roles) => {
   return (req, res, next) => {
     if (!req.user) {
@@ -86,6 +97,28 @@ export const requireRole = (...roles) => {
     next();
   };
 };
+
+export const requirePermission = (...permissions) => {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({
+        error: "Authentication required",
+      });
+    }
+
+    const userPermissions = Array.isArray(req.user.permissions) ? req.user.permissions : getDefaultRolePermissions(req.user.role);
+    const hasPermission = permissions.some((permissionCode) => canPermission(userPermissions, permissionCode));
+
+    if (!hasPermission) {
+      return res.status(403).json({
+        error: "Insufficient permissions",
+      });
+    }
+
+    next();
+  };
+};
+
 export const checkCityAccess = (req, res, next) => {
   if (!req.user) {
     return res.status(401).json({

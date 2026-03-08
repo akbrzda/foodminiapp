@@ -2,12 +2,13 @@ import express from "express";
 import bcrypt from "bcrypt";
 import db from "../../config/database.js";
 import redis from "../../config/redis.js";
-import { authenticateToken, requireRole } from "../../middleware/auth.js";
+import { authenticateToken, requirePermission, requireRole } from "../../middleware/auth.js";
 import { telegramQueue, imageQueue, getQueueStats, getFailedJobs, retryFailedJobs, cleanQueue } from "../../queues/config.js";
 import { getSystemSettings } from "../../utils/settings.js";
 import { logger } from "../../utils/logger.js";
 import { decryptUserData, encryptEmail, encryptPhone } from "../../utils/encryption.js";
 import loyaltyAdapter from "../integrations/adapters/loyaltyAdapter.js";
+import { getRolePermissions, resolveAdminPermissions, SYSTEM_ROLE_DEFINITIONS } from "../access/index.js";
 const router = express.Router();
 router.use(authenticateToken);
 const ADMIN_LOGIN_ATTEMPTS_PREFIX = "auth:admin:attempts";
@@ -56,6 +57,13 @@ const getManagerCityIds = (req) => {
   if (req.user?.role !== "manager") return null;
   if (!Array.isArray(req.user.cities)) return [];
   return req.user.cities.filter((cityId) => Number.isInteger(cityId));
+};
+
+const ACCESS_TABLE_MISSING_CODES = new Set(["ER_NO_SUCH_TABLE", "ER_BAD_TABLE_ERROR"]);
+
+const isAccessSchemaMissingError = (error) => {
+  if (!error) return false;
+  return ACCESS_TABLE_MISSING_CODES.has(error.code);
 };
 router.get("/users/admins", requireRole("admin", "ceo"), async (req, res, next) => {
   try {
@@ -158,6 +166,531 @@ router.get("/users/:id", requireRole("admin", "ceo"), async (req, res, next) => 
     next(error);
   }
 });
+
+router.get("/access/permissions", requirePermission("system.access.manage"), async (req, res, next) => {
+  try {
+    const [rows] = await db.query(
+      `SELECT id, code, module, action, description, is_active, created_at, updated_at
+       FROM admin_permissions
+       ORDER BY module ASC, code ASC`,
+    );
+    res.json({
+      success: true,
+      data: rows,
+    });
+  } catch (error) {
+    if (isAccessSchemaMissingError(error)) {
+      return res.status(503).json({
+        success: false,
+        error: "Схема доступов не инициализирована. Примените миграцию 052.",
+      });
+    }
+    next(error);
+  }
+});
+
+router.get("/access/roles", requirePermission("system.access.manage"), async (req, res, next) => {
+  try {
+    const [roles] = await db.query(
+      `SELECT r.id, r.code, r.name, r.is_system, r.is_active, r.created_at, r.updated_at, COUNT(rp.permission_id) AS permissions_count
+       FROM admin_roles r
+       LEFT JOIN admin_role_permissions rp ON rp.role_id = r.id
+       GROUP BY r.id, r.code, r.name, r.is_system, r.is_active, r.created_at, r.updated_at
+       ORDER BY r.is_system DESC, r.code ASC`,
+    );
+
+    res.json({
+      success: true,
+      data: roles,
+    });
+  } catch (error) {
+    if (isAccessSchemaMissingError(error)) {
+      return res.status(503).json({
+        success: false,
+        error: "Схема доступов не инициализирована. Примените миграцию 052.",
+      });
+    }
+    next(error);
+  }
+});
+
+router.post("/access/roles", requirePermission("system.access.manage"), async (req, res, next) => {
+  try {
+    const code = String(req.body?.code || "")
+      .trim()
+      .toLowerCase();
+    const name = String(req.body?.name || "").trim();
+    const isActive = req.body?.is_active === undefined ? true : req.body.is_active === true;
+
+    if (!code || !name) {
+      return res.status(400).json({
+        success: false,
+        error: "Поля code и name обязательны",
+      });
+    }
+    if (!/^[a-z0-9_]{2,50}$/.test(code)) {
+      return res.status(400).json({
+        success: false,
+        error: "code может содержать только a-z, 0-9 и _, длина 2-50",
+      });
+    }
+    if (SYSTEM_ROLE_DEFINITIONS.some((role) => role.code === code)) {
+      return res.status(400).json({
+        success: false,
+        error: "Код роли зарезервирован системной ролью",
+      });
+    }
+
+    const [result] = await db.query(`INSERT INTO admin_roles (code, name, is_system, is_active) VALUES (?, ?, 0, ?)`, [code, name, isActive]);
+    const [rows] = await db.query(
+      `SELECT id, code, name, is_system, is_active, created_at, updated_at
+       FROM admin_roles
+       WHERE id = ?`,
+      [result.insertId],
+    );
+
+    res.status(201).json({
+      success: true,
+      data: rows[0],
+    });
+  } catch (error) {
+    if (isAccessSchemaMissingError(error)) {
+      return res.status(503).json({
+        success: false,
+        error: "Схема доступов не инициализирована. Примените миграцию 052.",
+      });
+    }
+    if (error?.code === "ER_DUP_ENTRY") {
+      return res.status(409).json({
+        success: false,
+        error: "Роль с таким code уже существует",
+      });
+    }
+    next(error);
+  }
+});
+
+router.put("/access/roles/:id", requirePermission("system.access.manage"), async (req, res, next) => {
+  try {
+    const roleId = Number(req.params.id);
+    if (!Number.isInteger(roleId) || roleId <= 0) {
+      return res.status(400).json({
+        success: false,
+        error: "Некорректный id роли",
+      });
+    }
+
+    const [existingRows] = await db.query(`SELECT id, code, is_system FROM admin_roles WHERE id = ? LIMIT 1`, [roleId]);
+    if (existingRows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: "Роль не найдена",
+      });
+    }
+
+    const role = existingRows[0];
+    const updates = [];
+    const values = [];
+
+    if (req.body?.name !== undefined) {
+      const name = String(req.body.name || "").trim();
+      if (!name) {
+        return res.status(400).json({
+          success: false,
+          error: "name не может быть пустым",
+        });
+      }
+      updates.push("name = ?");
+      values.push(name);
+    }
+    if (req.body?.is_active !== undefined) {
+      updates.push("is_active = ?");
+      values.push(req.body.is_active === true);
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: "Нет полей для обновления",
+      });
+    }
+
+    if (role.is_system && req.body?.is_active === false) {
+      return res.status(400).json({
+        success: false,
+        error: "Системную роль нельзя деактивировать",
+      });
+    }
+
+    values.push(roleId);
+    await db.query(`UPDATE admin_roles SET ${updates.join(", ")} WHERE id = ?`, values);
+
+    const [rows] = await db.query(
+      `SELECT id, code, name, is_system, is_active, created_at, updated_at
+       FROM admin_roles
+       WHERE id = ?`,
+      [roleId],
+    );
+
+    res.json({
+      success: true,
+      data: rows[0],
+    });
+  } catch (error) {
+    if (isAccessSchemaMissingError(error)) {
+      return res.status(503).json({
+        success: false,
+        error: "Схема доступов не инициализирована. Примените миграцию 052.",
+      });
+    }
+    next(error);
+  }
+});
+
+router.delete("/access/roles/:id", requirePermission("system.access.manage"), async (req, res, next) => {
+  try {
+    const roleId = Number(req.params.id);
+    if (!Number.isInteger(roleId) || roleId <= 0) {
+      return res.status(400).json({
+        success: false,
+        error: "Некорректный id роли",
+      });
+    }
+
+    const [existingRows] = await db.query(`SELECT id, code, is_system FROM admin_roles WHERE id = ? LIMIT 1`, [roleId]);
+    if (existingRows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: "Роль не найдена",
+      });
+    }
+
+    if (existingRows[0].is_system) {
+      return res.status(400).json({
+        success: false,
+        error: "Системную роль нельзя удалить",
+      });
+    }
+
+    await db.query(`DELETE FROM admin_roles WHERE id = ?`, [roleId]);
+    res.json({
+      success: true,
+      data: { deleted: true },
+    });
+  } catch (error) {
+    if (isAccessSchemaMissingError(error)) {
+      return res.status(503).json({
+        success: false,
+        error: "Схема доступов не инициализирована. Примените миграцию 052.",
+      });
+    }
+    next(error);
+  }
+});
+
+router.get("/access/roles/:id/permissions", requirePermission("system.access.manage"), async (req, res, next) => {
+  try {
+    const roleId = Number(req.params.id);
+    if (!Number.isInteger(roleId) || roleId <= 0) {
+      return res.status(400).json({
+        success: false,
+        error: "Некорректный id роли",
+      });
+    }
+
+    const [roleRows] = await db.query(`SELECT id, code, name, is_system, is_active FROM admin_roles WHERE id = ? LIMIT 1`, [roleId]);
+    if (roleRows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: "Роль не найдена",
+      });
+    }
+
+    const [assignedRows] = await db.query(
+      `SELECT p.code
+       FROM admin_role_permissions rp
+       JOIN admin_permissions p ON p.id = rp.permission_id
+       WHERE rp.role_id = ?
+       ORDER BY p.code ASC`,
+      [roleId],
+    );
+
+    res.json({
+      success: true,
+      data: {
+        role: roleRows[0],
+        permissions: assignedRows.map((row) => row.code),
+      },
+    });
+  } catch (error) {
+    if (isAccessSchemaMissingError(error)) {
+      return res.status(503).json({
+        success: false,
+        error: "Схема доступов не инициализирована. Примените миграцию 052.",
+      });
+    }
+    next(error);
+  }
+});
+
+router.put("/access/roles/:id/permissions", requirePermission("system.access.manage"), async (req, res, next) => {
+  let connection;
+  try {
+    const roleId = Number(req.params.id);
+    const permissionCodes = Array.isArray(req.body?.permission_codes) ? req.body.permission_codes : null;
+    if (!Number.isInteger(roleId) || roleId <= 0) {
+      return res.status(400).json({
+        success: false,
+        error: "Некорректный id роли",
+      });
+    }
+    if (!permissionCodes) {
+      return res.status(400).json({
+        success: false,
+        error: "permission_codes должен быть массивом",
+      });
+    }
+
+    connection = await db.getConnection();
+    await connection.beginTransaction();
+
+    const [roleRows] = await connection.query(`SELECT id FROM admin_roles WHERE id = ? LIMIT 1`, [roleId]);
+    if (roleRows.length === 0) {
+      await connection.rollback();
+      return res.status(404).json({
+        success: false,
+        error: "Роль не найдена",
+      });
+    }
+
+    let permissionIds = [];
+    if (permissionCodes.length > 0) {
+      const [permissionRows] = await connection.query(`SELECT id, code FROM admin_permissions WHERE code IN (?)`, [permissionCodes]);
+      if (permissionRows.length !== permissionCodes.length) {
+        const existing = new Set(permissionRows.map((row) => row.code));
+        const missing = permissionCodes.filter((code) => !existing.has(code));
+        await connection.rollback();
+        return res.status(400).json({
+          success: false,
+          error: `Не найдены permissions: ${missing.join(", ")}`,
+        });
+      }
+      permissionIds = permissionRows.map((row) => row.id);
+    }
+
+    await connection.query(`DELETE FROM admin_role_permissions WHERE role_id = ?`, [roleId]);
+    if (permissionIds.length > 0) {
+      const values = permissionIds.map((permissionId) => [roleId, permissionId]);
+      await connection.query(`INSERT INTO admin_role_permissions (role_id, permission_id) VALUES ?`, [values]);
+    }
+
+    await connection.commit();
+    res.json({
+      success: true,
+      data: {
+        role_id: roleId,
+        permission_codes: permissionCodes,
+      },
+    });
+  } catch (error) {
+    if (connection) await connection.rollback();
+    if (isAccessSchemaMissingError(error)) {
+      return res.status(503).json({
+        success: false,
+        error: "Схема доступов не инициализирована. Примените миграцию 052.",
+      });
+    }
+    next(error);
+  } finally {
+    if (connection) connection.release();
+  }
+});
+
+router.get("/access/users/:id/overrides", requirePermission("system.access.manage"), async (req, res, next) => {
+  try {
+    const userId = Number(req.params.id);
+    if (!Number.isInteger(userId) || userId <= 0) {
+      return res.status(400).json({
+        success: false,
+        error: "Некорректный id пользователя",
+      });
+    }
+
+    const [users] = await db.query(`SELECT id, role, email, first_name, last_name FROM admin_users WHERE id = ? LIMIT 1`, [userId]);
+    if (users.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: "Пользователь не найден",
+      });
+    }
+
+    const user = users[0];
+    const [overridesRows] = await db.query(
+      `SELECT p.code AS permission_code, uo.effect
+       FROM admin_user_permission_overrides uo
+       JOIN admin_permissions p ON p.id = uo.permission_id
+       WHERE uo.admin_user_id = ?
+       ORDER BY p.code ASC`,
+      [userId],
+    );
+
+    const rolePermissions = await getRolePermissions(db, user.role);
+    const resolved = await resolveAdminPermissions(db, { adminUserId: userId, roleCode: user.role });
+
+    res.json({
+      success: true,
+      data: {
+        user,
+        role_permissions: rolePermissions,
+        overrides: overridesRows,
+        effective_permissions: resolved.permissions,
+      },
+    });
+  } catch (error) {
+    if (isAccessSchemaMissingError(error)) {
+      return res.status(503).json({
+        success: false,
+        error: "Схема доступов не инициализирована. Примените миграцию 052.",
+      });
+    }
+    next(error);
+  }
+});
+
+router.put("/access/users/:id/overrides", requirePermission("system.access.manage"), async (req, res, next) => {
+  let connection;
+  try {
+    const userId = Number(req.params.id);
+    const overrides = Array.isArray(req.body?.overrides) ? req.body.overrides : null;
+
+    if (!Number.isInteger(userId) || userId <= 0) {
+      return res.status(400).json({
+        success: false,
+        error: "Некорректный id пользователя",
+      });
+    }
+    if (!overrides) {
+      return res.status(400).json({
+        success: false,
+        error: "overrides должен быть массивом",
+      });
+    }
+
+    const normalizedOverrides = overrides.map((item) => ({
+      permission_code: String(item?.permission_code || "").trim(),
+      effect: String(item?.effect || "").trim().toLowerCase(),
+    }));
+    if (normalizedOverrides.some((item) => !item.permission_code || !["allow", "deny"].includes(item.effect))) {
+      return res.status(400).json({
+        success: false,
+        error: "Каждый override должен содержать permission_code и effect (allow|deny)",
+      });
+    }
+
+    connection = await db.getConnection();
+    await connection.beginTransaction();
+
+    const [users] = await connection.query(`SELECT id, role FROM admin_users WHERE id = ? LIMIT 1`, [userId]);
+    if (users.length === 0) {
+      await connection.rollback();
+      return res.status(404).json({
+        success: false,
+        error: "Пользователь не найден",
+      });
+    }
+
+    const permissionCodes = [...new Set(normalizedOverrides.map((item) => item.permission_code))];
+    const [permissionRows] = permissionCodes.length
+      ? await connection.query(`SELECT id, code FROM admin_permissions WHERE code IN (?)`, [permissionCodes])
+      : [[], []];
+
+    if (permissionRows.length !== permissionCodes.length) {
+      const existing = new Set(permissionRows.map((row) => row.code));
+      const missing = permissionCodes.filter((code) => !existing.has(code));
+      await connection.rollback();
+      return res.status(400).json({
+        success: false,
+        error: `Не найдены permissions: ${missing.join(", ")}`,
+      });
+    }
+
+    const permissionIdByCode = new Map(permissionRows.map((row) => [row.code, row.id]));
+
+    await connection.query(`DELETE FROM admin_user_permission_overrides WHERE admin_user_id = ?`, [userId]);
+
+    if (normalizedOverrides.length > 0) {
+      const values = normalizedOverrides.map((item) => [userId, permissionIdByCode.get(item.permission_code), item.effect]);
+      await connection.query(
+        `INSERT INTO admin_user_permission_overrides (admin_user_id, permission_id, effect) VALUES ?`,
+        [values],
+      );
+    }
+
+    await connection.commit();
+
+    const resolved = await resolveAdminPermissions(db, { adminUserId: userId, roleCode: users[0].role });
+    res.json({
+      success: true,
+      data: {
+        admin_user_id: userId,
+        overrides: normalizedOverrides,
+        effective_permissions: resolved.permissions,
+      },
+    });
+  } catch (error) {
+    if (connection) await connection.rollback();
+    if (isAccessSchemaMissingError(error)) {
+      return res.status(503).json({
+        success: false,
+        error: "Схема доступов не инициализирована. Примените миграцию 052.",
+      });
+    }
+    next(error);
+  } finally {
+    if (connection) connection.release();
+  }
+});
+
+router.delete("/access/users/:id/overrides", requirePermission("system.access.manage"), async (req, res, next) => {
+  try {
+    const userId = Number(req.params.id);
+    if (!Number.isInteger(userId) || userId <= 0) {
+      return res.status(400).json({
+        success: false,
+        error: "Некорректный id пользователя",
+      });
+    }
+
+    const [users] = await db.query(`SELECT id, role FROM admin_users WHERE id = ? LIMIT 1`, [userId]);
+    if (users.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: "Пользователь не найден",
+      });
+    }
+
+    await db.query(`DELETE FROM admin_user_permission_overrides WHERE admin_user_id = ?`, [userId]);
+    const resolved = await resolveAdminPermissions(db, { adminUserId: userId, roleCode: users[0].role });
+
+    res.json({
+      success: true,
+      data: {
+        admin_user_id: userId,
+        reset_to_role_defaults: true,
+        effective_permissions: resolved.permissions,
+      },
+    });
+  } catch (error) {
+    if (isAccessSchemaMissingError(error)) {
+      return res.status(503).json({
+        success: false,
+        error: "Схема доступов не инициализирована. Примените миграцию 052.",
+      });
+    }
+    next(error);
+  }
+});
+
 router.get("/users/:id/security", requireRole("admin"), async (req, res, next) => {
   try {
     const userId = Number(req.params.id);

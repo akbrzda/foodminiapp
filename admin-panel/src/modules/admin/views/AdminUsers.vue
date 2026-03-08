@@ -9,6 +9,10 @@
               <Plus :size="16" />
               Добавить пользователя
             </Button>
+            <Button v-if="authStore.hasPermission('system.access.manage')" variant="outline" @click="openAccessRolesPage">
+              <KeyRound :size="16" />
+              Роли и доступы
+            </Button>
           </template>
         </PageHeader>
       </CardContent>
@@ -82,7 +86,9 @@
                 </Badge>
                 <Badge
                   variant="secondary"
-                  :class="user.eruda_enabled ? 'bg-emerald-100 text-emerald-700 border-transparent' : 'bg-muted text-muted-foreground border-transparent'"
+                  :class="
+                    user.eruda_enabled ? 'bg-emerald-100 text-emerald-700 border-transparent' : 'bg-muted text-muted-foreground border-transparent'
+                  "
                 >
                   Eruda: {{ user.eruda_enabled ? "Вкл" : "Выкл" }}
                 </Badge>
@@ -90,7 +96,9 @@
               <div class="mt-3">
                 <div v-if="user.role === 'manager'" class="space-y-2">
                   <div v-if="user.branches?.length" class="flex flex-wrap gap-1">
-                    <Badge v-for="branch in user.branches" :key="`mobile-branch-${user.id}-${branch.id}`" variant="secondary">{{ branch.name }}</Badge>
+                    <Badge v-for="branch in user.branches" :key="`mobile-branch-${user.id}-${branch.id}`" variant="secondary">{{
+                      branch.name
+                    }}</Badge>
                   </div>
                   <div v-if="user.cities?.length" class="flex flex-wrap gap-1">
                     <Badge v-for="city in user.cities" :key="`mobile-city-${user.id}-${city.id}`" variant="outline">{{ city.name }}</Badge>
@@ -103,7 +111,7 @@
                 <Button v-if="authStore.role === 'admin'" variant="ghost" size="icon" @click="openSecurityModal(user)">
                   <Shield :size="16" />
                 </Button>
-                <Button v-if="!(authStore.role === 'ceo' && user.role === 'admin')" variant="ghost" size="icon" @click="openModal(user)">
+                <Button v-if="!(authStore.role === 'ceo' && user.role === 'admin')" variant="ghost" size="icon" @click="openEditPage(user)">
                   <Pencil :size="16" />
                 </Button>
                 <Button
@@ -155,7 +163,9 @@
                   <TableCell>
                     <Badge
                       variant="secondary"
-                      :class="user.is_active ? 'bg-emerald-100 text-emerald-700 border-transparent' : 'bg-muted text-muted-foreground border-transparent'"
+                      :class="
+                        user.is_active ? 'bg-emerald-100 text-emerald-700 border-transparent' : 'bg-muted text-muted-foreground border-transparent'
+                      "
                     >
                       {{ user.is_active ? "Активен" : "Неактивен" }}
                     </Badge>
@@ -163,7 +173,11 @@
                   <TableCell>
                     <Badge
                       variant="secondary"
-                      :class="user.eruda_enabled ? 'bg-emerald-100 text-emerald-700 border-transparent' : 'bg-muted text-muted-foreground border-transparent'"
+                      :class="
+                        user.eruda_enabled
+                          ? 'bg-emerald-100 text-emerald-700 border-transparent'
+                          : 'bg-muted text-muted-foreground border-transparent'
+                      "
                     >
                       {{ user.eruda_enabled ? "Включено" : "Выключено" }}
                     </Badge>
@@ -185,12 +199,7 @@
                       <Button v-if="authStore.role === 'admin'" variant="ghost" size="icon" @click="openSecurityModal(user)">
                         <Shield :size="16" />
                       </Button>
-                      <Button
-                        v-if="!(authStore.role === 'ceo' && user.role === 'admin')"
-                        variant="ghost"
-                        size="icon"
-                        @click="openModal(user)"
-                      >
+                      <Button v-if="!(authStore.role === 'ceo' && user.role === 'admin')" variant="ghost" size="icon" @click="openEditPage(user)">
                         <Pencil :size="16" />
                       </Button>
                       <Button
@@ -217,8 +226,8 @@
     <Dialog v-if="showModal" :open="showModal" @update:open="(value) => (value ? null : closeModal())">
       <DialogContent class="w-full max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{{ modalTitle }}</DialogTitle>
-          <DialogDescription>{{ modalSubtitle }}</DialogDescription>
+          <DialogTitle>Новый пользователь</DialogTitle>
+          <DialogDescription>Добавьте нового администратора или менеджера</DialogDescription>
         </DialogHeader>
         <form class="space-y-4" @submit.prevent="submitUser">
           <FieldGroup>
@@ -242,10 +251,10 @@
                 <Input v-model="form.email" type="email" required />
               </FieldContent>
             </Field>
-            <Field v-if="!editing">
+            <Field>
               <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Пароль</FieldLabel>
               <FieldContent>
-                <Input v-model="form.password" type="password" :required="!editing" minlength="6" />
+                <Input v-model="form.password" type="password" required minlength="6" />
                 <p class="text-xs text-muted-foreground">Минимум 6 символов</p>
               </FieldContent>
             </Field>
@@ -253,7 +262,7 @@
               <Field>
                 <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Роль</FieldLabel>
                 <FieldContent>
-                  <Select v-model="form.role" required :disabled="authStore.role === 'ceo' && Boolean(editing)">
+                  <Select v-model="form.role" required>
                     <SelectTrigger class="w-full">
                       <SelectValue placeholder="Выберите роль" />
                     </SelectTrigger>
@@ -287,22 +296,22 @@
                 <p class="text-xs text-muted-foreground">Используется для доступа к Eruda в mini app.</p>
               </FieldContent>
             </Field>
-              <Field>
-                <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Eruda</FieldLabel>
-                <FieldContent>
-                  <Select v-model="form.eruda_enabled" :disabled="!hasTelegramId || authStore.role === 'ceo'">
-                    <SelectTrigger class="w-full">
-                      <SelectValue placeholder="Выберите статус" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem :value="true">Включено</SelectItem>
-                      <SelectItem :value="false">Выключено</SelectItem>
-                    </SelectContent>
-                  </Select>
+            <Field>
+              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Eruda</FieldLabel>
+              <FieldContent>
+                <Select v-model="form.eruda_enabled" :disabled="!hasTelegramId || authStore.role === 'ceo'">
+                  <SelectTrigger class="w-full">
+                    <SelectValue placeholder="Выберите статус" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem :value="true">Включено</SelectItem>
+                    <SelectItem :value="false">Выключено</SelectItem>
+                  </SelectContent>
+                </Select>
                 <p v-if="authStore.role === 'ceo'" class="text-xs text-muted-foreground">CEO не может включать Eruda.</p>
                 <p v-else-if="!hasTelegramId" class="text-xs text-muted-foreground">Для включения нужен Telegram ID.</p>
-                </FieldContent>
-              </Field>
+              </FieldContent>
+            </Field>
             <Field v-if="form.role === 'manager'">
               <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Города доступа</FieldLabel>
               <FieldContent>
@@ -338,9 +347,7 @@
       <DialogContent class="w-full max-w-3xl">
         <DialogHeader>
           <DialogTitle>Безопасность пользователя</DialogTitle>
-          <DialogDescription>
-            {{ securityUser?.first_name }} {{ securityUser?.last_name }} · {{ securityUser?.email }}
-          </DialogDescription>
+          <DialogDescription> {{ securityUser?.first_name }} {{ securityUser?.last_name }} · {{ securityUser?.email }} </DialogDescription>
         </DialogHeader>
         <div class="space-y-4">
           <div class="flex flex-wrap justify-end gap-2">
@@ -372,12 +379,7 @@
                       <Badge v-if="item.is_banned" variant="secondary" class="bg-red-100 text-red-700 border-transparent">
                         Бан: {{ item.ban_ttl_seconds }}с
                       </Badge>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        :disabled="securityResetLoading"
-                        @click="resetSecurityLimits(item.ip)"
-                      >
+                      <Button size="sm" variant="outline" :disabled="securityResetLoading" @click="resetSecurityLimits(item.ip)">
                         Сбросить IP
                       </Button>
                     </div>
@@ -412,7 +414,8 @@
 <script setup>
 import { devError } from "@/shared/utils/logger";
 import { computed, onMounted, ref, watch } from "vue";
-import { Pencil, Plus, RefreshCcw, RotateCcw, Save, Shield, Trash2 } from "lucide-vue-next";
+import { useRouter } from "vue-router";
+import { KeyRound, Pencil, Plus, RefreshCcw, RotateCcw, Save, Shield, Trash2 } from "lucide-vue-next";
 import api from "@/shared/api/client.js";
 import { useReferenceStore } from "@/shared/stores/reference.js";
 import { useAuthStore } from "@/shared/stores/auth.js";
@@ -436,7 +439,8 @@ import { Field, FieldContent, FieldGroup, FieldLabel } from "@/shared/components
 import { Label } from "@/shared/components/ui/label";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
 import { useListContext } from "@/shared/composables/useListContext.js";
-import { formatDateTime, normalizeBoolean } from "@/shared/utils/format.js";
+import { formatDateTime } from "@/shared/utils/format.js";
+const router = useRouter();
 const referenceStore = useReferenceStore();
 const authStore = useAuthStore();
 const { showErrorNotification } = useNotifications();
@@ -447,7 +451,6 @@ const page = ref(1);
 const pageSize = ref(20);
 const showModal = ref(false);
 const showSecurityModal = ref(false);
-const editing = ref(null);
 const securityUser = ref(null);
 const securityLoading = ref(false);
 const securityResetLoading = ref(false);
@@ -469,8 +472,6 @@ const form = ref({
   city_ids: [],
   branch_ids: [],
 });
-const modalTitle = computed(() => (editing.value ? "Редактировать пользователя" : "Новый пользователь"));
-const modalSubtitle = computed(() => (editing.value ? "Измените данные пользователя" : "Добавьте нового администратора или менеджера"));
 const paginatedUsers = computed(() => {
   const start = (page.value - 1) * pageSize.value;
   return users.value.slice(start, start + pageSize.value);
@@ -524,43 +525,23 @@ const onPageSizeChange = (value) => {
   pageSize.value = value;
   page.value = 1;
 };
-const openModal = (user = null) => {
-  if (authStore.role === "ceo" && user?.role === "admin") {
-    return;
-  }
-  editing.value = user;
-  if (user) {
-    form.value = {
-      first_name: user.first_name,
-      last_name: user.last_name,
-      email: user.email,
-      password: "",
-      role: user.role,
-      is_active: normalizeBoolean(user.is_active, true),
-      telegram_id: user.telegram_id || "",
-      eruda_enabled: normalizeBoolean(user.eruda_enabled, false),
-      city_ids: (user.cities || []).map((c) => Number(c.id)).filter(Number.isFinite),
-      branch_ids: (user.branches || []).map((branch) => Number(branch.id)).filter(Number.isFinite),
-    };
-  } else {
-    form.value = {
-      first_name: "",
-      last_name: "",
-      email: "",
-      password: "",
-      role: "manager",
-      is_active: true,
-      telegram_id: "",
-      eruda_enabled: false,
-      city_ids: [],
-      branch_ids: [],
-    };
-  }
+const openModal = () => {
+  form.value = {
+    first_name: "",
+    last_name: "",
+    email: "",
+    password: "",
+    role: "manager",
+    is_active: true,
+    telegram_id: "",
+    eruda_enabled: false,
+    city_ids: [],
+    branch_ids: [],
+  };
   showModal.value = true;
 };
 const closeModal = () => {
   showModal.value = false;
-  editing.value = null;
 };
 const openSecurityModal = async (user) => {
   if (authStore.role !== "admin") return;
@@ -610,6 +591,7 @@ const submitUser = async () => {
       first_name: form.value.first_name,
       last_name: form.value.last_name,
       email: form.value.email,
+      password: form.value.password,
       role: form.value.role,
       is_active: form.value.is_active,
       telegram_id: form.value.telegram_id ? Number(form.value.telegram_id) : null,
@@ -617,16 +599,7 @@ const submitUser = async () => {
       cities: form.value.city_ids,
       branch_ids: form.value.branch_ids || [],
     };
-    if (!editing.value) {
-      payload.password = form.value.password;
-    } else if (form.value.password) {
-      payload.password = form.value.password;
-    }
-    if (editing.value) {
-      await api.put(`/api/admin/users/${editing.value.id}`, payload);
-    } else {
-      await api.post("/api/admin/users", payload);
-    }
+    await api.post("/api/admin/users", payload);
     showModal.value = false;
     await loadUsers();
   } catch (error) {
@@ -635,6 +608,15 @@ const submitUser = async () => {
   }
 };
 const hasTelegramId = computed(() => Boolean(String(form.value.telegram_id || "").trim()));
+const openAccessRolesPage = () => {
+  router.push({ name: "admin-users-access-roles" });
+};
+
+const openEditPage = (user) => {
+  if (!user?.id) return;
+  router.push({ name: "admin-user-edit", params: { id: user.id } });
+};
+
 const deleteUser = async (user) => {
   if (!confirm(`Удалить пользователя "${user.first_name} ${user.last_name}"?`)) return;
   try {

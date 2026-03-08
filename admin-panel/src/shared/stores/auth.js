@@ -61,6 +61,24 @@ export const useAuthStore = defineStore("auth", {
   getters: {
     isAuthenticated: (state) => Boolean(state.user),
     role: (state) => state.user?.role || "",
+    permissions: (state) => (Array.isArray(state.user?.permissions) ? state.user.permissions : []),
+    hasPermission: (state) => (permissionCode) => {
+      if (!permissionCode) return true;
+      const permissions = Array.isArray(state.user?.permissions) ? state.user.permissions : [];
+      if (permissions.includes(permissionCode)) return true;
+
+      // Backward compatibility для сессий без permissions.
+      if (permissions.length === 0 && ["admin", "ceo"].includes(state.user?.role)) {
+        return true;
+      }
+      return false;
+    },
+    hasAnyPermission() {
+      return (permissionCodes = []) => {
+        if (!Array.isArray(permissionCodes) || permissionCodes.length === 0) return true;
+        return permissionCodes.some((permissionCode) => this.hasPermission(permissionCode));
+      };
+    },
   },
   actions: {
     syncAuthEvent(payload) {

@@ -26,7 +26,9 @@ import SystemSettings from "@/modules/system/views/SystemSettings.vue";
 import IntegrationsSettings from "@/modules/system/views/IntegrationsSettings.vue";
 import LoyaltyLevelsSettings from "@/modules/system/views/LoyaltyLevelsSettings.vue";
 import AdminUsers from "@/modules/admin/views/AdminUsers.vue";
+import AdminUserEdit from "@/modules/admin/views/AdminUserEdit.vue";
 import AdminLogs from "@/modules/admin/views/AdminLogs.vue";
+import AccessRoles from "@/modules/admin/views/AccessRoles.vue";
 import OrderDetail from "@/modules/orders/views/OrderDetail.vue";
 import Broadcasts from "@/modules/broadcasts/views/Broadcasts.vue";
 import BroadcastForm from "@/modules/broadcasts/views/BroadcastForm.vue";
@@ -466,6 +468,33 @@ const router = createRouter({
           },
         },
         {
+          path: "admin-users/access-roles",
+          name: "admin-users-access-roles",
+          component: AccessRoles,
+          meta: {
+            title: "Роли и доступы",
+            subtitle: "Матрица прав и настройки ролей",
+            roles: ["admin", "ceo"],
+            permissions: ["system.access.manage"],
+            breadcrumbs: [{ label: "Администраторы", to: "/admin-users" }, { label: "Роли и доступы" }],
+            isDetail: true,
+            parentList: "admin-users",
+          },
+        },
+        {
+          path: "admin-users/:id/edit",
+          name: "admin-user-edit",
+          component: AdminUserEdit,
+          meta: {
+            title: "Редактирование пользователя",
+            subtitle: "Профиль, роль и индивидуальные доступы",
+            roles: ["admin", "ceo"],
+            breadcrumbs: [{ label: "Администраторы", to: "/admin-users" }, { label: "Редактирование пользователя" }],
+            isEdit: true,
+            parentList: "admin-users",
+          },
+        },
+        {
           path: "logs",
           name: "admin-logs",
           component: AdminLogs,
@@ -494,6 +523,14 @@ router.beforeEach(async (to, from) => {
   }
   if (to.meta.public && authStore.isAuthenticated && to.name === "login") {
     return { name: "orders" };
+  }
+  const requiredPermissions = Array.isArray(to.meta.permissions)
+    ? to.meta.permissions
+    : to.meta.permissions
+      ? [to.meta.permissions]
+      : [];
+  if (requiredPermissions.length > 0 && !authStore.hasAnyPermission(requiredPermissions)) {
+    return { name: "not-found" };
   }
   if (to.meta.roles && authStore.role && !to.meta.roles.includes(authStore.role)) {
     return { name: "not-found" };

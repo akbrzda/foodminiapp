@@ -26,6 +26,7 @@ import { addToBlacklist, isBlacklisted } from "../../middleware/tokenBlacklist.j
 import { authenticateToken } from "../../middleware/auth.js";
 import { logger } from "../../utils/logger.js";
 import { authLimiter, createLimiter, refreshLimiter, strictAuthLimiter, telegramAuthLimiter } from "../../middleware/rateLimiter.js";
+import { resolveAdminPermissions } from "../access/index.js";
 
 const router = express.Router();
 const CLIENT_ACCESS_TOKEN_TTL = "15m";
@@ -115,6 +116,51 @@ const clearAdminLoginFailures = async (email, ip) => {
 };
 const getRequestIp = (req) => req?.ip || req?.connection?.remoteAddress || null;
 const getRequestUserAgent = (req) => req?.get?.("user-agent") || null;
+
+const getAdminScope = async (adminId, roleCode) => {
+  let cities = [];
+  let branches = [];
+
+  if (roleCode === "manager") {
+    const [userCities] = await db.query(`SELECT city_id FROM admin_user_cities WHERE admin_user_id = ?`, [adminId]);
+    cities = userCities.map((city) => city.city_id);
+
+    const [userBranches] = await db.query(
+      `SELECT b.id, b.name, b.city_id
+       FROM admin_user_branches aub
+       JOIN branches b ON aub.branch_id = b.id
+       WHERE aub.admin_user_id = ?`,
+      [adminId],
+    );
+    branches = userBranches || [];
+  }
+
+  return {
+    cities,
+    branches,
+  };
+};
+
+const buildAdminAuthPayload = ({ user, cities, branches, permissions }) => ({
+  id: user.id,
+  email: user.email,
+  role: user.role,
+  cities,
+  permissions,
+  type: "admin",
+  branch_ids: branches.map((branch) => branch.id),
+  branch_city_ids: branches.map((branch) => branch.city_id),
+});
+
+const buildAdminSessionUser = ({ user, cities, branches, permissions }) => ({
+  ...user,
+  cities,
+  permissions,
+  branch_ids: branches.map((branch) => branch.id),
+  branch_city_ids: branches.map((branch) => branch.city_id),
+  branches,
+});
+
 const logAdminAuthAction = async ({ adminUserId, action, description, req }) => {
   if (!adminUserId || !action) return;
   try {
@@ -361,33 +407,9 @@ router.post("/admin/login", authLimiter, strictAuthLimiter, async (req, res, nex
     }
     await clearAdminLoginFailures(email, req.ip);
 
-    let cities = [];
-    if (user.role === "manager") {
-      const [userCities] = await db.query(`SELECT city_id FROM admin_user_cities WHERE admin_user_id = ?`, [user.id]);
-      cities = userCities.map((c) => c.city_id);
-    }
-
-    let branches = [];
-    if (user.role === "manager") {
-      const [userBranches] = await db.query(
-        `SELECT b.id, b.name, b.city_id
-         FROM admin_user_branches aub
-         JOIN branches b ON aub.branch_id = b.id
-         WHERE aub.admin_user_id = ?`,
-        [user.id],
-      );
-      branches = userBranches || [];
-    }
-
-    const authPayload = {
-      id: user.id,
-      email: user.email,
-      role: user.role,
-      cities: cities,
-      type: "admin",
-      branch_ids: branches.map((branch) => branch.id),
-      branch_city_ids: branches.map((branch) => branch.city_id),
-    };
+    const { cities, branches } = await getAdminScope(user.id, user.role);
+    const { permissions } = await resolveAdminPermissions(db, { adminUserId: user.id, roleCode: user.role });
+    const authPayload = buildAdminAuthPayload({ user, cities, branches, permissions });
     const accessToken = signAccessToken(authPayload, JWT_AUDIENCE_ADMIN, ADMIN_ACCESS_TOKEN_TTL);
     const refreshToken = signRefreshToken(authPayload, JWT_AUDIENCE_REFRESH_ADMIN, ADMIN_REFRESH_TOKEN_TTL);
 
@@ -407,13 +429,7 @@ router.post("/admin/login", authLimiter, strictAuthLimiter, async (req, res, nex
     delete user.password_hash;
 
     res.json({
-      user: {
-        ...user,
-        cities: cities,
-        branch_ids: branches.map((branch) => branch.id),
-        branch_city_ids: branches.map((branch) => branch.city_id),
-        branches: branches,
-      },
+      user: buildAdminSessionUser({ user, cities, branches, permissions }),
     });
   } catch (error) {
     next(error);
@@ -440,6 +456,7 @@ router.post("/ws-ticket", authenticateToken, createLimiter, async (req, res, nex
       id: req.user.id,
       role: req.user.role || null,
       cities: req.user.cities || [],
+      permissions: req.user.permissions || [],
       city_ids: req.user.city_ids || [],
       type: req.user.type || "client",
       issued_at: Date.now(),
@@ -515,31 +532,9 @@ router.post("/refresh", refreshLimiter, async (req, res) => {
         return res.status(401).json({ error: "Admin account not found or inactive" });
       }
       const admin = admins[0];
-      let cities = [];
-      if (admin.role === "manager") {
-        const [userCities] = await db.query(`SELECT city_id FROM admin_user_cities WHERE admin_user_id = ?`, [admin.id]);
-        cities = userCities.map((c) => c.city_id);
-      }
-      let branches = [];
-      if (admin.role === "manager") {
-        const [userBranches] = await db.query(
-          `SELECT b.id, b.city_id
-           FROM admin_user_branches aub
-           JOIN branches b ON aub.branch_id = b.id
-           WHERE aub.admin_user_id = ?`,
-          [admin.id],
-        );
-        branches = userBranches || [];
-      }
-      const payload = {
-        id: admin.id,
-        email: admin.email,
-        role: admin.role,
-        cities,
-        type: "admin",
-        branch_ids: branches.map((branch) => branch.id),
-        branch_city_ids: branches.map((branch) => branch.city_id),
-      };
+      const { cities, branches } = await getAdminScope(admin.id, admin.role);
+      const { permissions } = await resolveAdminPermissions(db, { adminUserId: admin.id, roleCode: admin.role });
+      const payload = buildAdminAuthPayload({ user: admin, cities, branches, permissions });
       nextAccessToken = signAccessToken(payload, JWT_AUDIENCE_ADMIN, ADMIN_ACCESS_TOKEN_TTL);
       nextRefreshToken = signRefreshToken(payload, JWT_AUDIENCE_REFRESH_ADMIN, ADMIN_REFRESH_TOKEN_TTL);
       accessMaxAge = ADMIN_ACCESS_TOKEN_COOKIE_MAX_AGE;
@@ -579,28 +574,10 @@ router.get("/session", authenticateToken, async (req, res, next) => {
       return res.status(401).json({ error: "Admin account not found or inactive" });
     }
     const admin = admins[0];
-    let cities = [];
-    let branches = [];
-    if (admin.role === "manager") {
-      const [userCities] = await db.query(`SELECT city_id FROM admin_user_cities WHERE admin_user_id = ?`, [admin.id]);
-      cities = userCities.map((city) => city.city_id);
-      const [userBranches] = await db.query(
-        `SELECT b.id, b.name, b.city_id
-         FROM admin_user_branches aub
-         JOIN branches b ON aub.branch_id = b.id
-         WHERE aub.admin_user_id = ?`,
-        [admin.id],
-      );
-      branches = userBranches || [];
-    }
+    const { cities, branches } = await getAdminScope(admin.id, admin.role);
+    const { permissions } = await resolveAdminPermissions(db, { adminUserId: admin.id, roleCode: admin.role });
     res.json({
-      user: {
-        ...admin,
-        cities,
-        branch_ids: branches.map((branch) => branch.id),
-        branch_city_ids: branches.map((branch) => branch.city_id),
-        branches,
-      },
+      user: buildAdminSessionUser({ user: admin, cities, branches, permissions }),
     });
   } catch (error) {
     next(error);
