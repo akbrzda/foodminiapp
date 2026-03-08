@@ -226,7 +226,7 @@ const branchOpenState = computed(() => {
     if (!selectedBranch.value) {
       return { isOpen: true, reason: "" };
     }
-    return getBranchOpenState(selectedBranch.value.working_hours || selectedBranch.value.work_hours, timeZone);
+    return getBranchOpenState(selectedBranch.value.working_hours || selectedBranch.value.work_hours, timeZone, "pickup");
   }
   if (orderType.value === "delivery") {
     const branchId = locationStore.deliveryZone?.branch_id;
@@ -237,7 +237,7 @@ const branchOpenState = computed(() => {
     if (!branch) {
       return { isOpen: false, reason: "Филиал закрыт" };
     }
-    return getBranchOpenState(branch.working_hours || branch.work_hours, timeZone);
+    return getBranchOpenState(branch.working_hours || branch.work_hours, timeZone, "delivery");
   }
   return { isOpen: true, reason: "" };
 });
@@ -577,7 +577,7 @@ async function loadBranches() {
     const timeZone = locationStore.selectedCity?.timezone || "Europe/Moscow";
     const raw = response.data.branches || [];
     branches.value = raw.map((branch) => {
-      const openState = getBranchOpenState(branch.working_hours || branch.work_hours, timeZone);
+      const openState = getBranchOpenState(branch.working_hours || branch.work_hours, timeZone, "pickup");
       return {
         ...branch,
         isOpen: openState.isOpen,

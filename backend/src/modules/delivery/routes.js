@@ -634,7 +634,7 @@ router.put(
       }
       if (working_hours !== undefined) {
         updates.push("working_hours = ?");
-        values.push(JSON.stringify(working_hours));
+        values.push(working_hours === null ? null : JSON.stringify(working_hours));
       }
       if (prep_time !== undefined) {
         updates.push("prep_time = ?");

@@ -55,7 +55,7 @@ const ensureOrderAccess = (settings, orderType, res) => {
   return true;
 };
 
-const ensureBranchIsOpen = async (connection, branchId, cityId) => {
+const ensureBranchIsOpen = async (connection, branchId, cityId, orderType = null) => {
   const [branches] = await connection.query(
     `SELECT b.id, b.name, b.working_hours, b.is_active, c.timezone 
      FROM branches b
@@ -76,7 +76,7 @@ const ensureBranchIsOpen = async (connection, branchId, cityId) => {
   }
 
   // Проверка графика работы
-  const openState = checkBranchIsOpen(branch.working_hours, branch.timezone || "Europe/Moscow");
+  const openState = checkBranchIsOpen(branch.working_hours, branch.timezone || "Europe/Moscow", orderType);
 
   if (!openState.isOpen) {
     return { ok: false, error: `Branch ${branch.name} is currently closed` };
@@ -398,7 +398,7 @@ export const createOrder = async (req, res, next) => {
     }
 
     if (order_type === "pickup") {
-      const openCheck = await ensureBranchIsOpen(connection, branch_id, city_id);
+      const openCheck = await ensureBranchIsOpen(connection, branch_id, city_id, "pickup");
       if (!openCheck.ok) {
         await connection.rollback();
         return res.status(400).json({ error: openCheck.error });
@@ -502,7 +502,7 @@ export const createOrder = async (req, res, next) => {
           return res.status(400).json({ error: "Branch not found" });
         }
 
-        const openCheck = await ensureBranchIsOpen(connection, deliveryPolygon.branch_id, city_id);
+        const openCheck = await ensureBranchIsOpen(connection, deliveryPolygon.branch_id, city_id, "delivery");
         if (!openCheck.ok) {
           await connection.rollback();
           return res.status(400).json({ error: openCheck.error });

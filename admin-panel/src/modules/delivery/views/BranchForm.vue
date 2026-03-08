@@ -126,35 +126,118 @@
             </Field>
           </FieldGroup>
 
-          <div class="rounded-xl border border-border bg-muted/30 p-4">
-            <div class="flex items-center justify-between">
-              <div>
-                <div class="text-sm font-semibold text-foreground">График работы</div>
-                <div class="text-xs text-muted-foreground">Добавьте дни недели и время</div>
-              </div>
-              <Button type="button" variant="outline" size="sm" @click="addWorkingDay">
-                <Plus :size="16" />
-                Добавить день
-              </Button>
-            </div>
-            <div class="mt-3 space-y-2">
-              <div v-if="form.working_hours.length === 0" class="text-xs text-muted-foreground">График не задан</div>
-              <div v-for="(schedule, index) in form.working_hours" :key="index" class="flex flex-wrap items-center gap-2">
-                <Select v-model="schedule.day" class="w-40">
-                  <SelectTrigger class="w-full">
-                    <SelectValue placeholder="День" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem v-for="day in days" :key="day.value" :value="day.value" :disabled="isDayTaken(day.value, index)">
-                      {{ day.label }}
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-                <Input v-model="schedule.open" type="time" class="w-32" />
-                <Input v-model="schedule.close" type="time" class="w-32" />
-                <Button type="button" variant="ghost" size="icon" @click="removeWorkingDay(index)">
-                  <Trash2 :size="16" class="text-red-600" />
+          <div class="rounded-xl border border-border bg-muted/30 p-4 space-y-4">
+            <div class="space-y-3">
+              <div class="text-sm font-semibold text-foreground">График работы</div>
+              <div class="grid gap-2 sm:grid-cols-2">
+                <Button
+                  type="button"
+                  :variant="form.schedule_mode === 'common' ? 'default' : 'outline'"
+                  class="justify-start"
+                  @click="form.schedule_mode = 'common'"
+                >
+                  Общее время работы
                 </Button>
+                <Button
+                  type="button"
+                  :variant="form.schedule_mode === 'by_fulfillment' ? 'default' : 'outline'"
+                  class="justify-start"
+                  @click="form.schedule_mode = 'by_fulfillment'"
+                >
+                  Зависит от способа получения
+                </Button>
+              </div>
+            </div>
+
+            <div v-if="form.schedule_mode === 'common'" class="space-y-3">
+              <div class="flex items-center justify-between">
+                <div class="text-xs text-muted-foreground">Один график для самовывоза и доставки</div>
+                <Button type="button" variant="outline" size="sm" @click="addWorkingDay('common')">
+                  <Plus :size="16" />
+                  Добавить день
+                </Button>
+              </div>
+              <div class="space-y-2">
+                <div v-if="form.common_working_hours.length === 0" class="text-xs text-muted-foreground">График не задан</div>
+                <div v-for="(schedule, index) in form.common_working_hours" :key="`common-${index}`" class="flex flex-wrap items-center gap-2">
+                  <Select v-model="schedule.day" class="w-40">
+                    <SelectTrigger class="w-full">
+                      <SelectValue placeholder="День" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem v-for="day in days" :key="day.value" :value="day.value" :disabled="isDayTaken('common', day.value, index)">
+                        {{ day.label }}
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Input v-model="schedule.open" type="time" class="w-32" />
+                  <Input v-model="schedule.close" type="time" class="w-32" />
+                  <Button type="button" variant="ghost" size="icon" @click="removeWorkingDay('common', index)">
+                    <Trash2 :size="16" class="text-red-600" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            <div v-else class="grid gap-4 lg:grid-cols-2">
+              <div class="space-y-3 rounded-lg border border-border bg-background p-3">
+                <div class="flex items-center justify-between">
+                  <div class="text-sm font-medium text-foreground">Самовывоз</div>
+                  <Button type="button" variant="outline" size="sm" @click="addWorkingDay('pickup')">
+                    <Plus :size="16" />
+                    Добавить день
+                  </Button>
+                </div>
+                <div class="space-y-2">
+                  <div v-if="form.pickup_working_hours.length === 0" class="text-xs text-muted-foreground">График не задан</div>
+                  <div v-for="(schedule, index) in form.pickup_working_hours" :key="`pickup-${index}`" class="flex flex-wrap items-center gap-2">
+                    <Select v-model="schedule.day" class="w-40">
+                      <SelectTrigger class="w-full">
+                        <SelectValue placeholder="День" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem v-for="day in days" :key="day.value" :value="day.value" :disabled="isDayTaken('pickup', day.value, index)">
+                          {{ day.label }}
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Input v-model="schedule.open" type="time" class="w-28" />
+                    <Input v-model="schedule.close" type="time" class="w-28" />
+                    <Button type="button" variant="ghost" size="icon" @click="removeWorkingDay('pickup', index)">
+                      <Trash2 :size="16" class="text-red-600" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="space-y-3 rounded-lg border border-border bg-background p-3">
+                <div class="flex items-center justify-between">
+                  <div class="text-sm font-medium text-foreground">Доставка</div>
+                  <Button type="button" variant="outline" size="sm" @click="addWorkingDay('delivery')">
+                    <Plus :size="16" />
+                    Добавить день
+                  </Button>
+                </div>
+                <div class="space-y-2">
+                  <div v-if="form.delivery_working_hours.length === 0" class="text-xs text-muted-foreground">График не задан</div>
+                  <div v-for="(schedule, index) in form.delivery_working_hours" :key="`delivery-${index}`" class="flex flex-wrap items-center gap-2">
+                    <Select v-model="schedule.day" class="w-40">
+                      <SelectTrigger class="w-full">
+                        <SelectValue placeholder="День" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem v-for="day in days" :key="day.value" :value="day.value" :disabled="isDayTaken('delivery', day.value, index)">
+                          {{ day.label }}
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Input v-model="schedule.open" type="time" class="w-28" />
+                    <Input v-model="schedule.close" type="time" class="w-28" />
+                    <Button type="button" variant="ghost" size="icon" @click="removeWorkingDay('delivery', index)">
+                      <Trash2 :size="16" class="text-red-600" />
+                    </Button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -211,7 +294,10 @@ const form = ref({
   latitude: null,
   longitude: null,
   phone: "",
-  working_hours: [],
+  schedule_mode: "common",
+  common_working_hours: [],
+  pickup_working_hours: [],
+  delivery_working_hours: [],
   prep_time: 0,
   assembly_time: 0,
   is_active: true,
@@ -245,38 +331,81 @@ const goBack = () => {
   router.push({ name: "branches" });
 };
 
-const isDayTaken = (day, index) => form.value.working_hours.some((schedule, idx) => idx !== index && schedule.day === day);
+const getScheduleByType = (scheduleType) => {
+  if (scheduleType === "pickup") return form.value.pickup_working_hours;
+  if (scheduleType === "delivery") return form.value.delivery_working_hours;
+  return form.value.common_working_hours;
+};
 
-const getNextAvailableDay = () => {
-  const used = new Set(form.value.working_hours.map((schedule) => schedule.day));
+const isDayTaken = (scheduleType, day, index) => getScheduleByType(scheduleType).some((schedule, idx) => idx !== index && schedule.day === day);
+
+const getNextAvailableDay = (scheduleType) => {
+  const used = new Set(getScheduleByType(scheduleType).map((schedule) => schedule.day));
   const next = days.find((day) => !used.has(day.value));
   return next?.value || "";
 };
 
-const addWorkingDay = () => {
-  const nextDay = getNextAvailableDay();
+const addWorkingDay = (scheduleType) => {
+  const target = getScheduleByType(scheduleType);
+  const nextDay = getNextAvailableDay(scheduleType);
   if (!nextDay) {
     showWarningNotification("Все дни недели уже добавлены");
     return;
   }
-  form.value.working_hours.push({
+  target.push({
     day: nextDay,
     open: "09:00",
     close: "21:00",
   });
-  sortWorkingHours();
+  sortWorkingHours(scheduleType);
 };
 
-const removeWorkingDay = (index) => {
-  form.value.working_hours.splice(index, 1);
+const removeWorkingDay = (scheduleType, index) => {
+  const target = getScheduleByType(scheduleType);
+  target.splice(index, 1);
 };
 
-const sortWorkingHours = () => {
-  form.value.working_hours.sort((a, b) => {
+const sortWorkingHours = (scheduleType) => {
+  getScheduleByType(scheduleType).sort((a, b) => {
     const orderA = dayOrder[a.day] ?? Number.MAX_SAFE_INTEGER;
     const orderB = dayOrder[b.day] ?? Number.MAX_SAFE_INTEGER;
     return orderA - orderB;
   });
+};
+
+const parseScheduleEntries = (scheduleObject = null) => {
+  if (!scheduleObject || typeof scheduleObject !== "object") return [];
+  const entries = [];
+  for (const [day, hours] of Object.entries(scheduleObject)) {
+    if (typeof hours !== "string" || !hours.includes("-")) continue;
+    const [open, close] = hours.split("-");
+    if (!open || !close) continue;
+    entries.push({ day, open, close });
+  }
+  return entries;
+};
+
+const normalizeWorkingHoursData = (value) => {
+  if (!value) return null;
+  if (typeof value === "string") {
+    try {
+      return JSON.parse(value);
+    } catch (error) {
+      return null;
+    }
+  }
+  if (typeof value === "object") return value;
+  return null;
+};
+
+const toScheduleMap = (scheduleEntries = []) => {
+  const schedule = {};
+  scheduleEntries.forEach((entry) => {
+    if (entry.day && entry.open && entry.close) {
+      schedule[entry.day] = `${entry.open}-${entry.close}`;
+    }
+  });
+  return Object.keys(schedule).length > 0 ? schedule : null;
 };
 
 const syncBranchMarkerPosition = () => {
@@ -401,29 +530,43 @@ const loadBranch = async () => {
       return;
     }
     currentBranchName.value = String(branch.name || "").trim();
-    const workingHours = [];
-    if (branch.working_hours && typeof branch.working_hours === "object") {
-      for (const [day, hours] of Object.entries(branch.working_hours)) {
-        if (typeof hours === "string" && hours.includes("-")) {
-          const [open, close] = hours.split("-");
-          workingHours.push({ day, open, close });
-        }
-      }
+    const rawWorkingHours = normalizeWorkingHoursData(branch.working_hours);
+    let scheduleMode = "common";
+    let commonHours = [];
+    let pickupHours = [];
+    let deliveryHours = [];
+
+    if (rawWorkingHours?.mode === "by_fulfillment") {
+      scheduleMode = "by_fulfillment";
+      pickupHours = parseScheduleEntries(rawWorkingHours.pickup);
+      deliveryHours = parseScheduleEntries(rawWorkingHours.delivery);
+      commonHours = parseScheduleEntries(rawWorkingHours.common);
+    } else if (rawWorkingHours?.mode === "common") {
+      scheduleMode = "common";
+      commonHours = parseScheduleEntries(rawWorkingHours.common);
+    } else {
+      commonHours = parseScheduleEntries(rawWorkingHours);
     }
+
     form.value = {
       name: branch.name,
       address: branch.address || "",
       latitude: branch.latitude ? Number(branch.latitude) : null,
       longitude: branch.longitude ? Number(branch.longitude) : null,
       phone: branch.phone ? formatPhoneInput(branch.phone) : "",
-      working_hours: workingHours,
+      schedule_mode: scheduleMode,
+      common_working_hours: commonHours,
+      pickup_working_hours: pickupHours,
+      delivery_working_hours: deliveryHours,
       prep_time: Number(branch.prep_time || 0),
       assembly_time: Number(branch.assembly_time || 0),
       is_active: normalizeBoolean(branch.is_active, true),
       iiko_terminal_group_id: String(branch.iiko_terminal_group_id || ""),
       iiko_organization_id: String(branch.iiko_organization_id || ""),
     };
-    sortWorkingHours();
+    sortWorkingHours("common");
+    sortWorkingHours("pickup");
+    sortWorkingHours("delivery");
     await nextTick();
     initBranchMap();
   } catch (error) {
@@ -471,19 +614,37 @@ const submitBranch = async () => {
       showErrorNotification("Для привязки iiko заполните оба поля: Terminal/POS ID и Organization ID");
       return;
     }
-    const workingHours = {};
-    form.value.working_hours.forEach((schedule) => {
-      if (schedule.day && schedule.open && schedule.close) {
-        workingHours[schedule.day] = `${schedule.open}-${schedule.close}`;
+    const commonSchedule = toScheduleMap(form.value.common_working_hours);
+    const pickupSchedule = toScheduleMap(form.value.pickup_working_hours);
+    const deliverySchedule = toScheduleMap(form.value.delivery_working_hours);
+    let workingHoursPayload = null;
+
+    if (form.value.schedule_mode === "by_fulfillment") {
+      const hasPickup = Boolean(pickupSchedule);
+      const hasDelivery = Boolean(deliverySchedule);
+      const hasCommon = Boolean(commonSchedule);
+      if (hasPickup || hasDelivery || hasCommon) {
+        workingHoursPayload = {
+          mode: "by_fulfillment",
+          common: commonSchedule,
+          pickup: pickupSchedule,
+          delivery: deliverySchedule,
+        };
       }
-    });
+    } else if (commonSchedule) {
+      workingHoursPayload = {
+        mode: "common",
+        common: commonSchedule,
+      };
+    }
+
     const payload = {
       name: form.value.name,
       address: form.value.address,
       latitude: form.value.latitude,
       longitude: form.value.longitude,
       phone: phoneDigits.length > 1 ? normalizePhone(form.value.phone) : "",
-      working_hours: Object.keys(workingHours).length > 0 ? workingHours : null,
+      working_hours: workingHoursPayload,
       prep_time: form.value.prep_time || 0,
       assembly_time: form.value.assembly_time || 0,
       is_active: form.value.is_active,
@@ -534,9 +695,23 @@ watch(
 );
 
 watch(
-  () => form.value.working_hours.map((schedule) => schedule.day || "").join("|"),
+  () => form.value.common_working_hours.map((schedule) => schedule.day || "").join("|"),
   () => {
-    sortWorkingHours();
+    sortWorkingHours("common");
+  },
+);
+
+watch(
+  () => form.value.pickup_working_hours.map((schedule) => schedule.day || "").join("|"),
+  () => {
+    sortWorkingHours("pickup");
+  },
+);
+
+watch(
+  () => form.value.delivery_working_hours.map((schedule) => schedule.day || "").join("|"),
+  () => {
+    sortWorkingHours("delivery");
   },
 );
 

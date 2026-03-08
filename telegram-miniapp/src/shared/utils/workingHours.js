@@ -41,6 +41,7 @@ const DAY_LABELS = {
 
 const DAY_ORDER = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
 const OFF_DAY_LABEL = "выходной";
+const FULFILLMENT_TYPES = new Set(["pickup", "delivery"]);
 
 const normalizeDayKey = (value) => {
   if (!value) return "";
@@ -114,8 +115,34 @@ export const normalizeWorkHours = (value) => {
   return value;
 };
 
-const buildScheduleMap = (value) => {
+const resolveScheduleValue = (value, fulfillmentType = null) => {
   const normalized = normalizeWorkHours(value);
+  if (!normalized || typeof normalized !== "object" || Array.isArray(normalized)) {
+    return normalized;
+  }
+
+  const mode = String(normalized.mode || "").trim();
+  const selectedType = FULFILLMENT_TYPES.has(String(fulfillmentType || "").trim()) ? String(fulfillmentType).trim() : null;
+
+  if (mode === "by_fulfillment") {
+    if (selectedType && normalized[selectedType] && typeof normalized[selectedType] === "object") {
+      return normalized[selectedType];
+    }
+    if (normalized.common && typeof normalized.common === "object") {
+      return normalized.common;
+    }
+    return null;
+  }
+
+  if (mode === "common" && normalized.common && typeof normalized.common === "object") {
+    return normalized.common;
+  }
+
+  return normalized;
+};
+
+const buildScheduleMap = (value, fulfillmentType = null) => {
+  const normalized = resolveScheduleValue(value, fulfillmentType);
   const map = new Map();
   if (!normalized) return map;
   if (Array.isArray(normalized)) {
@@ -178,8 +205,8 @@ const getCityNowParts = (timeZone) => {
   return { weekday: normalizeDayKey(weekday), minutes };
 };
 
-export const getBranchOpenState = (workingHours, timeZone) => {
-  const schedule = buildScheduleMap(workingHours);
+export const getBranchOpenState = (workingHours, timeZone, fulfillmentType = null) => {
+  const schedule = buildScheduleMap(workingHours, fulfillmentType);
   if (!schedule || schedule.size === 0) {
     return { isOpen: false, reason: "График работы не задан" };
   }
@@ -211,11 +238,7 @@ export const formatWorkHours = (value) => {
   return lines.join(", ");
 };
 
-export const formatWorkHoursLines = (value) => {
-  const normalized = normalizeWorkHours(value);
-  if (!normalized) return [];
-  if (typeof normalized === "string") return [normalized];
-  const schedule = buildScheduleMap(normalized);
+const formatScheduleMapLines = (schedule) => {
   if (!schedule || schedule.size === 0) return [];
   const ranges = [];
   DAY_ORDER.forEach((dayKey) => {
@@ -275,4 +298,28 @@ export const formatWorkHoursLines = (value) => {
     })
     .sort((a, b) => a.minIndex - b.minIndex)
     .map((group) => `${formatDayRange(group.days)}: ${group.time}`);
+};
+
+export const formatWorkHoursLines = (value, fulfillmentType = null) => {
+  const normalized = normalizeWorkHours(value);
+  if (!normalized) return [];
+  if (typeof normalized === "string") return [normalized];
+
+  if (normalized.mode === "by_fulfillment" && !FULFILLMENT_TYPES.has(String(fulfillmentType || "").trim())) {
+    const pickupLines = formatScheduleMapLines(buildScheduleMap(normalized, "pickup"));
+    const deliveryLines = formatScheduleMapLines(buildScheduleMap(normalized, "delivery"));
+    const result = [];
+    if (pickupLines.length > 0) {
+      result.push("Самовывоз:");
+      result.push(...pickupLines.map((line) => `• ${line}`));
+    }
+    if (deliveryLines.length > 0) {
+      if (result.length > 0) result.push("");
+      result.push("Доставка:");
+      result.push(...deliveryLines.map((line) => `• ${line}`));
+    }
+    return result;
+  }
+
+  return formatScheduleMapLines(buildScheduleMap(normalized, fulfillmentType));
 };

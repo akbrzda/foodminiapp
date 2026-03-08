@@ -184,7 +184,7 @@ const branchOpenState = computed(() => {
     if (!locationStore.selectedBranch) {
       return { isOpen: true, reason: "" };
     }
-    return getBranchOpenState(locationStore.selectedBranch.working_hours || locationStore.selectedBranch.work_hours, timeZone);
+    return getBranchOpenState(locationStore.selectedBranch.working_hours || locationStore.selectedBranch.work_hours, timeZone, "pickup");
   }
   if (locationStore.deliveryType === "delivery") {
     const branchId = locationStore.deliveryZone?.branch_id;
@@ -197,7 +197,7 @@ const branchOpenState = computed(() => {
     if (!branch) {
       return { isOpen: false, reason: "Филиал закрыт" };
     }
-    return getBranchOpenState(branch.working_hours || branch.work_hours, timeZone);
+    return getBranchOpenState(branch.working_hours || branch.work_hours, timeZone, "delivery");
   }
   return { isOpen: true, reason: "" };
 });

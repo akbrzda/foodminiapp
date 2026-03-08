@@ -8,6 +8,33 @@ const DAY_NAMES = {
   sunday: 6,
 };
 
+const FULFILLMENT_TYPES = new Set(["pickup", "delivery"]);
+
+const resolveScheduleByFulfillment = (workingHours, fulfillmentType = null) => {
+  if (!workingHours || typeof workingHours !== "object" || Array.isArray(workingHours)) {
+    return workingHours;
+  }
+
+  const mode = String(workingHours.mode || "").trim();
+  const selectedType = FULFILLMENT_TYPES.has(String(fulfillmentType || "").trim()) ? String(fulfillmentType).trim() : null;
+
+  if (mode === "by_fulfillment") {
+    if (selectedType && workingHours[selectedType] && typeof workingHours[selectedType] === "object") {
+      return workingHours[selectedType];
+    }
+    if (workingHours.common && typeof workingHours.common === "object") {
+      return workingHours.common;
+    }
+    return null;
+  }
+
+  if (mode === "common" && workingHours.common && typeof workingHours.common === "object") {
+    return workingHours.common;
+  }
+
+  return workingHours;
+};
+
 /**
  * Парсит время формата "10:00" в минуты от начала дня
  * @param {string} timeStr - Время в формате "HH:MM"
@@ -84,9 +111,10 @@ const getCurrentTimeInTimezone = (timezone = "Europe/Moscow") => {
  * Проверяет, открыт ли филиал в данный момент
  * @param {Object|string} workingHours - График работы из БД
  * @param {string} timezone - Часовой пояс филиала
+ * @param {string|null} fulfillmentType - Тип получения заказа ('pickup'|'delivery')
  * @returns {Object} - { isOpen: boolean, reason: string }
  */
-export const checkBranchIsOpen = (workingHours, timezone = "Europe/Moscow") => {
+export const checkBranchIsOpen = (workingHours, timezone = "Europe/Moscow", fulfillmentType = null) => {
   if (!workingHours) {
     return { isOpen: false, reason: "График работы не задан" };
   }
@@ -99,6 +127,11 @@ export const checkBranchIsOpen = (workingHours, timezone = "Europe/Moscow") => {
     } catch (error) {
       return { isOpen: false, reason: "Некорректный формат графика работы" };
     }
+  }
+
+  schedule = resolveScheduleByFulfillment(schedule, fulfillmentType);
+  if (!schedule || typeof schedule !== "object") {
+    return { isOpen: false, reason: "График работы не задан" };
   }
 
   const { dayIndex, minutes } = getCurrentTimeInTimezone(timezone);
