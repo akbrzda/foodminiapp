@@ -14,7 +14,10 @@
     <Card>
       <CardHeader>
         <CardTitle>Данные клиента</CardTitle>
-        <CardDescription>Регистрация: {{ formatDateTime(client?.created_at) || "—" }} · Город: {{ client?.city_name || "—" }}</CardDescription>
+        <CardDescription>
+          Регистрация: {{ formatDateTime(client?.created_at) || "—" }} · День рождения: {{ formatBirthday(client?.date_of_birth) }} · Город:
+          {{ client?.city_name || "—" }}
+        </CardDescription>
       </CardHeader>
       <CardContent class="p-3 space-y-4">
         <FieldGroup class="grid gap-4 md:grid-cols-2">
@@ -48,6 +51,9 @@
           <div class="space-y-1 text-sm text-muted-foreground">
             <div>
               Бонусный баланс: <strong class="text-foreground">{{ formatNumber(client?.loyalty_balance) }}</strong>
+            </div>
+            <div>
+              Средний чек: <strong class="text-foreground">{{ formatCurrency(client?.avg_check) }}</strong>
             </div>
             <div>
               ID PremiumBonus: <strong class="text-foreground">{{ client?.pb_client_id || "—" }}</strong>
@@ -492,6 +498,16 @@ const formatFavoriteOrdersCount = (count) => {
 const formatFavoriteLastOrdered = (value) => {
   if (!value) return "Дата последнего заказа неизвестна";
   return `Последний заказ: ${formatDateTime(value)}`;
+};
+const formatBirthday = (value) => {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return new Intl.DateTimeFormat("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(date);
 };
 const loadClient = async () => {
   clientLoading.value = true;

@@ -825,13 +825,41 @@ router.post("/users/:id/security/reset", requireRole("admin"), async (req, res, 
 });
 router.get("/clients", requireRole("admin", "manager", "ceo"), async (req, res, next) => {
   try {
-    const { search, city_id, limit = 50, offset = 0 } = req.query;
+    const {
+      search,
+      city_id,
+      orders_count_from,
+      orders_count_to,
+      birthday_from,
+      birthday_to,
+      registration_from,
+      registration_to,
+      total_orders_sum_from,
+      total_orders_sum_to,
+      avg_check_from,
+      avg_check_to,
+      loyalty_balance_from,
+      loyalty_balance_to,
+      last_order_days_from,
+      last_order_days_to,
+      limit = 50,
+      offset = 0,
+    } = req.query;
+
+    const toNumberOrNull = (value) => {
+      if (value === null || value === undefined || value === "") return null;
+      const normalized = Number(value);
+      return Number.isFinite(normalized) ? normalized : null;
+    };
+
     let whereClause = "WHERE 1=1";
     const params = [];
+
     if (search) {
       whereClause += " AND (u.phone LIKE ? OR u.first_name LIKE ? OR u.last_name LIKE ?)";
       params.push(`%${search}%`, `%${search}%`, `%${search}%`);
     }
+
     if (req.user.role === "manager") {
       const cityIds = getManagerCityIds(req);
       if (!cityIds || cityIds.length === 0) {
@@ -843,27 +871,104 @@ router.get("/clients", requireRole("admin", "manager", "ceo"), async (req, res, 
       whereClause += " AND EXISTS (SELECT 1 FROM orders o2 WHERE o2.user_id = u.id AND o2.city_id = ?)";
       params.push(city_id);
     }
+
+    const ordersCountFrom = toNumberOrNull(orders_count_from);
+    if (ordersCountFrom !== null) {
+      whereClause += " AND COALESCE(oa.orders_count, 0) >= ?";
+      params.push(ordersCountFrom);
+    }
+    const ordersCountTo = toNumberOrNull(orders_count_to);
+    if (ordersCountTo !== null) {
+      whereClause += " AND COALESCE(oa.orders_count, 0) <= ?";
+      params.push(ordersCountTo);
+    }
+
+    if (birthday_from) {
+      whereClause += " AND u.date_of_birth >= ?";
+      params.push(birthday_from);
+    }
+    if (birthday_to) {
+      whereClause += " AND u.date_of_birth <= ?";
+      params.push(birthday_to);
+    }
+
+    if (registration_from) {
+      whereClause += " AND DATE(u.created_at) >= ?";
+      params.push(registration_from);
+    }
+    if (registration_to) {
+      whereClause += " AND DATE(u.created_at) <= ?";
+      params.push(registration_to);
+    }
+
+    const totalSumFrom = toNumberOrNull(total_orders_sum_from);
+    if (totalSumFrom !== null) {
+      whereClause += " AND COALESCE(oa.total_orders_sum, 0) >= ?";
+      params.push(totalSumFrom);
+    }
+    const totalSumTo = toNumberOrNull(total_orders_sum_to);
+    if (totalSumTo !== null) {
+      whereClause += " AND COALESCE(oa.total_orders_sum, 0) <= ?";
+      params.push(totalSumTo);
+    }
+
+    const avgCheckFrom = toNumberOrNull(avg_check_from);
+    if (avgCheckFrom !== null) {
+      whereClause += " AND COALESCE(oa.avg_check, 0) >= ?";
+      params.push(avgCheckFrom);
+    }
+    const avgCheckTo = toNumberOrNull(avg_check_to);
+    if (avgCheckTo !== null) {
+      whereClause += " AND COALESCE(oa.avg_check, 0) <= ?";
+      params.push(avgCheckTo);
+    }
+
+    const loyaltyFrom = toNumberOrNull(loyalty_balance_from);
+    if (loyaltyFrom !== null) {
+      whereClause += " AND COALESCE(u.loyalty_balance, 0) >= ?";
+      params.push(loyaltyFrom);
+    }
+    const loyaltyTo = toNumberOrNull(loyalty_balance_to);
+    if (loyaltyTo !== null) {
+      whereClause += " AND COALESCE(u.loyalty_balance, 0) <= ?";
+      params.push(loyaltyTo);
+    }
+
+    const lastOrderDaysFrom = toNumberOrNull(last_order_days_from);
+    if (lastOrderDaysFrom !== null) {
+      whereClause += " AND oa.last_order_at IS NOT NULL AND TIMESTAMPDIFF(DAY, DATE(oa.last_order_at), CURDATE()) >= ?";
+      params.push(lastOrderDaysFrom);
+    }
+    const lastOrderDaysTo = toNumberOrNull(last_order_days_to);
+    if (lastOrderDaysTo !== null) {
+      whereClause += " AND oa.last_order_at IS NOT NULL AND TIMESTAMPDIFF(DAY, DATE(oa.last_order_at), CURDATE()) <= ?";
+      params.push(lastOrderDaysTo);
+    }
+
     const query = `
-      SELECT u.id, u.phone, u.first_name, u.last_name, u.email, u.telegram_id, u.loyalty_balance, u.pb_client_id,
-             COALESCE(oc.orders_count, 0) as orders_count,
-             lo.created_at as last_order_at,
+      SELECT
+             u.id, u.phone, u.first_name, u.last_name, u.email, u.telegram_id,
+             u.date_of_birth, u.created_at as registration_date,
+             u.loyalty_balance, u.pb_client_id,
+             COALESCE(oa.orders_count, 0) as orders_count,
+             COALESCE(oa.total_orders_sum, 0) as total_orders_sum,
+             COALESCE(oa.avg_check, 0) as avg_check,
+             oa.last_order_at,
+             TIMESTAMPDIFF(DAY, DATE(oa.last_order_at), CURDATE()) as last_order_days,
              c.name as city_name
       FROM users u
       LEFT JOIN (
-        SELECT user_id, COUNT(*) as orders_count
-        FROM orders
-        GROUP BY user_id
-      ) oc ON oc.user_id = u.id
-      LEFT JOIN (
-        SELECT o1.user_id, o1.created_at, o1.city_id
-        FROM orders o1
-        JOIN (
-          SELECT user_id, MAX(created_at) as max_created_at
-          FROM orders
-          GROUP BY user_id
-        ) o2 ON o2.user_id = o1.user_id AND o2.max_created_at = o1.created_at
-      ) lo ON lo.user_id = u.id
-      LEFT JOIN cities c ON c.id = lo.city_id
+        SELECT
+          o.user_id,
+          SUM(CASE WHEN o.status = 'completed' THEN 1 ELSE 0 END) as orders_count,
+          SUM(CASE WHEN o.status = 'completed' THEN o.total ELSE 0 END) as total_orders_sum,
+          AVG(CASE WHEN o.status = 'completed' THEN o.total ELSE NULL END) as avg_check,
+          MAX(o.created_at) as last_order_at,
+          SUBSTRING_INDEX(GROUP_CONCAT(o.city_id ORDER BY o.created_at DESC), ',', 1) as last_order_city_id
+        FROM orders o
+        GROUP BY o.user_id
+      ) oa ON oa.user_id = u.id
+      LEFT JOIN cities c ON c.id = oa.last_order_city_id
       ${whereClause}
       ORDER BY u.created_at DESC, u.id DESC
       LIMIT ? OFFSET ?
@@ -902,9 +1007,18 @@ router.get("/clients/:id", requireRole("admin", "manager", "ceo"), async (req, r
       }
     }
     const [users] = await db.query(
-      `SELECT u.id, u.phone, u.first_name, u.last_name, u.email, u.telegram_id, u.loyalty_balance, u.pb_client_id, u.created_at,
+      `SELECT u.id, u.phone, u.first_name, u.last_name, u.email, u.telegram_id, u.loyalty_balance, u.pb_client_id, u.created_at, u.date_of_birth,
+              COALESCE(oa.total_orders_sum, 0) as total_orders_sum,
+              COALESCE(oa.avg_check, 0) as avg_check,
               c.name as city_name
        FROM users u
+       LEFT JOIN (
+         SELECT o.user_id,
+                SUM(CASE WHEN o.status = 'completed' THEN o.total ELSE 0 END) as total_orders_sum,
+                AVG(CASE WHEN o.status = 'completed' THEN o.total ELSE NULL END) as avg_check
+         FROM orders o
+         GROUP BY o.user_id
+       ) oa ON oa.user_id = u.id
        LEFT JOIN orders o ON o.id = (
          SELECT id FROM orders WHERE user_id = u.id ORDER BY created_at DESC LIMIT 1
        )
@@ -1009,9 +1123,18 @@ router.put("/clients/:id", requireRole("admin", "manager", "ceo"), async (req, r
       userId,
     ]);
     const [updated] = await db.query(
-      `SELECT u.id, u.phone, u.first_name, u.last_name, u.email, u.telegram_id, u.loyalty_balance, u.pb_client_id, u.created_at,
+      `SELECT u.id, u.phone, u.first_name, u.last_name, u.email, u.telegram_id, u.loyalty_balance, u.pb_client_id, u.created_at, u.date_of_birth,
+              COALESCE(oa.total_orders_sum, 0) as total_orders_sum,
+              COALESCE(oa.avg_check, 0) as avg_check,
               c.name as city_name
        FROM users u
+       LEFT JOIN (
+         SELECT o.user_id,
+                SUM(CASE WHEN o.status = 'completed' THEN o.total ELSE 0 END) as total_orders_sum,
+                AVG(CASE WHEN o.status = 'completed' THEN o.total ELSE NULL END) as avg_check
+         FROM orders o
+         GROUP BY o.user_id
+       ) oa ON oa.user_id = u.id
        LEFT JOIN orders o ON o.id = (
          SELECT id FROM orders WHERE user_id = u.id ORDER BY created_at DESC LIMIT 1
        )
