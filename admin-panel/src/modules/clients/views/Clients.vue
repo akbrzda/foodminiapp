@@ -6,131 +6,99 @@
       </CardContent>
     </Card>
 
-    <Card>
-      <CardContent>
-        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <Field>
-            <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Поиск</FieldLabel>
-            <FieldContent>
-              <div class="relative">
-                <Search class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" :size="16" />
-                <Input v-model="filters.search" class="pl-9" placeholder="Искать по телефону, имени..." @keyup.enter="loadClients" />
-              </div>
-            </FieldContent>
-          </Field>
-
-          <Field>
-            <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Город</FieldLabel>
-            <FieldContent>
-              <Select v-model="filters.city_id">
-                <SelectTrigger class="w-full">
-                  <SelectValue placeholder="Все города" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">Все</SelectItem>
-                  <SelectItem v-for="city in referenceStore.cities" :key="city.id" :value="city.id">{{ city.name }}</SelectItem>
-                </SelectContent>
-              </Select>
-            </FieldContent>
-          </Field>
-
-          <Field>
-            <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">День рождения</FieldLabel>
-            <FieldContent>
-              <Popover v-model:open="isBirthdayRangeOpen">
-                <PopoverTrigger asChild>
-                  <button
-                    type="button"
-                    class="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    <span :class="birthdayRangeLabelClass">{{ birthdayRangeLabel }}</span>
-                    <CalendarIcon class="text-muted-foreground" :size="16" />
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent class="max-h-[calc(100vh-2rem)] w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] overflow-auto p-0 sm:w-auto sm:max-w-[calc(100vw-4rem)]" align="start">
-                  <div class="space-y-3 p-3">
-                    <div class="overflow-x-auto pb-1">
-                      <Calendar
-                        :model-value="birthdayCalendarRange"
-                        :number-of-months="calendarMonths"
-                        :is-date-disabled="isFutureDateDisabled"
-                        locale="ru-RU"
-                        multiple
-                        @update:modelValue="handleBirthdayRangeUpdate"
-                      />
-                    </div>
-                    <div class="flex items-center justify-between text-xs text-muted-foreground">
-                      <span>{{ birthdayRangeHelperLabel }}</span>
-                      <button type="button" class="text-primary hover:underline" @click="clearBirthdayRange">Очистить</button>
-                    </div>
-                  </div>
-                </PopoverContent>
-              </Popover>
-            </FieldContent>
-          </Field>
-
-          <Field>
-            <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Дата регистрации</FieldLabel>
-            <FieldContent>
-              <Popover v-model:open="isRegistrationRangeOpen">
-                <PopoverTrigger asChild>
-                  <button
-                    type="button"
-                    class="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    <span :class="registrationRangeLabelClass">{{ registrationRangeLabel }}</span>
-                    <CalendarIcon class="text-muted-foreground" :size="16" />
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent class="max-h-[calc(100vh-2rem)] w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] overflow-auto p-0 sm:w-auto sm:max-w-[calc(100vw-4rem)]" align="start">
-                  <div class="space-y-3 p-3">
-                    <div class="overflow-x-auto pb-1">
-                      <Calendar
-                        :model-value="registrationCalendarRange"
-                        :number-of-months="calendarMonths"
-                        :is-date-disabled="isFutureDateDisabled"
-                        locale="ru-RU"
-                        multiple
-                        @update:modelValue="handleRegistrationRangeUpdate"
-                      />
-                    </div>
-                    <div class="flex items-center justify-between text-xs text-muted-foreground">
-                      <span>{{ registrationRangeHelperLabel }}</span>
-                      <button type="button" class="text-primary hover:underline" @click="clearRegistrationRange">Очистить</button>
-                    </div>
-                  </div>
-                </PopoverContent>
-              </Popover>
-            </FieldContent>
-          </Field>
-
-          <Field v-for="rangeKey in rangeKeys" :key="rangeKey">
-            <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{{ rangeMeta[rangeKey].label }}</FieldLabel>
-            <FieldContent>
-              <Popover v-model:open="rangeUi[rangeKey].open">
-                <PopoverTrigger as-child>
-                  <button
-                    type="button"
-                    class="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    @click="openRange(rangeKey)"
-                  >
-                    <span class="truncate text-muted-foreground">{{ rangeTriggerText(rangeKey) }}</span>
-                    <ChevronDown class="text-muted-foreground" :size="16" />
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent class="w-[330px] p-3" align="start">
-                  <div class="flex items-center gap-2">
-                    <Input v-model="rangeUi[rangeKey].from" type="number" min="0" placeholder="От 0" />
-                    <Input v-model="rangeUi[rangeKey].to" type="number" min="0" placeholder="до 0" />
-                    <Button type="button" class="shrink-0" @click="applyRange(rangeKey)">OK</Button>
-                  </div>
-                </PopoverContent>
-              </Popover>
-            </FieldContent>
-          </Field>
+    <BaseFilters v-model="filtersModel" :fields="filterFields" :show-reset="false">
+      <template #field-search>
+        <div class="relative">
+          <Search class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" :size="16" />
+          <Input v-model="filters.search" class="pl-9" placeholder="Поиск по имени, фамилии или телефону" @keyup.enter="loadClients" />
         </div>
-      </CardContent>
-    </Card>
+      </template>
+      <template #after>
+        <div class="space-y-1 xl:col-span-2">
+          <Popover v-model:open="isBirthdayRangeOpen">
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                class="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <span :class="['min-w-0 flex-1 truncate pr-2 text-left', birthdayRangeLabelClass]">{{ birthdayRangeLabel }}</span>
+                <CalendarIcon class="text-muted-foreground" :size="16" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent class="max-h-[calc(100vh-2rem)] w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] overflow-auto p-0 sm:w-auto sm:max-w-[calc(100vw-4rem)]" align="start">
+              <div class="space-y-3 p-3">
+                <div class="overflow-x-auto pb-1">
+                  <Calendar
+                    :model-value="birthdayCalendarRange"
+                    :number-of-months="calendarMonths"
+                    :is-date-disabled="isFutureDateDisabled"
+                    locale="ru-RU"
+                    multiple
+                    @update:modelValue="handleBirthdayRangeUpdate"
+                  />
+                </div>
+                <div class="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>{{ birthdayRangeHelperLabel }}</span>
+                  <button type="button" class="text-primary hover:underline" @click="clearBirthdayRange">Очистить</button>
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
+        </div>
+        <div class="space-y-1 xl:col-span-2">
+          <Popover v-model:open="isRegistrationRangeOpen">
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                class="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <span :class="['min-w-0 flex-1 truncate pr-2 text-left', registrationRangeLabelClass]">{{ registrationRangeLabel }}</span>
+                <CalendarIcon class="text-muted-foreground" :size="16" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent class="max-h-[calc(100vh-2rem)] w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] overflow-auto p-0 sm:w-auto sm:max-w-[calc(100vw-4rem)]" align="start">
+              <div class="space-y-3 p-3">
+                <div class="overflow-x-auto pb-1">
+                  <Calendar
+                    :model-value="registrationCalendarRange"
+                    :number-of-months="calendarMonths"
+                    :is-date-disabled="isFutureDateDisabled"
+                    locale="ru-RU"
+                    multiple
+                    @update:modelValue="handleRegistrationRangeUpdate"
+                  />
+                </div>
+                <div class="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>{{ registrationRangeHelperLabel }}</span>
+                  <button type="button" class="text-primary hover:underline" @click="clearRegistrationRange">Очистить</button>
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
+        </div>
+        <div v-for="rangeKey in rangeKeys" :key="rangeKey" class="space-y-1 xl:col-span-2">
+          <Popover v-model:open="rangeUi[rangeKey].open">
+            <PopoverTrigger as-child>
+              <button
+                type="button"
+                class="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                @click="openRange(rangeKey)"
+              >
+                <span class="truncate text-muted-foreground">{{ rangeTriggerText(rangeKey) }}</span>
+                <ChevronDown class="text-muted-foreground" :size="16" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent class="w-[330px] p-3" align="start">
+              <div class="flex items-center gap-2">
+                <Input v-model="rangeUi[rangeKey].from" type="number" min="0" placeholder="От 0" />
+                <Input v-model="rangeUi[rangeKey].to" type="number" min="0" placeholder="до 0" />
+                <Button type="button" class="shrink-0" @click="applyRange(rangeKey)">OK</Button>
+              </div>
+            </PopoverContent>
+          </Popover>
+        </div>
+      </template>
+    </BaseFilters>
 
     <Card>
       <CardContent class="!p-0">
@@ -267,12 +235,11 @@ import Badge from "@/shared/components/ui/badge/Badge.vue";
 import Button from "@/shared/components/ui/button/Button.vue";
 import Card from "@/shared/components/ui/card/Card.vue";
 import CardContent from "@/shared/components/ui/card/CardContent.vue";
+import BaseFilters from "@/shared/components/filters/BaseFilters.vue";
 import PageHeader from "@/shared/components/PageHeader.vue";
 import { Calendar } from "@/shared/components/ui/calendar";
 import Input from "@/shared/components/ui/input/Input.vue";
 import { Popover, PopoverContent, PopoverTrigger } from "@/shared/components/ui/popover";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/components/ui/select";
-import { Field, FieldContent, FieldLabel } from "@/shared/components/ui/field";
 import Table from "@/shared/components/ui/table/Table.vue";
 import TableBody from "@/shared/components/ui/table/TableBody.vue";
 import TableCell from "@/shared/components/ui/table/TableCell.vue";
@@ -306,7 +273,7 @@ const loadTimer = ref(null);
 const isBirthdayRangeOpen = ref(false);
 const isRegistrationRangeOpen = ref(false);
 const timeZone = getLocalTimeZone();
-const rangeFormatter = new DateFormatter("ru-RU", { dateStyle: "medium" });
+const rangeFormatter = new DateFormatter("ru-RU", { dateStyle: "short" });
 const getCalendarMonthCount = () => (window.innerWidth < 1280 ? 1 : 2);
 const calendarMonths = ref(getCalendarMonthCount());
 
@@ -328,6 +295,35 @@ const filters = reactive({
   last_order_days_from: "",
   last_order_days_to: "",
 });
+const filtersModel = computed({
+  get: () => ({ ...filters }),
+  set: (value) => {
+    Object.assign(filters, value || {});
+  },
+});
+const filterFields = computed(() => [
+  {
+    key: "search",
+    label: "Поиск",
+    placeholder: "Поиск по имени, фамилии или телефону",
+    type: "text",
+    defaultValue: "",
+  },
+  {
+    key: "city_id",
+    label: "Город",
+    placeholder: "Все города",
+    type: "select",
+    defaultValue: "",
+    options: [
+      { value: "", label: "Все" },
+      ...referenceStore.cities.map((city) => ({
+        value: String(city.id),
+        label: city.name,
+      })),
+    ],
+  },
+]);
 
 const rangeUi = reactive(
   Object.fromEntries(
@@ -392,11 +388,11 @@ const buildRangeLabel = (from, to) => {
     const fromDate = rangeFormatter.format(parseDate(from).toDate(timeZone));
     return `${fromDate} — ...`;
   }
-  return "Выберите диапазон";
+  return "";
 };
 
-const birthdayRangeLabel = computed(() => buildRangeLabel(filters.birthday_from, filters.birthday_to));
-const registrationRangeLabel = computed(() => buildRangeLabel(filters.registration_from, filters.registration_to));
+const birthdayRangeLabel = computed(() => buildRangeLabel(filters.birthday_from, filters.birthday_to) || "День рождения");
+const registrationRangeLabel = computed(() => buildRangeLabel(filters.registration_from, filters.registration_to) || "Дата регистрации");
 const birthdayRangeLabelClass = computed(() => (filters.birthday_from ? "text-foreground" : "text-muted-foreground"));
 const registrationRangeLabelClass = computed(() => (filters.registration_from ? "text-foreground" : "text-muted-foreground"));
 const birthdayRangeHelperLabel = computed(() => {
@@ -465,8 +461,9 @@ const applyRange = (key) => {
 
 const rangeTriggerText = (key) => {
   const meta = rangeMeta[key];
-  const from = filters[meta.from] || "0";
-  const to = filters[meta.to] || "0";
+  const from = filters[meta.from] || "";
+  const to = filters[meta.to] || "";
+  if (!from && !to) return meta.label;
   return `От ${from} до ${to}`;
 };
 

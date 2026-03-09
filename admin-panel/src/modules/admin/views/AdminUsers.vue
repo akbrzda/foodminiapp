@@ -19,43 +19,7 @@
     </Card>
     <Card>
       <CardContent>
-        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-6">
-          <div class="min-w-0 xl:col-span-2">
-            <Field>
-              <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Роль</FieldLabel>
-              <FieldContent>
-                <Select v-model="filters.role" @update:modelValue="loadUsers">
-                  <SelectTrigger class="w-full">
-                    <SelectValue placeholder="Все роли" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">Все роли</SelectItem>
-                    <SelectItem value="admin">Администратор</SelectItem>
-                    <SelectItem value="manager">Менеджер</SelectItem>
-                    <SelectItem value="ceo">CEO</SelectItem>
-                  </SelectContent>
-                </Select>
-              </FieldContent>
-            </Field>
-          </div>
-          <div class="min-w-0 xl:col-span-2">
-            <Field>
-              <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Статус</FieldLabel>
-              <FieldContent>
-                <Select v-model="filters.is_active" @update:modelValue="loadUsers">
-                  <SelectTrigger class="w-full">
-                    <SelectValue placeholder="Все статусы" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">Все статусы</SelectItem>
-                    <SelectItem value="true">Активные</SelectItem>
-                    <SelectItem value="false">Неактивные</SelectItem>
-                  </SelectContent>
-                </Select>
-              </FieldContent>
-            </Field>
-          </div>
-        </div>
+        <BaseFilters v-model="filtersModel" :fields="filterFields" :show-reset="false" :with-card="false" />
       </CardContent>
     </Card>
     <Card>
@@ -424,6 +388,7 @@ import Button from "@/shared/components/ui/button/Button.vue";
 import Card from "@/shared/components/ui/card/Card.vue";
 import CardContent from "@/shared/components/ui/card/CardContent.vue";
 import PageHeader from "@/shared/components/PageHeader.vue";
+import BaseFilters from "@/shared/components/filters/BaseFilters.vue";
 import Input from "@/shared/components/ui/input/Input.vue";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/shared/components/ui/dialog/index.js";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/components/ui/select";
@@ -460,6 +425,39 @@ const filters = ref({
   role: "",
   is_active: "",
 });
+const filtersModel = computed({
+  get: () => ({ ...filters.value }),
+  set: (value) => {
+    filters.value = { ...filters.value, ...(value || {}) };
+  },
+});
+const filterFields = computed(() => [
+  {
+    key: "role",
+    label: "Роль",
+    placeholder: "Все роли",
+    type: "select",
+    defaultValue: "",
+    options: [
+      { value: "", label: "Все роли" },
+      { value: "admin", label: "Администратор" },
+      { value: "manager", label: "Менеджер" },
+      { value: "ceo", label: "CEO" },
+    ],
+  },
+  {
+    key: "is_active",
+    label: "Статус",
+    placeholder: "Все статусы",
+    type: "select",
+    defaultValue: "",
+    options: [
+      { value: "", label: "Все статусы" },
+      { value: "true", label: "Активные" },
+      { value: "false", label: "Неактивные" },
+    ],
+  },
+]);
 const form = ref({
   first_name: "",
   last_name: "",
@@ -672,6 +670,14 @@ watch(
     if (!telegramId) {
       form.value.eruda_enabled = false;
     }
+  },
+);
+watch(
+  () => [filters.value.role, filters.value.is_active],
+  async (next, prev) => {
+    if (next[0] === prev?.[0] && next[1] === prev?.[1]) return;
+    page.value = 1;
+    await loadUsers({ preservePage: true });
   },
 );
 watch(

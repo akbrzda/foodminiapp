@@ -65,14 +65,15 @@
           <PageHeader title="Зоны доставки" description="Фильтры и управление" />
           <div class="space-y-3">
             <Field>
-              <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Город</FieldLabel>
               <FieldContent>
                 <Select v-model="cityId" @update:modelValue="onCityChange">
                   <SelectTrigger class="w-full">
-                    <SelectValue placeholder="Все города" />
+                    <span class="truncate text-start" :class="!cityId ? 'text-muted-foreground' : ''">
+                      {{ cityFilterTriggerLabel }}
+                    </span>
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Все города</SelectItem>
+                    <SelectItem value="">Все</SelectItem>
                     <SelectItem v-for="city in referenceStore.cities" :key="city.id" :value="city.id">
                       {{ city.name }}
                     </SelectItem>
@@ -81,14 +82,15 @@
               </FieldContent>
             </Field>
             <Field v-if="cityId">
-              <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Филиал</FieldLabel>
               <FieldContent>
                 <Select v-model="branchId" @update:modelValue="onBranchChange">
                   <SelectTrigger class="w-full">
-                    <SelectValue placeholder="Все филиалы" />
+                    <span class="truncate text-start" :class="!branchId ? 'text-muted-foreground' : ''">
+                      {{ branchFilterTriggerLabel }}
+                    </span>
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Все филиалы</SelectItem>
+                    <SelectItem value="">Все</SelectItem>
                     <SelectItem v-for="branch in branches" :key="branch.id" :value="branch.id">
                       {{ branch.name }}
                     </SelectItem>
@@ -97,14 +99,15 @@
               </FieldContent>
             </Field>
             <Field>
-              <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Статус</FieldLabel>
               <FieldContent>
                 <Select v-model="statusFilter" @update:modelValue="onFilterChange">
                   <SelectTrigger class="w-full">
-                    <SelectValue placeholder="Все полигоны" />
+                    <span class="truncate text-start" :class="statusFilter === 'all' ? 'text-muted-foreground' : ''">
+                      {{ statusFilterTriggerLabel }}
+                    </span>
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">Все полигоны</SelectItem>
+                    <SelectItem value="all">Все</SelectItem>
                     <SelectItem value="active">Активные</SelectItem>
                     <SelectItem value="inactive">Неактивные</SelectItem>
                     <SelectItem value="blocked">Заблокированные</SelectItem>
@@ -222,14 +225,15 @@
         </DialogHeader>
         <div class="space-y-3">
           <Field>
-            <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Город</FieldLabel>
             <FieldContent>
               <Select v-model="cityId" @update:modelValue="onCityChange">
                 <SelectTrigger class="w-full">
-                  <SelectValue placeholder="Все города" />
+                  <span class="truncate text-start" :class="!cityId ? 'text-muted-foreground' : ''">
+                    {{ cityFilterTriggerLabel }}
+                  </span>
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Все города</SelectItem>
+                  <SelectItem value="">Все</SelectItem>
                   <SelectItem v-for="city in referenceStore.cities" :key="city.id" :value="city.id">
                     {{ city.name }}
                   </SelectItem>
@@ -238,14 +242,15 @@
             </FieldContent>
           </Field>
           <Field v-if="cityId">
-            <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Филиал</FieldLabel>
             <FieldContent>
               <Select v-model="branchId" @update:modelValue="onBranchChange">
                 <SelectTrigger class="w-full">
-                  <SelectValue placeholder="Все филиалы" />
+                  <span class="truncate text-start" :class="!branchId ? 'text-muted-foreground' : ''">
+                    {{ branchFilterTriggerLabel }}
+                  </span>
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Все филиалы</SelectItem>
+                  <SelectItem value="">Все</SelectItem>
                   <SelectItem v-for="branch in branches" :key="branch.id" :value="branch.id">
                     {{ branch.name }}
                   </SelectItem>
@@ -254,14 +259,15 @@
             </FieldContent>
           </Field>
           <Field>
-            <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Статус</FieldLabel>
             <FieldContent>
               <Select v-model="statusFilter" @update:modelValue="onFilterChange">
                 <SelectTrigger class="w-full">
-                  <SelectValue placeholder="Все полигоны" />
+                  <span class="truncate text-start" :class="statusFilter === 'all' ? 'text-muted-foreground' : ''">
+                    {{ statusFilterTriggerLabel }}
+                  </span>
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Все полигоны</SelectItem>
+                  <SelectItem value="all">Все</SelectItem>
                   <SelectItem value="active">Активные</SelectItem>
                   <SelectItem value="inactive">Неактивные</SelectItem>
                   <SelectItem value="blocked">Заблокированные</SelectItem>
@@ -639,16 +645,34 @@ const activeCityName = computed(() => {
   if (!cityId.value) return "Все города";
   return referenceStore.cities.find((city) => city.id === parseInt(cityId.value, 10))?.name || "Город не выбран";
 });
+const cityFilterTriggerLabel = computed(() => {
+  if (!cityId.value) return "Город: Все";
+  const cityName = referenceStore.cities.find((city) => city.id === parseInt(cityId.value, 10))?.name;
+  return `Город: ${cityName || "—"}`;
+});
 const activeBranchName = computed(() => {
   if (!cityId.value) return "Выберите город";
   if (!branchId.value) return "Все филиалы";
   return branches.value.find((branch) => branch.id === parseInt(branchId.value, 10))?.name || "Филиал не выбран";
+});
+const branchFilterTriggerLabel = computed(() => {
+  if (!cityId.value) return "Филиал: Выберите город";
+  if (!branchId.value) return "Филиал: Все";
+  const branchName = branches.value.find((branch) => branch.id === parseInt(branchId.value, 10))?.name;
+  return `Филиал: ${branchName || "—"}`;
 });
 const statusFilterLabel = computed(() => {
   if (statusFilter.value === "active") return "Активные";
   if (statusFilter.value === "inactive") return "Неактивные";
   if (statusFilter.value === "blocked") return "Заблокированные";
   return "Все полигоны";
+});
+const statusFilterTriggerLabel = computed(() => {
+  if (statusFilter.value === "all") return "Статус: Все";
+  if (statusFilter.value === "active") return "Статус: Активные";
+  if (statusFilter.value === "inactive") return "Статус: Неактивные";
+  if (statusFilter.value === "blocked") return "Статус: Заблокированные";
+  return "Статус: —";
 });
 const listEmptyStateLabel = computed(() => {
   if (!cityId.value) return "Выберите город для отображения зон";

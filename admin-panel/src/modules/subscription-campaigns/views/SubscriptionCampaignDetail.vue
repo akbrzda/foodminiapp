@@ -73,43 +73,16 @@
       </CardContent>
     </Card>
 
-    <Card>
-      <CardContent>
-        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-12">
-          <div class="space-y-1 xl:col-span-5">
-            <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Поиск</label>
-            <Input v-model="filters.search" placeholder="Имя, телефон или telegram_id" />
-          </div>
-          <div class="space-y-1 xl:col-span-3">
-            <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Статус подписки</label>
-            <Select v-model="filters.is_currently_subscribed">
-              <SelectTrigger class="w-full">
-                <SelectValue placeholder="Все" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="">Все</SelectItem>
-                <SelectItem value="1">Подписан</SelectItem>
-                <SelectItem value="0">Не подписан</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div class="space-y-1 xl:col-span-2">
-            <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Дата от</label>
-            <Input v-model="filters.date_from" type="date" />
-          </div>
-          <div class="space-y-1 xl:col-span-2">
-            <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Дата до</label>
-            <Input v-model="filters.date_to" type="date" />
-          </div>
-        </div>
-        <div class="mt-3">
+    <BaseFilters v-model="filtersModel" :fields="filterFields" :show-reset="false">
+      <template #after>
+        <div class="flex items-end sm:col-span-2 xl:col-span-12">
           <Button variant="outline" @click="exportParticipants">
             <Download :size="16" />
             Экспорт CSV
           </Button>
         </div>
-      </CardContent>
-    </Card>
+      </template>
+    </BaseFilters>
 
     <Card>
       <CardContent class="!p-0">
@@ -184,11 +157,11 @@ import Card from "@/shared/components/ui/card/Card.vue";
 import CardContent from "@/shared/components/ui/card/CardContent.vue";
 import CardHeader from "@/shared/components/ui/card/CardHeader.vue";
 import CardTitle from "@/shared/components/ui/card/CardTitle.vue";
+import BaseFilters from "@/shared/components/filters/BaseFilters.vue";
 import Input from "@/shared/components/ui/input/Input.vue";
 import PageHeader from "@/shared/components/PageHeader.vue";
 import BackButton from "@/shared/components/BackButton.vue";
 import Skeleton from "@/shared/components/ui/skeleton/Skeleton.vue";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/components/ui/select";
 import Table from "@/shared/components/ui/table/Table.vue";
 import TableBody from "@/shared/components/ui/table/TableBody.vue";
 import TableCell from "@/shared/components/ui/table/TableCell.vue";
@@ -217,6 +190,47 @@ const filters = reactive({
   date_from: "",
   date_to: "",
 });
+const filtersModel = computed({
+  get: () => ({ ...filters }),
+  set: (value) => {
+    Object.assign(filters, value || {});
+  },
+});
+const filterFields = computed(() => [
+  {
+    key: "search",
+    label: "Поиск",
+    placeholder: "Поиск по имени, телефону или telegram_id",
+    type: "text",
+    defaultValue: "",
+  },
+  {
+    key: "is_currently_subscribed",
+    label: "Статус подписки",
+    placeholder: "Все",
+    type: "select",
+    defaultValue: "",
+    options: [
+      { value: "", label: "Все" },
+      { value: "1", label: "Подписан" },
+      { value: "0", label: "Не подписан" },
+    ],
+  },
+  {
+    key: "date_from",
+    label: "Дата от",
+    type: "text",
+    inputType: "date",
+    defaultValue: "",
+  },
+  {
+    key: "date_to",
+    label: "Дата до",
+    type: "text",
+    inputType: "date",
+    defaultValue: "",
+  },
+]);
 
 let debounceTimer = null;
 

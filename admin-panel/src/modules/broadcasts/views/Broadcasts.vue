@@ -21,46 +21,7 @@
         </PageHeader>
       </CardContent>
     </Card>
-    <Card>
-      <CardContent>
-        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-12">
-          <div class="min-w-0 space-y-1 xl:col-span-3">
-            <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Тип</label>
-            <Select v-model="filters.type">
-              <SelectTrigger class="w-full">
-                <SelectValue placeholder="Все типы" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="">Все</SelectItem>
-                <SelectItem value="manual">Ручные</SelectItem>
-                <SelectItem value="trigger">Триггерные</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div class="min-w-0 space-y-1 xl:col-span-3">
-            <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Статус</label>
-            <Select v-model="filters.status">
-              <SelectTrigger class="w-full">
-                <SelectValue placeholder="Все статусы" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="">Все</SelectItem>
-                <SelectItem value="draft">Черновик</SelectItem>
-                <SelectItem value="scheduled">Запланирована</SelectItem>
-                <SelectItem value="sending">Отправляется</SelectItem>
-                <SelectItem value="completed">Завершена</SelectItem>
-                <SelectItem value="cancelled">Отменена</SelectItem>
-                <SelectItem value="failed">С ошибкой</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div class="min-w-0 space-y-1 sm:col-span-2 xl:col-span-6">
-            <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Поиск</label>
-            <Input v-model="filters.search" placeholder="Название или описание" />
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+    <BaseFilters v-model="filtersModel" :fields="filterFields" />
 
     <Card>
       <CardContent class="!p-0">
@@ -191,9 +152,8 @@ import Badge from "@/shared/components/ui/badge/Badge.vue";
 import Button from "@/shared/components/ui/button/Button.vue";
 import Card from "@/shared/components/ui/card/Card.vue";
 import CardContent from "@/shared/components/ui/card/CardContent.vue";
-import Input from "@/shared/components/ui/input/Input.vue";
 import PageHeader from "@/shared/components/PageHeader.vue";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/components/ui/select";
+import BaseFilters from "@/shared/components/filters/BaseFilters.vue";
 import Table from "@/shared/components/ui/table/Table.vue";
 import TableBody from "@/shared/components/ui/table/TableBody.vue";
 import TableCell from "@/shared/components/ui/table/TableCell.vue";
@@ -219,6 +179,51 @@ const filters = ref({
   status: "",
   search: "",
 });
+
+const filtersModel = computed({
+  get: () => ({ ...filters.value }),
+  set: (value) => {
+    filters.value = { ...filters.value, ...(value || {}) };
+  },
+});
+
+const filterFields = computed(() => [
+  {
+    key: "search",
+    label: "Поиск",
+    placeholder: "Поиск по названию или описанию",
+    type: "text",
+    defaultValue: "",
+  },
+  {
+    key: "type",
+    label: "Тип",
+    placeholder: "Все типы",
+    type: "select",
+    defaultValue: "",
+    options: [
+      { value: "", label: "Все" },
+      { value: "manual", label: "Ручные" },
+      { value: "trigger", label: "Триггерные" },
+    ],
+  },
+  {
+    key: "status",
+    label: "Статус",
+    placeholder: "Все статусы",
+    type: "select",
+    defaultValue: "",
+    options: [
+      { value: "", label: "Все" },
+      { value: "draft", label: "Черновик" },
+      { value: "scheduled", label: "Запланирована" },
+      { value: "sending", label: "Отправляется" },
+      { value: "completed", label: "Завершена" },
+      { value: "cancelled", label: "Отменена" },
+      { value: "failed", label: "С ошибкой" },
+    ],
+  },
+]);
 
 const loadCampaigns = async ({ preservePage = false } = {}) => {
   isLoading.value = true;

@@ -2,112 +2,54 @@
   <div class="space-y-6">
     <Card>
       <CardContent>
-        <PageHeader title="Действия администраторов" description="История изменений в системе" />
+        <PageHeader title="Действия администраторов" description="История изменений в системе">
+          <template #actions>
+            <Badge variant="secondary">Всего: {{ formatNumber(pagination.total) }}</Badge>
+          </template>
+        </PageHeader>
       </CardContent>
     </Card>
     <Card>
       <CardContent>
-        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-12">
-          <div class="min-w-0 xl:col-span-3">
-            <Field>
-              <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Администратор</FieldLabel>
-              <FieldContent>
-                <Select v-model="filters.admin_id">
-                  <SelectTrigger class="w-full">
-                    <SelectValue placeholder="Все администраторы" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">Все</SelectItem>
-                    <SelectItem v-for="admin in admins" :key="admin.id" :value="admin.id">{{ admin.first_name }} {{ admin.last_name }}</SelectItem>
-                  </SelectContent>
-                </Select>
-              </FieldContent>
-            </Field>
-          </div>
-          <div class="min-w-0 xl:col-span-2">
-            <Field>
-              <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Тип действия</FieldLabel>
-              <FieldContent>
-                <Select v-model="filters.action_type">
-                  <SelectTrigger class="w-full">
-                    <SelectValue placeholder="Все типы" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">Все</SelectItem>
-                    <SelectItem value="create">Создание</SelectItem>
-                    <SelectItem value="update">Изменение</SelectItem>
-                    <SelectItem value="delete">Удаление</SelectItem>
-                  </SelectContent>
-                </Select>
-              </FieldContent>
-            </Field>
-          </div>
-          <div class="min-w-0 xl:col-span-2">
-            <Field>
-              <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Объект</FieldLabel>
-              <FieldContent>
-                <Select v-model="filters.object_type">
-                  <SelectTrigger class="w-full">
-                    <SelectValue placeholder="Все объекты" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">Все</SelectItem>
-                    <SelectItem value="category">Категория</SelectItem>
-                    <SelectItem value="item">Блюдо</SelectItem>
-                    <SelectItem value="modifier">Модификатор</SelectItem>
-                    <SelectItem value="order">Заказ</SelectItem>
-                    <SelectItem value="polygon">Полигон</SelectItem>
-                    <SelectItem value="settings">Настройки</SelectItem>
-                    <SelectItem value="user">Пользователь</SelectItem>
-                    <SelectItem value="city">Город</SelectItem>
-                    <SelectItem value="branch">Филиал</SelectItem>
-                  </SelectContent>
-                </Select>
-              </FieldContent>
-            </Field>
-          </div>
-          <div class="min-w-0 sm:col-span-2 xl:col-span-3">
-            <Field>
-              <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Период</FieldLabel>
-              <FieldContent>
-                <Popover v-model:open="isRangeOpen">
-                  <PopoverTrigger asChild>
-                    <button
-                      type="button"
-                      class="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-background"
-                    >
-                      <span :class="rangeLabelClass">{{ rangeLabel }}</span>
-                      <CalendarIcon class="text-muted-foreground" :size="16" />
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent class="w-[calc(100vw-2rem)] max-w-md p-0 sm:w-auto" align="start">
-                    <div class="space-y-3 p-3">
-                      <Calendar
-                        :model-value="calendarRange"
-                        :number-of-months="calendarMonths"
-                        :is-date-disabled="isFutureDateDisabled"
-                        locale="ru-RU"
-                        multiple
-                        @update:modelValue="handleRangeUpdate"
-                      />
-                      <div class="flex items-center justify-between text-xs text-muted-foreground">
-                        <span>{{ rangeHelperLabel }}</span>
-                        <button type="button" class="text-primary hover:underline" @click="clearDateRange">Очистить</button>
-                      </div>
-                    </div>
-                  </PopoverContent>
-                </Popover>
-              </FieldContent>
-            </Field>
-          </div>
-          <div class="flex flex-wrap items-center gap-2 sm:col-span-2 xl:col-span-2 xl:justify-end">
-            <Button variant="outline" @click="resetFilters">
-              <RotateCcw :size="16" />
-              Сбросить
-            </Button>
-            <Badge variant="secondary">Всего: {{ formatNumber(pagination.total) }}</Badge>
-          </div>
-        </div>
+        <BaseFilters v-model="filtersModel" :fields="filterFields" :show-reset="false" :with-card="false">
+          <template #field-date_range>
+            <Popover v-model:open="isRangeOpen">
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  class="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-background"
+                >
+                  <span :class="['min-w-0 flex-1 truncate pr-2 text-left', rangeLabelClass]">{{ rangeLabel }}</span>
+                  <CalendarIcon class="text-muted-foreground" :size="16" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent class="w-[calc(100vw-2rem)] max-w-md p-0 sm:w-auto" align="start">
+                <div class="space-y-3 p-3">
+                  <Calendar
+                    :model-value="calendarRange"
+                    :number-of-months="calendarMonths"
+                    :is-date-disabled="isFutureDateDisabled"
+                    locale="ru-RU"
+                    multiple
+                    @update:modelValue="handleRangeUpdate"
+                  />
+                  <div class="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>{{ rangeHelperLabel }}</span>
+                    <button type="button" class="text-primary hover:underline" @click="clearDateRange">Очистить</button>
+                  </div>
+                </div>
+              </PopoverContent>
+            </Popover>
+          </template>
+          <template #after="{ hasActiveFilters, resetFilters }">
+            <div class="flex flex-wrap items-center gap-2 sm:col-span-2 xl:col-span-12 xl:justify-end">
+              <Button v-if="hasActiveFilters" size="sm" variant="ghost" class="text-muted-foreground hover:text-foreground" @click="resetFilters">
+                <RotateCcw :size="16" />
+                Сбросить
+              </Button>
+            </div>
+          </template>
+        </BaseFilters>
       </CardContent>
     </Card>
     <Card v-if="loading">
@@ -249,13 +191,12 @@ import Card from "@/shared/components/ui/card/Card.vue";
 import CardContent from "@/shared/components/ui/card/CardContent.vue";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/shared/components/ui/dialog/index.js";
 import PageHeader from "@/shared/components/PageHeader.vue";
+import BaseFilters from "@/shared/components/filters/BaseFilters.vue";
 import { Calendar } from "@/shared/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/shared/components/ui/popover";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/components/ui/select";
 import Table from "@/shared/components/ui/table/Table.vue";
 import TableBody from "@/shared/components/ui/table/TableBody.vue";
 import TableCell from "@/shared/components/ui/table/TableCell.vue";
-import { Field, FieldContent, FieldLabel } from "@/shared/components/ui/field";
 import Skeleton from "@/shared/components/ui/skeleton/Skeleton.vue";
 import TableHead from "@/shared/components/ui/table/TableHead.vue";
 import TableHeader from "@/shared/components/ui/table/TableHeader.vue";
@@ -280,8 +221,67 @@ const filters = reactive({
   date_from: "",
   date_to: "",
 });
+const filtersModel = computed({
+  get: () => ({ ...filters }),
+  set: (value) => {
+    Object.assign(filters, value || {});
+  },
+});
+const filterFields = computed(() => [
+  {
+    key: "admin_id",
+    label: "Администратор",
+    placeholder: "Все администраторы",
+    type: "select",
+    defaultValue: "",
+    options: [
+      { value: "", label: "Все" },
+      ...admins.value.map((admin) => ({
+        value: String(admin.id),
+        label: `${admin.first_name} ${admin.last_name}`,
+      })),
+    ],
+  },
+  {
+    key: "action_type",
+    label: "Тип действия",
+    placeholder: "Все типы",
+    type: "select",
+    defaultValue: "",
+    options: [
+      { value: "", label: "Все" },
+      { value: "create", label: "Создание" },
+      { value: "update", label: "Изменение" },
+      { value: "delete", label: "Удаление" },
+    ],
+  },
+  {
+    key: "object_type",
+    label: "Объект",
+    placeholder: "Все объекты",
+    type: "select",
+    defaultValue: "",
+    options: [
+      { value: "", label: "Все" },
+      { value: "category", label: "Категория" },
+      { value: "item", label: "Блюдо" },
+      { value: "modifier", label: "Модификатор" },
+      { value: "order", label: "Заказ" },
+      { value: "polygon", label: "Полигон" },
+      { value: "settings", label: "Настройки" },
+      { value: "user", label: "Пользователь" },
+      { value: "city", label: "Город" },
+      { value: "branch", label: "Филиал" },
+    ],
+  },
+  {
+    key: "date_range",
+    label: "Период",
+    type: "text",
+  },
+]);
 const timeZone = getLocalTimeZone();
-const rangeFormatter = new DateFormatter("ru-RU", { dateStyle: "medium" });
+const rangeFormatter = new DateFormatter("ru-RU", { dateStyle: "short" });
 const normalizeRangeValues = (value) => {
   const dates = Array.isArray(value) ? value : value ? [value] : [];
   if (!dates.length) return [];
@@ -317,7 +317,7 @@ const rangeLabel = computed(() => {
     const from = rangeFormatter.format(parseDate(filters.date_from).toDate(timeZone));
     return `${from} — ...`;
   }
-  return "Выберите диапазон";
+  return "Период";
 });
 const rangeLabelClass = computed(() => (filters.date_from ? "text-foreground" : "text-muted-foreground"));
 const rangeHelperLabel = computed(() => {

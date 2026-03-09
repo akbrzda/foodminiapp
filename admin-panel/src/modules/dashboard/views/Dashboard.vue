@@ -2,109 +2,105 @@
   <div class="space-y-6">
     <Card>
       <CardContent class="space-y-4">
-        <PageHeader title="Аналитика" description="Сводка по заказам и клиентам">
-          <template #filters>
-            <div class="grid w-full gap-3 lg:grid-cols-12 lg:items-end">
-              <Field class="min-w-0 lg:col-span-8">
-              <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Период</FieldLabel>
-              <FieldContent>
-                <div class="flex flex-wrap items-center gap-2">
-                  <div class="inline-flex items-center gap-1 rounded-md border border-border bg-muted/40 p-[1px]">
-                    <Button size="sm" :variant="periodButtonVariant('day')" @click="setPeriod('day')">Д</Button>
-                    <Button size="sm" :variant="periodButtonVariant('week')" @click="setPeriod('week')">Н</Button>
-                    <Button size="sm" :variant="periodButtonVariant('month')" @click="setPeriod('month')">М</Button>
-                    <Button size="sm" :variant="periodButtonVariant('year')" @click="setPeriod('year')">Г</Button>
-                  </div>
-                  <div class="flex w-full items-center gap-2 sm:w-auto">
-                    <div class="inline-flex min-w-0 flex-1 items-center gap-2 rounded-full border border-border bg-background px-2 py-[1px] sm:min-w-[220px] sm:flex-none">
-                      <Button size="sm" variant="ghost" @click="shiftPeriod(-1)" :disabled="isCustomPeriod">
-                        <ChevronLeft :size="14" />
-                      </Button>
-                      <span class="min-w-0 flex-1 text-center text-sm font-medium text-foreground">
-                        {{ periodRangeLabel }}
-                      </span>
-                      <Button size="sm" variant="ghost" @click="shiftPeriod(1)" :disabled="isCustomPeriod">
-                        <ChevronRight :size="14" />
-                      </Button>
-                    </div>
-                    <Button size="icon" variant="outline" class="shrink-0" @click="activateCustomPeriod">
-                      <Calendar :size="16" />
-                    </Button>
-                  </div>
-                  <div v-if="isCustomPeriod" class="w-full sm:min-w-[240px] sm:flex-1">
-                    <Popover v-model:open="isRangeOpen">
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          class="w-full justify-start text-left font-normal"
-                          :class="!filters.date_from && 'text-muted-foreground'"
-                        >
-                          <Calendar :size="16" />
-                          {{ customRangeLabel }}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent class="w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] p-0 sm:w-auto sm:max-w-[calc(100vw-4rem)]" align="start">
-                        <div class="space-y-3 p-3">
-                          <div class="overflow-x-auto pb-1">
-                            <CalendarView
-                              :model-value="calendarRange"
-                              :number-of-months="calendarMonths"
-                              :is-date-disabled="isFutureDateDisabled"
-                              locale="ru-RU"
-                              multiple
-                              @update:modelValue="handleRangeUpdate"
-                            />
-                          </div>
-                          <div class="flex items-center justify-between text-xs text-muted-foreground">
-                            <span>{{ rangeHelperLabel }}</span>
-                            <button type="button" class="text-primary hover:underline" @click="clearDateRange">Очистить</button>
-                          </div>
-                        </div>
-                      </PopoverContent>
-                    </Popover>
-                  </div>
-                </div>
-              </FieldContent>
-            </Field>
-            <div class="grid gap-3 sm:grid-cols-2 lg:col-span-4">
-              <Field class="min-w-0">
-                <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Город</FieldLabel>
-                <FieldContent>
-                  <Select v-model="filters.city_id" :disabled="isLocationLocked" @update:modelValue="onCityChange">
-                    <SelectTrigger class="w-full">
-                      <SelectValue placeholder="Все города" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">Все города</SelectItem>
-                      <SelectItem v-for="city in referenceStore.cities" :key="city.id" :value="city.id">
-                        {{ city.name }}
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </FieldContent>
-              </Field>
-              <Field class="min-w-0">
-                <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Филиал</FieldLabel>
-                <FieldContent>
-                  <Select v-model="filters.branch_id" :disabled="isLocationLocked || !filters.city_id" @update:modelValue="scheduleLoad">
-                    <SelectTrigger class="w-full">
-                      <SelectValue placeholder="Все филиалы" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">Все филиалы</SelectItem>
-                      <SelectItem v-for="branch in branches" :key="branch.id" :value="branch.id">
-                        {{ branch.name }}
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </FieldContent>
-              </Field>
-            </div>
-            </div>
-          </template>
-        </PageHeader>
+        <PageHeader title="Аналитика" description="Сводка по заказам и клиентам" />
       </CardContent>
     </Card>
+    <BaseFilters v-model="filtersModel" :fields="filterFields" :show-reset="false">
+      <template #before>
+        <div class="space-y-1 sm:col-span-2 xl:col-span-8">
+          <div class="flex flex-wrap items-center gap-2">
+            <div class="inline-flex items-center gap-1 rounded-md border border-border bg-muted/40 p-[1px]">
+              <Button size="sm" :variant="periodButtonVariant('day')" @click="setPeriod('day')">Д</Button>
+              <Button size="sm" :variant="periodButtonVariant('week')" @click="setPeriod('week')">Н</Button>
+              <Button size="sm" :variant="periodButtonVariant('month')" @click="setPeriod('month')">М</Button>
+              <Button size="sm" :variant="periodButtonVariant('year')" @click="setPeriod('year')">Г</Button>
+            </div>
+            <div class="flex w-full items-center gap-2 sm:w-auto">
+              <div class="inline-flex min-w-0 flex-1 items-center gap-2 rounded-full border border-border bg-background px-2 py-[1px] sm:min-w-[220px] sm:flex-none">
+                <Button size="sm" variant="ghost" @click="shiftPeriod(-1)" :disabled="isCustomPeriod">
+                  <ChevronLeft :size="14" />
+                </Button>
+                <span class="min-w-0 flex-1 text-center text-sm font-medium text-foreground">
+                  {{ periodRangeLabel }}
+                </span>
+                <Button size="sm" variant="ghost" @click="shiftPeriod(1)" :disabled="isCustomPeriod">
+                  <ChevronRight :size="14" />
+                </Button>
+              </div>
+              <Button size="icon" variant="outline" class="shrink-0" @click="activateCustomPeriod">
+                <Calendar :size="16" />
+              </Button>
+            </div>
+            <div v-if="isCustomPeriod" class="w-full sm:min-w-[240px] sm:flex-1">
+              <Popover v-model:open="isRangeOpen">
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    class="w-full min-w-0 justify-start text-left font-normal"
+                    :class="!filters.date_from && 'text-muted-foreground'"
+                  >
+                    <Calendar :size="16" />
+                    <span class="min-w-0 truncate">{{ customRangeLabel }}</span>
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent class="w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] p-0 sm:w-auto sm:max-w-[calc(100vw-4rem)]" align="start">
+                  <div class="space-y-3 p-3">
+                    <div class="overflow-x-auto pb-1">
+                      <CalendarView
+                        :model-value="calendarRange"
+                        :number-of-months="calendarMonths"
+                        :is-date-disabled="isFutureDateDisabled"
+                        locale="ru-RU"
+                        multiple
+                        @update:modelValue="handleRangeUpdate"
+                      />
+                    </div>
+                    <div class="flex items-center justify-between text-xs text-muted-foreground">
+                      <span>{{ rangeHelperLabel }}</span>
+                      <button type="button" class="text-primary hover:underline" @click="clearDateRange">Очистить</button>
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </div>
+          </div>
+        </div>
+      </template>
+      <template #field-city_id="{ value, updateField }">
+        <Select :model-value="value" :disabled="isLocationLocked" @update:model-value="(next) => { updateField(next); onCityChange(); }">
+          <SelectTrigger class="w-full">
+            <span class="truncate text-start" :class="!value ? 'text-muted-foreground' : ''">
+              {{
+                !value
+                  ? "Город: Все"
+                  : `Город: ${referenceStore.cities.find((city) => String(city.id) === String(value))?.name || "—"}`
+              }}
+            </span>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="">Все</SelectItem>
+            <SelectItem v-for="city in referenceStore.cities" :key="city.id" :value="String(city.id)">
+              {{ city.name }}
+            </SelectItem>
+          </SelectContent>
+        </Select>
+      </template>
+      <template #field-branch_id="{ value, updateField }">
+        <Select :model-value="value" :disabled="isLocationLocked || !filters.city_id" @update:model-value="(next) => { updateField(next); scheduleLoad(); }">
+          <SelectTrigger class="w-full">
+            <span class="truncate text-start" :class="!value ? 'text-muted-foreground' : ''">
+              {{ !value ? "Филиал: Все" : `Филиал: ${branches.find((branch) => String(branch.id) === String(value))?.name || "—"}` }}
+            </span>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="">Все</SelectItem>
+            <SelectItem v-for="branch in branches" :key="branch.id" :value="String(branch.id)">
+              {{ branch.name }}
+            </SelectItem>
+          </SelectContent>
+        </Select>
+      </template>
+    </BaseFilters>
     <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
       <Card>
         <CardContent class="space-y-3">
@@ -353,14 +349,14 @@ import { formatCurrency, formatNumber, formatPaymentMethod, normalizePaymentMeth
 import Button from "@/shared/components/ui/button/Button.vue";
 import Card from "@/shared/components/ui/card/Card.vue";
 import CardContent from "@/shared/components/ui/card/CardContent.vue";
-import { Field, FieldContent, FieldLabel } from "@/shared/components/ui/field";
+import BaseFilters from "@/shared/components/filters/BaseFilters.vue";
 import CardDescription from "@/shared/components/ui/card/CardDescription.vue";
 import CardHeader from "@/shared/components/ui/card/CardHeader.vue";
 import CardTitle from "@/shared/components/ui/card/CardTitle.vue";
 import PageHeader from "@/shared/components/PageHeader.vue";
 import { Calendar as CalendarView } from "@/shared/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/shared/components/ui/popover";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger } from "@/shared/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
 const referenceStore = useReferenceStore();
 const authStore = useAuthStore();
@@ -391,11 +387,47 @@ const filters = ref({
   city_id: "",
   branch_id: "",
 });
+const filtersModel = computed({
+  get: () => ({ ...filters.value }),
+  set: (value) => {
+    filters.value = { ...filters.value, ...(value || {}) };
+  },
+});
+const filterFields = computed(() => [
+  {
+    key: "city_id",
+    label: "Город",
+    placeholder: "Все города",
+    type: "select",
+    defaultValue: "",
+    options: [
+      { value: "", label: "Все города" },
+      ...referenceStore.cities.map((city) => ({
+        value: String(city.id),
+        label: city.name,
+      })),
+    ],
+  },
+  {
+    key: "branch_id",
+    label: "Филиал",
+    placeholder: "Все филиалы",
+    type: "select",
+    defaultValue: "",
+    options: [
+      { value: "", label: "Все филиалы" },
+      ...branches.value.map((branch) => ({
+        value: String(branch.id),
+        label: branch.name,
+      })),
+    ],
+  },
+]);
 const isRangeOpen = ref(false);
 const getCalendarMonthCount = () => (window.innerWidth < 1280 ? 1 : 2);
 const calendarMonths = ref(getCalendarMonthCount());
 const timeZone = getLocalTimeZone();
-const rangeFormatter = new DateFormatter("ru-RU", { dateStyle: "medium" });
+const rangeFormatter = new DateFormatter("ru-RU", { dateStyle: "short" });
 const normalizeRangeValues = (value) => {
   const dates = Array.isArray(value) ? value : value ? [value] : [];
   if (!dates.length) return [];
@@ -431,7 +463,7 @@ const customRangeLabel = computed(() => {
     const from = rangeFormatter.format(parseCalendarDate(filters.value.date_from).toDate(timeZone));
     return `${from} — ...`;
   }
-  return "Выберите диапазон";
+  return "Период";
 });
 const rangeHelperLabel = computed(() => {
   if (filters.value.date_from && filters.value.date_to) return "Диапазон выбран";

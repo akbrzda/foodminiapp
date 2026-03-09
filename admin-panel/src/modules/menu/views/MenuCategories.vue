@@ -13,58 +13,7 @@
         </PageHeader>
       </CardContent>
     </Card>
-    <Card>
-      <CardContent>
-        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-12">
-          <div class="space-y-1 sm:col-span-2 xl:col-span-4">
-            <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Поиск</label>
-            <Input v-model="filters.search" placeholder="Поиск по названию и описанию" />
-          </div>
-          <div class="space-y-1 xl:col-span-2">
-            <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Статус</label>
-            <Select v-model="filters.status">
-              <SelectTrigger class="w-full">
-                <SelectValue placeholder="Статус" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Все статусы</SelectItem>
-                <SelectItem value="active">Только активные</SelectItem>
-                <SelectItem value="hidden">Только скрытые</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div class="space-y-1 xl:col-span-2">
-            <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Город</label>
-            <Select v-model="filters.cityId">
-              <SelectTrigger class="w-full">
-                <SelectValue placeholder="Город" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Все города</SelectItem>
-                <SelectItem v-for="city in cityOptions" :key="city.id" :value="String(city.id)">
-                  {{ city.name }}
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div class="space-y-1 xl:col-span-2">
-            <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Источник</label>
-            <Select v-model="filters.source">
-              <SelectTrigger class="w-full">
-                <SelectValue placeholder="Источник категорий" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="local">Локальное</SelectItem>
-                <SelectItem value="iiko">iiko</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div class="flex items-end xl:col-span-2">
-            <Button class="w-full" variant="outline" @click="resetFilters">Сбросить фильтры</Button>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+    <BaseFilters v-model="filtersModel" :fields="filterFields" @reset="resetFilters" />
     <Card>
       <CardContent class="!p-0">
         <div class="space-y-3 p-3 md:hidden">
@@ -265,6 +214,7 @@ import Card from "@/shared/components/ui/card/Card.vue";
 import CardContent from "@/shared/components/ui/card/CardContent.vue";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/shared/components/ui/dialog/index.js";
 import PageHeader from "@/shared/components/PageHeader.vue";
+import BaseFilters from "@/shared/components/filters/BaseFilters.vue";
 import Input from "@/shared/components/ui/input/Input.vue";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/components/ui/select";
 import Table from "@/shared/components/ui/table/Table.vue";
@@ -316,6 +266,60 @@ const modalSubtitle = computed(() => (editing.value ? "Измените пара
 const cityOptions = computed(() => {
   return [...referenceStore.cities].sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), "ru"));
 });
+
+const filtersModel = computed({
+  get: () => ({ ...filters }),
+  set: (value) => {
+    Object.assign(filters, value || {});
+  },
+});
+
+const filterFields = computed(() => [
+  {
+    key: "search",
+    label: "Поиск",
+    placeholder: "Поиск по названию и описанию",
+    type: "text",
+    defaultValue: "",
+  },
+  {
+    key: "status",
+    label: "Статус",
+    placeholder: "Статус",
+    type: "select",
+    defaultValue: "active",
+    options: [
+      { value: "all", label: "Все статусы" },
+      { value: "active", label: "Только активные" },
+      { value: "hidden", label: "Только скрытые" },
+    ],
+  },
+  {
+    key: "cityId",
+    label: "Город",
+    placeholder: "Город",
+    type: "select",
+    defaultValue: "all",
+    options: [
+      { value: "all", label: "Все города" },
+      ...cityOptions.value.map((city) => ({
+        value: String(city.id),
+        label: city.name,
+      })),
+    ],
+  },
+  {
+    key: "source",
+    label: "Источник",
+    placeholder: "Источник категорий",
+    type: "select",
+    defaultValue: defaultSource.value || "local",
+    options: [
+      { value: "local", label: "Локальное" },
+      { value: "iiko", label: "iiko" },
+    ],
+  },
+]);
 const filteredCategories = computed(() => {
   const search = String(filters.search || "")
     .trim()
@@ -386,11 +390,6 @@ const onPageSizeChange = (value) => {
   page.value = 1;
 };
 const resetFilters = () => {
-  const nextSource = defaultSource.value || "local";
-  filters.search = "";
-  filters.status = "active";
-  filters.cityId = "all";
-  filters.source = nextSource;
   page.value = 1;
 };
 const openModal = async (category = null) => {

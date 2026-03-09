@@ -2,58 +2,42 @@
   <div class="space-y-6">
     <Card>
       <CardContent>
-        <PageHeader title="Дашборд рассылок" description="Сводная аналитика по кампаниям">
-          <template #filters>
-            <div class="w-full min-w-0 space-y-1 sm:w-auto sm:min-w-[180px]">
-              <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Период</label>
-              <Select v-model="period">
-                <SelectTrigger class="w-full">
-                  <SelectValue placeholder="Период" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="week">Неделя</SelectItem>
-                  <SelectItem value="month">Месяц</SelectItem>
-                  <SelectItem value="quarter">Квартал</SelectItem>
-                  <SelectItem value="year">Год</SelectItem>
-                  <SelectItem value="custom">Произвольный</SelectItem>
-                  <SelectItem value="all">Все время</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div v-if="period === 'custom'" class="w-full min-w-0 space-y-1 sm:w-auto sm:min-w-[240px]">
-              <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Диапазон дат</label>
-              <Popover v-model:open="isRangeOpen">
-                <PopoverTrigger asChild>
-                  <button
-                    type="button"
-                    class="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-background"
-                  >
-                    <span :class="rangeLabelClass">{{ rangeLabel }}</span>
-                    <CalendarIcon class="text-muted-foreground" :size="16" />
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent class="w-[calc(100vw-2rem)] max-w-md p-0 sm:w-auto" align="start">
-                  <div class="space-y-3 p-3">
-                    <Calendar
-                      :model-value="calendarRange"
-                      :number-of-months="calendarMonths"
-                      :is-date-disabled="isFutureDateDisabled"
-                      locale="ru-RU"
-                      multiple
-                      @update:modelValue="handleRangeUpdate"
-                    />
-                    <div class="flex items-center justify-between text-xs text-muted-foreground">
-                      <span>{{ rangeHelperLabel }}</span>
-                      <button type="button" class="text-primary hover:underline" @click="clearDateRange">Очистить</button>
-                    </div>
-                  </div>
-                </PopoverContent>
-              </Popover>
-            </div>
-          </template>
-        </PageHeader>
+        <PageHeader title="Дашборд рассылок" description="Сводная аналитика по кампаниям" />
       </CardContent>
     </Card>
+    <BaseFilters v-model="filtersModel" :fields="filterFields" :show-reset="false">
+      <template #after>
+        <div v-if="period === 'custom'" class="space-y-1 xl:col-span-2">
+          <Popover v-model:open="isRangeOpen">
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                class="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-background"
+              >
+                <span :class="['min-w-0 flex-1 truncate pr-2 text-left', rangeLabelClass]">{{ rangeLabel }}</span>
+                <CalendarIcon class="text-muted-foreground" :size="16" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent class="w-[calc(100vw-2rem)] max-w-md p-0 sm:w-auto" align="start">
+              <div class="space-y-3 p-3">
+                <Calendar
+                  :model-value="calendarRange"
+                  :number-of-months="calendarMonths"
+                  :is-date-disabled="isFutureDateDisabled"
+                  locale="ru-RU"
+                  multiple
+                  @update:modelValue="handleRangeUpdate"
+                />
+                <div class="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>{{ rangeHelperLabel }}</span>
+                  <button type="button" class="text-primary hover:underline" @click="clearDateRange">Очистить</button>
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
+        </div>
+      </template>
+    </BaseFilters>
 
     <div v-if="isLoading" class="grid gap-4 md:grid-cols-3">
       <Card v-for="index in 6" :key="`stats-skeleton-${index}`">
@@ -112,9 +96,9 @@ import api from "@/shared/api/client.js";
 import Card from "@/shared/components/ui/card/Card.vue";
 import CardContent from "@/shared/components/ui/card/CardContent.vue";
 import PageHeader from "@/shared/components/PageHeader.vue";
+import BaseFilters from "@/shared/components/filters/BaseFilters.vue";
 import { Calendar } from "@/shared/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/shared/components/ui/popover";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/components/ui/select";
 import Skeleton from "@/shared/components/ui/skeleton/Skeleton.vue";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
 import { useOrdersStore } from "@/modules/orders/stores/orders.js";
@@ -125,12 +109,42 @@ const ordersStore = useOrdersStore();
 const period = ref("month");
 const dateFrom = ref("");
 const dateTo = ref("");
+const filtersModel = computed({
+  get: () => ({
+    period: period.value,
+    date_from: dateFrom.value,
+    date_to: dateTo.value,
+  }),
+  set: (value) => {
+    if (!value) return;
+    period.value = value.period ?? period.value;
+    dateFrom.value = value.date_from ?? dateFrom.value;
+    dateTo.value = value.date_to ?? dateTo.value;
+  },
+});
+const filterFields = computed(() => [
+  {
+    key: "period",
+    label: "Период",
+    placeholder: "Период",
+    type: "select",
+    defaultValue: "month",
+    options: [
+      { value: "week", label: "Неделя" },
+      { value: "month", label: "Месяц" },
+      { value: "quarter", label: "Квартал" },
+      { value: "year", label: "Год" },
+      { value: "custom", label: "Произвольный" },
+      { value: "all", label: "Все время" },
+    ],
+  },
+]);
 const isRangeOpen = ref(false);
 const calendarMonths = ref(window.innerWidth < 1024 ? 1 : 2);
 const isLoading = ref(false);
 const stats = ref({});
 const timeZone = getLocalTimeZone();
-const rangeFormatter = new DateFormatter("ru-RU", { dateStyle: "medium" });
+const rangeFormatter = new DateFormatter("ru-RU", { dateStyle: "short" });
 
 const normalizeRangeValues = (value) => {
   const dates = Array.isArray(value) ? value : value ? [value] : [];
@@ -170,7 +184,7 @@ const rangeLabel = computed(() => {
     const from = rangeFormatter.format(parseDate(dateFrom.value).toDate(timeZone));
     return `${from} — ...`;
   }
-  return "Выберите диапазон";
+  return "Период";
 });
 
 const rangeLabelClass = computed(() => (dateFrom.value ? "text-foreground" : "text-muted-foreground"));

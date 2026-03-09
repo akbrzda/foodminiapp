@@ -15,25 +15,7 @@
     </Card>
     <Card>
       <CardContent>
-        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-12">
-          <div class="min-w-0 sm:col-span-2 xl:col-span-4">
-            <Field>
-              <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Город</FieldLabel>
-              <FieldContent>
-                <Select v-model="cityId" @update:modelValue="loadBranches">
-                  <SelectTrigger class="w-full">
-                    <SelectValue placeholder="Выберите город" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem v-for="city in referenceStore.cities" :key="city.id" :value="city.id">
-                      {{ city.name }}
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </FieldContent>
-            </Field>
-          </div>
-        </div>
+        <BaseFilters v-model="filtersModel" :fields="filterFields" :show-reset="false" :with-card="false" />
       </CardContent>
     </Card>
     <Card v-if="cityId">
@@ -172,7 +154,7 @@
 </template>
 <script setup>
 import { devError } from "@/shared/utils/logger";
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { MapPin, Pencil, Phone, Plus, Trash2 } from "lucide-vue-next";
 import { useRouter } from "vue-router";
 import api from "@/shared/api/client.js";
@@ -181,8 +163,7 @@ import Button from "@/shared/components/ui/button/Button.vue";
 import Card from "@/shared/components/ui/card/Card.vue";
 import CardContent from "@/shared/components/ui/card/CardContent.vue";
 import PageHeader from "@/shared/components/PageHeader.vue";
-import { Field, FieldContent, FieldLabel } from "@/shared/components/ui/field";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/components/ui/select";
+import BaseFilters from "@/shared/components/filters/BaseFilters.vue";
 import Table from "@/shared/components/ui/table/Table.vue";
 import TableBody from "@/shared/components/ui/table/TableBody.vue";
 import TableCell from "@/shared/components/ui/table/TableCell.vue";
@@ -211,6 +192,25 @@ const isLoading = ref(false);
 const page = ref(1);
 const pageSize = ref(20);
 const isManager = computed(() => authStore.role === "manager");
+const filtersModel = computed({
+  get: () => ({ cityId: cityId.value }),
+  set: (value) => {
+    cityId.value = value?.cityId || "";
+  },
+});
+const filterFields = computed(() => [
+  {
+    key: "cityId",
+    label: "Город",
+    placeholder: "Выберите город",
+    type: "select",
+    defaultValue: "",
+    options: referenceStore.cities.map((city) => ({
+      value: String(city.id),
+      label: city.name,
+    })),
+  },
+]);
 const paginatedBranches = computed(() => {
   const start = (page.value - 1) * pageSize.value;
   return branches.value.slice(start, start + pageSize.value);
@@ -303,4 +303,11 @@ onMounted(async () => {
     await loadBranches();
   }
 });
+watch(
+  () => cityId.value,
+  async (next, prev) => {
+    if (next === prev) return;
+    await loadBranches();
+  },
+);
 </script>

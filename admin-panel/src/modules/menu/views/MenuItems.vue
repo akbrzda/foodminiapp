@@ -13,46 +13,7 @@
         </PageHeader>
       </CardContent>
     </Card>
-    <Card>
-      <CardContent>
-        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-12">
-          <div class="space-y-1 sm:col-span-2 xl:col-span-6">
-            <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Поиск</label>
-            <Input v-model="filters.search" placeholder="Поиск по названию и описанию" />
-          </div>
-          <div class="space-y-1 xl:col-span-2">
-            <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Статус</label>
-            <Select v-model="filters.status">
-              <SelectTrigger class="w-full">
-                <SelectValue placeholder="Статус" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Все статусы</SelectItem>
-                <SelectItem value="active">Только активные</SelectItem>
-                <SelectItem value="hidden">Только скрытые</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div class="space-y-1 xl:col-span-2">
-            <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Категория</label>
-            <Select v-model="filters.categoryId">
-              <SelectTrigger class="w-full">
-                <SelectValue placeholder="Категория" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Все категории</SelectItem>
-                <SelectItem v-for="category in categoriesOptions" :key="category.id" :value="String(category.id)">
-                  {{ category.name }}
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div class="flex items-end xl:col-span-2">
-            <Button class="w-full" variant="outline" @click="resetFilters">Сбросить фильтры</Button>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+    <BaseFilters v-model="filtersModel" :fields="filterFields" @reset="resetFilters" />
     <Card>
       <CardContent class="!p-0">
         <div class="space-y-3 p-3 md:hidden">
@@ -196,9 +157,8 @@ import Badge from "@/shared/components/ui/badge/Badge.vue";
 import Button from "@/shared/components/ui/button/Button.vue";
 import Card from "@/shared/components/ui/card/Card.vue";
 import CardContent from "@/shared/components/ui/card/CardContent.vue";
-import Input from "@/shared/components/ui/input/Input.vue";
 import PageHeader from "@/shared/components/PageHeader.vue";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/components/ui/select";
+import BaseFilters from "@/shared/components/filters/BaseFilters.vue";
 import Skeleton from "@/shared/components/ui/skeleton/Skeleton.vue";
 import Table from "@/shared/components/ui/table/Table.vue";
 import TableBody from "@/shared/components/ui/table/TableBody.vue";
@@ -223,6 +183,49 @@ const filters = reactive({
   status: "all",
   categoryId: "all",
 });
+
+const filtersModel = computed({
+  get: () => ({ ...filters }),
+  set: (value) => {
+    Object.assign(filters, value || {});
+  },
+});
+
+const filterFields = computed(() => [
+  {
+    key: "search",
+    label: "Поиск",
+    placeholder: "Поиск по названию и описанию",
+    type: "text",
+    defaultValue: "",
+  },
+  {
+    key: "status",
+    label: "Статус",
+    placeholder: "Статус",
+    type: "select",
+    defaultValue: "all",
+    options: [
+      { value: "all", label: "Все статусы" },
+      { value: "active", label: "Только активные" },
+      { value: "hidden", label: "Только скрытые" },
+    ],
+  },
+  {
+    key: "categoryId",
+    label: "Категория",
+    placeholder: "Категория",
+    type: "select",
+    defaultValue: "all",
+    options: [
+      { value: "all", label: "Все категории" },
+      ...categoriesOptions.value.map((category) => ({
+        value: String(category.id),
+        label: category.name,
+      })),
+    ],
+  },
+]);
 
 const categoriesOptions = computed(() => {
   const map = new Map();
@@ -267,9 +270,6 @@ const normalizeImageUrl = (url) => {
 };
 
 const resetFilters = () => {
-  filters.search = "";
-  filters.status = "all";
-  filters.categoryId = "all";
   page.value = 1;
 };
 

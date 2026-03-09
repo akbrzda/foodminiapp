@@ -25,68 +25,42 @@
     </Card>
     <Card>
       <CardContent class="space-y-4 p-4">
-        <FieldGroup class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <Field>
-            <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Филиал</FieldLabel>
-            <FieldContent>
-              <Select v-model="filters.branch_id">
-                <SelectTrigger class="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Все филиалы</SelectItem>
-                  <SelectGroup v-for="city in referenceStore.cities" :key="city.id">
-                    <SelectLabel>{{ city.name }}</SelectLabel>
-                    <SelectItem v-for="branch in referenceStore.branchesByCity[city.id] || []" :key="branch.id" :value="String(branch.id)">
-                      {{ branch.name }}
-                    </SelectItem>
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-            </FieldContent>
-          </Field>
-          <Field>
-            <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Тип</FieldLabel>
-            <FieldContent>
-              <Select v-model="filters.entity_type">
-                <SelectTrigger class="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Все типы</SelectItem>
-                  <SelectItem value="item">Блюдо</SelectItem>
-                  <SelectItem value="variant">Вариант</SelectItem>
-                  <SelectItem value="modifier">Модификатор</SelectItem>
-                </SelectContent>
-              </Select>
-            </FieldContent>
-          </Field>
-          <Field>
-            <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Канал</FieldLabel>
-            <FieldContent>
-              <Select v-model="filters.fulfillment_type">
-                <SelectTrigger class="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Все каналы</SelectItem>
-                  <SelectItem v-for="option in fulfillmentOptions" :key="option.value" :value="option.value">
-                    {{ option.label }}
+        <BaseFilters v-model="filtersModel" :fields="filterFields" :with-card="false">
+          <template #field-branch_id="{ value, updateField }">
+            <Select :model-value="value" @update:model-value="updateField">
+              <SelectTrigger class="w-full">
+                <span class="truncate text-start" :class="value === 'all' ? 'text-muted-foreground' : ''">
+                  {{
+                    value === "all"
+                      ? "Филиал: Все"
+                      : `Филиал: ${referenceStore.branches.find((branch) => String(branch.id) === String(value))?.name || "—"}`
+                  }}
+                </span>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Все</SelectItem>
+                <SelectGroup v-for="city in referenceStore.cities" :key="city.id">
+                  <SelectLabel>{{ city.name }}</SelectLabel>
+                  <SelectItem v-for="branch in referenceStore.branchesByCity[city.id] || []" :key="branch.id" :value="String(branch.id)">
+                    {{ branch.name }}
                   </SelectItem>
-                </SelectContent>
-              </Select>
-            </FieldContent>
-          </Field>
-          <Field>
-            <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Поиск</FieldLabel>
-            <FieldContent>
-              <Input v-model="filters.search" placeholder="ID, название, причина" />
-            </FieldContent>
-          </Field>
-        </FieldGroup>
-        <div class="flex justify-end">
-          <Button type="button" variant="outline" size="sm" @click="resetFilters">Сбросить фильтры</Button>
-        </div>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </template>
+          <template #reset="{ hasActiveFilters, resetFilters }">
+            <Button
+              v-if="hasActiveFilters"
+              type="button"
+              variant="ghost"
+              size="sm"
+              class="text-muted-foreground hover:text-foreground"
+              @click="resetFilters"
+            >
+              Сбросить фильтры
+            </Button>
+          </template>
+        </BaseFilters>
         <Table v-if="isLoading || filteredStopList.length > 0">
           <TableHeader>
             <TableRow>
@@ -414,6 +388,7 @@ import Button from "@/shared/components/ui/button/Button.vue";
 import Card from "@/shared/components/ui/card/Card.vue";
 import CardContent from "@/shared/components/ui/card/CardContent.vue";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/shared/components/ui/dialog/index.js";
+import BaseFilters from "@/shared/components/filters/BaseFilters.vue";
 import Input from "@/shared/components/ui/input/Input.vue";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/shared/components/ui/select";
 import PageHeader from "@/shared/components/PageHeader.vue";
@@ -476,10 +451,51 @@ const filters = ref({
   fulfillment_type: "all",
   search: "",
 });
+const filtersModel = computed({
+  get: () => ({ ...filters.value }),
+  set: (value) => {
+    filters.value = { ...filters.value, ...(value || {}) };
+  },
+});
 const fulfillmentOptions = [
   { value: "pickup", label: "Самовывоз" },
   { value: "delivery", label: "Доставка" },
 ];
+const filterFields = computed(() => [
+  {
+    key: "branch_id",
+    label: "Филиал",
+    type: "select",
+    defaultValue: "all",
+    options: [],
+  },
+  {
+    key: "entity_type",
+    label: "Тип",
+    type: "select",
+    defaultValue: "all",
+    options: [
+      { value: "all", label: "Все типы" },
+      { value: "item", label: "Блюдо" },
+      { value: "variant", label: "Вариант" },
+      { value: "modifier", label: "Модификатор" },
+    ],
+  },
+  {
+    key: "fulfillment_type",
+    label: "Канал",
+    type: "select",
+    defaultValue: "all",
+    options: [{ value: "all", label: "Все каналы" }, ...fulfillmentOptions],
+  },
+  {
+    key: "search",
+    label: "Поиск",
+    placeholder: "Поиск по ID, названию или причине",
+    type: "text",
+    defaultValue: "",
+  },
+]);
 const fulfillmentLabelMap = {
   pickup: "Самовывоз",
   delivery: "Доставка",

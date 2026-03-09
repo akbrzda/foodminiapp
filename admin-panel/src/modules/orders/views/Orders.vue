@@ -3,151 +3,84 @@
     <Card>
       <CardContent>
         <PageHeader title="Заказы" description="Фильтры и список заказов" />
+         <Badge variant="secondary">Всего: {{ formatNumber(orders.length) }}</Badge>
       </CardContent>
     </Card>
-    <Card>
-      <CardContent>
-        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-12">
-          <div class="min-w-0 sm:col-span-2 xl:col-span-3">
-            <Field>
-              <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Поиск</FieldLabel>
-              <FieldContent>
-                <div class="relative">
-                  <Search class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" :size="16" />
-                  <Input v-model="filters.search" class="pl-9" placeholder="Номер заказа или телефон" @keyup.enter="loadOrders" />
-                </div>
-              </FieldContent>
-            </Field>
-          </div>
-          <div class="min-w-0 xl:col-span-2">
-            <Field>
-              <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Город</FieldLabel>
-              <FieldContent>
-                <Select v-model="filters.city_id">
-                  <SelectTrigger class="w-full">
-                    <SelectValue placeholder="Все города" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">Все</SelectItem>
-                    <SelectItem v-for="city in referenceStore.cities" :key="city.id" :value="city.id">{{ city.name }}</SelectItem>
-                  </SelectContent>
-                </Select>
-              </FieldContent>
-            </Field>
-          </div>
-          <div class="min-w-0 xl:col-span-2">
-            <Field>
-              <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Статус</FieldLabel>
-              <FieldContent>
-                <Select v-model="filters.status">
-                  <SelectTrigger class="w-full">
-                    <SelectValue placeholder="Все статусы" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">Все</SelectItem>
-                    <SelectItem value="pending">Новый</SelectItem>
-                    <SelectItem value="confirmed">Принят</SelectItem>
-                    <SelectItem value="preparing">Готовится</SelectItem>
-                    <SelectItem value="ready">Готов</SelectItem>
-                    <SelectItem value="delivering">В пути</SelectItem>
-                    <SelectItem value="completed">Завершен</SelectItem>
-                    <SelectItem value="cancelled">Отменен</SelectItem>
-                  </SelectContent>
-                </Select>
-              </FieldContent>
-            </Field>
-          </div>
-          <div class="min-w-0 xl:col-span-2">
-            <Field>
-              <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Тип</FieldLabel>
-              <FieldContent>
-                <Select v-model="filters.order_type">
-                  <SelectTrigger class="w-full">
-                    <SelectValue placeholder="Все типы" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">Все</SelectItem>
-                    <SelectItem value="delivery">Доставка</SelectItem>
-                    <SelectItem value="pickup">Самовывоз</SelectItem>
-                  </SelectContent>
-                </Select>
-              </FieldContent>
-            </Field>
-          </div>
-          <div class="min-w-0 sm:col-span-2 xl:col-span-3">
-            <Field>
-              <FieldLabel class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Период</FieldLabel>
-              <FieldContent>
-                <Popover v-model:open="isRangeOpen">
-                  <PopoverTrigger asChild>
-                    <button
-                      type="button"
-                      class="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-background"
-                    >
-                      <span :class="rangeLabelClass">{{ rangeLabel }}</span>
-                      <CalendarIcon class="text-muted-foreground" :size="16" />
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent class="w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] p-0 sm:w-auto sm:max-w-[calc(100vw-4rem)]" align="start">
-                    <div class="space-y-3 p-3">
-                      <div class="overflow-x-auto pb-1">
-                        <CalendarRoot
-                          v-slot="{ grid, weekDays }"
-                          :model-value="calendarRange"
-                          :number-of-months="calendarMonths"
-                          :is-date-disabled="isFutureDateDisabled"
-                          locale="ru-RU"
-                          multiple
-                          @update:model-value="handleRangeUpdate"
-                        >
-                          <CalendarHeader>
-                            <CalendarPrevButton />
-                            <CalendarHeading />
-                            <CalendarNextButton />
-                          </CalendarHeader>
-
-                          <div class="mt-4 flex flex-col gap-y-4 sm:flex-row sm:gap-x-4 sm:gap-y-0">
-                            <CalendarGrid v-for="month in grid" :key="month.value.toString()">
-                              <CalendarGridHead>
-                                <CalendarGridRow>
-                                  <CalendarHeadCell v-for="day in weekDays" :key="day">
-                                    {{ day }}
-                                  </CalendarHeadCell>
-                                </CalendarGridRow>
-                              </CalendarGridHead>
-                              <CalendarGridBody>
-                                <CalendarGridRow v-for="(weekDates, index) in month.rows" :key="`weekDate-${index}`" class="mt-2 w-full">
-                                  <CalendarCell v-for="weekDate in weekDates" :key="weekDate.toString()" :date="weekDate">
-                                    <CalendarCellTrigger :day="weekDate" :month="month.value" :class="getCalendarDayClass(weekDate)">
-                                      {{ weekDate.day }}
-                                    </CalendarCellTrigger>
-                                  </CalendarCell>
-                                </CalendarGridRow>
-                              </CalendarGridBody>
-                            </CalendarGrid>
-                          </div>
-                        </CalendarRoot>
-                      </div>
-                      <div class="flex items-center justify-between text-xs text-muted-foreground">
-                        <span>{{ rangeHelperLabel }}</span>
-                        <button type="button" class="text-primary hover:underline" @click="clearDateRange">Очистить</button>
-                      </div>
-                    </div>
-                  </PopoverContent>
-                </Popover>
-              </FieldContent>
-            </Field>
-          </div>
-          <div class="flex flex-wrap items-center gap-2 sm:col-span-2 xl:col-span-12 xl:justify-end">
-            <Button variant="outline" @click="resetFilters">
-              <RotateCcw :size="16" />
-              Сбросить
-            </Button>
-            <Badge variant="secondary">Всего: {{ formatNumber(orders.length) }}</Badge>
-          </div>
+    <BaseFilters v-model="filtersModel" :fields="filterFields" :show-reset="false">
+      <template #field-search>
+        <div class="relative">
+          <Search class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" :size="16" />
+          <Input v-model="filters.search" class="pl-9" placeholder="Поиск по номеру заказа или телефону" @keyup.enter="loadOrders" />
         </div>
-      </CardContent>
-    </Card>
+      </template>
+      <template #field-date_range>
+        <Popover v-model:open="isRangeOpen">
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              class="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-background"
+            >
+              <span :class="['min-w-0 flex-1 truncate pr-2 text-left', rangeLabelClass]">{{ rangeLabel }}</span>
+              <CalendarIcon class="text-muted-foreground" :size="16" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent class="w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] p-0 sm:w-auto sm:max-w-[calc(100vw-4rem)]" align="start">
+            <div class="space-y-3 p-3">
+              <div class="overflow-x-auto pb-1">
+                <CalendarRoot
+                  v-slot="{ grid, weekDays }"
+                  :model-value="calendarRange"
+                  :number-of-months="calendarMonths"
+                  :is-date-disabled="isFutureDateDisabled"
+                  locale="ru-RU"
+                  multiple
+                  @update:model-value="handleRangeUpdate"
+                >
+                  <CalendarHeader>
+                    <CalendarPrevButton />
+                    <CalendarHeading />
+                    <CalendarNextButton />
+                  </CalendarHeader>
+
+                  <div class="mt-4 flex flex-col gap-y-4 sm:flex-row sm:gap-x-4 sm:gap-y-0">
+                    <CalendarGrid v-for="month in grid" :key="month.value.toString()">
+                      <CalendarGridHead>
+                        <CalendarGridRow>
+                          <CalendarHeadCell v-for="day in weekDays" :key="day">
+                            {{ day }}
+                          </CalendarHeadCell>
+                        </CalendarGridRow>
+                      </CalendarGridHead>
+                      <CalendarGridBody>
+                        <CalendarGridRow v-for="(weekDates, index) in month.rows" :key="`weekDate-${index}`" class="mt-2 w-full">
+                          <CalendarCell v-for="weekDate in weekDates" :key="weekDate.toString()" :date="weekDate">
+                            <CalendarCellTrigger :day="weekDate" :month="month.value" :class="getCalendarDayClass(weekDate)">
+                              {{ weekDate.day }}
+                            </CalendarCellTrigger>
+                          </CalendarCell>
+                        </CalendarGridRow>
+                      </CalendarGridBody>
+                    </CalendarGrid>
+                  </div>
+                </CalendarRoot>
+              </div>
+              <div class="flex items-center justify-between text-xs text-muted-foreground">
+                <span>{{ rangeHelperLabel }}</span>
+                <button type="button" class="text-primary hover:underline" @click="clearDateRange">Очистить</button>
+              </div>
+            </div>
+          </PopoverContent>
+        </Popover>
+      </template>
+      <template #after="{ hasActiveFilters, resetFilters }">
+        <div class="flex flex-wrap items-center gap-2 sm:col-span-2 xl:col-span-12 xl:justify-end">
+          <Button v-if="hasActiveFilters" size="sm" variant="ghost" class="text-muted-foreground hover:text-foreground" @click="resetFilters">
+            <RotateCcw :size="16" />
+            Сбросить
+          </Button>
+        </div>
+      </template>
+    </BaseFilters>
     <Card>
       <CardContent class="!p-0">
         <div class="space-y-3 p-3 md:hidden">
@@ -292,6 +225,7 @@ import Badge from "@/shared/components/ui/badge/Badge.vue";
 import Button from "@/shared/components/ui/button/Button.vue";
 import Card from "@/shared/components/ui/card/Card.vue";
 import CardContent from "@/shared/components/ui/card/CardContent.vue";
+import BaseFilters from "@/shared/components/filters/BaseFilters.vue";
 import PageHeader from "@/shared/components/PageHeader.vue";
 import Input from "@/shared/components/ui/input/Input.vue";
 import { CalendarRoot } from "reka-ui";
@@ -309,7 +243,6 @@ import {
   CalendarPrevButton,
 } from "@/shared/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/shared/components/ui/popover";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/components/ui/select";
 import Table from "@/shared/components/ui/table/Table.vue";
 import TableBody from "@/shared/components/ui/table/TableBody.vue";
 import TableCell from "@/shared/components/ui/table/TableCell.vue";
@@ -318,7 +251,6 @@ import TableHeader from "@/shared/components/ui/table/TableHeader.vue";
 import TableRow from "@/shared/components/ui/table/TableRow.vue";
 import TablePagination from "@/shared/components/TablePagination.vue";
 import Skeleton from "@/shared/components/ui/skeleton/Skeleton.vue";
-import { Field, FieldContent, FieldLabel } from "@/shared/components/ui/field";
 const router = useRouter();
 const referenceStore = useReferenceStore();
 const ordersStore = useOrdersStore();
@@ -346,7 +278,67 @@ const filters = reactive({
   date_to: getTodayDateString(),
   search: "",
 });
-const rangeFormatter = new DateFormatter("ru-RU", { dateStyle: "medium" });
+const filtersModel = computed({
+  get: () => ({ ...filters }),
+  set: (value) => {
+    Object.assign(filters, value || {});
+  },
+});
+const filterFields = computed(() => [
+  {
+    key: "search",
+    label: "Поиск",
+    placeholder: "Поиск по номеру заказа или телефону",
+    type: "text",
+    defaultValue: "",
+  },
+  {
+    key: "city_id",
+    label: "Город",
+    placeholder: "Все города",
+    type: "select",
+    defaultValue: "",
+    options: [
+      { value: "", label: "Все" },
+      ...referenceStore.cities.map((city) => ({ value: String(city.id), label: city.name })),
+    ],
+  },
+  {
+    key: "status",
+    label: "Статус",
+    placeholder: "Все статусы",
+    type: "select",
+    defaultValue: "",
+    options: [
+      { value: "", label: "Все" },
+      { value: "pending", label: "Новый" },
+      { value: "confirmed", label: "Принят" },
+      { value: "preparing", label: "Готовится" },
+      { value: "ready", label: "Готов" },
+      { value: "delivering", label: "В пути" },
+      { value: "completed", label: "Завершен" },
+      { value: "cancelled", label: "Отменен" },
+    ],
+  },
+  {
+    key: "order_type",
+    label: "Тип",
+    placeholder: "Все типы",
+    type: "select",
+    defaultValue: "",
+    options: [
+      { value: "", label: "Все" },
+      { value: "delivery", label: "Доставка" },
+      { value: "pickup", label: "Самовывоз" },
+    ],
+  },
+  {
+    key: "date_range",
+    label: "Период",
+    type: "text",
+  },
+]);
+const rangeFormatter = new DateFormatter("ru-RU", { dateStyle: "short" });
 const normalizeRangeValues = (value) => {
   const dates = Array.isArray(value) ? value : value ? [value] : [];
   if (!dates.length) return [];
@@ -451,7 +443,7 @@ const rangeLabel = computed(() => {
     const from = rangeFormatter.format(parseDate(filters.date_from).toDate(timeZone));
     return `${from} — ...`;
   }
-  return "Выберите диапазон";
+  return "Период";
 });
 const rangeLabelClass = computed(() => (filters.date_from ? "text-foreground" : "text-muted-foreground"));
 const rangeHelperLabel = computed(() => {

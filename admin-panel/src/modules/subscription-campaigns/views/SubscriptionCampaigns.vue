@@ -13,29 +13,7 @@
       </CardContent>
     </Card>
 
-    <Card>
-      <CardContent>
-        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-12">
-          <div class="space-y-1 xl:col-span-8">
-            <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Поиск</label>
-            <Input v-model="filters.search" placeholder="Название или тег кампании" />
-          </div>
-          <div class="space-y-1 xl:col-span-4">
-            <label class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Статус</label>
-            <Select v-model="filters.is_active">
-              <SelectTrigger class="w-full">
-                <SelectValue placeholder="Все" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="">Все</SelectItem>
-                <SelectItem value="1">Активные</SelectItem>
-                <SelectItem value="0">Неактивные</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+    <BaseFilters v-model="filtersModel" :fields="filterFields" :show-reset="false" />
 
     <Card>
       <CardContent class="!p-0">
@@ -139,7 +117,7 @@
 
 <script setup>
 import { devError } from "@/shared/utils/logger";
-import { onMounted, reactive, ref, watch } from "vue";
+import { computed, onMounted, reactive, ref, watch } from "vue";
 import { Link2, Eye, Pencil, Plus } from "lucide-vue-next";
 import { useRouter } from "vue-router";
 import api from "@/shared/api/client.js";
@@ -149,9 +127,8 @@ import Badge from "@/shared/components/ui/badge/Badge.vue";
 import Button from "@/shared/components/ui/button/Button.vue";
 import Card from "@/shared/components/ui/card/Card.vue";
 import CardContent from "@/shared/components/ui/card/CardContent.vue";
-import Input from "@/shared/components/ui/input/Input.vue";
+import BaseFilters from "@/shared/components/filters/BaseFilters.vue";
 import PageHeader from "@/shared/components/PageHeader.vue";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/components/ui/select";
 import Table from "@/shared/components/ui/table/Table.vue";
 import TableBody from "@/shared/components/ui/table/TableBody.vue";
 import TableCell from "@/shared/components/ui/table/TableCell.vue";
@@ -174,6 +151,33 @@ const filters = reactive({
   search: "",
   is_active: "",
 });
+const filtersModel = computed({
+  get: () => ({ ...filters }),
+  set: (value) => {
+    Object.assign(filters, value || {});
+  },
+});
+const filterFields = computed(() => [
+  {
+    key: "search",
+    label: "Поиск",
+    placeholder: "Поиск по названию или тегу кампании",
+    type: "text",
+    defaultValue: "",
+  },
+  {
+    key: "is_active",
+    label: "Статус",
+    placeholder: "Все",
+    type: "select",
+    defaultValue: "",
+    options: [
+      { value: "", label: "Все" },
+      { value: "1", label: "Активные" },
+      { value: "0", label: "Неактивные" },
+    ],
+  },
+]);
 
 let debounceTimer = null;
 
