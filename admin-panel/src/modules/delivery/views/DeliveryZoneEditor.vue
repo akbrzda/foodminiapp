@@ -57,7 +57,22 @@
                 <Input v-model.number="form.delivery_time" type="number" min="0" required />
               </FieldContent>
             </Field>
+            <Field>
+              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Мин. заказ (₽)</FieldLabel>
+              <FieldContent>
+                <Input v-model.number="form.min_order_amount" type="number" min="0" />
+              </FieldContent>
+            </Field>
+            <Field>
+              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Доставка (₽)</FieldLabel>
+              <FieldContent>
+                <Input v-model.number="form.delivery_cost" type="number" min="0" />
+              </FieldContent>
+            </Field>
           </FieldGroup>
+          <p class="text-xs text-muted-foreground">
+            Эти значения применяются, если для зоны не настроены тарифные ступени.
+          </p>
           <div class="flex flex-wrap gap-2">
             <Button variant="secondary" @click="startDrawing">Перерисовать</Button>
             <Button variant="outline" @click="resetPolygon">Сбросить изменения</Button>
@@ -234,6 +249,8 @@ const cityId = computed(() => parseInt(route.query.cityId, 10));
 const form = ref({
   name: "",
   delivery_time: 30,
+  min_order_amount: 0,
+  delivery_cost: 0,
 });
 const branchPolygons = ref([]);
 const pageTitle = computed(() => (polygonId.value === "new" ? "Новый полигон" : "Редактировать полигон"));
@@ -397,6 +414,8 @@ const loadPolygon = async () => {
   form.value = {
     name: polygon.name || "",
     delivery_time: polygon.delivery_time || 30,
+    min_order_amount: Number(polygon.min_order_amount || 0),
+    delivery_cost: Number(polygon.delivery_cost || 0),
   };
   renderPolygon(polygon);
   await loadTariffs();
@@ -505,6 +524,8 @@ const savePolygon = async () => {
     branch_id: branchId.value,
     name: form.value.name,
     delivery_time: form.value.delivery_time,
+    min_order_amount: Math.max(0, Number(form.value.min_order_amount) || 0),
+    delivery_cost: Math.max(0, Number(form.value.delivery_cost) || 0),
     polygon: storedPolygon,
   };
   try {

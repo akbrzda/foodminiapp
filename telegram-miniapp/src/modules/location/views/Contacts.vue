@@ -88,6 +88,22 @@ const openBranches = ref(new Set());
 const mapRefs = new Map();
 const mapInstances = new Map();
 let yandexMaps = null;
+const createPointMarkerSvg = () =>
+  `
+<svg xmlns="http://www.w3.org/2000/svg" width="40" height="56" viewBox="0 0 40 56">
+  <path d="M20 2C10.0589 2 2 10.0589 2 20C2 33.5 20 54 20 54C20 54 38 33.5 38 20C38 10.0589 29.9411 2 20 2Z" fill="#111827"/>
+  <circle cx="20" cy="20" r="7" fill="#FFFFFF"/>
+</svg>`.trim();
+const createPointMarkerOptions = () => {
+  const svg = createPointMarkerSvg();
+  const href = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+  return {
+    iconLayout: "default#image",
+    iconImageHref: href,
+    iconImageSize: [40, 56],
+    iconImageOffset: [-20, -56],
+  };
+};
 const cityName = computed(() => locationStore.selectedCity?.name || "");
 const polygonsByBranch = computed(() => {
   const map = new Map();
@@ -192,15 +208,22 @@ async function initBranchMap(branchId) {
     const lat = Number(branch.latitude);
     const lon = Number(branch.longitude);
     if (Number.isFinite(lat) && Number.isFinite(lon)) {
-      const marker = new yandexMaps.Placemark([lat, lon], {
-        balloonContentBody: branch.address || branch.displayAddress || branch.name || "Филиал",
-      });
+      const marker = new yandexMaps.Placemark(
+        [lat, lon],
+        {
+          balloonContentBody: branch.address || branch.displayAddress || branch.name || "Филиал",
+        },
+        createPointMarkerOptions(),
+      );
       map.geoObjects.add(marker);
     }
   }
   const branchPolygons = getBranchPolygons(branch);
   const boundsPoints = [];
   const referenceCenter = { lat: Number(center[0]), lng: Number(center[1]) };
+  const branchLat = Number(branch?.latitude);
+  const branchLon = Number(branch?.longitude);
+  const hasBranchCoords = Number.isFinite(branchLat) && Number.isFinite(branchLon);
   branchPolygons.forEach((polygon, index) => {
     const ring = getPolygonRing(polygon?.polygon);
     if (!ring) return;
@@ -224,14 +247,19 @@ async function initBranchMap(branchId) {
     }
   });
   const bounds = calcBounds(boundsPoints);
-  if (bounds) {
+  if (!hasBranchCoords && bounds) {
     map.setBounds(bounds, { checkZoomRange: true, zoomMargin: 12 });
   }
+  map.setCenter(hasBranchCoords ? [branchLat, branchLon] : center, 16, { duration: 120 });
 }
 function buildTariffPopup(polygon, index) {
   const rawTariffs = polygon?.tariffs || polygon?.delivery_tariffs || [];
   if (!Array.isArray(rawTariffs) || rawTariffs.length === 0) {
-    return `<div><b>${getPolygonTitle(polygon, index)}</b><br>Тарифы не указаны</div>`;
+    const minOrderAmount = Number(polygon?.min_order_amount);
+    const deliveryCost = Number(polygon?.delivery_cost);
+    const normalizedMinOrderAmount = Number.isFinite(minOrderAmount) && minOrderAmount >= 0 ? minOrderAmount : 0;
+    const normalizedDeliveryCost = Number.isFinite(deliveryCost) && deliveryCost >= 0 ? deliveryCost : 0;
+    return `<div><b>${getPolygonTitle(polygon, index)}</b><div>Мин. заказ: ${normalizedMinOrderAmount} ₽</div><div>Доставка: ${normalizedDeliveryCost} ₽</div></div>`;
   }
   const tariffs = normalizeTariffs(rawTariffs);
   const rows = tariffs

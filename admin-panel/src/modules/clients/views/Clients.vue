@@ -47,7 +47,7 @@
                     <CalendarIcon class="text-muted-foreground" :size="16" />
                   </button>
                 </PopoverTrigger>
-                <PopoverContent class="w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] p-0 sm:w-auto sm:max-w-[calc(100vw-4rem)]" align="start">
+                <PopoverContent class="max-h-[calc(100vh-2rem)] w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] overflow-auto p-0 sm:w-auto sm:max-w-[calc(100vw-4rem)]" align="start">
                   <div class="space-y-3 p-3">
                     <div class="overflow-x-auto pb-1">
                       <Calendar
@@ -82,7 +82,7 @@
                     <CalendarIcon class="text-muted-foreground" :size="16" />
                   </button>
                 </PopoverTrigger>
-                <PopoverContent class="w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] p-0 sm:w-auto sm:max-w-[calc(100vw-4rem)]" align="start">
+                <PopoverContent class="max-h-[calc(100vh-2rem)] w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] overflow-auto p-0 sm:w-auto sm:max-w-[calc(100vw-4rem)]" align="start">
                   <div class="space-y-3 p-3">
                     <div class="overflow-x-auto pb-1">
                       <Calendar
@@ -307,7 +307,8 @@ const isBirthdayRangeOpen = ref(false);
 const isRegistrationRangeOpen = ref(false);
 const timeZone = getLocalTimeZone();
 const rangeFormatter = new DateFormatter("ru-RU", { dateStyle: "medium" });
-const calendarMonths = ref(window.innerWidth < 1024 ? 1 : 2);
+const getCalendarMonthCount = () => (window.innerWidth < 1280 ? 1 : 2);
+const calendarMonths = ref(getCalendarMonthCount());
 
 const filters = reactive({
   search: "",
@@ -435,7 +436,7 @@ const clearRegistrationRange = () => {
 
 const isFutureDateDisabled = (date) => date.compare(today(timeZone)) > 0;
 const updateCalendarMonths = () => {
-  calendarMonths.value = window.innerWidth < 1024 ? 1 : 2;
+  calendarMonths.value = getCalendarMonthCount();
 };
 
 const formatBirthday = (value) => {

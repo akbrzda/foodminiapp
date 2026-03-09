@@ -232,12 +232,24 @@ const maxRedeemPercentLabel = computed(() => Math.round(loyaltyStore.maxRedeemPe
 const isDelivery = computed(() => locationStore.deliveryType === "delivery");
 const deliveryTariffs = computed(() => locationStore.deliveryZone?.tariffs || []);
 const effectiveSubtotal = computed(() => Math.max(0, cartStore.totalPrice - appliedBonusToUse.value));
+const hasDeliveryTariffs = computed(() => Array.isArray(deliveryTariffs.value) && deliveryTariffs.value.length > 0);
+const fallbackDeliveryCost = computed(() => {
+  const raw = Number(locationStore.deliveryZone?.delivery_cost);
+  return Number.isFinite(raw) && raw >= 0 ? raw : 0;
+});
 const deliveryCost = computed(() => {
   if (!isDelivery.value) return 0;
-  return calculateDeliveryCost(deliveryTariffs.value, effectiveSubtotal.value);
+  if (hasDeliveryTariffs.value) {
+    return calculateDeliveryCost(deliveryTariffs.value, effectiveSubtotal.value);
+  }
+  return fallbackDeliveryCost.value;
 });
-const minOrderAmount = computed(() => 0);
-const isMinOrderReached = computed(() => true);
+const minOrderAmount = computed(() => {
+  if (hasDeliveryTariffs.value) return 0;
+  const raw = Number(locationStore.deliveryZone?.min_order_amount);
+  return Number.isFinite(raw) && raw >= 0 ? raw : 0;
+});
+const isMinOrderReached = computed(() => !isDelivery.value || hasDeliveryTariffs.value || effectiveSubtotal.value >= minOrderAmount.value);
 const thresholds = computed(() => getThresholds(deliveryTariffs.value, effectiveSubtotal.value));
 const nextThreshold = computed(() => (thresholds.value.length > 0 ? thresholds.value[0] : null));
 const normalizedTariffs = computed(() => normalizeTariffs(deliveryTariffs.value));
@@ -492,7 +504,13 @@ function onBonusToggle() {
 async function ensureTariffs() {
   if (!isDelivery.value) return;
   if (!locationStore.deliveryZone || !locationStore.deliveryCoords || !locationStore.selectedCity?.id) return;
-  if (Array.isArray(locationStore.deliveryZone.tariffs) && locationStore.deliveryZone.tariffs.length > 0) return;
+  if (
+    Array.isArray(locationStore.deliveryZone.tariffs) &&
+    (locationStore.deliveryZone.tariffs.length > 0 ||
+      (Number.isFinite(Number(locationStore.deliveryZone.min_order_amount)) && Number.isFinite(Number(locationStore.deliveryZone.delivery_cost))))
+  ) {
+    return;
+  }
   try {
     const response = await addressesAPI.checkDeliveryZone(
       locationStore.deliveryCoords.lat,
@@ -558,8 +576,10 @@ watch(
   () => appliedBonusToUse.value,
   (nextValue, prevValue) => {
     if (!bonusChangeRequested.value || !isDelivery.value) return;
-    const beforeCost = calculateDeliveryCost(deliveryTariffs.value, Math.max(0, cartStore.totalPrice - prevValue));
-    const afterCost = calculateDeliveryCost(deliveryTariffs.value, Math.max(0, cartStore.totalPrice - nextValue));
+    const beforeAmount = Math.max(0, cartStore.totalPrice - prevValue);
+    const afterAmount = Math.max(0, cartStore.totalPrice - nextValue);
+    const beforeCost = hasDeliveryTariffs.value ? calculateDeliveryCost(deliveryTariffs.value, beforeAmount) : fallbackDeliveryCost.value;
+    const afterCost = hasDeliveryTariffs.value ? calculateDeliveryCost(deliveryTariffs.value, afterAmount) : fallbackDeliveryCost.value;
     if (afterCost > beforeCost) {
       showAlert(`Внимание! После списания бонусов стоимость доставки изменится с ${beforeCost} ₽ на ${afterCost} ₽`);
     }

@@ -31,7 +31,7 @@ export const validateTariffs = (tariffsInput = []) => {
   }));
 
   if (!Array.isArray(normalized) || normalized.length === 0) {
-    return { valid: false, errors: ["Тарифные ступени не заданы."], normalized: [] };
+    return { valid: true, errors: [], normalized: [] };
   }
 
   const sorted = [...normalized].sort((a, b) => (a.amount_from ?? 0) - (b.amount_from ?? 0));

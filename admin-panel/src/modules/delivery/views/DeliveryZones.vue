@@ -336,6 +336,18 @@
                 <Input v-model.number="form.delivery_time" type="number" min="0" required />
               </FieldContent>
             </Field>
+            <Field>
+              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Мин. заказ (₽)</FieldLabel>
+              <FieldContent>
+                <Input v-model.number="form.min_order_amount" type="number" min="0" />
+              </FieldContent>
+            </Field>
+            <Field>
+              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Доставка (₽)</FieldLabel>
+              <FieldContent>
+                <Input v-model.number="form.delivery_cost" type="number" min="0" />
+              </FieldContent>
+            </Field>
           </FieldGroup>
           <Button class="w-full" type="submit">
             <Save :size="16" />
@@ -522,6 +534,8 @@ const showMobilePolygonList = ref(false);
 const form = ref({
   name: "",
   delivery_time: 30,
+  min_order_amount: 0,
+  delivery_cost: 0,
 });
 const blockForm = ref({
   blockType: "permanent",
@@ -908,12 +922,14 @@ const convertFeatureToImportItems = (feature, index) => {
   const baseName =
     typeof feature?.properties?.name === "string" && feature.properties.name.trim() ? feature.properties.name.trim() : `Импорт #${index + 1}`;
   const deliveryTime = parseDeliveryTime(feature?.properties?.delivery_time);
+  const minOrderAmount = normalizeTariffNumber(feature?.properties?.min_order_amount) ?? 0;
+  const deliveryCost = normalizeTariffNumber(feature?.properties?.delivery_cost) ?? 0;
   const tariffs = parseTariffsFromFeature(feature);
   const referenceCenter = getReferenceCenter();
   const preferredOrder = resolveCoordinateOrder(feature?.properties?.coordinates_order || feature?.properties?.coordinate_order);
   if (geometry.type === "Polygon") {
     const ring = normalizePolygonRing(geometry.coordinates?.[0], referenceCenter, preferredOrder);
-    return ring ? [{ name: baseName, delivery_time: deliveryTime, polygon: ring, tariffs }] : [];
+    return ring ? [{ name: baseName, delivery_time: deliveryTime, min_order_amount: minOrderAmount, delivery_cost: deliveryCost, polygon: ring, tariffs }] : [];
   }
   return (geometry.coordinates || [])
     .map((polygonCoords, partIndex) => {
@@ -922,6 +938,8 @@ const convertFeatureToImportItems = (feature, index) => {
       return {
         name: `${baseName} (${partIndex + 1})`,
         delivery_time: deliveryTime,
+        min_order_amount: minOrderAmount,
+        delivery_cost: deliveryCost,
         polygon: ring,
         tariffs,
       };
@@ -981,6 +999,8 @@ const confirmGeoJsonImport = async () => {
         branch_id: parseInt(branchId.value, 10),
         name: item.name,
         delivery_time: item.delivery_time,
+        min_order_amount: item.min_order_amount,
+        delivery_cost: item.delivery_cost,
         polygon: item.polygon,
       });
       const polygonId = Number(createResponse?.data?.polygon?.id);
@@ -1041,6 +1061,8 @@ const exportGeoJson = async () => {
             id: polygon.id,
             name: polygon.name || "",
             delivery_time: polygon.delivery_time || 30,
+            min_order_amount: Number(polygon.min_order_amount || 0),
+            delivery_cost: Number(polygon.delivery_cost || 0),
             is_active: Boolean(polygon.is_active),
             tariffs_count: Number(polygon.tariffs_count || 0),
             coordinates_order: "lat_lng",
@@ -1212,7 +1234,8 @@ const renderPolygonsOnMap = () => {
         <div class="text-xs text-muted-foreground">${polygon.branch_name || ""}</div>
         <div class="grid gap-1 text-xs text-muted-foreground">
           <div>Время доставки: ${polygon.delivery_time || 30} мин</div>
-            <div style="background: inherit;">Мин. заказ: 0 ₽</div>
+          <div style="background: inherit;">Мин. заказ: ${Number(polygon.tariffs_count || 0) > 0 ? "по тарифам" : `${Number(polygon.min_order_amount || 0)} ₽`}</div>
+          <div style="background: inherit;">Доставка: ${Number(polygon.tariffs_count || 0) > 0 ? "по тарифам" : `${Number(polygon.delivery_cost || 0)} ₽`}</div>
           <div>Тарифы: ${Number(polygon.tariffs_count || 0)} шт.</div>
         </div>
         ${statusBadge}
@@ -1531,6 +1554,8 @@ const savePolygonFromSidebar = async (data) => {
     const payload = {
       name: data.name,
       delivery_time: data.delivery_time,
+      min_order_amount: Math.max(0, Number(data.min_order_amount) || 0),
+      delivery_cost: Math.max(0, Number(data.delivery_cost) || 0),
       is_active: data.is_active ? 1 : 0,
     };
     await api.put(`/api/polygons/admin/${data.id}`, payload);
@@ -1585,6 +1610,8 @@ const closeModal = () => {
   form.value = {
     name: "",
     delivery_time: 30,
+    min_order_amount: 0,
+    delivery_cost: 0,
   };
 };
 const submitPolygon = async () => {
@@ -1609,6 +1636,8 @@ const submitPolygon = async () => {
       branch_id: parseInt(branchId.value),
       name: form.value.name,
       delivery_time: form.value.delivery_time,
+      min_order_amount: Math.max(0, Number(form.value.min_order_amount) || 0),
+      delivery_cost: Math.max(0, Number(form.value.delivery_cost) || 0),
       polygon: normalizedRing,
     };
     if (editing.value) {

@@ -412,7 +412,11 @@ function resolveDeliveryType() {
 const deliveryCost = computed(() => {
   if (locationStore.deliveryType !== "delivery") return 0;
   const tariffs = locationStore.deliveryZone?.tariffs || [];
-  return calculateDeliveryCost(tariffs, cartStore.totalPrice);
+  if (Array.isArray(tariffs) && tariffs.length > 0) {
+    return calculateDeliveryCost(tariffs, cartStore.totalPrice);
+  }
+  const fallback = Number(locationStore.deliveryZone?.delivery_cost);
+  return Number.isFinite(fallback) && fallback >= 0 ? fallback : 0;
 });
 const cartTotalWithDelivery = computed(() => {
   return cartStore.totalPrice + deliveryCost.value;

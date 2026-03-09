@@ -19,6 +19,11 @@ const parseGeoJson = (value) => {
   }
   return value;
 };
+const parseNonNegativeNumber = (value) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) return null;
+  return parsed;
+};
 const getPolygonMeta = async (polygonId) => {
   const [rows] = await db.query(
     `SELECT dp.id, dp.branch_id, b.city_id
@@ -900,25 +905,25 @@ router.post("/check-delivery", async (req, res, next) => {
       amount_to: row.amount_to === null ? null : Number(row.amount_to),
       delivery_cost: row.delivery_cost,
     }));
+    const cartAmountValue = Number.isFinite(Number(cart_amount)) ? Math.floor(Number(cart_amount)) : null;
     if (tariffs.length === 0) {
-      const freeTariffs = [{ amount_from: 0, amount_to: null, delivery_cost: 0 }];
+      const minOrderAmount = parseNonNegativeNumber(polygon.min_order_amount) ?? 0;
+      const flatDeliveryCost = parseNonNegativeNumber(polygon.delivery_cost) ?? 0;
+      if (cartAmountValue !== null && cartAmountValue < minOrderAmount) {
+        return res.json({
+          available: false,
+          polygon,
+          coords_swapped: coordsSwapped,
+          message: `Минимальная сумма заказа для этой зоны: ${minOrderAmount}`,
+        });
+      }
       return res.json({
         available: true,
         polygon,
         coords_swapped: coordsSwapped,
-        tariffs: freeTariffs,
-        delivery_cost: 0,
+        tariffs: [],
+        delivery_cost: flatDeliveryCost,
         next_threshold: null,
-      });
-    }
-    const cartAmountValue = Number.isFinite(Number(cart_amount)) ? Number(cart_amount) : null;
-    const minOrderAmount = Number.isFinite(Number(polygon.min_order_amount)) ? Number(polygon.min_order_amount) : 0;
-    if (cartAmountValue !== null && cartAmountValue < minOrderAmount) {
-      return res.json({
-        available: false,
-        polygon,
-        coords_swapped: coordsSwapped,
-        message: `Минимальная сумма заказа для этой зоны: ${minOrderAmount}`,
       });
     }
     const currentTariff = cartAmountValue === null ? null : findTariffForAmount(tariffs, cartAmountValue);
@@ -1109,7 +1114,7 @@ router.post("/admin/:id/tariffs/copy", authenticateToken, requireRole("admin", "
 router.post("/admin", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
   try {
     if (denyManagerWrite(req, res)) return;
-    const { branch_id, name, polygon, delivery_time } = req.body;
+    const { branch_id, name, polygon, delivery_time, min_order_amount, delivery_cost } = req.body;
     if (!branch_id || !polygon) {
       return res.status(400).json({
         error: "branch_id and polygon are required",
@@ -1129,9 +1134,15 @@ router.post("/admin", authenticateToken, requireRole("admin", "manager", "ceo"),
         error: "Polygon must be an array of at least 3 coordinates",
       });
     }
+    if (min_order_amount !== undefined && parseNonNegativeNumber(min_order_amount) === null) {
+      return res.status(400).json({ error: "min_order_amount must be a non-negative number" });
+    }
+    if (delivery_cost !== undefined && parseNonNegativeNumber(delivery_cost) === null) {
+      return res.status(400).json({ error: "delivery_cost must be a non-negative number" });
+    }
     const coordinates = polygon.map((coord) => `${coord[0]} ${coord[1]}`).join(", ");
-    const safeMinOrderAmount = 0;
-    const safeDeliveryCost = 0;
+    const safeMinOrderAmount = parseNonNegativeNumber(min_order_amount) ?? 0;
+    const safeDeliveryCost = parseNonNegativeNumber(delivery_cost) ?? 0;
     const wkt = `POLYGON((${coordinates}))`;
     const [result] = await db.query(
       `INSERT INTO delivery_polygons 
@@ -1201,12 +1212,20 @@ router.put("/admin/:id", authenticateToken, requireRole("admin", "manager", "ceo
       values.push(delivery_time);
     }
     if (min_order_amount !== undefined) {
+      const normalizedMinOrderAmount = parseNonNegativeNumber(min_order_amount);
+      if (normalizedMinOrderAmount === null) {
+        return res.status(400).json({ error: "min_order_amount must be a non-negative number" });
+      }
       updates.push("min_order_amount = ?");
-      values.push(0);
+      values.push(normalizedMinOrderAmount);
     }
     if (delivery_cost !== undefined) {
+      const normalizedDeliveryCost = parseNonNegativeNumber(delivery_cost);
+      if (normalizedDeliveryCost === null) {
+        return res.status(400).json({ error: "delivery_cost must be a non-negative number" });
+      }
       updates.push("delivery_cost = ?");
-      values.push(0);
+      values.push(normalizedDeliveryCost);
     }
     if (is_active !== undefined) {
       updates.push("is_active = ?");

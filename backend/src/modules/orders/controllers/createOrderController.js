@@ -34,13 +34,38 @@ const getTariffsByPolygonId = async (polygonId) => {
   }));
 };
 
+const getPolygonDeliverySettings = async (polygonId) => {
+  const [rows] = await db.query(
+    `SELECT id, min_order_amount, delivery_cost
+     FROM delivery_polygons
+     WHERE id = ?
+     LIMIT 1`,
+    [polygonId],
+  );
+  const polygon = rows?.[0];
+  if (!polygon) return null;
+  return {
+    min_order_amount: Number.isFinite(Number(polygon.min_order_amount)) ? Number(polygon.min_order_amount) : 0,
+    delivery_cost: Number.isFinite(Number(polygon.delivery_cost)) ? Number(polygon.delivery_cost) : 0,
+  };
+};
+
 const resolveDeliveryCost = async (polygonId, amount) => {
+  const polygonSettings = await getPolygonDeliverySettings(polygonId);
+  if (!polygonSettings) {
+    throw new Error("Polygon not found");
+  }
   const tariffs = await getTariffsByPolygonId(polygonId);
   if (tariffs.length === 0) {
-    return { deliveryCost: 0, tariffs: [{ amount_from: 0, amount_to: null, delivery_cost: 0 }] };
+    return {
+      deliveryCost: polygonSettings.delivery_cost,
+      tariffs: [],
+      minOrderAmount: polygonSettings.min_order_amount,
+      isTariffMode: false,
+    };
   }
   const tariff = findTariffForAmount(tariffs, amount);
-  return { deliveryCost: tariff ? tariff.delivery_cost : 0, tariffs };
+  return { deliveryCost: tariff ? tariff.delivery_cost : 0, tariffs, minOrderAmount: 0, isTariffMode: true };
 };
 
 const ensureOrderAccess = (settings, orderType, res) => {
@@ -542,7 +567,13 @@ export const createOrder = async (req, res, next) => {
     // Расчет стоимости доставки
     if (order_type === "delivery" && deliveryPolygon) {
       const amountForTariff = Math.floor(total);
-      const { deliveryCost: resolvedCost } = await resolveDeliveryCost(deliveryPolygon.id, amountForTariff);
+      const { deliveryCost: resolvedCost, minOrderAmount, isTariffMode } = await resolveDeliveryCost(deliveryPolygon.id, amountForTariff);
+      if (!isTariffMode && amountForTariff < minOrderAmount) {
+        await connection.rollback();
+        return res.status(400).json({
+          error: `Минимальная сумма заказа для этой зоны: ${minOrderAmount}`,
+        });
+      }
       deliveryCost = resolvedCost;
     }
 

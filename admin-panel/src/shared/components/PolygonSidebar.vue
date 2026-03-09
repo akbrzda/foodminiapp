@@ -53,6 +53,14 @@
           </div>
         </div>
         <div v-else-if="activeTab === 'delivery'" class="space-y-4">
+          <div>
+            <p class="text-xs text-muted-foreground mb-2">Мин. заказ (₽)</p>
+            <Input v-model.number="editForm.min_order_amount" type="number" min="0" class="max-w-[200px]" :disabled="readOnly" />
+          </div>
+          <div>
+            <p class="text-xs text-muted-foreground mb-2">Стоимость доставки (₽)</p>
+            <Input v-model.number="editForm.delivery_cost" type="number" min="0" class="max-w-[200px]" :disabled="readOnly" />
+          </div>
           <div class="space-y-2">
             <p class="text-xs text-muted-foreground">Стоимость доставки</p>
             <div v-if="tariffsLoading" class="text-xs text-muted-foreground">Загрузка тарифов...</div>
@@ -163,7 +171,8 @@ const tabs = computed(() => {
 const editForm = ref({
   name: "",
   delivery_time: 30,
-  courier_reward: 0,
+  min_order_amount: 0,
+  delivery_cost: 0,
   is_active: true,
 });
 const visibleTariffs = computed(() => {
@@ -186,6 +195,8 @@ watch(
       editForm.value = {
         name: newPolygon.name || "",
         delivery_time: newPolygon.delivery_time || 30,
+        min_order_amount: Number(newPolygon.min_order_amount || 0),
+        delivery_cost: Number(newPolygon.delivery_cost || 0),
         is_active: newPolygon.is_active === null || newPolygon.is_active === undefined ? true : Boolean(newPolygon.is_active),
       };
       transferBranchId.value = "";

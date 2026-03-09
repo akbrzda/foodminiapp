@@ -103,7 +103,6 @@ const toInt = (value) => {
 const validate = (tariffs) => {
   const errors = [];
   if (!tariffs || tariffs.length === 0) {
-    errors.push("Тарифные ступени не заданы.");
     return errors;
   }
   const normalized = tariffs.map((tariff) => ({

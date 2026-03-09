@@ -267,7 +267,9 @@ const canSubmitOrder = computed(() => {
   }
 });
 const isMinOrderReached = computed(() => {
-  return true;
+  if (orderType.value !== "delivery") return true;
+  if (hasDeliveryTariffs.value) return true;
+  return effectiveSubtotal.value >= minOrderAmount.value;
 });
 const appliedBonusToUse = computed(() => {
   if (!bonusesEnabled.value) return 0;
@@ -277,7 +279,18 @@ const appliedBonusToUse = computed(() => {
   return Math.min(cartStore.bonusUsage.bonusToUse, maxByPercent, balanceLimit);
 });
 const effectiveSubtotal = computed(() => Math.max(0, summarySubtotal.value - appliedBonusToUse.value));
-const deliveryCost = computed(() => (orderType.value === "delivery" ? calculateDeliveryCost(deliveryTariffs.value, effectiveSubtotal.value) : 0));
+const hasDeliveryTariffs = computed(() => Array.isArray(deliveryTariffs.value) && deliveryTariffs.value.length > 0);
+const fallbackDeliveryCost = computed(() => {
+  const raw = Number(locationStore.deliveryZone?.delivery_cost);
+  return Number.isFinite(raw) && raw >= 0 ? raw : 0;
+});
+const deliveryCost = computed(() => {
+  if (orderType.value !== "delivery") return 0;
+  if (hasDeliveryTariffs.value) {
+    return calculateDeliveryCost(deliveryTariffs.value, effectiveSubtotal.value);
+  }
+  return fallbackDeliveryCost.value;
+});
 const deliveryCostForSummary = computed(() => (orderType.value === "delivery" ? deliveryCost.value : 0));
 const finalTotalPrice = computed(() => {
   const subtotal = cartStore.totalPrice;
@@ -607,14 +620,20 @@ function applyBranchTimes(branch) {
 function applyDeliveryZone(zone) {
   if (orderType.value !== "delivery") return;
   deliveryTime.value = parseInt(zone?.delivery_time || 0);
-  minOrderAmount.value = 0;
+  minOrderAmount.value = Math.max(0, Number(zone?.min_order_amount || 0));
   prepTime.value = parseInt(zone?.prep_time || 0);
   assemblyTime.value = parseInt(zone?.assembly_time || 0);
 }
 async function ensureTariffs() {
   if (orderType.value !== "delivery") return;
   if (!locationStore.deliveryZone || !locationStore.deliveryCoords || !locationStore.selectedCity?.id) return;
-  if (Array.isArray(locationStore.deliveryZone.tariffs) && locationStore.deliveryZone.tariffs.length > 0) return;
+  if (
+    Array.isArray(locationStore.deliveryZone.tariffs) &&
+    (locationStore.deliveryZone.tariffs.length > 0 ||
+      (Number.isFinite(Number(locationStore.deliveryZone.min_order_amount)) && Number.isFinite(Number(locationStore.deliveryZone.delivery_cost))))
+  ) {
+    return;
+  }
   try {
     const response = await addressesAPI.checkDeliveryZone(
       locationStore.deliveryCoords.lat,
