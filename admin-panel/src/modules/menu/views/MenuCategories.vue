@@ -5,7 +5,7 @@
         <PageHeader title="Категории меню" description="Список категорий и управление">
           <template #actions>
             <Badge variant="secondary">Показано: {{ paginatedCategories.length }} / {{ filteredCategories.length }}</Badge>
-            <Button class="w-full md:w-auto" @click="openModal()">
+            <Button v-if="canManageCategories" class="w-full md:w-auto" @click="openModal()">
               <Plus :size="16" />
               Добавить категорию
             </Button>
@@ -37,7 +37,7 @@
                   {{ category.is_active ? "Активна" : "Скрыта" }}
                 </Badge>
               </div>
-              <div class="mt-3 flex justify-end gap-2">
+              <div v-if="canManageCategories" class="mt-3 flex justify-end gap-2">
                 <Button variant="ghost" size="icon" @click="openModal(category)">
                   <Pencil :size="16" />
                 </Button>
@@ -86,7 +86,7 @@
                     </Badge>
                   </TableCell>
                   <TableCell class="text-right">
-                    <div class="flex justify-end gap-2">
+                    <div v-if="canManageCategories" class="flex justify-end gap-2">
                       <Button variant="ghost" size="icon" @click="openModal(category)">
                         <Pencil :size="16" />
                       </Button>
@@ -193,7 +193,7 @@
               </FieldContent>
             </Field>
           </FieldGroup>
-          <Button class="w-full" type="submit" :disabled="saving">
+          <Button v-if="canManageCategories" class="w-full" type="submit" :disabled="saving">
             <Save :size="16" />
             {{ saving ? "Сохранение..." : "Сохранить" }}
           </Button>
@@ -232,10 +232,13 @@ import { useNotifications } from "@/shared/composables/useNotifications.js";
 import { formatNumber, normalizeBoolean, normalizeImageUrl } from "@/shared/utils/format.js";
 import { useReferenceStore } from "@/shared/stores/reference.js";
 import { useOrdersStore } from "@/modules/orders/stores/orders.js";
+import { useAuthStore } from "@/shared/stores/auth.js";
 const referenceStore = useReferenceStore();
 const ordersStore = useOrdersStore();
+const authStore = useAuthStore();
 const { showErrorNotification, showSuccessNotification } = useNotifications();
 const { shouldRestore, saveContext, restoreContext, restoreScroll } = useListContext("menu-categories");
+const canManageCategories = computed(() => authStore.hasPermission("menu.categories.manage"));
 const categories = ref([]);
 const isLoading = ref(false);
 const page = ref(1);
@@ -393,6 +396,7 @@ const resetFilters = () => {
   page.value = 1;
 };
 const openModal = async (category = null) => {
+  if (!canManageCategories.value) return;
   editing.value = category;
   uploadState.value = { loading: false, error: null, preview: null };
   form.value = category
@@ -431,6 +435,7 @@ const closeModal = () => {
   showModal.value = false;
 };
 const triggerFile = () => {
+  if (!canManageCategories.value) return;
   fileInput.value?.click();
 };
 const onDrop = (event) => {
@@ -446,6 +451,7 @@ const onFileChange = (event) => {
   }
 };
 const handleFile = async (file) => {
+  if (!canManageCategories.value) return;
   if (!file.type.startsWith("image/")) {
     uploadState.value.error = "Только изображения";
     return;
@@ -471,6 +477,7 @@ const handleFile = async (file) => {
   }
 };
 const submitCategory = async () => {
+  if (!canManageCategories.value) return;
   saving.value = true;
   try {
     const payload = { ...form.value };
@@ -490,6 +497,7 @@ const submitCategory = async () => {
   }
 };
 const deleteCategory = async (category) => {
+  if (!canManageCategories.value) return;
   if (!confirm(`Удалить категорию "${category.name}"?`)) return;
   try {
     await api.delete(`/api/menu/admin/categories/${category.id}`);

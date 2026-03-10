@@ -9,11 +9,11 @@
               <ChartLine :size="16" />
               Дашборд
             </Button>
-            <Button variant="secondary" @click="openSegments">
+            <Button v-if="canManageBroadcasts" variant="secondary" @click="openSegments">
               <Users :size="16" />
               Сегменты
             </Button>
-            <Button @click="createCampaign">
+            <Button v-if="canManageBroadcasts" @click="createCampaign">
               <Plus :size="16" />
               Создать рассылку
             </Button>
@@ -55,7 +55,7 @@
                 <Button variant="ghost" size="icon" @click="openDetail(campaign)">
                   <Eye :size="16" />
                 </Button>
-                <Button variant="ghost" size="icon" @click="editCampaign(campaign)">
+                <Button v-if="canManageBroadcasts" variant="ghost" size="icon" @click="editCampaign(campaign)">
                   <Pencil :size="16" />
                 </Button>
               </div>
@@ -114,7 +114,7 @@
                       <Button variant="ghost" size="icon" @click="openDetail(campaign)">
                         <Eye :size="16" />
                       </Button>
-                      <Button variant="ghost" size="icon" @click="editCampaign(campaign)">
+                      <Button v-if="canManageBroadcasts" variant="ghost" size="icon" @click="editCampaign(campaign)">
                         <Pencil :size="16" />
                       </Button>
                     </div>
@@ -147,6 +147,7 @@ import api from "@/shared/api/client.js";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
 import { useListContext } from "@/shared/composables/useListContext.js";
 import { useOrdersStore } from "@/modules/orders/stores/orders.js";
+import { useAuthStore } from "@/shared/stores/auth.js";
 import { formatDateTime, formatNumber } from "@/shared/utils/format.js";
 import Badge from "@/shared/components/ui/badge/Badge.vue";
 import Button from "@/shared/components/ui/button/Button.vue";
@@ -164,8 +165,10 @@ import TablePagination from "@/shared/components/TablePagination.vue";
 import Skeleton from "@/shared/components/ui/skeleton/Skeleton.vue";
 
 const router = useRouter();
+const authStore = useAuthStore();
 const { showErrorNotification } = useNotifications();
 const ordersStore = useOrdersStore();
+const canManageBroadcasts = computed(() => authStore.hasPermission("marketing.broadcasts.manage"));
 
 // Навигационный контекст
 const { shouldRestore, saveContext, restoreContext, restoreScroll } = useListContext("broadcasts");
@@ -287,11 +290,13 @@ const statusClass = (status) => {
 };
 
 const createCampaign = () => {
+  if (!canManageBroadcasts.value) return;
   saveContext(filters.value, { page: page.value, pageSize: pageSize.value });
   router.push({ name: "broadcast-new" });
 };
 
 const editCampaign = (campaign) => {
+  if (!canManageBroadcasts.value) return;
   saveContext(filters.value, { page: page.value, pageSize: pageSize.value });
   router.push({ name: "broadcast-edit", params: { id: campaign.id } });
 };
@@ -301,6 +306,7 @@ const openDetail = (campaign) => {
   router.push({ name: "broadcast-detail", params: { id: campaign.id } });
 };
 const openSegments = () => {
+  if (!canManageBroadcasts.value) return;
   router.push({ name: "broadcast-segments" });
 };
 const openDashboard = () => {

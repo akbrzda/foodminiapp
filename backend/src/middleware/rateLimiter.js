@@ -74,27 +74,51 @@ export const redisRateLimiter = (options = {}) => {
     fallbackStatus = 503,
     fallbackMessage = "Сервис временно недоступен",
     keyGenerator = (req) => req.user?.id || ipKeyGenerator(req),
+    skipSuccessfulRequests = false,
+    shouldCountRequest = (_req, res) => res.statusCode >= 400,
   } = options;
 
   return async (req, res, next) => {
     try {
       const identifier = keyGenerator(req);
       const key = `${prefix}:${identifier}`;
+      const rawCurrent = await redis.get(key);
+      const current = Number.parseInt(rawCurrent || "0", 10) || 0;
 
-      const current = await redis.incr(key);
-
-      if (current === 1) {
-        await redis.expire(key, Math.ceil(windowMs / 1000));
-      }
-
-      if (current > max) {
+      if (current >= max) {
         return res.status(429).json({ error: message });
       }
 
       res.setHeader("X-RateLimit-Limit", max);
       res.setHeader("X-RateLimit-Remaining", Math.max(0, max - current));
 
-      next();
+      if (skipSuccessfulRequests) {
+        res.on("finish", async () => {
+          try {
+            if (!shouldCountRequest(req, res)) return;
+            const updated = await redis.incr(key);
+            if (updated === 1) {
+              await redis.expire(key, Math.ceil(windowMs / 1000));
+            }
+          } catch (error) {
+            logger.system.warn("Ошибка фиксации rate-limit счетчика", {
+              prefix,
+              identifier,
+              error: error.message,
+            });
+          }
+        });
+        return next();
+      }
+
+      const updated = await redis.incr(key);
+      if (updated === 1) {
+        await redis.expire(key, Math.ceil(windowMs / 1000));
+      }
+      if (updated > max) {
+        return res.status(429).json({ error: message });
+      }
+      return next();
     } catch (error) {
       console.error("Rate limiter error:", error);
       if (failOpen) {
@@ -114,6 +138,14 @@ export const strictAuthLimiter = redisRateLimiter({
   failOpen: false,
   fallbackStatus: 503,
   fallbackMessage: "Авторизация временно недоступна, попробуйте позже",
+  skipSuccessfulRequests: true,
+  keyGenerator: (req) => {
+    const email = String(req.body?.email || "")
+      .trim()
+      .toLowerCase();
+    const ip = ipKeyGenerator(req);
+    return email ? `${email}:${ip}` : ip;
+  },
 });
 
 // Строгий limiter для чувствительных защищенных маршрутов

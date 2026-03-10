@@ -1,11 +1,27 @@
 import express from "express";
 import db from "../../config/database.js";
-import { authenticateToken, requireRole } from "../../middleware/auth.js";
+import { authenticateToken, requirePermission } from "../../middleware/auth.js";
 import redis from "../../config/redis.js";
 import axios from "axios";
 import { findTariffForAmount, getNextThreshold, validateTariffs } from "./utils/deliveryTariffs.js";
 import { getSystemSettings } from "../../utils/settings.js";
 const router = express.Router();
+const canViewDeliveryZones = requirePermission("locations.delivery_zones.view", "locations.delivery_zones.manage");
+const canManageDeliveryZones = requirePermission("locations.delivery_zones.manage");
+const canToggleDeliveryZones = requirePermission("locations.delivery_zones.toggle", "locations.delivery_zones.manage");
+
+const hasPermission = (req, permissionCode) => {
+  if (!permissionCode) return true;
+  const permissions = Array.isArray(req.user?.permissions) ? req.user.permissions : [];
+  if (permissions.includes(permissionCode)) return true;
+
+  const scopeRole = req.user?.scope_role || req.user?.role;
+  if (permissions.length === 0 && ["admin", "ceo"].includes(scopeRole)) {
+    return true;
+  }
+
+  return false;
+};
 
 router.use("/admin", authenticateToken);
 const parseGeoJson = (value) => {
@@ -49,11 +65,6 @@ const getTariffsByPolygonId = async (polygonId) => {
     amount_to: row.amount_to === null ? null : Number(row.amount_to),
     delivery_cost: row.delivery_cost,
   }));
-};
-const denyManagerWrite = (req, res) => {
-  if (req.user.role !== "manager") return false;
-  res.status(403).json({ error: "Недостаточно прав для выполнения действия" });
-  return true;
 };
 const STREETS_SEARCH_CACHE_TTL = 5 * 60;
 const CITY_BOUNDS_CACHE_TTL = 60 * 60;
@@ -940,7 +951,7 @@ router.post("/check-delivery", async (req, res, next) => {
     next(error);
   }
 });
-router.get("/admin/all", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
+router.get("/admin/all", authenticateToken, canViewDeliveryZones, async (req, res, next) => {
   try {
     let cityFilter = "";
     const values = [];
@@ -976,7 +987,7 @@ router.get("/admin/all", authenticateToken, requireRole("admin", "manager", "ceo
     next(error);
   }
 });
-router.get("/admin/branch/:branchId", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
+router.get("/admin/branch/:branchId", authenticateToken, canViewDeliveryZones, async (req, res, next) => {
   try {
     const branchId = req.params.branchId;
     const [branches] = await db.query("SELECT city_id FROM branches WHERE id = ?", [branchId]);
@@ -1010,7 +1021,7 @@ router.get("/admin/branch/:branchId", authenticateToken, requireRole("admin", "m
     next(error);
   }
 });
-router.get("/admin/:id/tariffs", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
+router.get("/admin/:id/tariffs", authenticateToken, canViewDeliveryZones, async (req, res, next) => {
   try {
     const polygonId = req.params.id;
     const meta = await getPolygonMeta(polygonId);
@@ -1026,10 +1037,9 @@ router.get("/admin/:id/tariffs", authenticateToken, requireRole("admin", "manage
     next(error);
   }
 });
-router.put("/admin/:id/tariffs", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
+router.put("/admin/:id/tariffs", authenticateToken, canManageDeliveryZones, async (req, res, next) => {
   const connection = await db.getConnection();
   try {
-    if (denyManagerWrite(req, res)) return;
     const polygonId = req.params.id;
     const meta = await getPolygonMeta(polygonId);
     if (!meta) {
@@ -1062,10 +1072,9 @@ router.put("/admin/:id/tariffs", authenticateToken, requireRole("admin", "manage
     connection.release();
   }
 });
-router.post("/admin/:id/tariffs/copy", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
+router.post("/admin/:id/tariffs/copy", authenticateToken, canManageDeliveryZones, async (req, res, next) => {
   const connection = await db.getConnection();
   try {
-    if (denyManagerWrite(req, res)) return;
     const polygonId = req.params.id;
     const sourcePolygonId = Number(req.body?.source_polygon_id);
     if (!Number.isFinite(sourcePolygonId)) {
@@ -1110,9 +1119,8 @@ router.post("/admin/:id/tariffs/copy", authenticateToken, requireRole("admin", "
     connection.release();
   }
 });
-router.post("/admin", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
+router.post("/admin", authenticateToken, canManageDeliveryZones, async (req, res, next) => {
   try {
-    if (denyManagerWrite(req, res)) return;
     const { branch_id, name, polygon, delivery_time, min_order_amount, delivery_cost } = req.body;
     if (!branch_id || !polygon) {
       return res.status(400).json({
@@ -1169,11 +1177,20 @@ router.post("/admin", authenticateToken, requireRole("admin", "manager", "ceo"),
     next(error);
   }
 });
-router.put("/admin/:id", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
+router.put("/admin/:id", authenticateToken, canToggleDeliveryZones, async (req, res, next) => {
   try {
-    if (denyManagerWrite(req, res)) return;
     const polygonId = req.params.id;
     const { name, polygon, delivery_time, min_order_amount, delivery_cost, is_active } = req.body;
+    const hasManageAccess = hasPermission(req, "locations.delivery_zones.manage");
+    if (!hasManageAccess) {
+      const requestKeys = Object.keys(req.body || {}).filter((key) => req.body[key] !== undefined);
+      const hasForbiddenFields = requestKeys.some((key) => key !== "is_active");
+      if (hasForbiddenFields || requestKeys.length === 0) {
+        return res.status(403).json({
+          error: "Insufficient permissions for polygon update",
+        });
+      }
+    }
     const [polygons] = await db.query(
       `SELECT dp.id, b.city_id
          FROM delivery_polygons dp
@@ -1254,7 +1271,7 @@ router.put("/admin/:id", authenticateToken, requireRole("admin", "manager", "ceo
     next(error);
   }
 });
-router.post("/admin/:id/block", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
+router.post("/admin/:id/block", authenticateToken, canToggleDeliveryZones, async (req, res, next) => {
   try {
     const polygonId = req.params.id;
     const { blocked_from, blocked_until, block_reason } = req.body;
@@ -1312,7 +1329,7 @@ router.post("/admin/:id/block", authenticateToken, requireRole("admin", "manager
     next(error);
   }
 });
-router.post("/admin/:id/unblock", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
+router.post("/admin/:id/unblock", authenticateToken, canToggleDeliveryZones, async (req, res, next) => {
   try {
     const polygonId = req.params.id;
     const [polygons] = await db.query(
@@ -1362,7 +1379,7 @@ router.post("/admin/:id/unblock", authenticateToken, requireRole("admin", "manag
     next(error);
   }
 });
-router.post("/admin/bulk-block", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
+router.post("/admin/bulk-block", authenticateToken, canToggleDeliveryZones, async (req, res, next) => {
   try {
     const { polygon_ids, blocked_from, blocked_until, block_reason } = req.body;
     if (!Array.isArray(polygon_ids) || polygon_ids.length === 0) {
@@ -1413,7 +1430,7 @@ router.post("/admin/bulk-block", authenticateToken, requireRole("admin", "manage
     next(error);
   }
 });
-router.post("/admin/bulk-unblock", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
+router.post("/admin/bulk-unblock", authenticateToken, canToggleDeliveryZones, async (req, res, next) => {
   try {
     const { polygon_ids } = req.body;
     if (!Array.isArray(polygon_ids) || polygon_ids.length === 0) {
@@ -1457,9 +1474,8 @@ router.post("/admin/bulk-unblock", authenticateToken, requireRole("admin", "mana
     next(error);
   }
 });
-router.post("/admin/:id/transfer", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
+router.post("/admin/:id/transfer", authenticateToken, canToggleDeliveryZones, async (req, res, next) => {
   try {
-    if (denyManagerWrite(req, res)) return;
     const polygonId = req.params.id;
     const { new_branch_id } = req.body;
     if (!new_branch_id) {
@@ -1513,9 +1529,8 @@ router.post("/admin/:id/transfer", authenticateToken, requireRole("admin", "mana
     next(error);
   }
 });
-router.delete("/admin/:id", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
+router.delete("/admin/:id", authenticateToken, canManageDeliveryZones, async (req, res, next) => {
   try {
-    if (denyManagerWrite(req, res)) return;
     const polygonId = req.params.id;
     const [polygons] = await db.query(
       `SELECT dp.id, b.city_id

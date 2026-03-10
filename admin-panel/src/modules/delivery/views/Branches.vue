@@ -5,7 +5,7 @@
         <PageHeader title="Филиалы" description="Список филиалов и настройки времени приготовления">
           <template #actions>
             <Badge variant="secondary">Всего: {{ branches.length }}</Badge>
-            <Button v-if="!isManager" class="w-full md:w-auto" :disabled="!cityId" @click="goToCreate">
+            <Button v-if="canManageBranches" class="w-full md:w-auto" :disabled="!cityId" @click="goToCreate">
               <Plus :size="16" />
               Добавить филиал
             </Button>
@@ -53,7 +53,7 @@
                 </Badge>
               </div>
               <div class="mt-3 flex justify-end gap-2">
-                <template v-if="!isManager">
+                <template v-if="canManageBranches">
                   <Button variant="ghost" size="icon" @click="goToEdit(branch)">
                     <Pencil :size="16" />
                   </Button>
@@ -122,7 +122,7 @@
                     </Badge>
                   </TableCell>
                   <TableCell class="text-right">
-                    <div v-if="!isManager" class="flex justify-end gap-2">
+                    <div v-if="canManageBranches" class="flex justify-end gap-2">
                       <Button variant="ghost" size="icon" @click="goToEdit(branch)">
                         <Pencil :size="16" />
                       </Button>
@@ -191,7 +191,7 @@ const branches = ref([]);
 const isLoading = ref(false);
 const page = ref(1);
 const pageSize = ref(20);
-const isManager = computed(() => authStore.role === "manager");
+const canManageBranches = computed(() => authStore.hasPermission("locations.branches.manage"));
 const filtersModel = computed({
   get: () => ({ cityId: cityId.value }),
   set: (value) => {

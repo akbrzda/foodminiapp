@@ -1,6 +1,6 @@
 import express from "express";
 import multer from "multer";
-import { authenticateToken, requireRole } from "../../middleware/auth.js";
+import { authenticateToken, requirePermission } from "../../middleware/auth.js";
 import { upload, processAndSaveImage } from "../../middleware/upload.js";
 import { createLimiter, redisRateLimiter } from "../../middleware/rateLimiter.js";
 import { IMAGE_CATEGORIES, deleteImage, deleteEntityImages } from "../../config/uploads.js";
@@ -40,7 +40,18 @@ const uploadImage = (category, { allowTemp = true } = {}) => async (req, res, ne
   }
 };
 
-router.use(authenticateToken, requireRole("admin", "manager", "ceo"));
+router.use(
+  authenticateToken,
+  requirePermission(
+    "menu.products.manage",
+    "menu.categories.manage",
+    "menu.modifiers.manage",
+    "menu.tags.manage",
+    "marketing.broadcasts.manage",
+    "marketing.campaigns.manage",
+    "system.settings.manage",
+  ),
+);
 router.use(createLimiter);
 router.use(
   redisRateLimiter({

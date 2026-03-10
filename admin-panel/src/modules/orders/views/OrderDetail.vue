@@ -132,7 +132,7 @@
               <CardTitle>Управление заказом</CardTitle>
               <CardDescription>Изменение статуса заказа</CardDescription>
             </CardHeader>
-            <CardContent class="grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
+            <CardContent v-if="canManageOrder" class="grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
               <div class="space-y-2">
                 <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Статус</label>
                 <Select v-model="statusUpdate">
@@ -151,6 +151,9 @@
                 <CircleCheck :size="16" />
                 Применить
               </Button>
+            </CardContent>
+            <CardContent v-else>
+              <p class="text-sm text-muted-foreground">У вас нет прав на изменение статуса заказа.</p>
             </CardContent>
           </Card>
         </TabsContent>
@@ -315,7 +318,8 @@ const activeTab = ref("general");
 const statusUpdate = ref("");
 const deleteDialogOpen = ref(false);
 const deletingOrder = ref(false);
-const canDeleteOrder = computed(() => authStore.role === "admin");
+const canDeleteOrder = computed(() => authStore.hasPermission("orders.delete"));
+const canManageOrder = computed(() => authStore.hasPermission("orders.manage"));
 const orderTimeZone = computed(() => order.value?.city_timezone || "Europe/Moscow");
 const paymentMethodLabel = computed(() => {
   return formatPaymentMethod(order.value?.payment_method);
@@ -480,6 +484,7 @@ const goBack = () => {
   router.push("/orders");
 };
 const updateStatus = async () => {
+  if (!canManageOrder.value) return;
   if (!statusUpdate.value) return;
   try {
     if (statusUpdate.value === "cancelled") {

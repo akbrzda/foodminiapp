@@ -78,7 +78,7 @@
           <Field>
             <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Eruda</FieldLabel>
             <FieldContent>
-              <Select v-model="form.eruda_enabled" :disabled="!hasTelegramId || authStore.role === 'ceo'">
+              <Select v-model="form.eruda_enabled" :disabled="!hasTelegramId || authStore.scopeRole === 'ceo'">
                 <SelectTrigger class="w-full">
                   <SelectValue placeholder="Выберите статус" />
                 </SelectTrigger>
@@ -87,7 +87,7 @@
                   <SelectItem :value="false">Выключено</SelectItem>
                 </SelectContent>
               </Select>
-              <p v-if="authStore.role === 'ceo'" class="text-xs text-muted-foreground">CEO не может включать Eruda.</p>
+              <p v-if="authStore.scopeRole === 'ceo'" class="text-xs text-muted-foreground">CEO не может включать Eruda.</p>
               <p v-else-if="!hasTelegramId" class="text-xs text-muted-foreground">Для включения нужен Telegram ID.</p>
             </FieldContent>
           </Field>
@@ -122,7 +122,7 @@
             </div>
           </div>
 
-          <Field v-if="form.role === 'manager'">
+          <Field v-if="isFormManagerRole">
             <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Города доступа</FieldLabel>
             <FieldContent>
               <div class="grid gap-2 md:grid-cols-2">
@@ -134,7 +134,7 @@
             </FieldContent>
           </Field>
 
-          <Field v-if="form.role === 'manager'">
+          <Field v-if="isFormManagerRole">
             <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Филиалы доступа</FieldLabel>
             <FieldContent>
               <div class="grid gap-2 md:grid-cols-2">
@@ -296,12 +296,6 @@ const expandedSections = ref({});
 const goBack = () => {
   router.push("/admin-users");
 };
-const roleOptions = [
-  { value: "ceo", label: "CEO" },
-  { value: "admin", label: "Администратор системы" },
-  { value: "manager", label: "Менеджер" },
-];
-
 const moduleLabels = {
   dashboard: "Дашборд",
   orders: "Заказы",
@@ -314,6 +308,36 @@ const moduleLabels = {
 
 const hasTelegramId = computed(() => Boolean(String(form.value.telegram_id || "").trim()));
 const rolePermissionSet = computed(() => new Set(rolePermissionCodes.value));
+const resolveScopeRole = (scopeRole, fallbackRole) => {
+  const role = String(scopeRole || fallbackRole || "")
+    .trim()
+    .toLowerCase();
+  return ["admin", "manager", "ceo"].includes(role) ? role : "manager";
+};
+const roleByCode = computed(() => {
+  return accessRoles.value.reduce((acc, role) => {
+    acc[role.code] = role;
+    return acc;
+  }, {});
+});
+const roleOptions = computed(() => {
+  return accessRoles.value
+    .filter((role) => {
+      if (!role?.is_active) return false;
+      if (authStore.scopeRole === "ceo" && resolveScopeRole(role.scope_role, role.code) === "admin") {
+        return false;
+      }
+      return true;
+    })
+    .map((role) => ({
+      value: role.code,
+      label: role.name,
+    }));
+});
+const isFormManagerRole = computed(() => {
+  const selectedRole = roleByCode.value[form.value.role];
+  return resolveScopeRole(selectedRole?.scope_role, form.value.role) === "manager";
+});
 
 const availableBranches = computed(() => {
   const cityIds = form.value.city_ids || [];
@@ -453,6 +477,11 @@ const loadRolePermissionsByCode = async (roleCode) => {
   rolePermissionCodes.value = permissions;
 };
 
+const loadRoles = async () => {
+  const response = await api.get("/api/admin/access/roles");
+  accessRoles.value = response.data?.data || [];
+};
+
 const loadUser = async () => {
   const response = await api.get(`/api/admin/users/${userId.value}`);
   const user = response.data?.user;
@@ -478,14 +507,12 @@ const loadAccess = async () => {
   if (!authStore.hasPermission("system.access.manage")) return;
   accessLoading.value = true;
   try {
-    const [permissionsResponse, overridesResponse, rolesResponse] = await Promise.all([
+    const [permissionsResponse, overridesResponse] = await Promise.all([
       api.get("/api/admin/access/permissions"),
       api.get(`/api/admin/access/users/${userId.value}/overrides`),
-      api.get("/api/admin/access/roles"),
     ]);
 
     allPermissions.value = permissionsResponse.data?.data || [];
-    accessRoles.value = rolesResponse.data?.data || [];
 
     const overrides = overridesResponse.data?.data?.overrides || [];
     overrideEffectMap.value = overrides.reduce((acc, item) => {
@@ -564,8 +591,12 @@ onMounted(async () => {
     }
 
     await referenceStore.loadCities();
+    await loadRoles();
     await loadUser();
-    if (form.value.role === "manager") {
+    if (!roleByCode.value[form.value.role]) {
+      form.value.role = roleOptions.value[0]?.value || "manager";
+    }
+    if (isFormManagerRole.value) {
       await Promise.all((form.value.city_ids || []).map((cityId) => referenceStore.loadBranches(cityId)));
     }
     await loadAccess();
@@ -581,7 +612,7 @@ onMounted(async () => {
 watch(
   () => [...(form.value.city_ids || [])],
   async (cityIds) => {
-    if (form.value.role !== "manager") return;
+    if (!isFormManagerRole.value) return;
     await Promise.all(cityIds.map((cityId) => referenceStore.loadBranches(cityId)));
     if (form.value.branch_ids?.length) {
       form.value.branch_ids = form.value.branch_ids.filter((branchId) => availableBranches.value.some((branch) => branch.id === branchId));
@@ -592,7 +623,7 @@ watch(
 watch(
   () => form.value.role,
   async (role) => {
-    if (role !== "manager") {
+    if (!isFormManagerRole.value) {
       form.value.city_ids = [];
       form.value.branch_ids = [];
     }

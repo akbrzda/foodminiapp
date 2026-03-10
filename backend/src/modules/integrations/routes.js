@@ -1,5 +1,5 @@
 import express from "express";
-import { authenticateToken, requireRole } from "../../middleware/auth.js";
+import { authenticateToken, requirePermission } from "../../middleware/auth.js";
 import { logger } from "../../utils/logger.js";
 import {
   getAdminIntegrationSettings,
@@ -25,7 +25,49 @@ import {
 
 const router = express.Router();
 
-router.use(authenticateToken, requireRole("admin", "ceo"));
+const hasPermission = (req, permissionCode) => {
+  const permissions = Array.isArray(req.user?.permissions) ? req.user.permissions : [];
+  if (permissions.includes(permissionCode)) return true;
+
+  const scopeRole = req.user?.scope_role || req.user?.role;
+  if (permissions.length === 0 && ["admin", "ceo"].includes(scopeRole)) {
+    return true;
+  }
+
+  return false;
+};
+
+router.post("/iiko/sync-stoplist", authenticateToken, requirePermission("system.integrations.manage", "menu.stop_list.manage"), async (req, res, next) => {
+  try {
+    const result = await syncIikoStopListNow({ branchId: req.body?.branch_id || null });
+    if (!result.accepted) {
+      return res.status(400).json(result);
+    }
+    return res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/sync-logs", authenticateToken, requirePermission("system.integrations.manage", "menu.stop_list.manage"), async (req, res, next) => {
+  try {
+    const canManageIntegrations = hasPermission(req, "system.integrations.manage");
+    const query = { ...(req.query || {}) };
+
+    if (!canManageIntegrations) {
+      query.integrationType = "iiko";
+      query.module = "stoplist";
+      query.limit = Number(query.limit) > 0 ? query.limit : 20;
+    }
+
+    const result = await listIntegrationSyncLogs(query);
+    return res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.use(authenticateToken, requirePermission("system.integrations.manage"));
 
 router.get("/settings", async (req, res, next) => {
   try {
@@ -108,17 +150,6 @@ router.post("/iiko/sync-menu", async (req, res, next) => {
   }
 });
 
-router.post("/iiko/sync-stoplist", async (req, res, next) => {
-  try {
-    const result = await syncIikoStopListNow({ branchId: req.body?.branch_id || null });
-    if (!result.accepted) {
-      return res.status(400).json(result);
-    }
-    return res.json(result);
-  } catch (error) {
-    next(error);
-  }
-});
 
 router.get("/iiko/sync-status", async (req, res, next) => {
   try {
@@ -186,15 +217,6 @@ router.post("/iiko/onboarding", async (req, res, next) => {
       admin_user_id: req.user?.id || null,
     });
     return res.json({ success: true, data: result });
-  } catch (error) {
-    next(error);
-  }
-});
-
-router.get("/sync-logs", async (req, res, next) => {
-  try {
-    const result = await listIntegrationSyncLogs(req.query || {});
-    return res.json(result);
   } catch (error) {
     next(error);
   }

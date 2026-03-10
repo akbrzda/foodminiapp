@@ -5,7 +5,7 @@
         <PageHeader title="Блюда меню" description="Список блюд и управление">
           <template #actions>
             <Badge variant="secondary">Показано: {{ paginatedItems.length }} / {{ filteredItems.length }}</Badge>
-            <Button @click="createItem">
+            <Button v-if="canManageProducts" @click="createItem">
               <Plus :size="16" />
               Добавить блюдо
             </Button>
@@ -52,7 +52,7 @@
                   {{ item.is_active ? "Активна" : "Скрыта" }}
                 </Badge>
               </div>
-              <div class="mt-3 flex justify-end gap-2">
+              <div v-if="canManageProducts" class="mt-3 flex justify-end gap-2">
                 <Button variant="ghost" size="icon" @click="editItem(item)">
                   <Pencil :size="16" />
                 </Button>
@@ -122,10 +122,10 @@
                   </TableCell>
                   <TableCell class="text-right">
                     <div class="flex justify-end gap-2">
-                      <Button variant="ghost" size="icon" @click="editItem(item)">
+                      <Button v-if="canManageProducts" variant="ghost" size="icon" @click="editItem(item)">
                         <Pencil :size="16" />
                       </Button>
-                      <Button variant="ghost" size="icon" @click="deleteItem(item)">
+                      <Button v-if="canManageProducts" variant="ghost" size="icon" @click="deleteItem(item)">
                         <Trash2 :size="16" class="text-red-600" />
                       </Button>
                     </div>
@@ -158,6 +158,7 @@ import api from "@/shared/api/client.js";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
 import { useListContext } from "@/shared/composables/useListContext.js";
 import { useReferenceStore } from "@/shared/stores/reference.js";
+import { useAuthStore } from "@/shared/stores/auth.js";
 import { formatCurrency } from "@/shared/utils/format.js";
 import Badge from "@/shared/components/ui/badge/Badge.vue";
 import Button from "@/shared/components/ui/button/Button.vue";
@@ -176,7 +177,9 @@ import TablePagination from "@/shared/components/TablePagination.vue";
 
 const router = useRouter();
 const referenceStore = useReferenceStore();
+const authStore = useAuthStore();
 const { showErrorNotification } = useNotifications();
+const canManageProducts = computed(() => authStore.hasPermission("menu.products.manage"));
 
 // Навигационный контекст
 const { shouldRestore, saveContext, restoreContext, restoreScroll } = useListContext("menu-products");
@@ -357,15 +360,18 @@ const loadItems = async ({ preservePage = false } = {}) => {
   }
 };
 const createItem = () => {
+  if (!canManageProducts.value) return;
   saveContext(filters, { page: page.value, pageSize: pageSize.value });
   router.push({ name: "menu-product-form", params: { id: "new" } });
 };
 
 const editItem = (item) => {
+  if (!canManageProducts.value) return;
   saveContext(filters, { page: page.value, pageSize: pageSize.value });
   router.push({ name: "menu-product-form", params: { id: item.id } });
 };
 const deleteItem = async (item) => {
+  if (!canManageProducts.value) return;
   if (!confirm(`Удалить блюдо "${item.name}"?`)) return;
   try {
     await api.delete(`/api/menu/admin/products/${item.id}`);

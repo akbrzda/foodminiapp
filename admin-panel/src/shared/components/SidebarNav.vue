@@ -155,7 +155,6 @@ const props = defineProps({
 const emit = defineEmits(["navigate", "close"]);
 const authStore = useAuthStore();
 const ordersStore = useOrdersStore();
-const isManager = computed(() => authStore.role === "manager");
 const newOrdersCount = computed(() => ordersStore.newOrdersCount);
 const initials = computed(() => {
   const first = authStore.user?.first_name?.[0] || "";
@@ -167,7 +166,8 @@ const userName = computed(() => {
   const last = authStore.user?.last_name || "";
   return `${first} ${last}`.trim() || "Пользователь";
 });
-const userRole = computed(() => authStore.user?.role || "");
+const userRole = computed(() => authStore.user?.role_name || authStore.user?.role || "");
+const canAccess = (permissions = []) => authStore.hasAnyPermission(permissions);
 
 const navSections = computed(() => {
   const sections = [
@@ -175,50 +175,53 @@ const navSections = computed(() => {
       id: "operations",
       title: "Операции",
       items: [
-        { label: "Дашборд", to: "/dashboard", icon: LayoutDashboard },
-        { label: "Заказы", to: "/orders", icon: ClipboardList, badge: newOrdersCount.value },
-        { label: "Клиенты", to: "/clients", icon: Users },
+        { label: "Дашборд", to: "/dashboard", icon: LayoutDashboard, permissions: ["dashboard.view"] },
+        { label: "Заказы", to: "/orders", icon: ClipboardList, badge: newOrdersCount.value, permissions: ["orders.view"] },
+        { label: "Клиенты", to: "/clients", icon: Users, permissions: ["clients.view"] },
       ],
     },
     {
       id: "marketing",
       title: "Маркетинг",
-      visible: !isManager.value,
       items: [
-        { label: "Кампании подписки", to: "/campaign", icon: BellRing },
-        { label: "Рассылки", to: "/broadcasts", icon: Megaphone, visible: !isManager.value },
-        { label: "Уровни лояльности", to: "/loyalty-levels", icon: Award },
+        { label: "Кампании подписки", to: "/campaign", icon: BellRing, permissions: ["marketing.campaigns.manage"] },
+        { label: "Рассылки", to: "/broadcasts", icon: Megaphone, permissions: ["marketing.broadcasts.manage"] },
+        { label: "Уровни лояльности", to: "/loyalty-levels", icon: Award, permissions: ["system.loyalty_levels.manage"] },
       ],
     },
     {
       id: "catalog",
       title: "Каталог",
       items: [
-        { label: "Блюда", to: "/menu/products", icon: UtensilsCrossed, visible: !isManager.value },
-        { label: "Категории", to: "/menu/categories", icon: ListTree, visible: !isManager.value },
-        { label: "Модификаторы", to: "/menu/modifiers", icon: Layers, visible: !isManager.value },
-        { label: "Теги", to: "/menu/tags", icon: Tag, visible: !isManager.value },
-        { label: "Стоп-лист", to: "/menu/stop-list", icon: Ban },
+        { label: "Блюда", to: "/menu/products", icon: UtensilsCrossed, permissions: ["menu.products.manage"] },
+        { label: "Категории", to: "/menu/categories", icon: ListTree, permissions: ["menu.categories.manage"] },
+        { label: "Модификаторы", to: "/menu/modifiers", icon: Layers, permissions: ["menu.modifiers.manage"] },
+        { label: "Теги", to: "/menu/tags", icon: Tag, permissions: ["menu.tags.manage"] },
+        { label: "Стоп-лист", to: "/menu/stop-list", icon: Ban, permissions: ["menu.stop_list.manage"] },
       ],
     },
     {
       id: "locations",
       title: "Локации",
       items: [
-        { label: "Города", to: "/cities", icon: MapPinned, visible: !isManager.value },
-        { label: "Филиалы", to: "/branches", icon: Building2 },
-        { label: "Зоны доставки", to: "/delivery-zones", icon: Map },
+        { label: "Города", to: "/cities", icon: MapPinned, permissions: ["locations.cities.manage"] },
+        { label: "Филиалы", to: "/branches", icon: Building2, permissions: ["locations.branches.view", "locations.branches.manage"] },
+        {
+          label: "Зоны доставки",
+          to: "/delivery-zones",
+          icon: Map,
+          permissions: ["locations.delivery_zones.view", "locations.delivery_zones.manage"],
+        },
       ],
     },
     {
       id: "system",
       title: "Администрирование",
-      visible: !isManager.value,
       items: [
-        { label: "Настройки системы", to: "/system/settings", icon: SlidersHorizontal },
-        { label: "Интеграции", to: "/integrations", icon: PlugZap },
-        { label: "Пользователи", to: "/admin-users", icon: UserCog },
-        { label: "Логи", to: "/logs", icon: FileText },
+        { label: "Настройки системы", to: "/system/settings", icon: SlidersHorizontal, permissions: ["system.settings.manage"] },
+        { label: "Интеграции", to: "/integrations", icon: PlugZap, permissions: ["system.integrations.manage"] },
+        { label: "Пользователи", to: "/admin-users", icon: UserCog, permissions: ["system.admin_users.manage"] },
+        { label: "Логи", to: "/logs", icon: FileText, permissions: ["system.logs.view"] },
       ],
     },
   ];
@@ -227,7 +230,7 @@ const navSections = computed(() => {
     .filter((section) => section.visible !== false)
     .map((section) => ({
       ...section,
-      items: section.items.filter((item) => item.visible !== false),
+      items: section.items.filter((item) => item.visible !== false && canAccess(item.permissions)),
     }))
     .filter((section) => section.items.length > 0);
 });

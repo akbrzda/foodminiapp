@@ -5,7 +5,7 @@
         <PageHeader :title="campaign?.name || 'Рассылка'" :description="campaign?.description || 'Детальная статистика'">
           <template #actions>
             <BackButton @click="goBack" />
-            <Button variant="secondary" @click="editCampaign">
+            <Button v-if="canManageBroadcasts" variant="secondary" @click="editCampaign">
               <Pencil :size="16" />
               Редактировать
             </Button>
@@ -201,11 +201,14 @@ import Skeleton from "@/shared/components/ui/skeleton/Skeleton.vue";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
 import { useOrdersStore } from "@/modules/orders/stores/orders.js";
 import { formatCurrency, formatDateTime, formatNumber, formatPhone, normalizePhone } from "@/shared/utils/format.js";
+import { useAuthStore } from "@/shared/stores/auth.js";
 
 const route = useRoute();
 const router = useRouter();
+const authStore = useAuthStore();
 const { showErrorNotification } = useNotifications();
 const ordersStore = useOrdersStore();
+const canManageBroadcasts = computed(() => authStore.hasPermission("marketing.broadcasts.manage"));
 const campaignId = computed(() => Number(route.params.id || 0));
 const campaign = ref(null);
 const stats = ref({});
@@ -267,6 +270,7 @@ const goBack = () => {
   router.push({ name: "broadcasts" });
 };
 const editCampaign = () => {
+  if (!canManageBroadcasts.value) return;
   router.push({ name: "broadcast-edit", params: { id: campaignId.value } });
 };
 

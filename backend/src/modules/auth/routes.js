@@ -27,8 +27,8 @@ import { grantRegistrationBonus } from "../loyalty/services/loyaltyService.js";
 import { addToBlacklist, isBlacklisted } from "../../middleware/tokenBlacklist.js";
 import { authenticateToken } from "../../middleware/auth.js";
 import { logger } from "../../utils/logger.js";
-import { authLimiter, createLimiter, refreshLimiter, strictAuthLimiter, telegramAuthLimiter } from "../../middleware/rateLimiter.js";
-import { resolveAdminPermissions } from "../access/index.js";
+import { authLimiter, createLimiter, refreshLimiter, telegramAuthLimiter } from "../../middleware/rateLimiter.js";
+import { getRoleByCode, resolveAdminPermissions, resolveScopeRole } from "../access/index.js";
 
 const router = express.Router();
 const CLIENT_ACCESS_TOKEN_TTL = "15m";
@@ -56,6 +56,7 @@ const ADMIN_LOGIN_BLOCK_LIMIT = 5;
 const ADMIN_LOGIN_BLOCK_WINDOW_SECONDS = 15 * 60;
 const ADMIN_AUTH_LOG_ENTITY_TYPE = "auth";
 const CSRF_TOKEN_COOKIE_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
+const SYSTEM_SCOPE_ROLES = new Set(["admin", "manager", "ceo"]);
 
 const getRequiredBotToken = () => {
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
@@ -126,11 +127,35 @@ const clearAdminLoginFailures = async (email, ip) => {
 const getRequestIp = (req) => req?.ip || req?.connection?.remoteAddress || null;
 const getRequestUserAgent = (req) => req?.get?.("user-agent") || null;
 
-const getAdminScope = async (adminId, roleCode) => {
+const resolveAdminRoleContext = async (roleCode) => {
+  const normalizedCode = String(roleCode || "")
+    .trim()
+    .toLowerCase();
+  const role = await getRoleByCode(db, roleCode);
+  if (!role) {
+    if (!SYSTEM_SCOPE_ROLES.has(normalizedCode)) {
+      return null;
+    }
+    return {
+      code: normalizedCode,
+      name: normalizedCode.toUpperCase(),
+      is_system: true,
+      is_active: true,
+      scope_role: resolveScopeRole("", normalizedCode),
+    };
+  }
+
+  return {
+    ...role,
+    scope_role: resolveScopeRole(role.scope_role, role.code),
+  };
+};
+
+const getAdminScope = async (adminId, scopeRole) => {
   let cities = [];
   let branches = [];
 
-  if (roleCode === "manager") {
+  if (scopeRole === "manager") {
     const [userCities] = await db.query(`SELECT city_id FROM admin_user_cities WHERE admin_user_id = ?`, [adminId]);
     cities = userCities.map((city) => city.city_id);
 
@@ -150,21 +175,28 @@ const getAdminScope = async (adminId, roleCode) => {
   };
 };
 
-const buildAdminAuthPayload = ({ user, cities, branches, permissions }) => ({
+const buildAdminAuthPayload = ({ user, roleContext, cities, branches, permissions }) => ({
   id: user.id,
   email: user.email,
-  role: user.role,
+  role: roleContext.scope_role,
+  role_code: roleContext.code,
+  role_name: roleContext.name,
+  scope_role: roleContext.scope_role,
   cities,
   permissions,
+  permission_version: Number(user.permission_version || 1),
   type: "admin",
   branch_ids: branches.map((branch) => branch.id),
   branch_city_ids: branches.map((branch) => branch.city_id),
 });
 
-const buildAdminSessionUser = ({ user, cities, branches, permissions }) => ({
+const buildAdminSessionUser = ({ user, roleContext, cities, branches, permissions }) => ({
   ...user,
+  scope_role: roleContext.scope_role,
+  role_name: roleContext.name,
   cities,
   permissions,
+  permission_version: Number(user.permission_version || 1),
   branch_ids: branches.map((branch) => branch.id),
   branch_city_ids: branches.map((branch) => branch.city_id),
   branches,
@@ -353,7 +385,7 @@ router.post("/eruda", async (req, res, next) => {
     next(error);
   }
 });
-router.post("/admin/login", authLimiter, strictAuthLimiter, async (req, res, next) => {
+router.post("/admin/login", authLimiter, async (req, res, next) => {
   try {
     const { email, password } = req.body;
     if (email) {
@@ -378,7 +410,7 @@ router.post("/admin/login", authLimiter, strictAuthLimiter, async (req, res, nex
     }
 
     const [users] = await db.query(
-      `SELECT id, email, password_hash, first_name, last_name, role, is_active, branch_id, telegram_id, eruda_enabled
+      `SELECT id, email, password_hash, first_name, last_name, role, is_active, branch_id, telegram_id, eruda_enabled, permission_version
        FROM admin_users WHERE email = ?`,
       [email],
     );
@@ -418,9 +450,15 @@ router.post("/admin/login", authLimiter, strictAuthLimiter, async (req, res, nex
     }
     await clearAdminLoginFailures(email, req.ip);
 
-    const { cities, branches } = await getAdminScope(user.id, user.role);
+    const roleContext = await resolveAdminRoleContext(user.role);
+    if (!roleContext || !roleContext.is_active) {
+      await logger.auth.loginFailed(email, "Role is disabled", req.ip);
+      return res.status(403).json({ error: "Role is disabled" });
+    }
+
+    const { cities, branches } = await getAdminScope(user.id, roleContext.scope_role);
     const { permissions } = await resolveAdminPermissions(db, { adminUserId: user.id, roleCode: user.role });
-    const authPayload = buildAdminAuthPayload({ user, cities, branches, permissions });
+    const authPayload = buildAdminAuthPayload({ user, roleContext, cities, branches, permissions });
     const accessToken = signAccessToken(authPayload, JWT_AUDIENCE_ADMIN, ADMIN_ACCESS_TOKEN_TTL);
     const refreshToken = signRefreshToken(authPayload, JWT_AUDIENCE_REFRESH_ADMIN, ADMIN_REFRESH_TOKEN_TTL);
 
@@ -431,7 +469,7 @@ router.post("/admin/login", authLimiter, strictAuthLimiter, async (req, res, nex
     setCsrfCookie(res, csrfToken, ADMIN_REFRESH_TOKEN_COOKIE_MAX_AGE);
 
     // Логируем успешный вход
-    await logger.auth.login(user.id, user.role, req.ip);
+    await logger.auth.login(user.id, roleContext.scope_role, req.ip);
     await logAdminAuthAction({
       adminUserId: user.id,
       action: "auth_login_success",
@@ -442,7 +480,7 @@ router.post("/admin/login", authLimiter, strictAuthLimiter, async (req, res, nex
     delete user.password_hash;
 
     res.json({
-      user: buildAdminSessionUser({ user, cities, branches, permissions }),
+      user: buildAdminSessionUser({ user, roleContext, cities, branches, permissions }),
       csrfToken,
     });
   } catch (error) {
@@ -536,7 +574,7 @@ router.post("/refresh", refreshLimiter, async (req, res) => {
       refreshMaxAge = CLIENT_REFRESH_TOKEN_COOKIE_MAX_AGE;
     } else if (decoded?.type === "admin") {
       const [admins] = await db.query(
-        `SELECT id, email, role, is_active
+        `SELECT id, email, role, is_active, permission_version
          FROM admin_users
          WHERE id = ?
          LIMIT 1`,
@@ -546,9 +584,13 @@ router.post("/refresh", refreshLimiter, async (req, res) => {
         return res.status(401).json({ error: "Admin account not found or inactive" });
       }
       const admin = admins[0];
-      const { cities, branches } = await getAdminScope(admin.id, admin.role);
+      const roleContext = await resolveAdminRoleContext(admin.role);
+      if (!roleContext || !roleContext.is_active) {
+        return res.status(401).json({ error: "Admin role is inactive" });
+      }
+      const { cities, branches } = await getAdminScope(admin.id, roleContext.scope_role);
       const { permissions } = await resolveAdminPermissions(db, { adminUserId: admin.id, roleCode: admin.role });
-      const payload = buildAdminAuthPayload({ user: admin, cities, branches, permissions });
+      const payload = buildAdminAuthPayload({ user: admin, roleContext, cities, branches, permissions });
       nextAccessToken = signAccessToken(payload, JWT_AUDIENCE_ADMIN, ADMIN_ACCESS_TOKEN_TTL);
       nextRefreshToken = signRefreshToken(payload, JWT_AUDIENCE_REFRESH_ADMIN, ADMIN_REFRESH_TOKEN_TTL);
       accessMaxAge = ADMIN_ACCESS_TOKEN_COOKIE_MAX_AGE;
@@ -595,7 +637,7 @@ router.get("/session", authenticateToken, async (req, res, next) => {
       return res.status(403).json({ error: "Invalid session type" });
     }
     const [admins] = await db.query(
-      `SELECT id, email, first_name, last_name, role, is_active, branch_id, telegram_id, eruda_enabled
+      `SELECT id, email, first_name, last_name, role, is_active, branch_id, telegram_id, eruda_enabled, permission_version
        FROM admin_users
        WHERE id = ?
        LIMIT 1`,
@@ -605,10 +647,14 @@ router.get("/session", authenticateToken, async (req, res, next) => {
       return res.status(401).json({ error: "Admin account not found or inactive" });
     }
     const admin = admins[0];
-    const { cities, branches } = await getAdminScope(admin.id, admin.role);
+    const roleContext = await resolveAdminRoleContext(admin.role);
+    if (!roleContext || !roleContext.is_active) {
+      return res.status(401).json({ error: "Admin role is inactive" });
+    }
+    const { cities, branches } = await getAdminScope(admin.id, roleContext.scope_role);
     const { permissions } = await resolveAdminPermissions(db, { adminUserId: admin.id, roleCode: admin.role });
     res.json({
-      user: buildAdminSessionUser({ user: admin, cities, branches, permissions }),
+      user: buildAdminSessionUser({ user: admin, roleContext, cities, branches, permissions }),
     });
   } catch (error) {
     next(error);

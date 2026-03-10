@@ -8,7 +8,7 @@
               <RefreshCcw :size="16" />
               Обновить
             </Button>
-            <Button :disabled="isBusy()" @click="saveSettings">
+            <Button v-if="canManageIntegrations" :disabled="isBusy()" @click="saveSettings">
               <RefreshCcw v-if="saving" class="h-4 w-4 animate-spin" />
               <PlugZap v-else :size="16" />
               {{ saving ? "Сохранение..." : "Сохранить" }}
@@ -316,11 +316,11 @@
             </FieldContent>
           </Field>
           <div class="flex flex-wrap gap-2">
-            <Button variant="secondary" :disabled="testLoading.iiko" @click="testIiko">
+            <Button v-if="canManageIntegrations" variant="secondary" :disabled="testLoading.iiko" @click="testIiko">
               <PlugZap :size="16" />
               Тест iiko
             </Button>
-            <Button variant="secondary" :disabled="manualLoading.menu" @click="syncMenuNow">
+            <Button v-if="canManageIntegrations" variant="secondary" :disabled="manualLoading.menu" @click="syncMenuNow">
               <RefreshCcw :size="16" />
               Синхронизировать меню
             </Button>
@@ -368,7 +368,7 @@
                   </div>
                   <div class="rounded-md border border-border/60 p-3">
                     <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Данные iiko</div>
-                    <div v-if="canResolveCandidate(candidate)" class="mb-2 space-y-2">
+                    <div v-if="canManageIntegrations && canResolveCandidate(candidate)" class="mb-2 space-y-2">
                       <div class="flex gap-2">
                         <Input
                           :model-value="mappingSearchByCandidate[candidate.id] || ''"
@@ -420,6 +420,7 @@
                 </div>
                 <div class="mt-3 flex flex-wrap justify-end gap-1">
                   <Button
+                    v-if="canManageIntegrations"
                     type="button"
                     size="sm"
                     variant="outline"
@@ -429,6 +430,7 @@
                     Подтвердить маппинг
                   </Button>
                   <Button
+                    v-if="canManageIntegrations"
                     type="button"
                     size="sm"
                     variant="outline"
@@ -438,6 +440,7 @@
                     Отказаться от маппинга
                   </Button>
                   <Button
+                    v-if="canManageIntegrations"
                     type="button"
                     size="sm"
                     variant="outline"
@@ -543,11 +546,16 @@
             </Field>
           </FieldGroup>
           <div class="flex gap-2">
-            <Button variant="secondary" :disabled="testLoading.pb" @click="testPb">
+            <Button v-if="canManageIntegrations" variant="secondary" :disabled="testLoading.pb" @click="testPb">
               <PlugZap :size="16" />
               Тест PremiumBonus
             </Button>
-            <Button variant="outline" :disabled="pbAutoSyncToggleLoading || loading || saving" @click="togglePbAutoSync">
+            <Button
+              v-if="canManageIntegrations"
+              variant="outline"
+              :disabled="pbAutoSyncToggleLoading || loading || saving"
+              @click="togglePbAutoSync"
+            >
               <RefreshCcw v-if="pbAutoSyncToggleLoading" class="h-4 w-4 animate-spin" />
               {{ form.premiumbonus_auto_sync_enabled ? "Отключить автосинк PB" : "Включить автосинк PB" }}
             </Button>
@@ -574,7 +582,13 @@
           <div class="rounded-lg border border-border/60 p-3 md:col-span-3">
             <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
               <div class="font-medium">Автосинк iiko</div>
-              <Button variant="outline" size="sm" :disabled="autoSyncToggleLoading || loading || saving" @click="toggleIikoAutoSync">
+              <Button
+                v-if="canManageIntegrations"
+                variant="outline"
+                size="sm"
+                :disabled="autoSyncToggleLoading || loading || saving"
+                @click="toggleIikoAutoSync"
+              >
                 <RefreshCcw v-if="autoSyncToggleLoading" class="h-4 w-4 animate-spin" />
                 {{ form.iiko_auto_sync_enabled ? "Отключить автосинк" : "Включить автосинк" }}
               </Button>
@@ -587,7 +601,13 @@
           <div class="rounded-lg border border-border/60 p-3 md:col-span-3">
             <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
               <div class="font-medium">Автосинк PremiumBonus</div>
-              <Button variant="outline" size="sm" :disabled="pbAutoSyncToggleLoading || loading || saving" @click="togglePbAutoSync">
+              <Button
+                v-if="canManageIntegrations"
+                variant="outline"
+                size="sm"
+                :disabled="pbAutoSyncToggleLoading || loading || saving"
+                @click="togglePbAutoSync"
+              >
                 <RefreshCcw v-if="pbAutoSyncToggleLoading" class="h-4 w-4 animate-spin" />
                 {{ form.premiumbonus_auto_sync_enabled ? "Отключить автосинк" : "Включить автосинк" }}
               </Button>
@@ -619,7 +639,7 @@
             <div class="text-muted-foreground">failed: {{ syncStatus.premiumbonusPurchases?.failed || 0 }}</div>
           </div>
         </div>
-        <Button variant="secondary" :disabled="retryLoading" @click="retryFailed">
+        <Button v-if="canManageIntegrations" variant="secondary" :disabled="retryLoading" @click="retryFailed">
           <RefreshCcw :size="16" />
           Повторить pending/error
         </Button>
@@ -733,11 +753,25 @@
           </div>
         </div>
         <div class="mt-4 flex flex-wrap justify-end gap-2">
-          <Button type="button" variant="outline" :disabled="onboardingLoading" @click="runOnboarding('defer')">Отложить</Button>
-          <Button type="button" variant="outline" :disabled="onboardingLoading" @click="runOnboarding('delete')"
+          <Button
+            v-if="canManageIntegrations"
+            type="button"
+            variant="outline"
+            :disabled="onboardingLoading"
+            @click="runOnboarding('defer')"
+            >Отложить</Button
+          >
+          <Button
+            v-if="canManageIntegrations"
+            type="button"
+            variant="outline"
+            :disabled="onboardingLoading"
+            @click="runOnboarding('delete')"
             >Очистить локальные данные (DELETE)</Button
           >
-          <Button type="button" :disabled="onboardingLoading" @click="runOnboarding('merge')">Слить с сопоставлением</Button>
+          <Button v-if="canManageIntegrations" type="button" :disabled="onboardingLoading" @click="runOnboarding('merge')"
+            >Слить с сопоставлением</Button
+          >
         </div>
       </DialogContent>
     </Dialog>
@@ -768,8 +802,11 @@ import Input from "@/shared/components/ui/input/Input.vue";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/shared/components/ui/dialog/index.js";
+import { useAuthStore } from "@/shared/stores/auth.js";
 
 const { showErrorNotification, showSuccessNotification } = useNotifications();
+const authStore = useAuthStore();
+const canManageIntegrations = computed(() => authStore.hasPermission("system.integrations.manage"));
 
 const loading = ref(false);
 const settingsLoaded = ref(false);
@@ -1294,6 +1331,7 @@ const handleVisibilityChange = () => {
 };
 
 const saveSettings = async () => {
+  if (!canManageIntegrations.value) return;
   const wasIikoEnabled = currentIikoEnabled.value;
   saving.value = true;
   try {
@@ -1318,6 +1356,7 @@ const saveSettings = async () => {
 };
 
 const toggleIikoAutoSync = async () => {
+  if (!canManageIntegrations.value) return;
   autoSyncToggleLoading.value = true;
   try {
     const nextValue = !form.value.iiko_auto_sync_enabled;
@@ -1337,6 +1376,7 @@ const toggleIikoAutoSync = async () => {
 };
 
 const togglePbAutoSync = async () => {
+  if (!canManageIntegrations.value) return;
   pbAutoSyncToggleLoading.value = true;
   try {
     const nextValue = !form.value.premiumbonus_auto_sync_enabled;
@@ -1356,6 +1396,7 @@ const togglePbAutoSync = async () => {
 };
 
 const runOnboarding = async (action) => {
+  if (!canManageIntegrations.value) return;
   onboardingLoading.value = true;
   try {
     await api.post("/api/admin/integrations/iiko/onboarding", { action });
@@ -1370,6 +1411,7 @@ const runOnboarding = async (action) => {
 };
 
 const resolveCandidate = async (candidateId, action, targetLocalId = null) => {
+  if (!canManageIntegrations.value) return;
   try {
     await api.post("/api/admin/integrations/iiko/mapping/resolve", {
       candidate_id: candidateId,
@@ -1384,6 +1426,7 @@ const resolveCandidate = async (candidateId, action, targetLocalId = null) => {
 };
 
 const testIiko = async () => {
+  if (!canManageIntegrations.value) return;
   testLoading.value.iiko = true;
   try {
     await api.post("/api/admin/integrations/iiko/test-connection");
@@ -1397,6 +1440,7 @@ const testIiko = async () => {
 };
 
 const testPb = async () => {
+  if (!canManageIntegrations.value) return;
   testLoading.value.pb = true;
   try {
     await api.post("/api/admin/integrations/premiumbonus/test-connection");
@@ -1409,6 +1453,7 @@ const testPb = async () => {
 };
 
 const syncMenuNow = async () => {
+  if (!canManageIntegrations.value) return;
   manualLoading.value.menu = true;
   try {
     await api.post("/api/admin/integrations/iiko/sync-menu");
@@ -1421,6 +1466,7 @@ const syncMenuNow = async () => {
 };
 
 const retryFailed = async () => {
+  if (!canManageIntegrations.value) return;
   retryLoading.value = true;
   try {
     await api.post("/api/admin/integrations/retry-failed");

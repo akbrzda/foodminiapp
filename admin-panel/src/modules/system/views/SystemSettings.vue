@@ -4,7 +4,7 @@
       <CardContent>
         <PageHeader title="Системные настройки" description="Управление ключевыми модулями и их параметрами">
           <template #actions>
-            <div v-if="activeTab === 0" class="flex flex-wrap items-center gap-3">
+            <div v-if="activeTab === 0 && canManageSettings" class="flex flex-wrap items-center gap-3">
               <Button variant="secondary" :disabled="moduleLoading || moduleSaving" @click="loadModuleSettings">
                 <Spinner v-if="moduleLoading" class="h-4 w-4" />
                 <RefreshCcw v-else :size="16" />
@@ -16,7 +16,7 @@
                 {{ moduleSaving ? "Сохранение..." : "Сохранить" }}
               </Button>
             </div>
-            <div v-else-if="activeTab === 1" class="flex flex-wrap items-center gap-3">
+            <div v-else-if="activeTab === 1 && canManageSettings" class="flex flex-wrap items-center gap-3">
               <Button variant="secondary" :disabled="moduleLoading || moduleSaving || mapsTesting" @click="loadModuleSettings">
                 <Spinner v-if="moduleLoading" class="h-4 w-4" />
                 <RefreshCcw v-else :size="16" />
@@ -33,7 +33,7 @@
                 {{ moduleSaving ? "Сохранение..." : "Сохранить" }}
               </Button>
             </div>
-            <div v-else-if="activeTab === 2" class="flex flex-wrap items-center gap-3">
+            <div v-else-if="activeTab === 2 && canManageSettings" class="flex flex-wrap items-center gap-3">
               <Button variant="secondary" :disabled="moduleLoading || moduleSaving" @click="loadModuleSettings">
                 <Spinner v-if="moduleLoading" class="h-4 w-4" />
                 <RefreshCcw v-else :size="16" />
@@ -45,7 +45,7 @@
                 {{ moduleSaving ? "Сохранение..." : "Сохранить" }}
               </Button>
             </div>
-            <div v-else-if="activeTab === 4" class="flex flex-wrap items-center gap-3">
+            <div v-else-if="activeTab === 4 && canManageSettings" class="flex flex-wrap items-center gap-3">
               <Button variant="secondary" :disabled="telegramLoading || telegramSaving || telegramTesting" @click="loadTelegramStartSettings">
                 <Spinner v-if="telegramLoading" class="h-4 w-4" />
                 <RefreshCcw v-else :size="16" />
@@ -62,7 +62,7 @@
                 {{ telegramSaving ? "Сохранение..." : "Сохранить" }}
               </Button>
             </div>
-            <div v-else-if="activeTab === 5" class="flex flex-wrap items-center gap-3">
+            <div v-else-if="activeTab === 5 && canManageSettings" class="flex flex-wrap items-center gap-3">
               <Button
                 variant="secondary"
                 :disabled="telegramLoading || telegramSaving || telegramOrderTesting || telegramCitiesLoading"
@@ -309,7 +309,7 @@
                 <div class="text-sm font-semibold text-foreground">Причины стоп-листа</div>
                 <div class="text-xs text-muted-foreground">Настройка причин, по которым позиции скрываются</div>
               </div>
-              <Button @click="openModal()">
+              <Button v-if="canManageStopListReasons" @click="openModal()">
                 <Plus :size="16" />
                 Добавить причину
               </Button>
@@ -349,7 +349,7 @@
                       </Badge>
                     </TableCell>
                     <TableCell class="text-right">
-                      <div class="flex justify-end gap-2">
+                      <div v-if="canManageStopListReasons" class="flex justify-end gap-2">
                         <Button variant="ghost" size="icon" @click="openModal(reason)">
                           <Pencil :size="16" />
                         </Button>
@@ -461,6 +461,7 @@
                           </Field>
                         </div>
                         <Button
+                          v-if="canManageSettings"
                           type="button"
                           variant="outline"
                           size="icon"
@@ -475,7 +476,13 @@
                 </FieldContent>
               </Field>
               <div class="flex w-full gap-2 md:w-auto">
-                <Button type="button" variant="outline" class="w-full md:w-auto" @click="triggerTelegramFileInput">
+                <Button
+                  v-if="canManageSettings"
+                  type="button"
+                  variant="outline"
+                  class="w-full md:w-auto"
+                  @click="triggerTelegramFileInput"
+                >
                   <ImagePlus :size="16" />
                   Добавить фото
                 </Button>
@@ -756,7 +763,7 @@
               </Field>
             </FieldGroup>
           </FieldGroup>
-          <Button class="w-full" type="submit" :disabled="savingReason">
+          <Button v-if="canManageStopListReasons" class="w-full" type="submit" :disabled="savingReason">
             <Spinner v-if="savingReason" class="h-4 w-4" />
             <Save v-else :size="16" />
             {{ savingReason ? "Сохранение..." : "Сохранить" }}
@@ -795,6 +802,7 @@ import { Field, FieldContent, FieldGroup, FieldLabel } from "@/shared/components
 import Spinner from "@/shared/components/ui/spinner/Spinner.vue";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
 import { formatNumber, normalizeBoolean } from "@/shared/utils/format.js";
+import { useAuthStore } from "@/shared/stores/auth.js";
 
 const moduleItems = ref([]);
 const moduleForm = ref({});
@@ -855,7 +863,10 @@ const formReason = ref({
   sort_order: 0,
   is_active: true,
 });
+const authStore = useAuthStore();
 const { showErrorNotification, showSuccessNotification } = useNotifications();
+const canManageSettings = computed(() => authStore.hasPermission("system.settings.manage"));
+const canManageStopListReasons = computed(() => authStore.hasPermission("menu.stop_list.manage"));
 
 const modalTitle = computed(() => (editing.value ? "Редактировать причину" : "Новая причина"));
 const modalSubtitle = computed(() => (editing.value ? "Измените параметры" : "Создайте причину стоп-листа"));
@@ -1043,6 +1054,7 @@ const loadModuleSettings = async () => {
 };
 
 const saveModuleSettings = async () => {
+  if (!canManageSettings.value) return;
   moduleSaving.value = true;
   try {
     const payload = {};
@@ -1066,6 +1078,7 @@ const saveModuleSettings = async () => {
 };
 
 const saveMapSettings = async () => {
+  if (!canManageSettings.value) return;
   moduleSaving.value = true;
   try {
     const payload = {};
@@ -1085,6 +1098,7 @@ const saveMapSettings = async () => {
 };
 
 const saveAppearanceSettings = async () => {
+  if (!canManageSettings.value) return;
   moduleSaving.value = true;
   try {
     const payload = {};
@@ -1104,6 +1118,7 @@ const saveAppearanceSettings = async () => {
 };
 
 const testMapsSettings = async () => {
+  if (!canManageSettings.value) return;
   mapsTesting.value = true;
   try {
     const { data } = await api.post("/api/settings/admin/maps/test");
@@ -1142,6 +1157,7 @@ const loadTelegramOrderSettings = async () => {
 };
 
 const saveTelegramStartSettings = async () => {
+  if (!canManageSettings.value) return;
   telegramSaving.value = true;
   try {
     const payload = normalizeTelegramForm(telegramForm.value);
@@ -1165,6 +1181,7 @@ const saveTelegramStartSettings = async () => {
 };
 
 const saveTelegramOrderSettings = async () => {
+  if (!canManageSettings.value) return;
   telegramSaving.value = true;
   try {
     const orderNotificationPayload = normalizeTelegramOrderNotificationForm(telegramOrderNotificationForm.value);
@@ -1198,6 +1215,7 @@ const updateCityThreadId = (cityId, value) => {
 };
 
 const sendTelegramStartTest = async () => {
+  if (!canManageSettings.value) return;
   const telegramId = Number(telegramTestId.value);
   if (!Number.isFinite(telegramId) || telegramId <= 0) {
     showErrorNotification("Укажите корректный Telegram ID для теста");
@@ -1216,6 +1234,7 @@ const sendTelegramStartTest = async () => {
 };
 
 const sendTelegramOrderTest = async () => {
+  if (!canManageSettings.value) return;
   telegramOrderTesting.value = true;
   try {
     const cityIdValue = String(telegramOrderTestForm.value.city_id || "").trim();
@@ -1247,6 +1266,7 @@ const loadReasons = async () => {
 };
 
 const openModal = (reason = null) => {
+  if (!canManageStopListReasons.value) return;
   editing.value = reason;
   formReason.value = reason
     ? {
@@ -1267,6 +1287,7 @@ const closeModal = () => {
 };
 
 const submitReason = async () => {
+  if (!canManageStopListReasons.value) return;
   savingReason.value = true;
   try {
     if (editing.value) {
@@ -1285,6 +1306,7 @@ const submitReason = async () => {
 };
 
 const deleteReason = async (reason) => {
+  if (!canManageStopListReasons.value) return;
   if (!confirm(`Удалить причину "${reason.name}"?`)) return;
   try {
     await api.delete(`/api/menu/admin/stop-list-reasons/${reason.id}`);
@@ -1296,6 +1318,7 @@ const deleteReason = async (reason) => {
 };
 
 const triggerTelegramFileInput = () => {
+  if (!canManageSettings.value) return;
   telegramFileInput.value?.click();
 };
 
@@ -1313,6 +1336,7 @@ const syncTelegramPrimaryImage = () => {
 };
 
 const handleTelegramFiles = async (files) => {
+  if (!canManageSettings.value) return;
   const validFiles = files.filter((file) => file?.type?.startsWith("image/"));
   if (!validFiles.length) {
     telegramUploadState.value = { loading: false, error: "Нужен файл изображения", total: 0, completed: 0 };
@@ -1359,6 +1383,7 @@ const handleTelegramFiles = async (files) => {
 };
 
 const updateTelegramImageWeight = (index, value) => {
+  if (!canManageSettings.value) return;
   const image = telegramForm.value.images[index];
   if (!image) return;
   const parsed = Number(value);
@@ -1367,6 +1392,7 @@ const updateTelegramImageWeight = (index, value) => {
 };
 
 const updateTelegramImageActive = (index, value) => {
+  if (!canManageSettings.value) return;
   const image = telegramForm.value.images[index];
   if (!image) return;
   image.is_active = normalizeBoolean(value, true);
@@ -1374,6 +1400,7 @@ const updateTelegramImageActive = (index, value) => {
 };
 
 const removeTelegramImage = (index) => {
+  if (!canManageSettings.value) return;
   telegramForm.value.images.splice(index, 1);
   syncTelegramPrimaryImage();
 };

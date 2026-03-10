@@ -4,7 +4,7 @@
       <CardContent>
         <PageHeader title="Группы модификаторов" description="Список групп модификаторов и управление">
           <template #actions>
-            <Button @click="openModal()">
+            <Button v-if="canManageModifiers" @click="openModal()">
               <Plus :size="16" />
               Добавить группу
             </Button>
@@ -27,7 +27,7 @@
               </span>
             </CardDescription>
           </div>
-          <div class="flex gap-2">
+          <div v-if="canManageModifiers" class="flex gap-2">
             <Button variant="ghost" size="icon" @click="openModal(group)">
               <Pencil :size="16" />
             </Button>
@@ -58,7 +58,7 @@
                 </div>
               </div>
             </div>
-            <div class="flex gap-2">
+            <div v-if="canManageModifiers" class="flex gap-2">
               <Button variant="ghost" size="icon" @click="editModifier(group, modifier)">
                 <Pencil :size="16" />
               </Button>
@@ -73,7 +73,7 @@
               </Button>
             </div>
           </div>
-          <Button variant="outline" size="sm" @click="openModifierModal(group)">
+          <Button v-if="canManageModifiers" variant="outline" size="sm" @click="openModifierModal(group)">
             <Plus :size="16" />
             Добавить модификатор
           </Button>
@@ -141,7 +141,7 @@
               </FieldContent>
             </Field>
           </FieldGroup>
-          <Button class="w-full" type="submit">
+          <Button v-if="canManageModifiers" class="w-full" type="submit">
             <Save :size="16" />
             Сохранить
           </Button>
@@ -232,7 +232,7 @@
               </FieldContent>
             </Field>
           </FieldGroup>
-          <Button class="w-full" type="submit">
+          <Button v-if="canManageModifiers" class="w-full" type="submit">
             <Save :size="16" />
             Сохранить
           </Button>
@@ -281,7 +281,7 @@
               </div>
             </div>
           </div>
-          <Button class="w-full" type="submit" :disabled="saving">
+          <Button v-if="canManageModifiers" class="w-full" type="submit" :disabled="saving">
             <Save :size="16" />
             {{ saving ? "Сохранение..." : "Сохранить цены" }}
           </Button>
@@ -323,7 +323,7 @@
               />
             </div>
           </div>
-          <Button class="w-full" type="submit" :disabled="saving">
+          <Button v-if="canManageModifiers" class="w-full" type="submit" :disabled="saving">
             <Save :size="16" />
             {{ saving ? "Сохранение..." : "Сохранить цены групп" }}
           </Button>
@@ -355,11 +355,14 @@ import { Label } from "@/shared/components/ui/label";
 import Spinner from "@/shared/components/ui/spinner/Spinner.vue";
 import { useOrdersStore } from "@/modules/orders/stores/orders.js";
 import { useReferenceStore } from "@/shared/stores/reference.js";
+import { useAuthStore } from "@/shared/stores/auth.js";
 const groups = ref([]);
 const { showErrorNotification, showSuccessNotification } = useNotifications();
 const ordersStore = useOrdersStore();
 const referenceStore = useReferenceStore();
+const authStore = useAuthStore();
 const { shouldRestore, saveContext, restoreContext, restoreScroll } = useListContext("menu-modifiers");
+const canManageModifiers = computed(() => authStore.hasPermission("menu.modifiers.manage"));
 const showModal = ref(false);
 const showModifierModal = ref(false);
 const showCityPricesModal = ref(false);
@@ -525,6 +528,7 @@ const loadGroups = async () => {
   }
 };
 const openModal = (group = null) => {
+  if (!canManageModifiers.value) return;
   editing.value = group;
   form.value = group
     ? {
@@ -543,6 +547,7 @@ const closeModal = () => {
   showModal.value = false;
 };
 const submitGroup = async () => {
+  if (!canManageModifiers.value) return;
   try {
     if (editing.value) {
       await api.put(`/api/menu/admin/modifier-groups/${editing.value.id}`, form.value);
@@ -558,6 +563,7 @@ const submitGroup = async () => {
   }
 };
 const deleteGroup = async (group) => {
+  if (!canManageModifiers.value) return;
   if (!confirm(`Удалить группу "${group.name}"?`)) return;
   try {
     await api.delete(`/api/menu/admin/modifier-groups/${group.id}`);
@@ -569,6 +575,7 @@ const deleteGroup = async (group) => {
   }
 };
 const openModifierModal = (group) => {
+  if (!canManageModifiers.value) return;
   activeGroup.value = group;
   editingModifier.value = null;
   modifierForm.value = { name: "", price: 0, sort_order: 0, weight: null, weight_unit: "", image_url: "" };
@@ -576,6 +583,7 @@ const openModifierModal = (group) => {
   showModifierModal.value = true;
 };
 const editModifier = (group, modifier) => {
+  if (!canManageModifiers.value) return;
   activeGroup.value = group;
   editingModifier.value = modifier;
   modifierForm.value = {
@@ -593,6 +601,7 @@ const closeModifierModal = () => {
   showModifierModal.value = false;
 };
 const openCityPricesModal = async (modifier) => {
+  if (!canManageModifiers.value) return;
   try {
     saving.value = true;
     await referenceStore.fetchCitiesAndBranches();
@@ -628,6 +637,7 @@ const closeCityPricesModal = () => {
   selectedCityId.value = null;
 };
 const openVariantGroupPricesModal = async (modifier) => {
+  if (!canManageModifiers.value) return;
   try {
     saving.value = true;
     const response = await api.get(`/api/menu/admin/modifiers/${modifier.id}/variant-prices`);
@@ -653,6 +663,7 @@ const closeVariantGroupPricesModal = () => {
   modifierVariantGroupPrices.value = [];
 };
 const triggerFile = () => {
+  if (!canManageModifiers.value) return;
   fileInput.value?.click();
 };
 const onFileChange = (event) => {
@@ -664,6 +675,7 @@ const onDrop = (event) => {
   if (file) handleFile(file);
 };
 const handleFile = async (file) => {
+  if (!canManageModifiers.value) return;
   if (!file.type.startsWith("image/")) {
     uploadState.value.error = "Только изображения";
     return;
@@ -693,6 +705,7 @@ const handleFile = async (file) => {
   }
 };
 const submitModifier = async () => {
+  if (!canManageModifiers.value) return;
   if (!activeGroup.value) {
     devError("activeGroup is not set");
     showErrorNotification("Ошибка: не выбрана группа модификаторов");
@@ -722,6 +735,7 @@ const submitModifier = async () => {
   }
 };
 const submitCityPrices = async () => {
+  if (!canManageModifiers.value) return;
   if (!activeModifierForPrices.value) return;
   saving.value = true;
   try {
@@ -744,6 +758,7 @@ const submitCityPrices = async () => {
   }
 };
 const submitVariantGroupPrices = async () => {
+  if (!canManageModifiers.value) return;
   if (!activeModifierForVariantGroups.value) return;
   saving.value = true;
   try {
@@ -776,6 +791,7 @@ const submitVariantGroupPrices = async () => {
   }
 };
 const deleteModifier = async (modifier) => {
+  if (!canManageModifiers.value) return;
   if (!confirm(`Удалить модификатор "${modifier.name}"?`)) return;
   try {
     await api.delete(`/api/menu/admin/modifiers/${modifier.id}`);

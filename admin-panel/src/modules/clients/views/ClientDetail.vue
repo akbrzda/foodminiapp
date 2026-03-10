@@ -4,7 +4,7 @@
       <template #actions>
         <div class="flex items-center gap-2">
           <BackButton label="Назад к клиентам" @click="goBack" />
-          <Button variant="destructive" size="sm" :disabled="deletingClient" @click="deleteClient">
+          <Button v-if="canManageClient" variant="destructive" size="sm" :disabled="deletingClient" @click="deleteClient">
             <Trash2 :size="16" />
             {{ deletingClient ? "Удаление..." : "Удалить клиента" }}
           </Button>
@@ -24,26 +24,26 @@
           <Field>
             <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Имя</FieldLabel>
             <FieldContent>
-              <Input v-model="form.first_name" />
+              <Input v-model="form.first_name" :disabled="!canManageClient" />
             </FieldContent>
           </Field>
           <Field>
             <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Фамилия</FieldLabel>
             <FieldContent>
-              <Input v-model="form.last_name" />
+              <Input v-model="form.last_name" :disabled="!canManageClient" />
             </FieldContent>
           </Field>
           <Field>
             <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Телефон</FieldLabel>
             <FieldContent>
-              <Input v-model="form.phone" @input="handlePhoneInput" placeholder="+7 (900) 909-22-22" />
+              <Input v-model="form.phone" :disabled="!canManageClient" @input="handlePhoneInput" placeholder="+7 (900) 909-22-22" />
               <p v-if="phoneError" class="text-xs text-red-500">{{ phoneError }}</p>
             </FieldContent>
           </Field>
           <Field>
             <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Email</FieldLabel>
             <FieldContent>
-              <Input v-model="form.email" />
+              <Input v-model="form.email" :disabled="!canManageClient" />
             </FieldContent>
           </Field>
         </FieldGroup>
@@ -59,7 +59,7 @@
               ID PremiumBonus: <strong class="text-foreground">{{ client?.pb_client_id || "—" }}</strong>
             </div>
           </div>
-          <Button @click="saveClient" :disabled="saving">
+          <Button v-if="canManageClient" @click="saveClient" :disabled="saving">
             <Spinner v-if="saving" class="h-4 w-4" />
             <Save v-else :size="16" />
             {{ saving ? "Сохранение..." : "Сохранить" }}
@@ -73,7 +73,7 @@
           <CardTitle>Лояльность</CardTitle>
           <CardDescription>Уровень, статистика и история</CardDescription>
         </div>
-        <Button variant="secondary" @click="openAdjustModal"> Корректировка баланса </Button>
+        <Button v-if="canAdjustLoyalty" variant="secondary" @click="openAdjustModal"> Корректировка баланса </Button>
       </CardHeader>
       <CardContent class="p-3 space-y-6">
         <div class="grid gap-4 md:grid-cols-3">
@@ -303,7 +303,7 @@
         </Table>
       </CardContent>
     </Card>
-    <Dialog v-if="showAdjustModal" :open="showAdjustModal" @update:open="(value) => (value ? null : closeAdjustModal())">
+    <Dialog v-if="showAdjustModal && canAdjustLoyalty" :open="showAdjustModal" @update:open="(value) => (value ? null : closeAdjustModal())">
       <DialogContent class="w-full max-w-2xl">
         <DialogHeader>
           <DialogTitle>Корректировка баланса</DialogTitle>
@@ -355,6 +355,7 @@ import api from "@/shared/api/client.js";
 import { devError } from "@/shared/utils/logger";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
 import { useOrdersStore } from "@/modules/orders/stores/orders.js";
+import { useAuthStore } from "@/shared/stores/auth.js";
 import { formatCurrency, formatDateTime, formatNumber, formatPhoneInput, isValidPhone, normalizePhone } from "@/shared/utils/format.js";
 import Button from "@/shared/components/ui/button/Button.vue";
 import Card from "@/shared/components/ui/card/Card.vue";
@@ -384,6 +385,7 @@ const route = useRoute();
 const router = useRouter();
 const { showErrorNotification, showSuccessNotification } = useNotifications();
 const ordersStore = useOrdersStore();
+const authStore = useAuthStore();
 const clientId = route.params.id;
 const client = ref(null);
 const clientLoading = ref(false);
@@ -430,6 +432,8 @@ const totalSpentLabel = computed(() => {
   }
   return "Сумма заказов";
 });
+const canManageClient = computed(() => authStore.hasPermission("clients.manage"));
+const canAdjustLoyalty = computed(() => authStore.hasPermission("clients.loyalty.adjust"));
 const updateBreadcrumbs = () => {
   const name = [client.value?.first_name, client.value?.last_name].filter(Boolean).join(" ").trim();
   ordersStore.setBreadcrumbs([{ label: "Клиенты", to: "/clients" }, { label: name || "Клиент" }], route.name);
@@ -575,6 +579,7 @@ const loadLoyalty = async () => {
   }
 };
 const saveClient = async () => {
+  if (!canManageClient.value) return;
   saving.value = true;
   try {
     phoneError.value = "";
@@ -600,6 +605,7 @@ const handlePhoneInput = (event) => {
   }
 };
 const openAdjustModal = () => {
+  if (!canAdjustLoyalty.value) return;
   adjustForm.type = "earn";
   adjustForm.amount = 0;
   adjustForm.reason = "";
@@ -609,6 +615,7 @@ const closeAdjustModal = () => {
   showAdjustModal.value = false;
 };
 const submitAdjustment = async () => {
+  if (!canAdjustLoyalty.value) return;
   adjustSaving.value = true;
   try {
     await api.post("/api/admin/loyalty/adjust", {
@@ -640,6 +647,7 @@ const goBack = () => {
   router.push("/clients");
 };
 const deleteClient = async () => {
+  if (!canManageClient.value) return;
   if (deletingClient.value) return;
   const confirmed = window.confirm("Удалить клиента и все связанные данные? Действие необратимо.");
   if (!confirmed) return;

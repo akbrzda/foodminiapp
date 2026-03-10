@@ -1,5 +1,5 @@
 import express from "express";
-import { authenticateToken, requireRole } from "../../middleware/auth.js";
+import { authenticateToken, requirePermission } from "../../middleware/auth.js";
 import { checkPremiumBonusIntegration } from "../integrations/middleware/checkPremiumBonusIntegration.js";
 
 export function createLoyaltyRoutes({ clientController, adminController }) {
@@ -14,12 +14,23 @@ export function createLoyaltyRoutes({ clientController, adminController }) {
   clientRouter.post("/confirmation/send-writeoff-code", authenticateToken, clientController.sendWriteOffConfirmationCode);
   clientRouter.post("/confirmation/verify", authenticateToken, clientController.verifyConfirmationCode);
 
-  adminRouter.get("/status", authenticateToken, requireRole("admin", "ceo"), adminController.getStatus);
-  adminRouter.put("/toggle", authenticateToken, requireRole("admin", "ceo"), checkPremiumBonusIntegration, adminController.toggle);
-  adminRouter.post("/adjust", authenticateToken, requireRole("admin", "ceo"), adminController.adjust);
-  adminRouter.get("/levels", authenticateToken, requireRole("admin", "ceo"), adminController.getLevels);
-  adminRouter.put("/levels", authenticateToken, requireRole("admin", "ceo"), adminController.saveLevels);
-  adminRouter.get("/users/:id/loyalty", authenticateToken, requireRole("admin", "manager", "ceo"), adminController.getUserLoyalty);
+  adminRouter.get("/status", authenticateToken, requirePermission("system.loyalty_levels.manage"), adminController.getStatus);
+  adminRouter.put(
+    "/toggle",
+    authenticateToken,
+    requirePermission("system.loyalty_levels.manage"),
+    checkPremiumBonusIntegration,
+    adminController.toggle,
+  );
+  adminRouter.post("/adjust", authenticateToken, requirePermission("clients.loyalty.adjust"), adminController.adjust);
+  adminRouter.get("/levels", authenticateToken, requirePermission("system.loyalty_levels.manage"), adminController.getLevels);
+  adminRouter.put("/levels", authenticateToken, requirePermission("system.loyalty_levels.manage"), adminController.saveLevels);
+  adminRouter.get(
+    "/users/:id/loyalty",
+    authenticateToken,
+    requirePermission("clients.view", "clients.loyalty.adjust"),
+    adminController.getUserLoyalty,
+  );
 
   return { clientRouter, adminRouter };
 }

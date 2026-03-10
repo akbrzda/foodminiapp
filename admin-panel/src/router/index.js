@@ -66,7 +66,7 @@ const router = createRouter({
           path: "",
           name: "shift-page",
           component: ShiftPage,
-          meta: { title: "Текущая смена", fullBleed: true, roles: ["admin", "ceo", "manager"] },
+          meta: { title: "Текущая смена", fullBleed: true, permissions: ["orders.view"] },
         },
       ],
     },
@@ -80,7 +80,7 @@ const router = createRouter({
           path: "dashboard",
           name: "dashboard",
           component: Dashboard,
-          meta: { title: "Панель управления", subtitle: "Статистика и обзор", roles: ["admin", "ceo", "manager"] },
+          meta: { title: "Панель управления", subtitle: "Статистика и обзор", permissions: ["dashboard.view"] },
         },
         {
           path: "orders",
@@ -89,7 +89,7 @@ const router = createRouter({
           meta: {
             title: "Заказы",
             subtitle: "Реальные заявки и статусы",
-            roles: ["admin", "ceo", "manager"],
+            permissions: ["orders.view"],
             isList: true,
             listName: "orders",
           },
@@ -101,7 +101,7 @@ const router = createRouter({
           meta: {
             title: "Детали заказа",
             subtitle: "Подробная информация",
-            roles: ["admin", "ceo", "manager"],
+            permissions: ["orders.view"],
             breadcrumbs: [{ label: "Заказы", to: "/orders" }, { label: "Детали заказа" }],
             isDetail: true,
             parentList: "orders",
@@ -114,7 +114,7 @@ const router = createRouter({
           meta: {
             title: "Клиенты",
             subtitle: "Контакты и лояльность",
-            roles: ["admin", "ceo", "manager"],
+            permissions: ["clients.view"],
             isList: true,
             listName: "clients",
           },
@@ -126,7 +126,7 @@ const router = createRouter({
           meta: {
             title: "Клиент",
             subtitle: "Данные и история",
-            roles: ["admin", "ceo", "manager"],
+            permissions: ["clients.view"],
             breadcrumbs: [{ label: "Клиенты", to: "/clients" }, { label: "Клиент" }],
             isDetail: true,
             parentList: "clients",
@@ -139,7 +139,7 @@ const router = createRouter({
           meta: {
             title: "Города",
             subtitle: "Управление городами доставки",
-            roles: ["admin", "ceo"],
+            permissions: ["locations.cities.manage"],
             isList: true,
             listName: "cities",
           },
@@ -151,7 +151,7 @@ const router = createRouter({
           meta: {
             title: "Новый город",
             subtitle: "Создание города",
-            roles: ["admin", "ceo"],
+            permissions: ["locations.cities.manage"],
             breadcrumbs: [{ label: "Города", to: "/cities" }, { label: "Новый город" }],
             isEdit: true,
             parentList: "cities",
@@ -164,7 +164,7 @@ const router = createRouter({
           meta: {
             title: "Редактирование города",
             subtitle: "Изменение города",
-            roles: ["admin", "ceo"],
+            permissions: ["locations.cities.manage"],
             breadcrumbs: [{ label: "Города", to: "/cities" }, { label: "Редактирование" }],
             isEdit: true,
             parentList: "cities",
@@ -177,7 +177,7 @@ const router = createRouter({
           meta: {
             title: "Филиалы",
             subtitle: "Рестораны и точки самовывоза",
-            roles: ["admin", "ceo", "manager"],
+            permissions: ["locations.branches.view", "locations.branches.manage"],
             isList: true,
             listName: "branches",
           },
@@ -189,7 +189,7 @@ const router = createRouter({
           meta: {
             title: "Новый филиал",
             subtitle: "Создание филиала",
-            roles: ["admin", "ceo"],
+            permissions: ["locations.branches.manage"],
             breadcrumbs: [{ label: "Филиалы", to: "/branches" }, { label: "Новый филиал" }],
             isEdit: true,
             parentList: "branches",
@@ -202,7 +202,7 @@ const router = createRouter({
           meta: {
             title: "Редактирование филиала",
             subtitle: "Изменение филиала",
-            roles: ["admin", "ceo"],
+            permissions: ["locations.branches.manage"],
             breadcrumbs: [{ label: "Филиалы", to: "/branches" }, { label: "Редактирование" }],
             isEdit: true,
             parentList: "branches",
@@ -217,7 +217,7 @@ const router = createRouter({
             subtitle: "Полигоны на карте",
             sidebarCollapsed: true,
             fullBleed: true,
-            roles: ["admin", "ceo", "manager"],
+            permissions: ["locations.delivery_zones.view", "locations.delivery_zones.manage"],
             isList: true,
             listName: "delivery-zones",
           },
@@ -231,7 +231,7 @@ const router = createRouter({
             subtitle: "Редактирование зоны",
             sidebarCollapsed: true,
             fullBleed: true,
-            roles: ["admin", "ceo"],
+            permissions: ["locations.delivery_zones.manage"],
             isEdit: true,
             parentList: "delivery-zones",
           },
@@ -243,7 +243,7 @@ const router = createRouter({
           meta: {
             title: "Категории",
             subtitle: "Структура меню по городам",
-            roles: ["admin", "ceo"],
+            permissions: ["menu.categories.manage"],
             isList: true,
             listName: "menu-categories",
           },
@@ -255,7 +255,7 @@ const router = createRouter({
           meta: {
             title: "Блюда",
             subtitle: "Карточки блюд и варианты",
-            roles: ["admin", "ceo"],
+            permissions: ["menu.products.manage"],
             isList: true,
             listName: "menu-products",
           },
@@ -267,7 +267,7 @@ const router = createRouter({
           meta: {
             title: "Блюдо меню",
             subtitle: "Создание и редактирование",
-            roles: ["admin", "ceo"],
+            permissions: ["menu.products.manage"],
             breadcrumbs: [{ label: "Блюда", to: "/menu/products" }, { label: "Блюдо меню" }],
             isEdit: true,
             parentList: "menu-products",
@@ -280,7 +280,7 @@ const router = createRouter({
           meta: {
             title: "Модификаторы",
             subtitle: "Группы и допы",
-            roles: ["admin", "ceo"],
+            permissions: ["menu.modifiers.manage"],
             isList: true,
             listName: "menu-modifiers",
           },
@@ -292,7 +292,7 @@ const router = createRouter({
           meta: {
             title: "Теги",
             subtitle: "Метки для фильтрации блюд",
-            roles: ["admin", "ceo"],
+            permissions: ["menu.tags.manage"],
             isList: true,
             listName: "menu-tags",
           },
@@ -304,7 +304,7 @@ const router = createRouter({
           meta: {
             title: "Стоп-лист",
             subtitle: "Недоступные блюда",
-            roles: ["admin", "ceo", "manager"],
+            permissions: ["menu.stop_list.manage"],
             isList: true,
             listName: "menu-stop-list",
           },
@@ -316,7 +316,7 @@ const router = createRouter({
           meta: {
             title: "Рассылки",
             subtitle: "Маркетинговые кампании",
-            roles: ["admin", "ceo"],
+            permissions: ["marketing.broadcasts.manage"],
             breadcrumbs: [{ label: "Рассылки", to: "/broadcasts" }],
             isList: true,
             listName: "broadcasts",
@@ -329,7 +329,7 @@ const router = createRouter({
           meta: {
             title: "Новая рассылка",
             subtitle: "Создание кампании",
-            roles: ["admin", "ceo"],
+            permissions: ["marketing.broadcasts.manage"],
             breadcrumbs: [{ label: "Рассылки", to: "/broadcasts" }, { label: "Новая рассылка" }],
             isEdit: true,
             parentList: "broadcasts",
@@ -342,7 +342,7 @@ const router = createRouter({
           meta: {
             title: "Редактирование рассылки",
             subtitle: "Настройка кампании",
-            roles: ["admin", "ceo"],
+            permissions: ["marketing.broadcasts.manage"],
             breadcrumbs: [{ label: "Рассылки", to: "/broadcasts" }, { label: "Редактирование" }],
             isEdit: true,
             parentList: "broadcasts",
@@ -355,7 +355,7 @@ const router = createRouter({
           meta: {
             title: "Статистика рассылки",
             subtitle: "Детальный отчет",
-            roles: ["admin", "ceo"],
+            permissions: ["marketing.broadcasts.manage"],
             breadcrumbs: [{ label: "Рассылки", to: "/broadcasts" }, { label: "Статистика" }],
             isDetail: true,
             parentList: "broadcasts",
@@ -368,7 +368,7 @@ const router = createRouter({
           meta: {
             title: "Сегменты",
             subtitle: "Сохраненные аудитории",
-            roles: ["admin", "ceo"],
+            permissions: ["marketing.broadcasts.manage"],
             breadcrumbs: [{ label: "Рассылки", to: "/broadcasts" }, { label: "Сегменты" }],
             isList: true,
             listName: "broadcast-segments",
@@ -381,7 +381,7 @@ const router = createRouter({
           meta: {
             title: "Дашборд рассылок",
             subtitle: "Сводная аналитика",
-            roles: ["admin", "ceo"],
+            permissions: ["marketing.broadcasts.manage"],
             breadcrumbs: [{ label: "Рассылки", to: "/broadcasts" }, { label: "Дашборд" }],
           },
         },
@@ -392,7 +392,7 @@ const router = createRouter({
           meta: {
             title: "Кампании подписки",
             subtitle: "Привлечение подписчиков",
-            roles: ["admin", "ceo"],
+            permissions: ["marketing.campaigns.manage"],
             breadcrumbs: [{ label: "Кампании подписки", to: "/campaign" }],
             isList: true,
             listName: "campaign",
@@ -405,7 +405,7 @@ const router = createRouter({
           meta: {
             title: "Новая кампания подписки",
             subtitle: "Создание кампании",
-            roles: ["admin", "ceo"],
+            permissions: ["marketing.campaigns.manage"],
             breadcrumbs: [{ label: "Кампании подписки", to: "/campaign" }, { label: "Новая кампания" }],
             isEdit: true,
             parentList: "campaign",
@@ -418,7 +418,7 @@ const router = createRouter({
           meta: {
             title: "Редактирование кампании подписки",
             subtitle: "Настройка кампании",
-            roles: ["admin", "ceo"],
+            permissions: ["marketing.campaigns.manage"],
             breadcrumbs: [{ label: "Кампании подписки", to: "/campaign" }, { label: "Редактирование" }],
             isEdit: true,
             parentList: "campaign",
@@ -431,7 +431,7 @@ const router = createRouter({
           meta: {
             title: "Статистика кампании подписки",
             subtitle: "Участники и конверсия",
-            roles: ["admin", "ceo"],
+            permissions: ["marketing.campaigns.manage"],
             breadcrumbs: [{ label: "Кампании подписки", to: "/campaign" }, { label: "Статистика" }],
             isDetail: true,
             parentList: "campaign",
@@ -441,19 +441,19 @@ const router = createRouter({
           path: "system/settings",
           name: "system-settings",
           component: SystemSettings,
-          meta: { title: "Настройки системы", subtitle: "Модули и функциональные блоки", roles: ["admin", "ceo"] },
+          meta: { title: "Настройки системы", subtitle: "Модули и функциональные блоки", permissions: ["system.settings.manage"] },
         },
         {
           path: "integrations",
           name: "integrations",
           component: IntegrationsSettings,
-          meta: { title: "Интеграции", subtitle: "iiko и PremiumBonus", roles: ["admin", "ceo"] },
+          meta: { title: "Интеграции", subtitle: "iiko и PremiumBonus", permissions: ["system.integrations.manage"] },
         },
         {
           path: "loyalty-levels",
           name: "loyalty-levels",
           component: LoyaltyLevelsSettings,
-          meta: { title: "Уровни лояльности", subtitle: "Локальные уровни и маппинг PremiumBonus", roles: ["admin", "ceo"] },
+          meta: { title: "Уровни лояльности", subtitle: "Локальные уровни и маппинг PremiumBonus", permissions: ["system.loyalty_levels.manage"] },
         },
         {
           path: "admin-users",
@@ -462,7 +462,7 @@ const router = createRouter({
           meta: {
             title: "Администраторы",
             subtitle: "Управление пользователями админ-панели",
-            roles: ["admin", "ceo"],
+            permissions: ["system.admin_users.manage"],
             isList: true,
             listName: "admin-users",
           },
@@ -474,8 +474,7 @@ const router = createRouter({
           meta: {
             title: "Роли и доступы",
             subtitle: "Матрица прав и настройки ролей",
-            roles: ["admin", "ceo"],
-            permissions: ["system.access.manage"],
+            permissions: ["system.roles.view", "system.access.manage"],
             breadcrumbs: [{ label: "Администраторы", to: "/admin-users" }, { label: "Роли и доступы" }],
             isDetail: true,
             parentList: "admin-users",
@@ -488,7 +487,7 @@ const router = createRouter({
           meta: {
             title: "Редактирование пользователя",
             subtitle: "Профиль, роль и индивидуальные доступы",
-            roles: ["admin", "ceo"],
+            permissions: ["system.admin_users.manage"],
             breadcrumbs: [{ label: "Администраторы", to: "/admin-users" }, { label: "Редактирование пользователя" }],
             isEdit: true,
             parentList: "admin-users",
@@ -501,7 +500,7 @@ const router = createRouter({
           meta: {
             title: "Логи",
             subtitle: "Журнал действий администраторов",
-            roles: ["admin", "ceo"],
+            permissions: ["system.logs.view"],
             isList: true,
             listName: "admin-logs",
           },
@@ -511,6 +510,7 @@ const router = createRouter({
     { path: "/:pathMatch(.*)*", name: "not-found", component: NotFound },
   ],
 });
+
 router.beforeEach(async (to, from) => {
   const authStore = useAuthStore();
   if (!authStore.sessionChecked) {
@@ -532,10 +532,6 @@ router.beforeEach(async (to, from) => {
   if (requiredPermissions.length > 0 && !authStore.hasAnyPermission(requiredPermissions)) {
     return { name: "not-found" };
   }
-  if (to.meta.roles && authStore.role && !to.meta.roles.includes(authStore.role)) {
-    return { name: "not-found" };
-  }
-
   // Управление навигационным контекстом
   const navigationStore = useNavigationContextStore();
 

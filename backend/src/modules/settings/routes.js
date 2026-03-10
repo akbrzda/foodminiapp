@@ -1,6 +1,6 @@
 import express from "express";
 import axios from "axios";
-import { authenticateToken, requireRole } from "../../middleware/auth.js";
+import { authenticateToken, requirePermission } from "../../middleware/auth.js";
 import { getSystemSettings, getSettingsList, updateSystemSettings } from "../../utils/settings.js";
 import { logger } from "../../utils/logger.js";
 import { sendTelegramStartMessage } from "../../utils/telegram.js";
@@ -76,7 +76,7 @@ router.get("/maps-public", async (req, res, next) => {
   }
 });
 
-router.get("/admin", authenticateToken, requireRole("admin", "ceo"), async (req, res, next) => {
+router.get("/admin", authenticateToken, requirePermission("system.settings.manage"), async (req, res, next) => {
   try {
     const settings = await getSystemSettings();
     res.json({
@@ -88,7 +88,7 @@ router.get("/admin", authenticateToken, requireRole("admin", "ceo"), async (req,
   }
 });
 
-router.post("/admin/maps/test", authenticateToken, requireRole("admin", "ceo"), async (req, res, next) => {
+router.post("/admin/maps/test", authenticateToken, requirePermission("system.settings.manage"), async (req, res, next) => {
   try {
     const settings = await getSystemSettings();
     const geocoderKey = String(settings?.yandex_js_api_key || "").trim();
@@ -153,7 +153,7 @@ router.post("/admin/maps/test", authenticateToken, requireRole("admin", "ceo"), 
   }
 });
 
-router.put("/admin", authenticateToken, requireRole("admin", "ceo"), async (req, res, next) => {
+router.put("/admin", authenticateToken, requirePermission("system.settings.manage"), async (req, res, next) => {
   try {
     const { settings: patch } = req.body || {};
     const { updated, errors } = await updateSystemSettings(patch);
@@ -171,7 +171,7 @@ router.put("/admin", authenticateToken, requireRole("admin", "ceo"), async (req,
   }
 });
 
-router.post("/admin/telegram-start/test", authenticateToken, requireRole("admin", "ceo"), async (req, res, next) => {
+router.post("/admin/telegram-start/test", authenticateToken, requirePermission("system.settings.manage"), async (req, res, next) => {
   try {
     const telegramIdRaw = req.body?.telegram_id;
     const telegramId = Number(telegramIdRaw);
@@ -191,7 +191,7 @@ router.post("/admin/telegram-start/test", authenticateToken, requireRole("admin"
   }
 });
 
-router.post("/admin/telegram-orders/test", authenticateToken, requireRole("admin", "ceo"), async (req, res, next) => {
+router.post("/admin/telegram-orders/test", authenticateToken, requirePermission("system.settings.manage"), async (req, res, next) => {
   try {
     const eventTypeRaw = String(req.body?.event_type || "new_order").trim().toLowerCase();
     const allowedEventTypes = new Set(["new_order", "completed", "cancelled"]);
@@ -265,7 +265,7 @@ router.post("/admin/telegram-orders/test", authenticateToken, requireRole("admin
   }
 });
 
-router.get("/admin/telegram-bot/profile", authenticateToken, requireRole("admin", "ceo"), async (req, res, next) => {
+router.get("/admin/telegram-bot/profile", authenticateToken, requirePermission("system.settings.manage"), async (req, res, next) => {
   try {
     const token = String(process.env.TELEGRAM_BOT_TOKEN || "").trim();
     if (!token) {

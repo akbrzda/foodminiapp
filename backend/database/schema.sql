@@ -271,10 +271,11 @@ CREATE TABLE `admin_users` (
   `password_hash` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
   `first_name` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
   `last_name` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `role` enum('admin','manager','ceo') COLLATE utf8mb4_unicode_ci NOT NULL,
+  `role` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
   `is_active` tinyint(1) DEFAULT '1',
   `telegram_id` bigint DEFAULT NULL,
   `eruda_enabled` tinyint(1) DEFAULT '0',
+  `permission_version` int NOT NULL DEFAULT '1',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   `branch_id` int DEFAULT NULL,
@@ -291,6 +292,7 @@ CREATE TABLE `admin_roles` (
   `id` int NOT NULL AUTO_INCREMENT,
   `code` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
   `name` varchar(120) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `scope_role` enum('admin','manager','ceo') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'manager',
   `is_system` tinyint(1) NOT NULL DEFAULT '0',
   `is_active` tinyint(1) NOT NULL DEFAULT '1',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
@@ -342,6 +344,12 @@ CREATE TABLE `admin_user_permission_overrides` (
   CONSTRAINT `fk_admin_user_permission_overrides_user` FOREIGN KEY (`admin_user_id`) REFERENCES `admin_users` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_admin_user_permission_overrides_permission` FOREIGN KEY (`permission_id`) REFERENCES `admin_permissions` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+ALTER TABLE `admin_users`
+  ADD CONSTRAINT `fk_admin_users_role_code`
+  FOREIGN KEY (`role`) REFERENCES `admin_roles` (`code`)
+  ON DELETE RESTRICT
+  ON UPDATE CASCADE;
 
 
 CREATE TABLE `delivery_polygons` (
@@ -1173,10 +1181,10 @@ INSERT INTO `loyalty_levels` (`id`, `name`, `threshold_amount`, `earn_percentage
 
 INSERT INTO `order_number_sequence` (`id`, `last_number`) VALUES (1, 0);
 
-INSERT INTO `admin_roles` (`id`, `code`, `name`, `is_system`, `is_active`) VALUES
-(1, 'ceo', 'CEO', 1, 1),
-(2, 'admin', 'Администратор', 1, 1),
-(3, 'manager', 'Менеджер', 1, 1);
+INSERT INTO `admin_roles` (`id`, `code`, `name`, `scope_role`, `is_system`, `is_active`) VALUES
+(1, 'ceo', 'CEO', 'ceo', 1, 1),
+(2, 'admin', 'Администратор', 'admin', 1, 1),
+(3, 'manager', 'Менеджер', 'manager', 1, 1);
 
 INSERT INTO `admin_permissions` (`id`, `code`, `module`, `action`, `description`, `is_active`) VALUES
 (1, 'dashboard.view', 'dashboard', 'view', 'Просмотр дашборда', 1),
@@ -1200,15 +1208,18 @@ INSERT INTO `admin_permissions` (`id`, `code`, `module`, `action`, `description`
 (19, 'marketing.campaigns.manage', 'marketing', 'campaigns_manage', 'Управление кампаниями подписки', 1),
 (20, 'system.settings.manage', 'system', 'settings_manage', 'Управление системными настройками', 1),
 (21, 'system.integrations.manage', 'system', 'integrations_manage', 'Управление интеграциями', 1),
-(22, 'system.loyalty_levels.manage', 'system', 'loyalty_levels_manage', 'Управление уровнями лояльности', 1),
-(23, 'system.admin_users.manage', 'system', 'admin_users_manage', 'Управление admin-users', 1),
-(24, 'system.logs.view', 'system', 'logs_view', 'Просмотр административных логов', 1),
-(25, 'system.queues.manage', 'system', 'queues_manage', 'Управление очередями', 1),
-(26, 'system.access.manage', 'system', 'access_manage', 'Управление ролями и доступами', 1);
+(22, 'system.roles.view', 'system', 'roles_view', 'Просмотр справочника ролей', 1),
+(23, 'system.loyalty_levels.manage', 'system', 'loyalty_levels_manage', 'Управление уровнями лояльности', 1),
+(24, 'system.admin_users.manage', 'system', 'admin_users_manage', 'Управление admin-users', 1),
+(25, 'system.logs.view', 'system', 'logs_view', 'Просмотр административных логов', 1),
+(26, 'system.queues.manage', 'system', 'queues_manage', 'Управление очередями', 1),
+(27, 'system.access.manage', 'system', 'access_manage', 'Управление ролями и доступами', 1),
+(28, 'system.auth_limits.manage', 'system', 'auth_limits_manage', 'Управление auth-лимитами', 1),
+(29, 'locations.delivery_zones.toggle', 'locations', 'delivery_zones_toggle', 'Блокировка/разблокировка и переключение зон доставки', 1);
 
 INSERT INTO `admin_role_permissions` (`role_id`, `permission_id`) VALUES
-(1, 1), (1, 2), (1, 3), (1, 4), (1, 5), (1, 6), (1, 7), (1, 8), (1, 9), (1, 10), (1, 11), (1, 12), (1, 13), (1, 14), (1, 15), (1, 16), (1, 17), (1, 18), (1, 19), (1, 20), (1, 21), (1, 22), (1, 23), (1, 24), (1, 25), (1, 26),
-(2, 1), (2, 2), (2, 3), (2, 4), (2, 5), (2, 6), (2, 7), (2, 8), (2, 9), (2, 10), (2, 11), (2, 12), (2, 13), (2, 14), (2, 15), (2, 16), (2, 17), (2, 18), (2, 19), (2, 20), (2, 21), (2, 22), (2, 23), (2, 24), (2, 25), (2, 26),
+(1, 1), (1, 2), (1, 3), (1, 4), (1, 5), (1, 6), (1, 7), (1, 8), (1, 9), (1, 10), (1, 11), (1, 12), (1, 13), (1, 14), (1, 15), (1, 16), (1, 17), (1, 18), (1, 19), (1, 20), (1, 21), (1, 22), (1, 23), (1, 24), (1, 25), (1, 26), (1, 27), (1, 28), (1, 29),
+(2, 1), (2, 2), (2, 3), (2, 4), (2, 5), (2, 6), (2, 7), (2, 8), (2, 9), (2, 10), (2, 11), (2, 12), (2, 13), (2, 14), (2, 15), (2, 16), (2, 17), (2, 18), (2, 19), (2, 20), (2, 21), (2, 22), (2, 23), (2, 24), (2, 25), (2, 26), (2, 27), (2, 28), (2, 29),
 (3, 1), (3, 2), (3, 3), (3, 5), (3, 6), (3, 9), (3, 11), (3, 12), (3, 17);
 
 SET FOREIGN_KEY_CHECKS=1;

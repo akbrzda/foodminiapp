@@ -63,6 +63,7 @@ export const useAuthStore = defineStore("auth", {
   getters: {
     isAuthenticated: (state) => Boolean(state.user),
     role: (state) => state.user?.role || "",
+    scopeRole: (state) => state.user?.scope_role || state.user?.role || "",
     permissions: (state) => (Array.isArray(state.user?.permissions) ? state.user.permissions : []),
     hasPermission: (state) => (permissionCode) => {
       if (!permissionCode) return true;
@@ -70,7 +71,8 @@ export const useAuthStore = defineStore("auth", {
       if (permissions.includes(permissionCode)) return true;
 
       // Backward compatibility для сессий без permissions.
-      if (permissions.length === 0 && ["admin", "ceo"].includes(state.user?.role)) {
+      const scopeRole = state.user?.scope_role || state.user?.role;
+      if (permissions.length === 0 && ["admin", "ceo"].includes(scopeRole)) {
         return true;
       }
       return false;

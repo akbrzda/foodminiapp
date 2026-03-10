@@ -134,7 +134,7 @@
             </div>
           </div>
           <div v-if="branchId" class="pt-3 border-t border-border">
-            <div v-if="!isManager" class="space-y-2">
+            <div v-if="canManageDeliveryZones" class="space-y-2">
               <Button class="w-full" size="sm" @click="startDrawing">
                 <Plus :size="16" />
                 Добавить полигон
@@ -150,7 +150,7 @@
                 </Button>
               </div>
             </div>
-            <p v-else class="text-center text-xs text-muted-foreground">Редактирование доступно только администратору и CEO</p>
+            <p v-else class="text-center text-xs text-muted-foreground">Недостаточно прав для редактирования зон доставки</p>
           </div>
           <div v-if="filteredPolygons.length > 0" class="pt-2 text-xs text-muted-foreground text-center">
             {{ filteredPolygons.length }} {{ getPluralForm(filteredPolygons.length) }}
@@ -184,7 +184,7 @@
                     type="checkbox"
                     class="mt-0.5 h-4 w-4 rounded border-border text-primary focus:ring-primary"
                     :checked="selectedPolygons.includes(polygon.id)"
-                    :disabled="isManager"
+                    :disabled="!canToggleDeliveryZones"
                     @change="togglePolygonSelection(polygon.id)"
                   />
                   <button type="button" class="min-w-0 flex-1 text-left" @click="focusPolygonOnMap(polygon, true)">
@@ -202,7 +202,7 @@
                 </div>
               </div>
             </div>
-            <div v-if="selectedPolygons.length && !isManager" class="grid grid-cols-2 gap-2 pt-1">
+            <div v-if="selectedPolygons.length && canToggleDeliveryZones" class="grid grid-cols-2 gap-2 pt-1">
               <Button size="sm" variant="outline" @click="bulkBlock">Блок. ({{ selectedPolygons.length }})</Button>
               <Button size="sm" variant="outline" @click="bulkUnblock">Разблок.</Button>
             </div>
@@ -213,7 +213,7 @@
         </div>
       </div>
     </div>
-    <Button v-if="branchId && !isManager" type="button" size="sm" class="absolute bottom-4 left-2 z-10 md:hidden" @click="startDrawing">
+    <Button v-if="branchId && canManageDeliveryZones" type="button" size="sm" class="absolute bottom-4 left-2 z-10 md:hidden" @click="startDrawing">
       <Plus :size="16" />
       Добавить полигон
     </Button>
@@ -275,7 +275,7 @@
               </Select>
             </FieldContent>
           </Field>
-          <div v-if="branchId && !isManager" class="grid grid-cols-2 gap-2 border-t border-border pt-3">
+          <div v-if="branchId && canManageDeliveryZones" class="grid grid-cols-2 gap-2 border-t border-border pt-3">
             <Button variant="outline" size="sm" @click="triggerGeoJsonImport">
               <Upload :size="16" />
               Импорт
@@ -449,7 +449,9 @@
       :tariffs-loading="tariffsLoading"
       :tariff-sources="availableTariffSources"
       :city-branches="branches"
-      :read-only="isManager"
+      :read-only="!canManageDeliveryZones"
+      :can-toggle-state="canToggleDeliveryZones"
+      :can-transfer="canToggleDeliveryZones"
       @close="closeSidebar"
       @save="savePolygonFromSidebar"
       @edit-tariffs="openTariffEditor"
@@ -524,7 +526,11 @@ const route = useRoute();
 const router = useRouter();
 const { showErrorNotification, showSuccessNotification, showWarningNotification } = useNotifications();
 const { shouldRestore, saveContext, restoreContext, restoreScroll } = useListContext("delivery-zones");
-const isManager = computed(() => authStore.role === "manager");
+const isManager = computed(() => authStore.scopeRole === "manager");
+const canManageDeliveryZones = computed(() => authStore.hasPermission("locations.delivery_zones.manage"));
+const canToggleDeliveryZones = computed(() =>
+  authStore.hasAnyPermission(["locations.delivery_zones.manage", "locations.delivery_zones.toggle"]),
+);
 const cityId = ref("");
 const branchId = ref("");
 const branches = ref([]);
@@ -620,7 +626,12 @@ const getManagerDefaultCityId = () => {
   return city ? String(city.id) : String(allowed[0]);
 };
 const ensureEditAccess = (message) => {
-  if (!isManager.value) return true;
+  if (canManageDeliveryZones.value) return true;
+  showWarningNotification(message || "Недостаточно прав для выполнения действия");
+  return false;
+};
+const ensureToggleAccess = (message) => {
+  if (canToggleDeliveryZones.value) return true;
   showWarningNotification(message || "Недостаточно прав для выполнения действия");
   return false;
 };
@@ -1374,6 +1385,7 @@ const closeBlockModal = () => {
   };
 };
 const submitBlock = async () => {
+  if (!ensureToggleAccess("Недостаточно прав для блокировки зон доставки")) return;
   if (!blockingPolygon.value) return;
   try {
     const payload = {
@@ -1405,6 +1417,7 @@ const submitBlock = async () => {
   }
 };
 const unblockPolygon = async (polygon) => {
+  if (!ensureToggleAccess("Недостаточно прав для разблокировки зон доставки")) return;
   if (!confirm("Разблокировать полигон?")) return;
   try {
     await api.post(`/api/polygons/admin/${polygon.id}/unblock`);
@@ -1431,6 +1444,7 @@ const togglePolygonSelection = (polygonId) => {
   }
 };
 const bulkBlock = () => {
+  if (!ensureToggleAccess("Недостаточно прав для блокировки зон доставки")) return;
   if (selectedPolygons.value.length === 0) return;
   const firstPolygon = filteredPolygons.value.find((p) => p.id === selectedPolygons.value[0]);
   if (firstPolygon) {
@@ -1445,6 +1459,7 @@ const bulkBlock = () => {
   }
 };
 const bulkUnblock = async () => {
+  if (!ensureToggleAccess("Недостаточно прав для разблокировки зон доставки")) return;
   if (selectedPolygons.value.length === 0) return;
   if (!confirm(`Разблокировать ${selectedPolygons.value.length} ${getPluralForm(selectedPolygons.value.length)}?`)) return;
   try {
@@ -1562,15 +1577,20 @@ const confirmTariffCopy = async (value) => {
   }
 };
 const savePolygonFromSidebar = async (data) => {
-  if (!ensureEditAccess("Недостаточно прав для редактирования полигона")) return;
+  const hasManageAccess = canManageDeliveryZones.value;
+  if (!hasManageAccess && !ensureToggleAccess("Недостаточно прав для переключения зоны")) return;
   try {
-    const payload = {
-      name: data.name,
-      delivery_time: data.delivery_time,
-      min_order_amount: Math.max(0, Number(data.min_order_amount) || 0),
-      delivery_cost: Math.max(0, Number(data.delivery_cost) || 0),
-      is_active: data.is_active ? 1 : 0,
-    };
+    const payload = hasManageAccess
+      ? {
+          name: data.name,
+          delivery_time: data.delivery_time,
+          min_order_amount: Math.max(0, Number(data.min_order_amount) || 0),
+          delivery_cost: Math.max(0, Number(data.delivery_cost) || 0),
+          is_active: data.is_active ? 1 : 0,
+        }
+      : {
+          is_active: data.is_active ? 1 : 0,
+        };
     await api.put(`/api/polygons/admin/${data.id}`, payload);
     await loadPolygons();
     await loadAllPolygons();
@@ -1583,6 +1603,7 @@ const savePolygonFromSidebar = async (data) => {
   }
 };
 const showBlockModalFromSidebar = (polygon) => {
+  if (!ensureToggleAccess("Недостаточно прав для блокировки зон доставки")) return;
   closeSidebar();
   showBlockModal(polygon);
 };
@@ -1596,7 +1617,7 @@ const deletePolygonFromSidebar = async (polygon) => {
   await deletePolygon(polygon);
 };
 const transferPolygon = async (data) => {
-  if (!ensureEditAccess("Недостаточно прав для переноса полигона")) return;
+  if (!ensureToggleAccess("Недостаточно прав для переключения зоны")) return;
   try {
     await api.post(`/api/polygons/admin/${data.polygonId}/transfer`, {
       new_branch_id: data.newBranchId,

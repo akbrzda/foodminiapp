@@ -1,9 +1,9 @@
 import express from "express";
 import db from "../../config/database.js";
-import { authenticateToken, requireRole } from "../../middleware/auth.js";
+import { authenticateToken, requirePermission } from "../../middleware/auth.js";
 const router = express.Router();
 router.use(authenticateToken);
-router.use(requireRole("admin", "manager", "ceo"));
+router.use(requirePermission("dashboard.view"));
 
 const DASHBOARD_ALLOWED_ORDER_STATUSES = ["pending", "confirmed", "preparing", "ready", "delivering", "completed"];
 

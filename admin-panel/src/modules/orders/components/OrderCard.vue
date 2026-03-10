@@ -44,7 +44,7 @@
 
         <div class="text-sm font-semibold text-foreground">Итого: {{ formatCurrency(order.total) }}</div>
 
-        <div class="space-y-2">
+        <div v-if="canManageOrders" class="space-y-2">
           <Button v-if="nextStatus" class="w-full" @click.stop="$emit('changeStatus')">
             {{ nextStatus.label }}
           </Button>
@@ -67,6 +67,7 @@ const props = defineProps({
   order: { type: Object, required: true },
   isExpanded: { type: Boolean, default: false },
   isRecent: { type: Boolean, default: false },
+  canManageOrders: { type: Boolean, default: false },
 });
 
 defineEmits(["toggle", "changeStatus", "cancel", "setRef"]);

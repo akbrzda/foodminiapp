@@ -96,6 +96,7 @@
           :order="order"
           :is-expanded="expandedOrderId === order.id"
           :is-recent="recentOrderIds.has(order.id)"
+          :can-manage-orders="canManageOrders"
           @toggle="$emit('toggleOrder', order)"
           @change-status="$emit('changeStatus', order)"
           @cancel="$emit('openCancelDialog', order)"
@@ -130,6 +131,7 @@ const props = defineProps({
   expandedOrderId: { type: [Number, null], default: null },
   recentOrderIds: { type: Set, required: true },
   tabs: { type: Array, required: true },
+  canManageOrders: { type: Boolean, default: false },
 });
 
 defineEmits([

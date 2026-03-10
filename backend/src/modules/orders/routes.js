@@ -1,5 +1,5 @@
 import express from "express";
-import { authenticateToken, requireRole } from "../../middleware/auth.js";
+import { authenticateToken, requirePermission } from "../../middleware/auth.js";
 import { createLimiter, orderLimiter, redisRateLimiter } from "../../middleware/rateLimiter.js";
 import { adminActionLogger } from "../../utils/logger.js";
 
@@ -36,15 +36,15 @@ router.get("/:id", authenticateToken, getUserOrderById);
 router.post("/:id/repeat", authenticateToken, orderLimiter, createLimiter, repeatOrder);
 
 // Админские эндпоинты
-router.get("/admin/all", authenticateToken, requireRole("admin", "manager", "ceo"), getAdminOrders);
-router.get("/admin/shift", authenticateToken, requireRole("admin", "manager", "ceo"), getShiftOrders);
-router.get("/admin/count", authenticateToken, requireRole("admin", "manager", "ceo"), getOrdersCount);
-router.get("/admin/:id", authenticateToken, requireRole("admin", "manager", "ceo"), getAdminOrderById);
+router.get("/admin/all", authenticateToken, requirePermission("orders.view"), getAdminOrders);
+router.get("/admin/shift", authenticateToken, requirePermission("orders.view"), getShiftOrders);
+router.get("/admin/count", authenticateToken, requirePermission("orders.view"), getOrdersCount);
+router.get("/admin/:id", authenticateToken, requirePermission("orders.view"), getAdminOrderById);
 
 router.put(
   "/admin/:id/status",
   authenticateToken,
-  requireRole("admin", "manager", "ceo"),
+  requirePermission("orders.manage"),
   adminOrderMutationLimiter,
   adminActionLogger("update_order_status", "order"),
   async (req, res, next) => {
@@ -55,7 +55,7 @@ router.put(
 router.put(
   "/admin/:id/cancel",
   authenticateToken,
-  requireRole("admin", "manager", "ceo"),
+  requirePermission("orders.manage"),
   adminOrderMutationLimiter,
   adminActionLogger("cancel_order", "order"),
   async (req, res, next) => {
@@ -66,12 +66,12 @@ router.put(
 router.delete(
   "/admin/:id",
   authenticateToken,
-  requireRole("admin"),
+  requirePermission("orders.delete"),
   adminOrderMutationLimiter,
   adminActionLogger("delete_order", "order"),
   deleteAdminOrder,
 );
 
-router.get("/admin/stats", authenticateToken, requireRole("admin", "manager", "ceo"), getOrdersStats);
+router.get("/admin/stats", authenticateToken, requirePermission("orders.view"), getOrdersStats);
 
 export default router;

@@ -77,7 +77,7 @@
           <SegmentBuilder v-model="segmentConfig" />
         </div>
         <div class="flex flex-wrap items-center gap-2">
-          <Button variant="outline" type="button" @click="calculateAudience">Рассчитать аудиторию</Button>
+          <Button v-if="canManageBroadcasts" variant="outline" type="button" @click="calculateAudience">Рассчитать аудиторию</Button>
           <span v-if="estimatedSize !== null" class="text-xs text-muted-foreground">Примерный размер: {{ estimatedSize }}</span>
         </div>
       </CardContent>
@@ -126,7 +126,7 @@
               @drop.prevent="onDrop"
             >
               <input ref="fileInput" type="file" accept="image/*" class="hidden" @change="onFileChange" />
-              <Button type="button" variant="outline" size="sm" @click="triggerFile">
+              <Button v-if="canManageBroadcasts" type="button" variant="outline" size="sm" @click="triggerFile">
                 <UploadCloud :size="16" />
                 Загрузить изображение
               </Button>
@@ -136,7 +136,7 @@
             </div>
             <div v-if="uploadState.preview || form.content_image_url" class="mt-3 flex flex-wrap items-center gap-3">
               <img :src="uploadState.preview || form.content_image_url" class="h-16 w-16 rounded-xl object-cover" alt="preview" />
-              <Button type="button" variant="ghost" size="icon" @click="clearImage">
+              <Button v-if="canManageBroadcasts" type="button" variant="ghost" size="icon" @click="clearImage">
                 <Trash2 :size="16" class="text-red-600" />
               </Button>
             </div>
@@ -149,7 +149,7 @@
             <div v-for="(button, index) in buttons" :key="button.id" class="rounded-lg border border-border p-3">
               <div class="flex flex-wrap items-center justify-between gap-2">
                 <div class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Кнопка #{{ index + 1 }}</div>
-                <Button type="button" size="icon" variant="ghost" @click="removeButton(index)">
+                <Button v-if="canManageBroadcasts" type="button" size="icon" variant="ghost" @click="removeButton(index)">
                   <Trash2 :size="16" class="text-red-600" />
                 </Button>
               </div>
@@ -182,7 +182,7 @@
                 </Field>
               </FieldGroup>
             </div>
-            <Button type="button" variant="outline" @click="addButton">
+            <Button v-if="canManageBroadcasts" type="button" variant="outline" @click="addButton">
               <Plus :size="16" />
               Добавить кнопку
             </Button>
@@ -331,8 +331,8 @@
           </Field>
         </FieldGroup>
         <div class="flex flex-wrap gap-2">
-          <Button variant="outline" type="button" @click="previewCampaign">Предпросмотр</Button>
-          <Button variant="outline" type="button" @click="sendTest">Отправить тест</Button>
+          <Button v-if="canManageBroadcasts" variant="outline" type="button" @click="previewCampaign">Предпросмотр</Button>
+          <Button v-if="canManageBroadcasts" variant="outline" type="button" @click="sendTest">Отправить тест</Button>
         </div>
         <div v-if="previewText" class="rounded-lg border border-border bg-muted/30 p-4 text-sm text-foreground whitespace-pre-wrap">
           {{ previewText }}
@@ -341,11 +341,11 @@
     </Card>
 
     <div class="flex flex-wrap gap-3">
-      <Button :disabled="saving" @click="saveCampaign">
+      <Button v-if="canManageBroadcasts" :disabled="saving" @click="saveCampaign">
         <Save :size="16" />
         {{ saving ? "Сохранение..." : "Сохранить" }}
       </Button>
-      <Button variant="secondary" :disabled="sending" @click="sendCampaign">
+      <Button v-if="canManageBroadcasts" variant="secondary" :disabled="sending" @click="sendCampaign">
         <Send :size="16" />
         {{ sending ? "Отправка..." : "Отправить" }}
       </Button>
@@ -376,11 +376,14 @@ import BackButton from "@/shared/components/BackButton.vue";
 import SegmentBuilder from "../components/SegmentBuilder.vue";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
 import { useOrdersStore } from "@/modules/orders/stores/orders.js";
+import { useAuthStore } from "@/shared/stores/auth.js";
 
 const route = useRoute();
 const router = useRouter();
+const authStore = useAuthStore();
 const { showErrorNotification, showSuccessNotification, showWarningNotification } = useNotifications();
 const ordersStore = useOrdersStore();
+const canManageBroadcasts = computed(() => authStore.hasPermission("marketing.broadcasts.manage"));
 
 const campaignId = computed(() => Number(route.params.id || 0));
 const isEditing = computed(() => Boolean(campaignId.value));
@@ -521,6 +524,7 @@ const loadCampaign = async () => {
 };
 
 const calculateAudience = async () => {
+  if (!canManageBroadcasts.value) return;
   try {
     if (!segmentConfig.value?.conditions?.length) {
       showWarningNotification("Добавьте условия сегментации");
@@ -535,6 +539,7 @@ const calculateAudience = async () => {
 };
 
 const saveCampaign = async () => {
+  if (!canManageBroadcasts.value) return;
   saving.value = true;
   try {
     const payload = {
@@ -584,6 +589,7 @@ const saveCampaign = async () => {
 };
 
 const sendCampaign = async () => {
+  if (!canManageBroadcasts.value) return;
   if (!isEditing.value) {
     showWarningNotification("Сначала сохраните рассылку");
     return;
@@ -601,6 +607,7 @@ const sendCampaign = async () => {
 };
 
 const previewCampaign = async () => {
+  if (!canManageBroadcasts.value) return;
   if (!isEditing.value) {
     showWarningNotification("Сначала сохраните рассылку");
     return;
@@ -619,6 +626,7 @@ const previewCampaign = async () => {
 };
 
 const sendTest = async () => {
+  if (!canManageBroadcasts.value) return;
   if (!isEditing.value) {
     showWarningNotification("Сначала сохраните рассылку");
     return;
@@ -644,6 +652,7 @@ const goBack = () => {
 };
 
 const addButton = () => {
+  if (!canManageBroadcasts.value) return;
   if (buttons.value.length >= 8) {
     showWarningNotification("Максимум 8 кнопок");
     return;
@@ -651,6 +660,7 @@ const addButton = () => {
   buttons.value.push({ id: `${Date.now()}-${Math.random()}`, text: "", type: "url", url: "" });
 };
 const removeButton = (index) => {
+  if (!canManageBroadcasts.value) return;
   buttons.value.splice(index, 1);
 };
 
@@ -703,6 +713,7 @@ const updateScheduledAt = () => {
 };
 
 const triggerFile = () => {
+  if (!canManageBroadcasts.value) return;
   fileInput.value?.click();
 };
 const onFileChange = (event) => {
@@ -714,6 +725,7 @@ const onDrop = (event) => {
   if (file) handleFile(file);
 };
 const handleFile = async (file) => {
+  if (!canManageBroadcasts.value) return;
   if (!file.type.startsWith("image/")) {
     uploadState.value = { loading: false, error: "Нужен файл изображения", preview: null };
     return;
@@ -740,6 +752,7 @@ const handleFile = async (file) => {
 };
 
 const clearImage = () => {
+  if (!canManageBroadcasts.value) return;
   form.value.content_image_url = "";
   uploadState.value = { loading: false, error: null, preview: null };
 };

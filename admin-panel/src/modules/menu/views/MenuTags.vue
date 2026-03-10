@@ -4,7 +4,7 @@
       <CardContent>
         <PageHeader title="Теги меню" description="Список тегов для фильтрации блюд">
           <template #actions>
-            <Button @click="openModal()">
+            <Button v-if="canManageTags" @click="openModal()">
               <Plus :size="16" />
               Добавить тег
             </Button>
@@ -48,7 +48,7 @@
                   <span v-else class="text-muted-foreground">—</span>
                 </TableCell>
                 <TableCell class="text-right">
-                  <div class="flex justify-end gap-2">
+                  <div v-if="canManageTags" class="flex justify-end gap-2">
                     <Button variant="ghost" size="icon" @click="openModal(tag)">
                       <Pencil :size="16" />
                     </Button>
@@ -99,7 +99,7 @@
               </FieldContent>
             </Field>
           </FieldGroup>
-          <Button class="w-full" type="submit">
+          <Button v-if="canManageTags" class="w-full" type="submit">
             <Save :size="16" />
             Сохранить
           </Button>
@@ -116,6 +116,7 @@ import api from "@/shared/api/client.js";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
 import { useListContext } from "@/shared/composables/useListContext.js";
 import { useOrdersStore } from "@/modules/orders/stores/orders.js";
+import { useAuthStore } from "@/shared/stores/auth.js";
 import Button from "@/shared/components/ui/button/Button.vue";
 import Card from "@/shared/components/ui/card/Card.vue";
 import CardContent from "@/shared/components/ui/card/CardContent.vue";
@@ -134,6 +135,8 @@ import { Field, FieldContent, FieldGroup, FieldLabel } from "@/shared/components
 
 const { showErrorNotification, showSuccessNotification } = useNotifications();
 const ordersStore = useOrdersStore();
+const authStore = useAuthStore();
+const canManageTags = computed(() => authStore.hasPermission("menu.tags.manage"));
 
 // Навигационный контекст
 const { shouldRestore, saveContext, restoreContext, restoreScroll } = useListContext("menu-tags");
@@ -212,6 +215,7 @@ const onPageSizeChange = (value) => {
   page.value = 1;
 };
 function openModal(tag = null) {
+  if (!canManageTags.value) return;
   editingTag.value = tag;
   if (tag) {
     form.value = {
@@ -238,6 +242,7 @@ function closeModal() {
   };
 }
 async function submitTag() {
+  if (!canManageTags.value) return;
   try {
     const payload = {
       name: form.value.name.trim(),
@@ -263,6 +268,7 @@ async function submitTag() {
   }
 }
 async function deleteTag(tag) {
+  if (!canManageTags.value) return;
   if (!confirm(`Удалить тег "${tag.name}"? Это действие необратимо.`)) {
     return;
   }

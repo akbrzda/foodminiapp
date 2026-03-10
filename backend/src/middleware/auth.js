@@ -2,7 +2,8 @@ import jwt from "jsonwebtoken";
 import { isBlacklisted } from "./tokenBlacklist.js";
 import { logger } from "../utils/logger.js";
 import { JWT_ISSUER, JWT_ACCESS_AUDIENCES, extractBearerToken, getJwtSecret } from "../config/auth.js";
-import { canPermission, getDefaultRolePermissions } from "../modules/access/index.js";
+import { canPermission, getDefaultRolePermissions, resolveScopeRole } from "../modules/access/index.js";
+import db from "../config/database.js";
 
 const normalizeCityIds = (value) => {
   if (Array.isArray(value)) {
@@ -37,6 +38,8 @@ const normalizePermissions = (value, role) => {
   return getDefaultRolePermissions(role);
 };
 
+const getUserScopeRole = (user) => resolveScopeRole(user?.scope_role, user?.role);
+
 export const authenticateToken = async (req, res, next) => {
   try {
     // Пытаемся получить токен из cookie (приоритет) или header
@@ -64,11 +67,41 @@ export const authenticateToken = async (req, res, next) => {
       issuer: JWT_ISSUER,
       audience: JWT_ACCESS_AUDIENCES,
     });
+    const scopeRole = getUserScopeRole(user);
+    const roleCode = String(user?.role_code || user?.role || "").trim();
     req.user = {
       ...user,
+      role: scopeRole,
+      scope_role: scopeRole,
+      role_code: roleCode,
       cities: normalizeCityIds(user?.cities),
-      permissions: normalizePermissions(user?.permissions, user?.role),
+      permissions: normalizePermissions(user?.permissions, roleCode || scopeRole),
     };
+
+    if (req.user?.type === "admin") {
+      const adminId = Number(req.user?.id);
+      if (!Number.isInteger(adminId) || adminId <= 0) {
+        return res.status(401).json({ error: "Invalid admin session" });
+      }
+
+      const [admins] = await db.query(
+        `SELECT id, role, is_active, permission_version
+         FROM admin_users
+         WHERE id = ?
+         LIMIT 1`,
+        [adminId],
+      );
+      if (admins.length === 0 || !admins[0].is_active) {
+        return res.status(401).json({ error: "Admin account not found or inactive" });
+      }
+
+      const tokenPermissionVersion = Number(req.user?.permission_version);
+      const currentPermissionVersion = Number(admins[0].permission_version || 1);
+      if (!Number.isInteger(tokenPermissionVersion) || tokenPermissionVersion !== currentPermissionVersion) {
+        return res.status(401).json({ error: "Session permissions outdated. Please login again." });
+      }
+    }
+
     next();
   } catch (error) {
     if (error.name === "TokenExpiredError") {
@@ -89,12 +122,14 @@ export const requireRole = (...roles) => {
         error: "Authentication required",
       });
     }
-    if (!roles.includes(req.user.role)) {
-      return res.status(403).json({
-        error: "Insufficient permissions",
-      });
+    const scopeRole = getUserScopeRole(req.user);
+    if (roles.includes(scopeRole)) {
+      return next();
     }
-    next();
+
+    return res.status(403).json({
+      error: "Insufficient permissions",
+    });
   };
 };
 
@@ -125,7 +160,8 @@ export const checkCityAccess = (req, res, next) => {
       error: "Authentication required",
     });
   }
-  if (req.user.role === "admin" || req.user.role === "ceo") {
+  const scopeRole = getUserScopeRole(req.user);
+  if (scopeRole === "admin" || scopeRole === "ceo") {
     return next();
   }
   const cityId = parseInt(req.params.cityId || req.query.cityId || req.body.cityId);

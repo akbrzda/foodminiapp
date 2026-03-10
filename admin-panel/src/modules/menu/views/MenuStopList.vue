@@ -10,11 +10,11 @@
                 <div class="text-sm font-medium text-foreground">{{ stopListSyncLabel }}</div>
                 <div class="text-xs text-muted-foreground">{{ stopListSyncStatusLabel }}</div>
               </div>
-              <Button variant="secondary" :disabled="syncLoading" @click="syncStopListNow">
+              <Button v-if="canManageStopList" variant="secondary" :disabled="syncLoading" @click="syncStopListNow">
                 <RefreshCcw :size="16" />
                 {{ syncLoading ? "Синхронизация..." : "Синхронизировать стоп-лист" }}
               </Button>
-              <Button @click="openModal()">
+              <Button v-if="canManageStopList" @click="openModal()">
                 <Plus :size="16" />
                 Добавить
               </Button>
@@ -111,7 +111,7 @@
                   <div class="text-xs text-muted-foreground">{{ formatStopCreatedAt(item.created_at) }}</div>
                 </TableCell>
                 <TableCell class="text-right">
-                  <Button variant="ghost" size="icon" @click="removeFromStopList(item)">
+                  <Button v-if="canManageStopList" variant="ghost" size="icon" @click="removeFromStopList(item)">
                     <Trash2 :size="16" class="text-red-600" />
                   </Button>
                 </TableCell>
@@ -367,7 +367,7 @@
         <DialogFooter class="flex flex-wrap gap-2">
           <BackButton type="button" @click="handleBack" :disabled="step === 1" />
           <Button v-if="!isFinalStep" type="button" @click="handleNext" :disabled="!canProceed"> Следующий шаг </Button>
-          <Button v-else type="button" @click="submitStopList" :disabled="saving || !canSubmit">
+          <Button v-else-if="canManageStopList" type="button" @click="submitStopList" :disabled="saving || !canSubmit">
             <Save :size="16" />
             {{ saving ? "Сохранение..." : "Поставить" }}
           </Button>
@@ -405,9 +405,12 @@ import { useNotifications } from "@/shared/composables/useNotifications.js";
 import { useListContext } from "@/shared/composables/useListContext.js";
 import { formatDate } from "@/shared/utils/date.js";
 import { useReferenceStore } from "@/shared/stores/reference.js";
+import { useAuthStore } from "@/shared/stores/auth.js";
 const referenceStore = useReferenceStore();
+const authStore = useAuthStore();
 const { showErrorNotification, showSuccessNotification } = useNotifications();
 const { shouldRestore, saveContext, restoreContext, restoreScroll } = useListContext("menu-stop-list");
+const canManageStopList = computed(() => authStore.hasPermission("menu.stop_list.manage"));
 const stopList = ref([]);
 const page = ref(1);
 const pageSize = ref(20);
@@ -721,6 +724,7 @@ const loadCategoriesAndItems = async () => {
   }
 };
 const openModal = () => {
+  if (!canManageStopList.value) return;
   resetForm();
   showModal.value = true;
 };
@@ -848,6 +852,7 @@ const formatDateTime = (date) => {
   }).format(date);
 };
 const submitStopList = async () => {
+  if (!canManageStopList.value) return;
   saving.value = true;
   try {
     const branchId = Number(form.value.branch_id);
@@ -903,6 +908,7 @@ const submitStopList = async () => {
   }
 };
 const removeFromStopList = async (item) => {
+  if (!canManageStopList.value) return;
   if (!confirm(`Удалить "${item.entity_name}" из стоп-листа?`)) return;
   try {
     await api.delete(`/api/menu/admin/stop-list/${item.id}`);
@@ -914,6 +920,7 @@ const removeFromStopList = async (item) => {
   }
 };
 const syncStopListNow = async () => {
+  if (!canManageStopList.value) return;
   syncLoading.value = true;
   try {
     const previousLogId = Number(stopListSyncInfo.value?.id || 0);

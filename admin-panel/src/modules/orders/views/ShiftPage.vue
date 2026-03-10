@@ -46,6 +46,7 @@
         :expanded-order-id="expandedOrderId"
         :recent-order-ids="recentOrderIds"
         :tabs="tabs"
+        :can-manage-orders="canManageOrders"
         @clear-search="clearSearch"
         @toggle-order="toggleOrder"
         @change-status="changeStatus"
@@ -90,6 +91,7 @@ import { devError } from "@/shared/utils/logger";
 import api from "@/shared/api/client.js";
 import { useReferenceStore } from "@/shared/stores/reference.js";
 import { useOrdersStore } from "@/modules/orders/stores/orders.js";
+import { useAuthStore } from "@/shared/stores/auth.js";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
 import { useTheme } from "@/shared/composables/useTheme.js";
 import { loadYandexMaps } from "@/shared/services/yandexMaps.js";
@@ -101,6 +103,7 @@ import OrderStatusModal from "@/modules/orders/components/OrderStatusModal.vue";
 
 const referenceStore = useReferenceStore();
 const ordersStore = useOrdersStore();
+const authStore = useAuthStore();
 const { showErrorNotification, showNewOrderNotification, showSuccessNotification } = useNotifications();
 const { theme, setTheme } = useTheme();
 
@@ -181,6 +184,7 @@ const tabs = computed(() => [
   { value: "completed", label: "Завершенные", badge: deliveringCount.value },
   { value: "search", label: "Поиск", badge: null },
 ]);
+const canManageOrders = computed(() => authStore.hasPermission("orders.manage"));
 
 // Опции филиалов
 const branchOptions = computed(() => {
@@ -364,6 +368,7 @@ const ensureOrderDetails = async (order) => {
 };
 
 const changeStatus = async (order) => {
+  if (!canManageOrders.value) return;
   const flowDelivery = {
     pending: { status: "confirmed", label: "Принять заказ" },
     confirmed: { status: "preparing", label: "Отправить в готовку" },
@@ -406,10 +411,12 @@ const changeStatus = async (order) => {
 };
 
 const openCancelDialog = (order) => {
+  if (!canManageOrders.value) return;
   cancelDialog.value = { open: true, order, loading: false };
 };
 
 const confirmCancel = async () => {
+  if (!canManageOrders.value) return;
   if (!cancelDialog.value.order) return;
   cancelDialog.value.loading = true;
   try {

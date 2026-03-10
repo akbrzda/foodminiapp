@@ -6,7 +6,7 @@
           <template #actions>
             <BackButton label="Назад" @click="goBack" />
             <Badge variant="secondary">Всего: {{ segments.length }}</Badge>
-            <Button @click="openModal()">
+            <Button v-if="canManageBroadcasts" @click="openModal()">
               <Plus :size="16" />
               Создать сегмент
             </Button>
@@ -32,7 +32,7 @@
               <div class="mt-2 text-sm text-muted-foreground">{{ segment.description || "—" }}</div>
               <div class="mt-2 text-xs text-muted-foreground">Размер: {{ formatNumber(segment.estimated_size || 0) }}</div>
               <div class="text-xs text-muted-foreground">Обновлено: {{ formatDateTime(segment.updated_at) || "—" }}</div>
-              <div class="mt-3 flex justify-end gap-2">
+              <div v-if="canManageBroadcasts" class="mt-3 flex justify-end gap-2">
                 <Button variant="ghost" size="icon" @click="openModal(segment)">
                   <Pencil :size="16" />
                 </Button>
@@ -75,7 +75,7 @@
                   <TableCell>{{ formatNumber(segment.estimated_size || 0) }}</TableCell>
                   <TableCell>{{ formatDateTime(segment.updated_at) || "—" }}</TableCell>
                   <TableCell class="text-right">
-                    <div class="flex justify-end gap-2">
+                    <div v-if="canManageBroadcasts" class="flex justify-end gap-2">
                       <Button variant="ghost" size="icon" @click="openModal(segment)">
                         <Pencil :size="16" />
                       </Button>
@@ -112,13 +112,13 @@
             <Textarea v-model="form.description" rows="3" />
           </div>
           <SegmentBuilder v-model="segmentConfig" />
-          <div class="flex flex-wrap gap-2">
+          <div v-if="canManageBroadcasts" class="flex flex-wrap gap-2">
             <Button type="button" variant="outline" @click="calculate">Рассчитать аудиторию</Button>
             <span v-if="estimatedSize !== null" class="text-xs text-muted-foreground">Размер: {{ estimatedSize }}</span>
           </div>
           <DialogFooter class="gap-2">
             <Button type="button" variant="outline" @click="closeModal">Отмена</Button>
-            <Button type="submit">
+            <Button v-if="canManageBroadcasts" type="submit">
               <Save :size="16" />
               Сохранить
             </Button>
@@ -155,10 +155,13 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { useNotifications } from "@/shared/composables/useNotifications.js";
 import { useListContext } from "@/shared/composables/useListContext.js";
 import { formatDateTime, formatNumber } from "@/shared/utils/format.js";
+import { useAuthStore } from "@/shared/stores/auth.js";
 
 const router = useRouter();
+const authStore = useAuthStore();
 const { showErrorNotification, showSuccessNotification, showWarningNotification } = useNotifications();
 const { shouldRestore, saveContext, restoreContext, restoreScroll } = useListContext("broadcast-segments");
+const canManageBroadcasts = computed(() => authStore.hasPermission("marketing.broadcasts.manage"));
 const segments = ref([]);
 const isLoading = ref(false);
 const page = ref(1);
@@ -203,6 +206,7 @@ const onPageSizeChange = (value) => {
 };
 
 const openModal = (segment = null) => {
+  if (!canManageBroadcasts.value) return;
   editing.value = segment;
   estimatedSize.value = null;
   if (segment) {
@@ -228,6 +232,7 @@ const closeModal = () => {
 };
 
 const calculate = async () => {
+  if (!canManageBroadcasts.value) return;
   try {
     if (!segmentConfig.value?.conditions?.length) {
       showWarningNotification("Добавьте условия сегментации");
@@ -242,6 +247,7 @@ const calculate = async () => {
 };
 
 const saveSegment = async () => {
+  if (!canManageBroadcasts.value) return;
   try {
     const payload = {
       name: form.value.name,
@@ -271,6 +277,7 @@ const saveSegment = async () => {
 };
 
 const deleteSegment = async (segment) => {
+  if (!canManageBroadcasts.value) return;
   if (!confirm(`Удалить сегмент "${segment.name}"?`)) return;
   try {
     await api.delete(`/api/broadcasts/segments/${segment.id}`);

@@ -480,7 +480,7 @@ const updateCalendarMonths = () => {
 };
 const chartTabs = ["Выручка", "Заказы", "Средний чек"];
 const isCustomPeriod = computed(() => filters.value.period === "custom");
-const isManager = computed(() => authStore.role === "manager");
+const isManager = computed(() => authStore.scopeRole === "manager");
 const managerBranches = computed(() => authStore.user?.branches || []);
 const managerBranchIds = computed(() => authStore.user?.branch_ids || []);
 const isLocationLocked = computed(() => isManager.value && managerBranches.value.length === 1);

@@ -1,6 +1,6 @@
 import express from "express";
 import db from "../../config/database.js";
-import { authenticateToken, requireRole, checkCityAccess } from "../../middleware/auth.js";
+import { authenticateToken, requirePermission, checkCityAccess } from "../../middleware/auth.js";
 import { getIikoClientOrNull } from "../integrations/services/integrationConfigService.js";
 const router = express.Router();
 
@@ -299,7 +299,17 @@ router.get("/:cityId/branches/:branchId", async (req, res, next) => {
     next(error);
   }
 });
-router.get("/admin/all", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
+router.get(
+  "/admin/all",
+  authenticateToken,
+  requirePermission(
+    "locations.cities.manage",
+    "locations.branches.view",
+    "locations.delivery_zones.view",
+    "locations.delivery_zones.manage",
+    "locations.delivery_zones.toggle",
+  ),
+  async (req, res, next) => {
   try {
     let query = `
         SELECT id, name, iiko_city_id, latitude, longitude, timezone, is_active, 
@@ -317,8 +327,9 @@ router.get("/admin/all", authenticateToken, requireRole("admin", "manager", "ceo
   } catch (error) {
     next(error);
   }
-});
-router.post("/admin", authenticateToken, requireRole("admin", "ceo"), async (req, res, next) => {
+  },
+);
+router.post("/admin", authenticateToken, requirePermission("locations.cities.manage"), async (req, res, next) => {
   try {
     const { name, iiko_city_id, latitude, longitude, timezone } = req.body;
     if (!name) {
@@ -340,7 +351,7 @@ router.post("/admin", authenticateToken, requireRole("admin", "ceo"), async (req
     next(error);
   }
 });
-router.put("/admin/:id", authenticateToken, requireRole("admin", "ceo"), async (req, res, next) => {
+router.put("/admin/:id", authenticateToken, requirePermission("locations.cities.manage"), async (req, res, next) => {
   try {
     const cityId = req.params.id;
     const { name, iiko_city_id, latitude, longitude, timezone, is_active } = req.body;
@@ -391,7 +402,7 @@ router.put("/admin/:id", authenticateToken, requireRole("admin", "ceo"), async (
   }
 });
 
-router.delete("/admin/:id", authenticateToken, requireRole("admin", "ceo"), async (req, res, next) => {
+router.delete("/admin/:id", authenticateToken, requirePermission("locations.cities.manage"), async (req, res, next) => {
   try {
     const cityId = req.params.id;
     const [cities] = await db.query("SELECT id FROM cities WHERE id = ?", [cityId]);
@@ -411,7 +422,7 @@ router.delete("/admin/:id", authenticateToken, requireRole("admin", "ceo"), asyn
   }
 });
 
-router.get("/admin/iiko/unmapped-branches", authenticateToken, requireRole("admin", "manager", "ceo"), async (req, res, next) => {
+router.get("/admin/iiko/unmapped-branches", authenticateToken, requirePermission("locations.branches.view"), async (req, res, next) => {
   try {
     const client = await getIikoClientOrNull();
     if (!client) {
@@ -449,7 +460,7 @@ router.get("/admin/iiko/unmapped-branches", authenticateToken, requireRole("admi
     return next(error);
   }
 });
-router.get("/admin/:cityId/branches", authenticateToken, requireRole("admin", "manager", "ceo"), checkCityAccess, async (req, res, next) => {
+router.get("/admin/:cityId/branches", authenticateToken, requirePermission("locations.branches.view"), checkCityAccess, async (req, res, next) => {
   try {
     const cityId = req.params.cityId;
     const [branches] = await db.query(
@@ -467,7 +478,7 @@ router.get("/admin/:cityId/branches", authenticateToken, requireRole("admin", "m
     next(error);
   }
 });
-router.post("/admin/:cityId/branches", authenticateToken, requireRole("admin", "manager", "ceo"), checkCityAccess, async (req, res, next) => {
+router.post("/admin/:cityId/branches", authenticateToken, requirePermission("locations.branches.manage"), checkCityAccess, async (req, res, next) => {
   try {
     const cityId = req.params.cityId;
     const { name, address, latitude, longitude, phone, working_hours, prep_time, assembly_time, iiko_terminal_group_id, iiko_organization_id } =
@@ -544,7 +555,7 @@ router.post("/admin/:cityId/branches", authenticateToken, requireRole("admin", "
 router.put(
   "/admin/:cityId/branches/:branchId",
   authenticateToken,
-  requireRole("admin", "manager", "ceo"),
+  requirePermission("locations.branches.manage"),
   checkCityAccess,
   async (req, res, next) => {
     try {
@@ -670,7 +681,7 @@ router.put(
 router.delete(
   "/admin/:cityId/branches/:branchId",
   authenticateToken,
-  requireRole("admin", "manager", "ceo"),
+  requirePermission("locations.branches.manage"),
   checkCityAccess,
   async (req, res, next) => {
     try {

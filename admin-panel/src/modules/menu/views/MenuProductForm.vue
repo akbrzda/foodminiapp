@@ -5,7 +5,7 @@
         <PageHeader :title="modalTitle" :description="modalSubtitle">
           <template #actions>
             <BackButton label="Назад к списку" @click="goBack" />
-            <Button type="button" @click="saveAll" :disabled="saving || isInitialLoading">
+            <Button v-if="canManageProducts" type="button" @click="saveAll" :disabled="saving || isInitialLoading">
               <Save :size="16" />
               {{ saving ? "Сохранение..." : "Сохранить" }}
             </Button>
@@ -78,7 +78,7 @@
                     @drop.prevent="onDrop"
                   >
                     <input ref="fileInput" type="file" accept="image/*" class="hidden" @change="onFileChange" />
-                    <Button type="button" variant="outline" size="sm" @click="triggerFile">
+                    <Button v-if="canManageProducts" type="button" variant="outline" size="sm" @click="triggerFile">
                       <UploadCloud :size="16" />
                       Загрузить (до 10МБ)
                     </Button>
@@ -240,7 +240,7 @@
               <CardTitle class="text-base">Вариации блюда</CardTitle>
               <CardDescription>Размеры, порции и их параметры</CardDescription>
             </div>
-            <Button type="button" variant="outline" size="sm" @click="addVariant">
+            <Button v-if="canManageProducts" type="button" variant="outline" size="sm" @click="addVariant">
               <Plus :size="16" />
               Добавить
             </Button>
@@ -267,7 +267,7 @@
             </div>
             <div class="flex items-center gap-2">
               <span class="text-xs text-muted-foreground">Порядок: {{ variant.sort_order || (index + 1) * 10 }}</span>
-              <Button type="button" variant="ghost" size="icon" @click="removeVariant(index)">
+              <Button v-if="canManageProducts" type="button" variant="ghost" size="icon" @click="removeVariant(index)">
                 <Trash2 :size="16" class="text-red-600" />
               </Button>
             </div>
@@ -327,7 +327,7 @@
                     class="hidden"
                     @change="onVariantFileChange(variant, index, $event)"
                   />
-                  <Button type="button" variant="outline" size="sm" @click="triggerVariantFile(variant, index)">
+                  <Button v-if="canManageProducts" type="button" variant="outline" size="sm" @click="triggerVariantFile(variant, index)">
                     <UploadCloud :size="16" />
                     Загрузить (до 10МБ)
                   </Button>
@@ -595,11 +595,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui
 import { useNotifications } from "@/shared/composables/useNotifications.js";
 import { useReferenceStore } from "@/shared/stores/reference.js";
 import { useOrdersStore } from "@/modules/orders/stores/orders.js";
+import { useAuthStore } from "@/shared/stores/auth.js";
 const router = useRouter();
 const route = useRoute();
 const referenceStore = useReferenceStore();
 const ordersStore = useOrdersStore();
+const authStore = useAuthStore();
 const { showErrorNotification, showSuccessNotification } = useNotifications();
+const canManageProducts = computed(() => authStore.hasPermission("menu.products.manage"));
 const allCategories = ref([]);
 const modifierGroups = ref([]);
 const tags = ref([]);
@@ -1057,6 +1060,7 @@ const saveVariantPrices = async () => {
   }
 };
 const saveAll = async () => {
+  if (!canManageProducts.value) return;
   saving.value = true;
   try {
     const savedItemId = await saveItem();
@@ -1079,6 +1083,7 @@ const normalizeVariantSortOrder = () => {
   });
 };
 const addVariant = () => {
+  if (!canManageProducts.value) return;
   const newVariant = {
     __local_key: `new-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
     name: "",
@@ -1102,6 +1107,7 @@ const addVariant = () => {
   cityIds.forEach((cityId) => ensureVariantPricesForCity(newVariant, cityId));
 };
 const removeVariant = (index) => {
+  if (!canManageProducts.value) return;
   const variant = form.value.variants[index];
   const key = getVariantUploadKey(variant, index);
   delete variantUploadStates.value[key];
@@ -1139,6 +1145,7 @@ const onVariantDragEnd = () => {
   dragOverVariantIndex.value = null;
 };
 const triggerFile = () => {
+  if (!canManageProducts.value) return;
   fileInput.value?.click();
 };
 const onFileChange = (e) => {
@@ -1150,6 +1157,7 @@ const onDrop = (e) => {
   if (file) handleFile(file);
 };
 const handleFile = async (file) => {
+  if (!canManageProducts.value) return;
   if (file.size > 10 * 1024 * 1024) {
     uploadState.value.error = "Файл больше 10MB";
     return;
@@ -1175,6 +1183,7 @@ const handleFile = async (file) => {
   }
 };
 const triggerVariantFile = (variant, index) => {
+  if (!canManageProducts.value) return;
   const key = getVariantUploadKey(variant, index);
   const input = document.getElementById(`variant-file-${key}`);
   if (input) input.click();
@@ -1188,6 +1197,7 @@ const onVariantDrop = (variant, index, event) => {
   if (file) handleVariantFile(variant, index, file);
 };
 const handleVariantFile = async (variant, index, file) => {
+  if (!canManageProducts.value) return;
   const state = getVariantUploadState(variant, index);
   if (file.size > 10 * 1024 * 1024) {
     state.error = "Файл больше 10MB";

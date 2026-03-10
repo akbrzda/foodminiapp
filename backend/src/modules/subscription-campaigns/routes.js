@@ -1,5 +1,5 @@
 import express from "express";
-import { authenticateToken, requireRole } from "../../middleware/auth.js";
+import { authenticateToken, requirePermission } from "../../middleware/auth.js";
 import {
   createSubscriptionCampaign,
   getSubscriptionCampaignById,
@@ -12,7 +12,7 @@ import {
 } from "./services/subscriptionCampaignService.js";
 
 const router = express.Router();
-const ensureAdmin = [authenticateToken, requireRole("admin", "manager", "ceo")];
+const ensureAdmin = [authenticateToken, requirePermission("marketing.campaigns.manage")];
 
 const escapeCsv = (value) => {
   if (value === null || value === undefined) return "";

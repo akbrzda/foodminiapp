@@ -35,8 +35,8 @@
           </div>
           <div>
             <p class="text-xs text-muted-foreground mb-2">Статус</p>
-            <Label class="flex items-center gap-2 cursor-pointer" :class="readOnly ? 'opacity-60 cursor-not-allowed' : ''">
-              <input v-model="editForm.is_active" type="checkbox" class="h-4 w-4 rounded border-gray-300" :disabled="readOnly" />
+            <Label class="flex items-center gap-2 cursor-pointer" :class="canToggleStatus ? '' : 'opacity-60 cursor-not-allowed'">
+              <input v-model="editForm.is_active" type="checkbox" class="h-4 w-4 rounded border-gray-300" :disabled="!canToggleStatus" />
               <span class="text-sm text-foreground">{{ editForm.is_active ? "Активен" : "Неактивен" }}</span>
             </Label>
           </div>
@@ -106,13 +106,13 @@
               </SelectContent>
             </Select>
           </div>
-          <Button class="w-full" @click="handleTransfer" :disabled="!transferBranchId || parseInt(transferBranchId) === polygon?.branch_id">
+          <Button class="w-full" @click="handleTransfer" :disabled="!canTransfer || !transferBranchId || parseInt(transferBranchId) === polygon?.branch_id">
             Переключить
           </Button>
         </div>
       </div>
       <div class="border-t border-border p-4 space-y-2 bg-muted/30">
-        <Button v-if="!readOnly" class="w-full" @click="saveChanges">
+        <Button v-if="!readOnly || canToggleStatus" class="w-full" @click="saveChanges">
           <Save :size="16" />
           Сохранить
         </Button>
@@ -145,6 +145,14 @@ const props = defineProps({
   },
   tariffsLoading: Boolean,
   readOnly: Boolean,
+  canToggleState: {
+    type: Boolean,
+    default: false,
+  },
+  canTransfer: {
+    type: Boolean,
+    default: false,
+  },
   tariffSources: {
     type: Array,
     default: () => [],
@@ -163,11 +171,10 @@ const tabs = computed(() => {
     { id: "delivery", label: "Доставка" },
     { id: "transfer", label: "Переключение" },
   ];
-  if (props.readOnly) {
-    return baseTabs.filter((tab) => tab.id !== "transfer");
-  }
+  if (props.readOnly && !props.canTransfer) return baseTabs.filter((tab) => tab.id !== "transfer");
   return baseTabs;
 });
+const canToggleStatus = computed(() => !props.readOnly || props.canToggleState);
 const editForm = ref({
   name: "",
   delivery_time: 30,
@@ -205,9 +212,9 @@ watch(
   { immediate: true },
 );
 watch(
-  () => props.readOnly,
-  (value) => {
-    if (value && activeTab.value === "transfer") {
+  () => [props.readOnly, props.canTransfer],
+  ([isReadOnly, canTransfer]) => {
+    if (isReadOnly && !canTransfer && activeTab.value === "transfer") {
       activeTab.value = "general";
     }
   },
@@ -224,14 +231,21 @@ const formatDateTime = (dateTimeStr) => {
   });
 };
 const saveChanges = () => {
-  if (props.readOnly) return;
+  if (props.readOnly && !props.canToggleState) return;
+  if (props.readOnly && props.canToggleState) {
+    emit("save", {
+      id: props.polygon.id,
+      is_active: editForm.value.is_active,
+    });
+    return;
+  }
   emit("save", {
     id: props.polygon.id,
     ...editForm.value,
   });
 };
 const handleTransfer = () => {
-  if (props.readOnly) return;
+  if (props.readOnly && !props.canTransfer) return;
   if (!transferBranchId.value || parseInt(transferBranchId.value) === props.polygon?.branch_id) return;
   emit("transfer", {
     polygonId: props.polygon.id,

@@ -41,7 +41,7 @@
               <div class="text-xs text-muted-foreground">{{ user.email }}</div>
               <div v-if="user.telegram_id" class="text-xs text-muted-foreground mt-1">Telegram ID: {{ user.telegram_id }}</div>
               <div class="mt-3 flex flex-wrap items-center gap-2">
-                <Badge :variant="roleVariant(user.role)" :class="roleClass(user.role)">{{ getRoleLabel(user.role) }}</Badge>
+                <Badge :variant="roleVariant(user)" :class="roleClass(user)">{{ getRoleLabel(user) }}</Badge>
                 <Badge
                   variant="secondary"
                   :class="user.is_active ? 'bg-emerald-100 text-emerald-700 border-transparent' : 'bg-muted text-muted-foreground border-transparent'"
@@ -58,7 +58,7 @@
                 </Badge>
               </div>
               <div class="mt-3">
-                <div v-if="user.role === 'manager'" class="space-y-2">
+                <div v-if="isManagerUser(user)" class="space-y-2">
                   <div v-if="user.branches?.length" class="flex flex-wrap gap-1">
                     <Badge v-for="branch in user.branches" :key="`mobile-branch-${user.id}-${branch.id}`" variant="secondary">{{
                       branch.name
@@ -72,14 +72,14 @@
                 <span v-else class="text-xs text-muted-foreground">Полный доступ по роли</span>
               </div>
               <div class="mt-3 flex justify-end gap-2">
-                <Button v-if="authStore.role === 'admin'" variant="ghost" size="icon" @click="openSecurityModal(user)">
+                <Button v-if="canManageAuthLimits" variant="ghost" size="icon" @click="openSecurityModal(user)">
                   <Shield :size="16" />
                 </Button>
-                <Button v-if="!(authStore.role === 'ceo' && user.role === 'admin')" variant="ghost" size="icon" @click="openEditPage(user)">
+                <Button v-if="canManageUser(user)" variant="ghost" size="icon" @click="openEditPage(user)">
                   <Pencil :size="16" />
                 </Button>
                 <Button
-                  v-if="user.id !== authStore.user?.id && !(authStore.role === 'ceo' && user.role === 'admin')"
+                  v-if="user.id !== authStore.user?.id && canManageUser(user)"
                   variant="ghost"
                   size="icon"
                   @click="deleteUser(user)"
@@ -122,7 +122,7 @@
                     <div v-if="user.telegram_id" class="text-xs text-muted-foreground">Telegram ID: {{ user.telegram_id }}</div>
                   </TableCell>
                   <TableCell>
-                    <Badge :variant="roleVariant(user.role)" :class="roleClass(user.role)">{{ getRoleLabel(user.role) }}</Badge>
+                    <Badge :variant="roleVariant(user)" :class="roleClass(user)">{{ getRoleLabel(user) }}</Badge>
                   </TableCell>
                   <TableCell>
                     <Badge
@@ -147,7 +147,7 @@
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <div v-if="user.role === 'manager'" class="space-y-2">
+                    <div v-if="isManagerUser(user)" class="space-y-2">
                       <div v-if="user.branches?.length" class="flex flex-wrap gap-1">
                         <Badge v-for="branch in user.branches" :key="branch.id" variant="secondary">{{ branch.name }}</Badge>
                       </div>
@@ -160,14 +160,14 @@
                   </TableCell>
                   <TableCell class="text-right">
                     <div class="flex justify-end gap-2">
-                      <Button v-if="authStore.role === 'admin'" variant="ghost" size="icon" @click="openSecurityModal(user)">
+                      <Button v-if="canManageAuthLimits" variant="ghost" size="icon" @click="openSecurityModal(user)">
                         <Shield :size="16" />
                       </Button>
-                      <Button v-if="!(authStore.role === 'ceo' && user.role === 'admin')" variant="ghost" size="icon" @click="openEditPage(user)">
+                      <Button v-if="canManageUser(user)" variant="ghost" size="icon" @click="openEditPage(user)">
                         <Pencil :size="16" />
                       </Button>
                       <Button
-                        v-if="user.id !== authStore.user?.id && !(authStore.role === 'ceo' && user.role === 'admin')"
+                        v-if="user.id !== authStore.user?.id && canManageUser(user)"
                         variant="ghost"
                         size="icon"
                         @click="deleteUser(user)"
@@ -231,9 +231,9 @@
                       <SelectValue placeholder="Выберите роль" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem v-if="authStore.role !== 'ceo'" value="admin">Администратор</SelectItem>
-                      <SelectItem value="manager">Менеджер</SelectItem>
-                      <SelectItem value="ceo">CEO</SelectItem>
+                      <SelectItem v-for="roleOption in assignableRoleOptions" :key="roleOption.code" :value="roleOption.code">
+                        {{ roleOption.name }}
+                      </SelectItem>
                     </SelectContent>
                   </Select>
                 </FieldContent>
@@ -263,7 +263,7 @@
             <Field>
               <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Eruda</FieldLabel>
               <FieldContent>
-                <Select v-model="form.eruda_enabled" :disabled="!hasTelegramId || authStore.role === 'ceo'">
+                <Select v-model="form.eruda_enabled" :disabled="!hasTelegramId || authStore.scopeRole === 'ceo'">
                   <SelectTrigger class="w-full">
                     <SelectValue placeholder="Выберите статус" />
                   </SelectTrigger>
@@ -272,11 +272,11 @@
                     <SelectItem :value="false">Выключено</SelectItem>
                   </SelectContent>
                 </Select>
-                <p v-if="authStore.role === 'ceo'" class="text-xs text-muted-foreground">CEO не может включать Eruda.</p>
+                <p v-if="authStore.scopeRole === 'ceo'" class="text-xs text-muted-foreground">CEO не может включать Eruda.</p>
                 <p v-else-if="!hasTelegramId" class="text-xs text-muted-foreground">Для включения нужен Telegram ID.</p>
               </FieldContent>
             </Field>
-            <Field v-if="form.role === 'manager'">
+            <Field v-if="isFormManagerRole">
               <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Города доступа</FieldLabel>
               <FieldContent>
                 <div class="grid gap-2 md:grid-cols-2">
@@ -287,7 +287,7 @@
                 </div>
               </FieldContent>
             </Field>
-            <Field v-if="form.role === 'manager'">
+            <Field v-if="isFormManagerRole">
               <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Филиалы доступа</FieldLabel>
               <FieldContent>
                 <div class="grid gap-2 md:grid-cols-2">
@@ -421,6 +421,7 @@ const securityLoading = ref(false);
 const securityResetLoading = ref(false);
 const securityLimits = ref([]);
 const securityLogs = ref([]);
+const accessRoles = ref([]);
 const filters = ref({
   role: "",
   is_active: "",
@@ -438,12 +439,12 @@ const filterFields = computed(() => [
     placeholder: "Все роли",
     type: "select",
     defaultValue: "",
-    options: [
-      { value: "", label: "Все роли" },
-      { value: "admin", label: "Администратор" },
-      { value: "manager", label: "Менеджер" },
-      { value: "ceo", label: "CEO" },
-    ],
+    options: [{ value: "", label: "Все роли" }].concat(
+      accessRoles.value.map((role) => ({
+        value: role.code,
+        label: role.name || role.code,
+      })),
+    ),
   },
   {
     key: "is_active",
@@ -486,21 +487,48 @@ const availableBranches = computed(() => {
     }));
   });
 });
-const getRoleLabel = (role) => {
-  const labels = {
-    admin: "Администратор",
-    manager: "Менеджер",
-    ceo: "CEO",
-  };
-  return labels[role] || role;
+const roleByCode = computed(() => {
+  return accessRoles.value.reduce((acc, role) => {
+    acc[role.code] = role;
+    return acc;
+  }, {});
+});
+const resolveScopeRole = (scopeRole, fallbackRole) => {
+  const role = String(scopeRole || fallbackRole || "")
+    .trim()
+    .toLowerCase();
+  return ["admin", "manager", "ceo"].includes(role) ? role : "manager";
 };
-const roleVariant = (role) => {
-  if (role === "ceo") return "secondary";
+const assignableRoleOptions = computed(() => {
+  return accessRoles.value.filter((role) => {
+    if (!role?.is_active) return false;
+    if (authStore.scopeRole === "ceo" && resolveScopeRole(role.scope_role, role.code) === "admin") {
+      return false;
+    }
+    return true;
+  });
+});
+const isFormManagerRole = computed(() => {
+  const selected = roleByCode.value[form.value.role];
+  return resolveScopeRole(selected?.scope_role, form.value.role) === "manager";
+});
+const isManagerUser = (user) => resolveScopeRole(user?.scope_role, user?.role) === "manager";
+const canManageUser = (user) => {
+  if (authStore.scopeRole !== "ceo") return true;
+  return resolveScopeRole(user?.scope_role, user?.role) !== "admin";
+};
+const getRoleLabel = (user) => user?.role_name || roleByCode.value[user?.role]?.name || user?.role;
+const roleVariant = (user) => {
+  if (resolveScopeRole(user?.scope_role, user?.role) === "ceo") return "secondary";
   return "default";
 };
-const roleClass = (role) => {
-  if (role === "admin") return "bg-amber-100 text-amber-700 border-transparent";
+const roleClass = (user) => {
+  if (resolveScopeRole(user?.scope_role, user?.role) === "admin") return "bg-amber-100 text-amber-700 border-transparent";
   return "";
+};
+const loadAccessRoles = async () => {
+  const response = await api.get("/api/admin/access/roles");
+  accessRoles.value = response.data?.data || [];
 };
 const loadUsers = async ({ preservePage = false } = {}) => {
   isLoading.value = true;
@@ -524,12 +552,13 @@ const onPageSizeChange = (value) => {
   page.value = 1;
 };
 const openModal = () => {
+  const firstRole = assignableRoleOptions.value[0]?.code || "manager";
   form.value = {
     first_name: "",
     last_name: "",
     email: "",
     password: "",
-    role: "manager",
+    role: firstRole,
     is_active: true,
     telegram_id: "",
     eruda_enabled: false,
@@ -542,7 +571,7 @@ const closeModal = () => {
   showModal.value = false;
 };
 const openSecurityModal = async (user) => {
-  if (authStore.role !== "admin") return;
+  if (!canManageAuthLimits.value) return;
   securityUser.value = user;
   showSecurityModal.value = true;
   await loadSecurityData();
@@ -554,7 +583,7 @@ const closeSecurityModal = () => {
   securityLogs.value = [];
 };
 const loadSecurityData = async () => {
-  if (!securityUser.value?.id || authStore.role !== "admin") return;
+  if (!securityUser.value?.id || !canManageAuthLimits.value) return;
   securityLoading.value = true;
   try {
     const response = await api.get(`/api/admin/users/${securityUser.value.id}/security`);
@@ -568,7 +597,7 @@ const loadSecurityData = async () => {
   }
 };
 const resetSecurityLimits = async (ip = "") => {
-  if (!securityUser.value?.id || authStore.role !== "admin") return;
+  if (!securityUser.value?.id || !canManageAuthLimits.value) return;
   securityResetLoading.value = true;
   try {
     await api.post(`/api/admin/users/${securityUser.value.id}/security/reset`, {
@@ -606,6 +635,9 @@ const submitUser = async () => {
   }
 };
 const hasTelegramId = computed(() => Boolean(String(form.value.telegram_id || "").trim()));
+const canManageAuthLimits = computed(
+  () => authStore.hasPermission("system.auth_limits.manage") || authStore.hasPermission("system.admin_users.manage"),
+);
 const openAccessRolesPage = () => {
   router.push({ name: "admin-users-access-roles" });
 };
@@ -627,6 +659,7 @@ const deleteUser = async (user) => {
 };
 onMounted(async () => {
   try {
+    await loadAccessRoles();
     await referenceStore.loadCities();
     if (shouldRestore.value) {
       const context = restoreContext();
@@ -648,7 +681,7 @@ onMounted(async () => {
 watch(
   () => [...(form.value.city_ids || [])],
   async (cityIds) => {
-    if (form.value.role !== "manager") return;
+    if (!isFormManagerRole.value) return;
     await Promise.all(cityIds.map((cityId) => referenceStore.loadBranches(cityId)));
     if (form.value.branch_ids?.length) {
       form.value.branch_ids = form.value.branch_ids.filter((branchId) => availableBranches.value.some((branch) => branch.id === branchId));
@@ -657,8 +690,8 @@ watch(
 );
 watch(
   () => form.value.role,
-  (role) => {
-    if (role !== "manager") {
+  () => {
+    if (!isFormManagerRole.value) {
       form.value.city_ids = [];
       form.value.branch_ids = [];
     }

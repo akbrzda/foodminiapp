@@ -4,15 +4,15 @@
       <CardContent>
         <PageHeader title="Уровни лояльности" description="Управление уровнями и маппингом на PremiumBonus">
           <template #actions>
-            <Button variant="secondary" :disabled="loading || saving" @click="loadLevels">
+            <Button v-if="canManageLoyaltyLevels" variant="secondary" :disabled="loading || saving" @click="loadLevels">
               <RefreshCcw :size="16" />
               Обновить
             </Button>
-            <Button variant="secondary" :disabled="loading || saving" @click="addLevel">
+            <Button v-if="canManageLoyaltyLevels" variant="secondary" :disabled="loading || saving" @click="addLevel">
               <Plus :size="16" />
               Добавить уровень
             </Button>
-            <Button :disabled="loading || saving" @click="saveLevels">
+            <Button v-if="canManageLoyaltyLevels" :disabled="loading || saving" @click="saveLevels">
               <Save v-if="!saving" :size="16" />
               <RefreshCcw v-else class="h-4 w-4 animate-spin" />
               {{ saving ? "Сохранение..." : "Сохранить" }}
@@ -56,17 +56,38 @@
           <div class="flex flex-wrap items-center justify-between gap-2">
             <CardTitle class="text-base">Уровень #{{ index + 1 }}</CardTitle>
             <div class="flex gap-1">
-              <Button type="button" size="sm" variant="outline" :disabled="index === 0" @click="moveLevel(index, -1)">
+              <Button
+                v-if="canManageLoyaltyLevels"
+                type="button"
+                size="sm"
+                variant="outline"
+                :disabled="index === 0"
+                @click="moveLevel(index, -1)"
+              >
                 <ChevronUp :size="14" />
               </Button>
-              <Button type="button" size="sm" variant="outline" :disabled="index === levels.length - 1" @click="moveLevel(index, 1)">
+              <Button
+                v-if="canManageLoyaltyLevels"
+                type="button"
+                size="sm"
+                variant="outline"
+                :disabled="index === levels.length - 1"
+                @click="moveLevel(index, 1)"
+              >
                 <ChevronDown :size="14" />
               </Button>
-              <Button type="button" size="sm" variant="outline" :disabled="!pbGroups.length" @click="applyNextPbGroup(level)">
+              <Button
+                v-if="canManageLoyaltyLevels"
+                type="button"
+                size="sm"
+                variant="outline"
+                :disabled="!pbGroups.length"
+                @click="applyNextPbGroup(level)"
+              >
                 <Link :size="14" />
                 Подставить из PB
               </Button>
-              <Button type="button" size="sm" variant="outline" @click="removeLevel(index)">
+              <Button v-if="canManageLoyaltyLevels" type="button" size="sm" variant="outline" @click="removeLevel(index)">
                 <Trash2 :size="14" />
                 {{ level.id ? "Отключить" : "Удалить" }}
               </Button>
@@ -157,8 +178,11 @@ import Skeleton from "@/shared/components/ui/skeleton/Skeleton.vue";
 import { Field, FieldContent, FieldLabel } from "@/shared/components/ui/field";
 import Input from "@/shared/components/ui/input/Input.vue";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/components/ui/select";
+import { useAuthStore } from "@/shared/stores/auth.js";
 
 const { showErrorNotification, showSuccessNotification } = useNotifications();
+const authStore = useAuthStore();
+const canManageLoyaltyLevels = computed(() => authStore.hasPermission("system.loyalty_levels.manage"));
 
 const loading = ref(false);
 const saving = ref(false);
@@ -210,6 +234,7 @@ const loadLevels = async () => {
 };
 
 const addLevel = () => {
+  if (!canManageLoyaltyLevels.value) return;
   levels.value.push(
     normalizeLevel(
       {
@@ -229,6 +254,7 @@ const addLevel = () => {
 };
 
 const removeLevel = (index) => {
+  if (!canManageLoyaltyLevels.value) return;
   const target = levels.value[index];
   if (!target) return;
 
@@ -244,6 +270,7 @@ const removeLevel = (index) => {
 };
 
 const moveLevel = (index, direction) => {
+  if (!canManageLoyaltyLevels.value) return;
   const nextIndex = index + direction;
   if (nextIndex < 0 || nextIndex >= levels.value.length) return;
 
@@ -262,6 +289,7 @@ const findUnusedPbGroup = () => {
 };
 
 const applyNextPbGroup = (level) => {
+  if (!canManageLoyaltyLevels.value) return;
   const nextGroup = findUnusedPbGroup();
   if (!nextGroup) return;
   level.pb_group_id = String(nextGroup.id || "").trim();
@@ -269,6 +297,7 @@ const applyNextPbGroup = (level) => {
 };
 
 const saveLevels = async () => {
+  if (!canManageLoyaltyLevels.value) return;
   const payload = levels.value.map((level, index) => ({
     id: level.id,
     name: String(level.name || "").trim(),

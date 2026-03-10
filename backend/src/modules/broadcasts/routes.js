@@ -1,7 +1,7 @@
 import express from "express";
 import crypto from "crypto";
 import db from "../../config/database.js";
-import { authenticateToken, requireRole } from "../../middleware/auth.js";
+import { authenticateToken, requirePermission } from "../../middleware/auth.js";
 import { logger } from "../../utils/logger.js";
 import { answerCallbackQueryViaBot, sendBroadcastMessageViaBot } from "../../utils/botService.js";
 import {
@@ -33,7 +33,7 @@ import { listActiveTriggers } from "./services/triggerService.js";
 
 const router = express.Router();
 
-const ensureAdmin = [authenticateToken, requireRole("admin", "manager", "ceo")];
+const ensureAdmin = [authenticateToken, requirePermission("marketing.broadcasts.manage")];
 const ALLOWED_CAMPAIGN_TYPES = new Set(["manual", "trigger", "subscription_campaign"]);
 const ALLOWED_CAMPAIGN_STATUSES = new Set(["draft", "scheduled", "sending", "completed", "cancelled", "failed"]);
 const ALLOWED_TRIGGER_TYPES = new Set(["inactive_users", "birthday", "new_registration"]);
