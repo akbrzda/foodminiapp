@@ -1,5 +1,6 @@
 import axios from "axios";
 import { useAuthStore } from "@/shared/stores/auth.js";
+
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || "http://localhost:3000",
   withCredentials: true,
@@ -7,6 +8,23 @@ const api = axios.create({
     "Content-Type": "application/json",
   },
 });
+
+const getCookieValue = (name) => {
+  if (typeof document === "undefined") return "";
+  const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = document.cookie.match(new RegExp(`(?:^|; )${escapedName}=([^;]*)`));
+  return match ? decodeURIComponent(match[1]) : "";
+};
+
+const withCsrfHeader = (headers = {}) => {
+  const csrfToken = getCookieValue("csrf_token");
+  if (!csrfToken) return headers;
+  return {
+    ...headers,
+    "X-CSRF-Token": csrfToken,
+  };
+};
+
 let refreshPromise = null;
 const AUTH_ERRORS = new Set([
   "Authentication required",
@@ -41,10 +59,10 @@ const refreshToken = async () => {
   if (refreshPromise) return refreshPromise;
   refreshPromise = axios
     .post(`${(import.meta.env.VITE_API_URL || "http://localhost:3000").replace(/\/$/, "")}/api/auth/refresh`, null, {
-      headers: {
+      headers: withCsrfHeader({
         "Content-Type": "application/json; charset=utf-8",
         Accept: "application/json; charset=utf-8",
-      },
+      }),
       withCredentials: true,
       timeout: 10000,
     })
@@ -55,6 +73,10 @@ const refreshToken = async () => {
   return refreshPromise;
 };
 api.interceptors.request.use((config) => {
+  const method = String(config.method || "get").toUpperCase();
+  if (!["GET", "HEAD", "OPTIONS"].includes(method)) {
+    config.headers = withCsrfHeader(config.headers || {});
+  }
   return config;
 });
 api.interceptors.response.use(

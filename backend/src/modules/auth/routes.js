@@ -15,6 +15,8 @@ import {
   extractBearerToken,
   getAuthCookieOptions,
   getClearAuthCookieOptions,
+  getCsrfCookieOptions,
+  getClearCsrfCookieOptions,
   getJwtSecret,
 } from "../../config/auth.js";
 import { parseTelegramUser, validateTelegramData } from "../../utils/telegram.js";
@@ -53,6 +55,7 @@ const TELEGRAM_AUTH_MAX_AGE_SECONDS = 10 * 60;
 const ADMIN_LOGIN_BLOCK_LIMIT = 5;
 const ADMIN_LOGIN_BLOCK_WINDOW_SECONDS = 15 * 60;
 const ADMIN_AUTH_LOG_ENTITY_TYPE = "auth";
+const CSRF_TOKEN_COOKIE_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
 
 const getRequiredBotToken = () => {
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
@@ -65,6 +68,12 @@ function setAuthCookie(res, token, maxAge = 7 * 24 * 60 * 60 * 1000) {
 }
 function setRefreshCookie(res, token, maxAge = 30 * 24 * 60 * 60 * 1000) {
   res.cookie("refresh_token", token, getAuthCookieOptions(maxAge));
+}
+function createCsrfToken() {
+  return crypto.randomBytes(32).toString("hex");
+}
+function setCsrfCookie(res, token, maxAge = CSRF_TOKEN_COOKIE_MAX_AGE) {
+  res.cookie("csrf_token", token, getCsrfCookieOptions(maxAge));
 }
 function signAccessToken(payload, audience, expiresIn) {
   return jwt.sign(payload, getJwtSecret(), {
@@ -299,6 +308,7 @@ router.post("/telegram", telegramAuthLimiter, async (req, res, next) => {
     // Устанавливаем cookie с токеном
     setAuthCookie(res, accessToken, CLIENT_ACCESS_TOKEN_COOKIE_MAX_AGE);
     setRefreshCookie(res, refreshToken, CLIENT_REFRESH_TOKEN_COOKIE_MAX_AGE);
+    setCsrfCookie(res, createCsrfToken(), CLIENT_REFRESH_TOKEN_COOKIE_MAX_AGE);
 
     // Логируем успешный вход
     await logger.auth.login(userId, "client", req.ip);
@@ -416,6 +426,7 @@ router.post("/admin/login", authLimiter, strictAuthLimiter, async (req, res, nex
     // Устанавливаем cookie с токеном
     setAuthCookie(res, accessToken, ADMIN_ACCESS_TOKEN_COOKIE_MAX_AGE);
     setRefreshCookie(res, refreshToken, ADMIN_REFRESH_TOKEN_COOKIE_MAX_AGE);
+    setCsrfCookie(res, createCsrfToken(), ADMIN_REFRESH_TOKEN_COOKIE_MAX_AGE);
 
     // Логируем успешный вход
     await logger.auth.login(user.id, user.role, req.ip);
@@ -552,6 +563,7 @@ router.post("/refresh", refreshLimiter, async (req, res) => {
     await addToBlacklist(refreshToken, getTokenTtlSeconds(decoded));
     setAuthCookie(res, nextAccessToken, accessMaxAge);
     setRefreshCookie(res, nextRefreshToken, refreshMaxAge);
+    setCsrfCookie(res, createCsrfToken(), refreshMaxAge);
     res.json({ ok: true });
   } catch (error) {
     return res.status(401).json({ error: "Invalid or expired refresh token" });
@@ -626,6 +638,7 @@ router.post("/logout", async (req, res, next) => {
     const clearOptions = getClearAuthCookieOptions();
     res.clearCookie("access_token", clearOptions);
     res.clearCookie("refresh_token", clearOptions);
+    res.clearCookie("csrf_token", getClearCsrfCookieOptions());
 
     if (logoutAdminUserId) {
       await logAdminAuthAction({

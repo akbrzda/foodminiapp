@@ -7,6 +7,13 @@ const LEGACY_STORAGE_USER = "admin_user";
 const AUTH_SYNC_KEY = "admin_auth_sync_event";
 const POST_LOGIN_REDIRECT_KEY = "admin_post_login_redirect";
 let crossTabSyncAttached = false;
+
+const getCookieValue = (name) => {
+  if (typeof document === "undefined") return "";
+  const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = document.cookie.match(new RegExp(`(?:^|; )${escapedName}=([^;]*)`));
+  return match ? decodeURIComponent(match[1]) : "";
+};
 const LOGIN_ERROR_MAP = {
   "Invalid credentials": "Неверный email или пароль.",
   "Account is disabled": "Аккаунт отключен. Обратитесь к администратору.",
@@ -167,12 +174,17 @@ export const useAuthStore = defineStore("auth", {
       this.rememberPostLoginRedirect();
       const apiBase = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
       if (notifyServer) {
+        const csrfToken = getCookieValue("csrf_token");
+        const headers = {
+          "Content-Type": "application/json; charset=utf-8",
+          Accept: "application/json; charset=utf-8",
+        };
+        if (csrfToken) {
+          headers["X-CSRF-Token"] = csrfToken;
+        }
         fetch(`${apiBase}/api/auth/logout`, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json; charset=utf-8",
-            Accept: "application/json; charset=utf-8",
-          },
+          headers,
           credentials: "include",
           keepalive: true,
         }).catch(() => {

@@ -7,14 +7,43 @@ on:
       - "admin-panel/**"
       - ".github/workflows/deploy-admin.yml"
 jobs:
-  deploy:
-    name: Deploy Admin Panel to Server
+  quality:
+    name: Admin Quality Gates
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: admin-panel/package-lock.json
+      - name: Install dependencies
+        working-directory: admin-panel
+        run: npm ci
+      - name: Run lint
+        working-directory: admin-panel
+        run: npm run lint
+      - name: Run typecheck
+        working-directory: admin-panel
+        run: npm run typecheck
+      - name: Run tests
+        working-directory: admin-panel
+        run: npm run test
+      - name: Security audit
+        working-directory: admin-panel
+        run: npm audit --omit=dev --audit-level=high
+
+  deploy:
+    name: Deploy Admin Panel to Server
+    needs: quality
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: "20"
           cache: "npm"
@@ -55,10 +84,10 @@ jobs:
       - name: Deploy to server
         run: |
           rsync -avz --delete \
-            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no" \
+            -e "ssh -i ~/.ssh/deploy_key" \
             admin-panel/dist/ ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/var/www/panda.akbrzda.ru/
       - name: Verify deployment
-        uses: appleboy/ssh-action@v1.0.0
+        uses: appleboy/ssh-action@2ead5e36573f08b82fbfce1504f1a4b05a647c6f
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}

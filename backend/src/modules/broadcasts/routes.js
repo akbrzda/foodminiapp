@@ -1,4 +1,5 @@
 import express from "express";
+import crypto from "crypto";
 import db from "../../config/database.js";
 import { authenticateToken, requireRole } from "../../middleware/auth.js";
 import { logger } from "../../utils/logger.js";
@@ -36,6 +37,17 @@ const ensureAdmin = [authenticateToken, requireRole("admin", "manager", "ceo")];
 const ALLOWED_CAMPAIGN_TYPES = new Set(["manual", "trigger", "subscription_campaign"]);
 const ALLOWED_CAMPAIGN_STATUSES = new Set(["draft", "scheduled", "sending", "completed", "cancelled", "failed"]);
 const ALLOWED_TRIGGER_TYPES = new Set(["inactive_users", "birthday", "new_registration"]);
+const parseBotServiceToken = () => String(process.env.BOT_SERVICE_TOKEN || "").trim();
+
+const isValidInternalBotToken = (receivedToken) => {
+  const expected = parseBotServiceToken();
+  const received = String(receivedToken || "").trim();
+  if (!expected || !received) return false;
+  const expectedBuffer = Buffer.from(expected, "utf8");
+  const receivedBuffer = Buffer.from(received, "utf8");
+  if (expectedBuffer.length !== receivedBuffer.length) return false;
+  return crypto.timingSafeEqual(expectedBuffer, receivedBuffer);
+};
 
 const parseJsonField = (value, fallback = null) => {
   if (value === null || value === undefined || value === "") return fallback;
@@ -91,6 +103,15 @@ const resolveUserIdByTelegram = async (telegramId) => {
 
 router.post("/telegram/callback", async (req, res) => {
   try {
+    if (!parseBotServiceToken()) {
+      logger.system.warn("BOT_SERVICE_TOKEN не задан для callback endpoint рассылок");
+      return res.status(503).json({ ok: false, error: "Callback endpoint временно недоступен" });
+    }
+
+    if (!isValidInternalBotToken(req.headers["x-bot-service-token"])) {
+      return res.status(401).json({ ok: false, error: "Unauthorized" });
+    }
+
     const callback = req.body?.callback_query;
     if (!callback?.data || !callback?.from?.id) {
       return res.json({ ok: true });
@@ -105,9 +126,24 @@ router.post("/telegram/callback", async (req, res) => {
     if (!campaignId || !messageId) {
       return res.json({ ok: true });
     }
-    const [messages] = await db.query("SELECT user_id FROM broadcast_messages WHERE id = ?", [messageId]);
+    const [messages] = await db.query(
+      `SELECT bm.user_id, bm.campaign_id, u.telegram_id
+       FROM broadcast_messages bm
+       LEFT JOIN users u ON u.id = bm.user_id
+       WHERE bm.id = ?
+       LIMIT 1`,
+      [messageId],
+    );
     const userId = messages[0]?.user_id;
+    const expectedCampaignId = Number(messages[0]?.campaign_id || 0);
+    const expectedTelegramId = Number(messages[0]?.telegram_id || 0);
     if (!userId) {
+      return res.json({ ok: true });
+    }
+    if (expectedCampaignId !== campaignId) {
+      return res.json({ ok: true });
+    }
+    if (!expectedTelegramId || Number(callback.from.id) !== expectedTelegramId) {
       return res.json({ ok: true });
     }
     const buttonUrl = null;

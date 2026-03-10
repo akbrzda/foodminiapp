@@ -1,5 +1,6 @@
 import axios from "axios";
 import { useAuthStore } from "@/modules/auth/stores/auth.js";
+
 const apiBase = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
 const api = axios.create({
   baseURL: `${apiBase}/api`,
@@ -10,6 +11,23 @@ const api = axios.create({
     Accept: "application/json; charset=utf-8",
   },
 });
+
+const getCookieValue = (name) => {
+  if (typeof document === "undefined") return "";
+  const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = document.cookie.match(new RegExp(`(?:^|; )${escapedName}=([^;]*)`));
+  return match ? decodeURIComponent(match[1]) : "";
+};
+
+const withCsrfHeader = (headers = {}) => {
+  const csrfToken = getCookieValue("csrf_token");
+  if (!csrfToken) return headers;
+  return {
+    ...headers,
+    "X-CSRF-Token": csrfToken,
+  };
+};
+
 const normalizeErrorMessage = (message) => {
   if (!message) return "Произошла ошибка";
   const hasLatin = /[A-Za-z]/.test(message);
@@ -20,10 +38,10 @@ const refreshToken = async () => {
   if (refreshPromise) return refreshPromise;
   refreshPromise = axios
     .post(`${apiBase}/api/auth/refresh`, null, {
-      headers: {
+      headers: withCsrfHeader({
         "Content-Type": "application/json; charset=utf-8",
         Accept: "application/json; charset=utf-8",
-      },
+      }),
       withCredentials: true,
       timeout: 10000,
     })
@@ -35,6 +53,10 @@ const refreshToken = async () => {
 };
 api.interceptors.request.use(
   (config) => {
+    const method = String(config.method || "get").toUpperCase();
+    if (!["GET", "HEAD", "OPTIONS"].includes(method)) {
+      config.headers = withCsrfHeader(config.headers || {});
+    }
     return config;
   },
   (error) => {

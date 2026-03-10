@@ -61,10 +61,22 @@ export const getUserOrderById = async (req, res, next) => {
 
     // Получение товаров заказа
     const [items] = await db.query(`SELECT * FROM order_items WHERE order_id = ?`, [orderId]);
+    const itemIds = items.map((item) => item.id).filter(Boolean);
+    let modifiersByItemId = new Map();
+
+    if (itemIds.length > 0) {
+      const [modifierRows] = await db.query(`SELECT * FROM order_item_modifiers WHERE order_item_id IN (?)`, [itemIds]);
+      modifiersByItemId = modifierRows.reduce((acc, modifier) => {
+        if (!acc.has(modifier.order_item_id)) {
+          acc.set(modifier.order_item_id, []);
+        }
+        acc.get(modifier.order_item_id).push(modifier);
+        return acc;
+      }, new Map());
+    }
 
     for (const item of items) {
-      const [modifiers] = await db.query(`SELECT * FROM order_item_modifiers WHERE order_item_id = ?`, [item.id]);
-      item.modifiers = modifiers;
+      item.modifiers = modifiersByItemId.get(item.id) || [];
     }
 
     order.items = items;
@@ -125,13 +137,26 @@ export const repeatOrder = async (req, res, next) => {
     }
 
     const [items] = await db.query(`SELECT * FROM order_items WHERE order_id = ?`, [orderId]);
+    const itemIds = items.map((item) => item.id).filter(Boolean);
+    let modifierIdsByItemId = new Map();
+
+    if (itemIds.length > 0) {
+      const [modifierRows] = await db.query(`SELECT order_item_id, modifier_id FROM order_item_modifiers WHERE order_item_id IN (?)`, [itemIds]);
+      modifierIdsByItemId = modifierRows.reduce((acc, modifier) => {
+        if (!acc.has(modifier.order_item_id)) {
+          acc.set(modifier.order_item_id, []);
+        }
+        if (modifier.modifier_id !== null) {
+          acc.get(modifier.order_item_id).push(modifier.modifier_id);
+        }
+        return acc;
+      }, new Map());
+    }
 
     const orderItems = [];
 
     for (const item of items) {
-      const [modifiers] = await db.query(`SELECT modifier_id FROM order_item_modifiers WHERE order_item_id = ?`, [item.id]);
-
-      const modifierIds = modifiers.map((m) => m.modifier_id).filter((id) => id !== null);
+      const modifierIds = modifierIdsByItemId.get(item.id) || [];
 
       orderItems.push({
         item_id: item.item_id,

@@ -3,6 +3,7 @@ import db from "../../config/database.js";
 import { authenticateToken, requireRole } from "../../middleware/auth.js";
 import fs from "fs";
 import path from "path";
+import readline from "readline";
 import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -65,37 +66,64 @@ router.get("/admin", authenticateToken, requireRole("admin", "ceo"), async (req,
 });
 router.get("/system", authenticateToken, requireRole("admin", "ceo"), async (req, res, next) => {
   try {
-    const { level, category, search, limit = 100 } = req.query;
+    const { level, category, search } = req.query;
+    const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(500, Math.max(1, Number.parseInt(req.query.limit, 10) || 100));
+    const keepTop = page * limit;
     const logFilePath = path.join(__dirname, "../../logs/combined.log");
     if (!fs.existsSync(logFilePath)) {
       return res.json({ logs: [], total: 0 });
     }
-    const fileContent = fs.readFileSync(logFilePath, "utf-8");
-    const lines = fileContent.split("\n").filter((line) => line.trim());
-    let logs = lines
-      .map((line) => {
-        try {
-          return JSON.parse(line);
-        } catch {
-          return null;
+    const searchQuery = String(search || "").trim().toLowerCase();
+    const toTimestamp = (log) => {
+      const value = new Date(log?.timestamp || 0).getTime();
+      return Number.isFinite(value) ? value : 0;
+    };
+    const filteredLogs = [];
+    let totalMatched = 0;
+
+    const input = fs.createReadStream(logFilePath, { encoding: "utf8" });
+    const lineReader = readline.createInterface({
+      input,
+      crlfDelay: Infinity,
+    });
+
+    for await (const line of lineReader) {
+      if (!line || !line.trim()) continue;
+      let logEntry = null;
+      try {
+        logEntry = JSON.parse(line);
+      } catch {
+        continue;
+      }
+
+      if (level && logEntry.level !== level) continue;
+      if (category && logEntry.category !== category) continue;
+      if (searchQuery && !String(logEntry.message || "").toLowerCase().includes(searchQuery)) continue;
+
+      totalMatched += 1;
+      filteredLogs.push(logEntry);
+
+      if (filteredLogs.length > keepTop) {
+        let minIndex = 0;
+        for (let index = 1; index < filteredLogs.length; index += 1) {
+          if (toTimestamp(filteredLogs[index]) < toTimestamp(filteredLogs[minIndex])) {
+            minIndex = index;
+          }
         }
-      })
-      .filter((log) => log !== null);
-    if (level) {
-      logs = logs.filter((log) => log.level === level);
+        filteredLogs.splice(minIndex, 1);
+      }
     }
-    if (category) {
-      logs = logs.filter((log) => log.category === category);
-    }
-    if (search) {
-      logs = logs.filter((log) => log.message && log.message.toLowerCase().includes(search.toLowerCase()));
-    }
-    logs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-    const limitedLogs = logs.slice(0, parseInt(limit));
+
+    filteredLogs.sort((a, b) => toTimestamp(b) - toTimestamp(a));
+    const start = (page - 1) * limit;
+    const paginatedLogs = filteredLogs.slice(start, start + limit);
+
     res.json({
-      logs: limitedLogs,
-      total: logs.length,
-      limit: parseInt(limit),
+      logs: paginatedLogs,
+      total: totalMatched,
+      page,
+      limit,
     });
   } catch (error) {
     next(error);

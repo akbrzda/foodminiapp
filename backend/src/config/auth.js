@@ -61,6 +61,29 @@ export const getAuthCookieOptions = (maxAge) => getResolvedCookieOptions(maxAge)
 
 export const getClearAuthCookieOptions = () => getResolvedClearCookieOptions();
 
+export const getCsrfCookieOptions = (maxAge) => {
+  const sameSite = resolveCookieSameSite();
+  const secure = resolveCookieSecure(sameSite);
+  return {
+    httpOnly: false,
+    secure,
+    sameSite,
+    maxAge,
+    path: "/",
+  };
+};
+
+export const getClearCsrfCookieOptions = () => {
+  const sameSite = resolveCookieSameSite();
+  const secure = resolveCookieSecure(sameSite);
+  return {
+    httpOnly: false,
+    secure,
+    sameSite,
+    path: "/",
+  };
+};
+
 export const getJwtSecret = () => {
   const secret = String(process.env.JWT_SECRET || "").trim();
   if (!secret) {

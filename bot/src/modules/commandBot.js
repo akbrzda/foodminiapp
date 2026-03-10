@@ -17,6 +17,7 @@ const normalizeMode = (value) => {
 export const createTelegramCommandBot = () => {
   const enabled = (process.env.TELEGRAM_COMMAND_BOT_ENABLED || "true").toLowerCase() !== "false";
   const backendUrl = String(process.env.BACKEND_URL || "http://localhost:3000").replace(/\/$/, "");
+  const botServiceToken = String(process.env.BOT_SERVICE_TOKEN || "").trim();
   const isProduction = String(process.env.NODE_ENV || "").trim().toLowerCase() === "production";
   const mode = normalizeMode(process.env.TELEGRAM_BOT_MODE || (isProduction ? "webhook" : "polling"));
   const webhookUrl = String(process.env.TELEGRAM_WEBHOOK_URL || "").trim();
@@ -49,9 +50,14 @@ export const createTelegramCommandBot = () => {
 
   const forwardBroadcastCallback = async (callbackQuery) => {
     try {
-      await axios.post(`${backendUrl}/api/broadcasts/telegram/callback`, {
-        callback_query: callbackQuery,
-      });
+      const headers = botServiceToken ? { "x-bot-service-token": botServiceToken } : {};
+      await axios.post(
+        `${backendUrl}/api/broadcasts/telegram/callback`,
+        {
+          callback_query: callbackQuery,
+        },
+        { headers },
+      );
     } catch (error) {
       logger.error("Не удалось проксировать callback в backend", {
         error: error?.response?.data || error?.message || String(error),

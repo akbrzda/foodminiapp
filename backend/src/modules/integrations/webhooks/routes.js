@@ -1,4 +1,5 @@
 import express from "express";
+import crypto from "crypto";
 import db from "../../../config/database.js";
 import { IIKO_STATUS_MAP_TO_LOCAL, INTEGRATION_MODULE, INTEGRATION_TYPE, SYNC_STATUS } from "../constants.js";
 import { getIntegrationSettings } from "../services/integrationConfigService.js";
@@ -16,36 +17,105 @@ import {
 
 const router = express.Router();
 
+function normalizeHeaderValues(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item || "").trim()).filter(Boolean);
+  }
+  return [String(value || "").trim()].filter(Boolean);
+}
+
+function stripSignaturePrefixes(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const withoutBearer = raw.toLowerCase().startsWith("bearer ") ? raw.slice(7).trim() : raw;
+  const normalized = withoutBearer.replace(/^hmac-sha256=/i, "").replace(/^sha256=/i, "").trim();
+  return normalized;
+}
+
+function timingSafeEqualString(leftValue, rightValue) {
+  const left = Buffer.from(String(leftValue || ""), "utf8");
+  const right = Buffer.from(String(rightValue || ""), "utf8");
+  if (left.length === 0 || right.length === 0 || left.length !== right.length) {
+    return false;
+  }
+  return crypto.timingSafeEqual(left, right);
+}
+
+function getWebhookRawBody(req) {
+  if (typeof req.rawBody === "string") {
+    return req.rawBody;
+  }
+  if (req.body === undefined || req.body === null) {
+    return "";
+  }
+  if (typeof req.body === "string") {
+    return req.body;
+  }
+  try {
+    return JSON.stringify(req.body);
+  } catch (error) {
+    return "";
+  }
+}
+
+function getSanitizedWebhookHeaders(req) {
+  return {
+    authorization_present: Boolean(req.headers?.authorization),
+    x_iiko_signature_present: Boolean(req.headers?.["x-iiko-signature"]),
+    x_webhook_signature_present: Boolean(req.headers?.["x-webhook-signature"]),
+    x_api_key_present: Boolean(req.headers?.["x-api-key"]),
+    content_type: req.headers?.["content-type"] || null,
+    user_agent: req.headers?.["user-agent"] || null,
+  };
+}
+
 function isValidWebhookSignature(req, secret) {
   const normalizedSecret = String(secret || "").trim();
-  if (!normalizedSecret) return true;
+  if (!normalizedSecret) return false;
 
-  const normalizeHeaderValues = (value) => {
-    if (!value) return [];
-    if (Array.isArray(value)) {
-      return value.map((item) => String(item || "").trim()).filter(Boolean);
-    }
-    return [String(value || "").trim()].filter(Boolean);
-  };
+  const rawBody = getWebhookRawBody(req);
+  const expectedHex = crypto.createHmac("sha256", normalizedSecret).update(rawBody).digest("hex");
+  const expectedBase64 = crypto.createHmac("sha256", normalizedSecret).update(rawBody).digest("base64");
+  const expectedCandidates = [expectedHex, expectedBase64];
 
   const candidates = [
     ...normalizeHeaderValues(req.headers.authorization),
     ...normalizeHeaderValues(req.headers["x-iiko-signature"]),
     ...normalizeHeaderValues(req.headers["x-webhook-signature"]),
     ...normalizeHeaderValues(req.headers["x-api-key"]),
-  ];
+  ]
+    .map(stripSignaturePrefixes)
+    .filter(Boolean);
 
-  return candidates.some((candidate) => {
-    const normalizedCandidate = String(candidate || "").trim();
-    if (!normalizedCandidate) return false;
-    if (normalizedCandidate === normalizedSecret) return true;
+  return candidates.some((candidate) => expectedCandidates.some((expected) => timingSafeEqualString(candidate, expected)));
+}
 
-    const bearerPrefix = "Bearer ";
-    if (normalizedCandidate.startsWith(bearerPrefix)) {
-      return normalizedCandidate.slice(bearerPrefix.length).trim() === normalizedSecret;
-    }
+async function rejectInvalidSignature({ req, module, path }) {
+  await logIntegrationEvent({
+    integrationType: INTEGRATION_TYPE.IIKO,
+    module,
+    action: "webhook_signature_rejected",
+    status: "failed",
+    errorMessage: "Неверная подпись webhook",
+    requestData: {
+      path,
+      headers: getSanitizedWebhookHeaders(req),
+    },
+  });
+}
 
-    return false;
+async function rejectMissingSecret({ req, module, path }) {
+  await logIntegrationEvent({
+    integrationType: INTEGRATION_TYPE.IIKO,
+    module,
+    action: "webhook_secret_missing",
+    status: "failed",
+    errorMessage: "iiko_webhook_secret не задан при включенной интеграции",
+    requestData: {
+      path,
+      headers: getSanitizedWebhookHeaders(req),
+    },
   });
 }
 
@@ -313,23 +383,13 @@ router.post("/event", async (req, res, next) => {
       return res.status(400).json({ error: "Интеграция iiko выключена" });
     }
 
+    if (!String(settings.iikoWebhookSecret || "").trim()) {
+      await rejectMissingSecret({ req, module: INTEGRATION_MODULE.ORDERS, path: "/event" });
+      return res.status(503).json({ error: "Webhook секрет iiko не настроен" });
+    }
+
     if (!isValidWebhookSignature(req, settings.iikoWebhookSecret)) {
-      await logIntegrationEvent({
-        integrationType: INTEGRATION_TYPE.IIKO,
-        module: INTEGRATION_MODULE.ORDERS,
-        action: "webhook_signature_rejected",
-        status: "failed",
-        errorMessage: "Неверная подпись webhook",
-        requestData: {
-          path: "/event",
-          headers: {
-            authorization: req.headers.authorization || null,
-            x_iiko_signature: req.headers["x-iiko-signature"] || null,
-            x_webhook_signature: req.headers["x-webhook-signature"] || null,
-            x_api_key: req.headers["x-api-key"] || null,
-          },
-        },
-      });
+      await rejectInvalidSignature({ req, module: INTEGRATION_MODULE.ORDERS, path: "/event" });
       return res.status(401).json({ error: "Неверная подпись webhook" });
     }
 
@@ -379,23 +439,13 @@ router.post("/order-status", async (req, res, next) => {
       return res.status(400).json({ error: "Интеграция iiko выключена" });
     }
 
+    if (!String(settings.iikoWebhookSecret || "").trim()) {
+      await rejectMissingSecret({ req, module: INTEGRATION_MODULE.ORDERS, path: "/order-status" });
+      return res.status(503).json({ error: "Webhook секрет iiko не настроен" });
+    }
+
     if (!isValidWebhookSignature(req, settings.iikoWebhookSecret)) {
-      await logIntegrationEvent({
-        integrationType: INTEGRATION_TYPE.IIKO,
-        module: INTEGRATION_MODULE.ORDERS,
-        action: "webhook_signature_rejected",
-        status: "failed",
-        errorMessage: "Неверная подпись webhook",
-        requestData: {
-          path: "/order-status",
-          headers: {
-            authorization: req.headers.authorization || null,
-            x_iiko_signature: req.headers["x-iiko-signature"] || null,
-            x_webhook_signature: req.headers["x-webhook-signature"] || null,
-            x_api_key: req.headers["x-api-key"] || null,
-          },
-        },
-      });
+      await rejectInvalidSignature({ req, module: INTEGRATION_MODULE.ORDERS, path: "/order-status" });
       return res.status(401).json({ error: "Неверная подпись webhook" });
     }
     const result = await processOrderStatusWebhookPayload(req.body || {});
@@ -415,23 +465,13 @@ router.post("/stoplist", async (req, res, next) => {
       return res.status(400).json({ error: "Интеграция iiko выключена" });
     }
 
+    if (!String(settings.iikoWebhookSecret || "").trim()) {
+      await rejectMissingSecret({ req, module: INTEGRATION_MODULE.STOPLIST, path: "/stoplist" });
+      return res.status(503).json({ error: "Webhook секрет iiko не настроен" });
+    }
+
     if (!isValidWebhookSignature(req, settings.iikoWebhookSecret)) {
-      await logIntegrationEvent({
-        integrationType: INTEGRATION_TYPE.IIKO,
-        module: INTEGRATION_MODULE.STOPLIST,
-        action: "webhook_signature_rejected",
-        status: "failed",
-        errorMessage: "Неверная подпись webhook",
-        requestData: {
-          path: "/stoplist",
-          headers: {
-            authorization: req.headers.authorization || null,
-            x_iiko_signature: req.headers["x-iiko-signature"] || null,
-            x_webhook_signature: req.headers["x-webhook-signature"] || null,
-            x_api_key: req.headers["x-api-key"] || null,
-          },
-        },
-      });
+      await rejectInvalidSignature({ req, module: INTEGRATION_MODULE.STOPLIST, path: "/stoplist" });
       return res.status(401).json({ error: "Неверная подпись webhook" });
     }
     const result = await processStopListWebhookPayload(req.body || {});

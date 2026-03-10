@@ -99,28 +99,50 @@ router.get("/users", requireRole("admin", "ceo"), async (req, res, next) => {
     }
     query += " ORDER BY au.created_at DESC";
     const [users] = await db.query(query, params);
+    const managerIds = users.filter((user) => user.role === "manager").map((user) => user.id);
+    let citiesByManager = new Map();
+    let branchesByManager = new Map();
+
+    if (managerIds.length > 0) {
+      const [cityRows] = await db.query(
+        `SELECT auc.admin_user_id, c.id, c.name
+         FROM admin_user_cities auc
+         JOIN cities c ON auc.city_id = c.id
+         WHERE auc.admin_user_id IN (?)`,
+        [managerIds],
+      );
+      citiesByManager = cityRows.reduce((acc, row) => {
+        if (!acc.has(row.admin_user_id)) {
+          acc.set(row.admin_user_id, []);
+        }
+        acc.get(row.admin_user_id).push({ id: row.id, name: row.name });
+        return acc;
+      }, new Map());
+
+      const [branchRows] = await db.query(
+        `SELECT aub.admin_user_id, b.id, b.name, b.city_id
+         FROM admin_user_branches aub
+         JOIN branches b ON aub.branch_id = b.id
+         WHERE aub.admin_user_id IN (?)`,
+        [managerIds],
+      );
+      branchesByManager = branchRows.reduce((acc, row) => {
+        if (!acc.has(row.admin_user_id)) {
+          acc.set(row.admin_user_id, []);
+        }
+        acc.get(row.admin_user_id).push({ id: row.id, name: row.name, city_id: row.city_id });
+        return acc;
+      }, new Map());
+    }
+
     for (let user of users) {
-      if (user.role === "manager") {
-        const [cities] = await db.query(
-          `SELECT c.id, c.name 
-           FROM admin_user_cities auc
-           JOIN cities c ON auc.city_id = c.id
-           WHERE auc.admin_user_id = ?`,
-          [user.id],
-        );
-        user.cities = cities;
-        const [branches] = await db.query(
-          `SELECT b.id, b.name, b.city_id
-           FROM admin_user_branches aub
-           JOIN branches b ON aub.branch_id = b.id
-           WHERE aub.admin_user_id = ?`,
-          [user.id],
-        );
-        user.branches = branches || [];
-      } else {
+      if (user.role !== "manager") {
         user.cities = [];
         user.branches = [];
+        continue;
       }
+      user.cities = citiesByManager.get(user.id) || [];
+      user.branches = branchesByManager.get(user.id) || [];
     }
     res.json({ users });
   } catch (error) {

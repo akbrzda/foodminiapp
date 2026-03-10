@@ -34,8 +34,8 @@ export async function isBlacklisted(token) {
     return result !== null;
   } catch (error) {
     console.error("Failed to check token blacklist:", error);
-    // В случае ошибки Redis считаем токен валидным для безопасности
-    return false;
+    // Fail-closed: при сбое Redis считаем токен потенциально отозванным.
+    return true;
   }
 }
 
@@ -65,7 +65,9 @@ export const checkBlacklist = async (req, res, next) => {
     next();
   } catch (error) {
     console.error("Blacklist check error:", error);
-    next();
+    return res.status(503).json({
+      error: "Authorization service temporarily unavailable",
+    });
   }
 };
 
@@ -76,8 +78,9 @@ export async function cleanupExpiredTokens() {
   try {
     // Redis автоматически удаляет ключи с истекшим TTL
     // Эта функция для дополнительной очистки если нужна
-    console.log("Token cleanup completed");
+    return true;
   } catch (error) {
     console.error("Token cleanup error:", error);
+    return false;
   }
 }

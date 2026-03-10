@@ -9,6 +9,7 @@ import { testRedisConnection } from "./config/redis.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
 import { apiLimiter, sensitiveRouteLimiter, unauthorizedBanShield } from "./middleware/rateLimiter.js";
 import { hppMiddleware } from "./middleware/hpp.js";
+import { createCsrfProtection } from "./middleware/csrf.js";
 import { router as authRoutes } from "./modules/auth/index.js";
 import { router as deliveryRoutes } from "./modules/delivery/index.js";
 import { router as usersRoutes } from "./modules/users/index.js";
@@ -31,10 +32,50 @@ import { logger } from "./utils/logger.js";
 
 dotenv.config();
 const app = express();
+const workersMode = String(process.env.WORKERS_MODE || (process.env.NODE_ENV === "production" ? "external" : "inline"))
+  .trim()
+  .toLowerCase();
+const runWorkersInline = workersMode === "inline";
+const runtimeReadiness = {
+  db: false,
+  redis: false,
+  workers: false,
+  startup: false,
+};
 
-// Настройка trust proxy для корректной работы с reverse proxy (nginx, CloudFlare и т.д.)
-// Доверяем первому прокси-серверу для определения реального IP пользователя
-app.set("trust proxy", 1);
+const resolveTrustProxySetting = () => {
+  const rawValue = process.env.TRUST_PROXY;
+  if (!rawValue) {
+    return false;
+  }
+
+  const normalizedValue = rawValue.trim().toLowerCase();
+
+  if (["false", "0", "off", "no"].includes(normalizedValue)) {
+    return false;
+  }
+
+  if (["true", "on", "yes"].includes(normalizedValue)) {
+    // Безопасный дефолт для "включено": доверяем только первому proxy hop.
+    return 1;
+  }
+
+  if (/^\d+$/.test(normalizedValue)) {
+    const hops = Number.parseInt(normalizedValue, 10);
+    return Number.isNaN(hops) || hops < 0 ? false : hops;
+  }
+
+  if (rawValue.includes(",")) {
+    return rawValue
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean);
+  }
+
+  return rawValue.trim();
+};
+
+app.set("trust proxy", resolveTrustProxySetting());
 
 const PORT = process.env.PORT || 3000;
 const rawCorsOrigins = process.env.CORS_ORIGINS || "";
@@ -94,7 +135,7 @@ const corsOptions = {
   },
   credentials: true,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "X-CSRF-Token"],
   exposedHeaders: ["Content-Range", "X-Content-Range"],
   maxAge: 86400,
 };
@@ -141,10 +182,20 @@ if (process.env.NODE_ENV === "production") {
 app.use(cors(corsOptions));
 app.options(/.*/, cors(corsOptions));
 app.use(cookieParser());
+app.use(createCsrfProtection({ isOriginAllowed }));
 app.use(hppMiddleware);
 // strict=false позволяет корректно обработать payload `null` на /auth/refresh
 // и вернуть контролируемый 401 вместо SyntaxError от body-parser.
-app.use(express.json({ charset: "utf-8", limit: "10kb", strict: false }));
+app.use(
+  express.json({
+    charset: "utf-8",
+    limit: "10kb",
+    strict: false,
+    verify: (req, _res, buffer) => {
+      req.rawBody = buffer?.length ? buffer.toString("utf8") : "";
+    },
+  }),
+);
 app.use(express.urlencoded({ extended: true, charset: "utf-8", limit: "2mb" }));
 
 // Глобальный rate limiter
@@ -158,12 +209,36 @@ app.use((req, res, next) => {
   res.setHeader("Content-Type", "application/json; charset=utf-8");
   next();
 });
-app.get("/health", (req, res) => {
+
+const buildReadinessPayload = () => {
+  const isReady = runtimeReadiness.startup && runtimeReadiness.db && runtimeReadiness.redis && runtimeReadiness.workers;
+  return {
+    status: isReady ? "ok" : "fail",
+    timestamp: new Date().toISOString(),
+    service: "miniapp-panda-backend",
+    checks: {
+      db: runtimeReadiness.db ? "ok" : "fail",
+      redis: runtimeReadiness.redis ? "ok" : "fail",
+      workers: runtimeReadiness.workers ? "ok" : "fail",
+      startup: runtimeReadiness.startup ? "ok" : "fail",
+    },
+  };
+};
+
+app.get("/health/live", (req, res) => {
   res.json({
     status: "ok",
     timestamp: new Date().toISOString(),
     service: "miniapp-panda-backend",
   });
+});
+app.get("/health/ready", (req, res) => {
+  const payload = buildReadinessPayload();
+  return res.status(payload.status === "ok" ? 200 : 503).json(payload);
+});
+app.get("/health", (req, res) => {
+  const payload = buildReadinessPayload();
+  return res.status(payload.status === "ok" ? 200 : 503).json(payload);
 });
 app.get("/api", (req, res) => {
   res.json({
@@ -195,36 +270,63 @@ const wsServer = new WSServer(server);
 registerWsServer(wsServer);
 wsServer.startHeartbeat();
 export { wsServer };
-server.listen(PORT, async () => {
-  await logger.system.startup(PORT);
+
+const listenServer = () =>
+  new Promise((resolve, reject) => {
+    server.listen(PORT, (error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve();
+    });
+  });
+
+const bootstrap = async () => {
   try {
     await testConnection();
+    runtimeReadiness.db = true;
     await logger.system.dbConnected();
-  } catch (error) {
-    await logger.system.dbError(error.message);
-  }
-  try {
+
     await testRedisConnection();
+    runtimeReadiness.redis = true;
     await logger.system.redisConnected();
+
+    if (runWorkersInline) {
+      await startWorkers();
+    }
+    runtimeReadiness.workers = true;
+
+    await listenServer();
+    runtimeReadiness.startup = true;
+    await logger.system.startup(PORT);
   } catch (error) {
-    await logger.system.redisError(error.message);
+    runtimeReadiness.startup = false;
+    await logger.system.dbError(`Fail-fast startup: ${error.message}`);
+    try {
+      await stopWorkers();
+    } catch (stopError) {
+      await logger.system.dbError(`Failed to stop workers after startup error: ${stopError.message}`);
+    }
+    process.exit(1);
   }
-  try {
-    await startWorkers();
-  } catch (error) {
-    await logger.system.dbError(`Failed to start workers: ${error.message}`);
-  }
-});
+};
+
+bootstrap();
 process.on("SIGTERM", async () => {
   await logger.system.shutdown("SIGTERM received");
-  await stopWorkers();
+  if (runWorkersInline) {
+    await stopWorkers();
+  }
   server.close(() => {
     process.exit(0);
   });
 });
 process.on("SIGINT", async () => {
   await logger.system.shutdown("SIGINT received");
-  await stopWorkers();
+  if (runWorkersInline) {
+    await stopWorkers();
+  }
   server.close(() => {
     process.exit(0);
   });

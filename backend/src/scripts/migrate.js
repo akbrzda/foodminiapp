@@ -4,12 +4,26 @@ import { fileURLToPath } from "url";
 import mysql from "mysql2/promise";
 import dotenv from "dotenv";
 dotenv.config();
+
+const requiredMigrationEnv = ["DB_HOST", "DB_PORT", "DB_USER", "DB_PASSWORD", "DB_NAME"];
+for (const envName of requiredMigrationEnv) {
+  const value = String(process.env[envName] || "").trim();
+  if (!value) {
+    throw new Error(`Отсутствует обязательная переменная окружения: ${envName}`);
+  }
+}
+
+const dbPort = Number.parseInt(process.env.DB_PORT, 10);
+if (!Number.isFinite(dbPort) || dbPort <= 0) {
+  throw new Error("Переменная DB_PORT должна быть положительным числом");
+}
+
 const migrationDbConfig = {
-  host: process.env.DB_HOST || "localhost",
-  port: process.env.DB_PORT || 3306,
-  user: process.env.DB_USER || "miniapp_user",
-  password: process.env.DB_PASSWORD || "miniapp_password_change_me",
-  database: process.env.DB_NAME || "miniapp_panda",
+  host: process.env.DB_HOST,
+  port: dbPort,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME,
   charset: "utf8mb4_unicode_ci",
   multipleStatements: true,
   waitForConnections: true,
@@ -52,10 +66,24 @@ async function runMigration() {
       const migrationPath = path.join(migrationsDir, file);
       console.log(`🔄 Выполнение миграции: ${file}...`);
       const migrationSQL = fs.readFileSync(migrationPath, "utf8");
-      await migrationConnection.query(migrationSQL);
-      await migrationConnection.query("INSERT INTO migrations (name) VALUES (?)", [file]);
-      console.log("  ✅ Миграция выполнена\n");
-      executedCount++;
+      const connection = await migrationConnection.getConnection();
+      try {
+        await connection.beginTransaction();
+        await connection.query(migrationSQL);
+        await connection.query("INSERT INTO migrations (name) VALUES (?)", [file]);
+        await connection.commit();
+        console.log("  ✅ Миграция выполнена\n");
+        executedCount++;
+      } catch (migrationError) {
+        try {
+          await connection.rollback();
+        } catch (rollbackError) {
+          console.error(`  ⚠️ Не удалось откатить миграцию ${file}:`, rollbackError);
+        }
+        throw migrationError;
+      } finally {
+        connection.release();
+      }
     }
     if (executedCount === 0) {
       console.log("✅ Все миграции уже выполнены");

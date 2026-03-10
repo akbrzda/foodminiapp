@@ -23,6 +23,21 @@ const STORAGE_KEYS = [
 ];
 
 const getApiBase = () => (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
+const getCookieValue = (name) => {
+  if (typeof document === "undefined") return "";
+  const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = document.cookie.match(new RegExp(`(?:^|; )${escapedName}=([^;]*)`));
+  return match ? decodeURIComponent(match[1]) : "";
+};
+
+const withCsrfHeader = (headers = {}) => {
+  const csrfToken = getCookieValue("csrf_token");
+  if (!csrfToken) return headers;
+  return {
+    ...headers,
+    "X-CSRF-Token": csrfToken,
+  };
+};
 
 const readSessionUser = () => {
   const raw = sessionStorage.getItem(SESSION_USER_KEY) || "null";
@@ -49,10 +64,10 @@ const fetchUserProfile = async () => {
 const tryRefreshSession = async () => {
   const response = await fetch(`${getApiBase()}/api/auth/refresh`, {
     method: "POST",
-    headers: {
+    headers: withCsrfHeader({
       "Content-Type": "application/json; charset=utf-8",
       Accept: "application/json; charset=utf-8",
-    },
+    }),
     credentials: "include",
   });
   if (!response.ok) return false;
@@ -135,10 +150,10 @@ export const useAuthStore = defineStore("auth", {
       if (!initData) return false;
       const response = await fetch(`${getApiBase()}/api/auth/telegram`, {
         method: "POST",
-        headers: {
+        headers: withCsrfHeader({
           "Content-Type": "application/json; charset=utf-8",
           Accept: "application/json; charset=utf-8",
-        },
+        }),
         credentials: "include",
         body: JSON.stringify({ initData }),
       });
@@ -152,10 +167,10 @@ export const useAuthStore = defineStore("auth", {
         try {
           await fetch(`${getApiBase()}/api/auth/logout`, {
             method: "POST",
-            headers: {
+            headers: withCsrfHeader({
               "Content-Type": "application/json; charset=utf-8",
               Accept: "application/json; charset=utf-8",
-            },
+            }),
             credentials: "include",
           });
         } catch {

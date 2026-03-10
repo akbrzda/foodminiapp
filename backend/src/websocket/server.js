@@ -7,9 +7,40 @@ const WS_TICKET_PREFIX = "ws_ticket";
 const connectionAttempts = new Map();
 const MAX_ATTEMPTS = 10; // Максимум 10 попыток
 const ATTEMPT_WINDOW = 60000; // За 1 минуту
+const ATTEMPT_ENTRY_TTL = ATTEMPT_WINDOW * 5; // Храним IP ограниченное время
+const MAX_TRACKED_IPS = 5000; // Защита от неконтролируемого роста Map
+
+function cleanupConnectionAttempts(now = Date.now()) {
+  for (const [ip, attempts] of connectionAttempts.entries()) {
+    const recentAttempts = attempts.filter((time) => now - time < ATTEMPT_ENTRY_TTL);
+    if (recentAttempts.length === 0) {
+      connectionAttempts.delete(ip);
+      continue;
+    }
+    connectionAttempts.set(ip, recentAttempts);
+  }
+}
+
+function enforceConnectionAttemptsLimit() {
+  if (connectionAttempts.size <= MAX_TRACKED_IPS) return;
+  const sortedByLastSeen = Array.from(connectionAttempts.entries()).sort((left, right) => {
+    const leftLast = left[1][left[1].length - 1] || 0;
+    const rightLast = right[1][right[1].length - 1] || 0;
+    return leftLast - rightLast;
+  });
+  const overflow = connectionAttempts.size - MAX_TRACKED_IPS;
+  for (let index = 0; index < overflow; index += 1) {
+    const [ip] = sortedByLastSeen[index] || [];
+    if (ip) {
+      connectionAttempts.delete(ip);
+    }
+  }
+}
 
 function checkConnectionRateLimit(ip) {
+  if (!ip) return true;
   const now = Date.now();
+  cleanupConnectionAttempts(now);
   const attempts = connectionAttempts.get(ip) || [];
 
   // Удаляем старые попытки
@@ -21,8 +52,13 @@ function checkConnectionRateLimit(ip) {
 
   recentAttempts.push(now);
   connectionAttempts.set(ip, recentAttempts);
+  enforceConnectionAttemptsLimit();
   return true;
 }
+
+setInterval(() => {
+  cleanupConnectionAttempts();
+}, ATTEMPT_WINDOW).unref();
 
 function normalizeOrigin(value) {
   if (!value || typeof value !== "string") return "";

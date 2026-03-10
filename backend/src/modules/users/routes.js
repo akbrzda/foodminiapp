@@ -1,6 +1,6 @@
 import express from "express";
 import db from "../../config/database.js";
-import { extractBearerToken, getClearAuthCookieOptions } from "../../config/auth.js";
+import { extractBearerToken, getClearAuthCookieOptions, getClearCsrfCookieOptions } from "../../config/auth.js";
 import { authenticateToken } from "../../middleware/auth.js";
 import { normalizePhone } from "../../utils/phone.js";
 import { getSystemSettings } from "../../utils/settings.js";
@@ -366,6 +366,7 @@ router.delete("/me", authenticateToken, async (req, res, next) => {
     const clearOptions = getClearAuthCookieOptions();
     res.clearCookie("access_token", clearOptions);
     res.clearCookie("refresh_token", clearOptions);
+    res.clearCookie("csrf_token", getClearCsrfCookieOptions());
     res.json({ message: "Account deleted successfully" });
   } catch (error) {
     next(error);
