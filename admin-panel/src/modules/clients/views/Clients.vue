@@ -2,7 +2,7 @@
   <div class="space-y-6">
     <Card>
       <CardContent>
-        <PageHeader title="Клиенты" description="Поиск по клиентам и расширенные фильтры" />
+        <PageHeader title="Клиенты" description="Список клиентов и расширенные фильтры" />
       </CardContent>
     </Card>
 

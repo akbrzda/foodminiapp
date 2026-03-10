@@ -2,8 +2,11 @@
   <div class="space-y-6">
     <Card>
       <CardContent>
-        <PageHeader title="Заказы" description="Фильтры и список заказов" />
-         <Badge variant="secondary">Всего: {{ formatNumber(orders.length) }}</Badge>
+        <PageHeader title="Заказы" description="Список заказов и фильтры">
+          <template #actions>
+            <Badge variant="secondary">Всего: {{ formatNumber(orders.length) }}</Badge>
+          </template>
+        </PageHeader>
       </CardContent>
     </Card>
     <BaseFilters v-model="filtersModel" :fields="filterFields" :show-reset="false">
@@ -298,10 +301,7 @@ const filterFields = computed(() => [
     placeholder: "Все города",
     type: "select",
     defaultValue: "",
-    options: [
-      { value: "", label: "Все" },
-      ...referenceStore.cities.map((city) => ({ value: String(city.id), label: city.name })),
-    ],
+    options: [{ value: "", label: "Все" }, ...referenceStore.cities.map((city) => ({ value: String(city.id), label: city.name }))],
   },
   {
     key: "status",

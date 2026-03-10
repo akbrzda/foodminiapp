@@ -232,18 +232,6 @@ function formatDeliveryAddress(orderData) {
   const parts = [orderData.delivery_street, orderData.delivery_house].map((value) => (value ? String(value).trim() : "")).filter(Boolean);
   return parts.join(", ");
 }
-function getOrderComment(orderData) {
-  if (!orderData) return "";
-  const value = orderData.comment || "";
-  return String(value).trim();
-}
-function getChangeAmount(orderData) {
-  if (!orderData) return 0;
-  const changeFrom = Number(orderData.change_from || 0);
-  const total = Number(orderData.total || 0);
-  if (!Number.isFinite(changeFrom) || !Number.isFinite(total)) return 0;
-  return Math.max(0, changeFrom - total);
-}
 </script>
 <style scoped>
 .order-detail {

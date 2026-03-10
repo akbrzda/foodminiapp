@@ -2,7 +2,7 @@
   <div class="space-y-6">
     <Card>
       <CardContent>
-        <PageHeader title="Категории меню" description="Создание и настройка категорий">
+        <PageHeader title="Категории меню" description="Список категорий и управление">
           <template #actions>
             <Badge variant="secondary">Показано: {{ paginatedCategories.length }} / {{ filteredCategories.length }}</Badge>
             <Button class="w-full md:w-auto" @click="openModal()">

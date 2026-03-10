@@ -3,8 +3,7 @@ import * as localLoyaltyService from "../../loyalty/services/loyaltyService.js";
 import db from "../../../config/database.js";
 import redis from "../../../config/redis.js";
 
-const DEFAULT_LEVEL_PERIOD_DAYS = 60;
-const DEFAULT_MAX_SPEND_PERCENT = 0.25;
+const DEFAULT_MAX_SPEND_PERCENT = 0.20;
 const DEFAULT_LEVEL_THRESHOLDS = [0, 10000, 20000];
 const PB_CACHE_TTL_SECONDS = 60 * 60 * 24 * 7;
 
@@ -220,27 +219,6 @@ function resolveNextLevel(currentLevel, levels) {
   const index = levels.findIndex((level) => String(level.id) === String(currentLevel.id));
   if (index < 0 || index >= levels.length - 1) return null;
   return levels[index + 1];
-}
-
-function extractPeriodDays(transitionState) {
-  const direct = toNumber(transitionState?.period_days, 0);
-  if (direct > 0) return Math.floor(direct);
-
-  const candidates = [
-    ...(Array.isArray(transitionState?.client_group_transitions_list) ? transitionState.client_group_transitions_list : []),
-    ...(Array.isArray(transitionState?.transition_up) ? transitionState.transition_up : []),
-    ...(Array.isArray(transitionState?.transition_keep) ? transitionState.transition_keep : []),
-    ...(Array.isArray(transitionState?.transition_down) ? transitionState.transition_down : []),
-  ];
-  for (const item of candidates) {
-    const value =
-      toNumber(item?.period_days, 0) ||
-      toNumber(item?.period_day, 0) ||
-      toNumber(item?.period, 0) ||
-      toNumber(item?.days, 0);
-    if (value > 0) return Math.floor(value);
-  }
-  return DEFAULT_LEVEL_PERIOD_DAYS;
 }
 
 function extractAmountToNextLevel(transitionState) {

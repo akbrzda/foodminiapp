@@ -2,7 +2,7 @@
   <div class="space-y-6">
     <Card>
       <CardContent>
-        <PageHeader title="Кампании подписки" description="Кампании привлечения подписчиков в Telegram-канал">
+        <PageHeader title="Кампании подписки" description="Список кампаний привлечения подписчиков в Telegram-канал">
           <template #actions>
             <Button @click="createCampaign">
               <Plus :size="16" />

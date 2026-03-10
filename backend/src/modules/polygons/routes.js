@@ -79,7 +79,6 @@ const buildYandexRequestHeaders = (req) => {
   return headers;
 };
 const normalizeStreetName = (value) => String(value || "").trim();
-const normalizeStreetQuery = (value) => String(value || "").trim().toLowerCase();
 const parseYandexPoint = (geoObject = {}) => {
   const rawPos = String(geoObject?.Point?.pos || "").trim();
   if (!rawPos) return null;

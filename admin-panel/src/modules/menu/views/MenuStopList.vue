@@ -2,7 +2,7 @@
   <div class="space-y-6">
     <Card>
       <CardContent>
-        <PageHeader title="Стоп-лист" description="Управление временно недоступными блюдами по филиалам">
+        <PageHeader title="Стоп-лист" description="Список временно недоступных блюд по филиалам">
           <template #actions>
             <div class="flex flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
               <div class="rounded-lg border border-border/60 bg-muted/20 px-3 py-2 text-left">
@@ -23,44 +23,37 @@
         </PageHeader>
       </CardContent>
     </Card>
+    <BaseFilters
+      v-model="filtersModel"
+      :fields="filterFields"
+      reset-label="Сбросить"
+      @reset="resetFilters"
+    >
+      <template #field-branch_id="{ value, updateField }">
+        <Select :model-value="value" @update:model-value="updateField">
+          <SelectTrigger class="w-full">
+            <span class="truncate text-start" :class="value === 'all' ? 'text-muted-foreground' : ''">
+              {{
+                value === "all"
+                  ? "Филиал: Все"
+                  : `Филиал: ${referenceStore.branches.find((branch) => String(branch.id) === String(value))?.name || "—"}`
+              }}
+            </span>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Все</SelectItem>
+            <SelectGroup v-for="city in referenceStore.cities" :key="city.id">
+              <SelectLabel>{{ city.name }}</SelectLabel>
+              <SelectItem v-for="branch in referenceStore.branchesByCity[city.id] || []" :key="branch.id" :value="String(branch.id)">
+                {{ branch.name }}
+              </SelectItem>
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+      </template>
+    </BaseFilters>
     <Card>
-      <CardContent class="space-y-4 p-4">
-        <BaseFilters v-model="filtersModel" :fields="filterFields" :with-card="false">
-          <template #field-branch_id="{ value, updateField }">
-            <Select :model-value="value" @update:model-value="updateField">
-              <SelectTrigger class="w-full">
-                <span class="truncate text-start" :class="value === 'all' ? 'text-muted-foreground' : ''">
-                  {{
-                    value === "all"
-                      ? "Филиал: Все"
-                      : `Филиал: ${referenceStore.branches.find((branch) => String(branch.id) === String(value))?.name || "—"}`
-                  }}
-                </span>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Все</SelectItem>
-                <SelectGroup v-for="city in referenceStore.cities" :key="city.id">
-                  <SelectLabel>{{ city.name }}</SelectLabel>
-                  <SelectItem v-for="branch in referenceStore.branchesByCity[city.id] || []" :key="branch.id" :value="String(branch.id)">
-                    {{ branch.name }}
-                  </SelectItem>
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-          </template>
-          <template #reset="{ hasActiveFilters, resetFilters }">
-            <Button
-              v-if="hasActiveFilters"
-              type="button"
-              variant="ghost"
-              size="sm"
-              class="text-muted-foreground hover:text-foreground"
-              @click="resetFilters"
-            >
-              Сбросить фильтры
-            </Button>
-          </template>
-        </BaseFilters>
+      <CardContent class="space-y-4 !p-0">
         <Table v-if="isLoading || filteredStopList.length > 0">
           <TableHeader>
             <TableRow>
@@ -131,7 +124,13 @@
         </div>
       </CardContent>
     </Card>
-    <TablePagination :total="filteredStopList.length" :page="page" :page-size="pageSize" @update:page="page = $event" @update:page-size="onPageSizeChange" />
+    <TablePagination
+      :total="filteredStopList.length"
+      :page="page"
+      :page-size="pageSize"
+      @update:page="page = $event"
+      @update:page-size="onPageSizeChange"
+    />
     <Dialog v-if="showModal" :open="showModal" @update:open="(value) => (value ? null : closeModal())">
       <DialogContent class="w-full max-w-5xl">
         <DialogHeader>
@@ -617,12 +616,7 @@ const formatStopCreatedAt = (value) => {
   });
 };
 const resetFilters = () => {
-  filters.value = {
-    branch_id: "all",
-    entity_type: "all",
-    fulfillment_type: "all",
-    search: "",
-  };
+  page.value = 1;
 };
 const loadStopList = async ({ preservePage = false } = {}) => {
   isLoading.value = true;
@@ -883,9 +877,7 @@ const submitStopList = async () => {
         entity_id: modifierId,
       });
     } else {
-      const duplicateProductIds = selectedProductIds.value
-        .map((id) => Number(id))
-        .filter((id) => existingStopSet.has(`item:${id}`));
+      const duplicateProductIds = selectedProductIds.value.map((id) => Number(id)).filter((id) => existingStopSet.has(`item:${id}`));
       if (duplicateProductIds.length > 0) {
         showErrorNotification("Часть выбранных позиций уже находится в стоп-листе этого филиала");
         return;

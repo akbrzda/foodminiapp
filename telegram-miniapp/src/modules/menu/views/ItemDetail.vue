@@ -227,7 +227,6 @@ const selectedModifiers = ref({});
 const quantity = ref(1);
 const isAdded = ref(false);
 const showKbjuPopup = ref(false);
-const pageTitle = computed(() => item.value?.name || "Блюдо");
 const ordersEnabled = computed(() => settingsStore.ordersEnabled);
 const menuBadgesEnabled = computed(() => settingsStore.menuBadgesEnabled);
 const canOrder = computed(() => {

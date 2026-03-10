@@ -105,7 +105,7 @@
   </aside>
 </template>
 <script setup>
-import { computed, onMounted, ref } from "vue";
+import { computed } from "vue";
 import { RouterLink } from "vue-router";
 import { useAuthStore } from "@/shared/stores/auth.js";
 import { useOrdersStore } from "@/modules/orders/stores/orders.js";
@@ -175,8 +175,8 @@ const navSections = computed(() => {
       id: "operations",
       title: "Операции",
       items: [
-        { label: "Заказы", to: "/orders", icon: ClipboardList, badge: newOrdersCount.value },
         { label: "Дашборд", to: "/dashboard", icon: LayoutDashboard },
+        { label: "Заказы", to: "/orders", icon: ClipboardList, badge: newOrdersCount.value },
         { label: "Клиенты", to: "/clients", icon: Users },
       ],
     },
@@ -187,6 +187,7 @@ const navSections = computed(() => {
       items: [
         { label: "Кампании подписки", to: "/campaign", icon: BellRing },
         { label: "Рассылки", to: "/broadcasts", icon: Megaphone, visible: !isManager.value },
+        { label: "Уровни лояльности", to: "/loyalty-levels", icon: Award },
       ],
     },
     {
@@ -216,7 +217,6 @@ const navSections = computed(() => {
       items: [
         { label: "Настройки системы", to: "/system/settings", icon: SlidersHorizontal },
         { label: "Интеграции", to: "/integrations", icon: PlugZap },
-        { label: "Уровни лояльности", to: "/loyalty-levels", icon: Award },
         { label: "Пользователи", to: "/admin-users", icon: UserCog },
         { label: "Логи", to: "/logs", icon: FileText },
       ],

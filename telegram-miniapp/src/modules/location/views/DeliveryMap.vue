@@ -89,7 +89,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted, reactive, watch } from "vue";
-import { LocateFixed, Minus, Plus, X } from "lucide-vue-next";
+import { LocateFixed, X } from "lucide-vue-next";
 import { useRouter } from "vue-router";
 import { useLocationStore } from "@/modules/location/stores/location.js";
 import { addressesAPI } from "@/shared/api/endpoints.js";
@@ -670,16 +670,6 @@ function scheduleReverseFromCenter(lat, lon, immediate = false) {
   }
 
   reverseTimeout = setTimeout(run, REVERSE_DEBOUNCE_MS);
-}
-
-function zoomIn() {
-  if (!mapInstance) return;
-  mapInstance.setZoom(mapInstance.getZoom() + 1, { duration: 150 });
-}
-
-function zoomOut() {
-  if (!mapInstance) return;
-  mapInstance.setZoom(mapInstance.getZoom() - 1, { duration: 150 });
 }
 
 async function locateUser() {

@@ -155,7 +155,6 @@ const changeFromAmount = computed(() => {
   if (normalizePaymentMethodKey(props.order.payment_method) !== "cash") return 0;
   return Math.max(0, Number(props.order.change_from) || 0);
 });
-const changeAmount = computed(() => Math.max(0, changeFromAmount.value - (Number(props.order.total) || 0)));
 
 // Бейдж статуса
 const statusBadge = computed(() => {

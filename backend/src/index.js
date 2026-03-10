@@ -2,8 +2,6 @@ import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
 import http from "http";
-import path from "path";
-import { fileURLToPath } from "url";
 import helmet from "helmet";
 import cookieParser from "cookie-parser";
 import { testConnection } from "./config/database.js";
@@ -39,8 +37,6 @@ const app = express();
 app.set("trust proxy", 1);
 
 const PORT = process.env.PORT || 3000;
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 const rawCorsOrigins = process.env.CORS_ORIGINS || "";
 const defaultProductionOrigins = ["https://app.panda.akbrzda.ru", "https://panda.akbrzda.ru"];
 const defaultDevelopmentOrigins = ["http://localhost:5173", "http://localhost:5174", "http://localhost:4173"];

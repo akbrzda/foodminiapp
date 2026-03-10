@@ -2,7 +2,7 @@
   <div class="space-y-6">
     <Card>
       <CardContent>
-        <PageHeader title="Блюда меню" description="Управление блюдами и их параметрами">
+        <PageHeader title="Блюда меню" description="Список блюд и управление">
           <template #actions>
             <Badge variant="secondary">Показано: {{ paginatedItems.length }} / {{ filteredItems.length }}</Badge>
             <Button @click="createItem">

@@ -2,8 +2,9 @@
   <div class="space-y-6">
     <Card>
       <CardContent>
-        <PageHeader title="Сегменты" description="Сохраненные сегменты аудитории">
+        <PageHeader title="Сегменты" description="Список сохраненных сегментов аудитории">
           <template #actions>
+            <BackButton label="Назад" @click="goBack" />
             <Badge variant="secondary">Всего: {{ segments.length }}</Badge>
             <Button @click="openModal()">
               <Plus :size="16" />
@@ -131,16 +132,16 @@
 import { devError } from "@/shared/utils/logger";
 import { computed, onMounted, ref, watch } from "vue";
 import { Pencil, Plus, Save, Trash2 } from "lucide-vue-next";
+import { useRouter } from "vue-router";
 import api from "@/shared/api/client.js";
 import Badge from "@/shared/components/ui/badge/Badge.vue";
 import Button from "@/shared/components/ui/button/Button.vue";
 import Card from "@/shared/components/ui/card/Card.vue";
 import CardContent from "@/shared/components/ui/card/CardContent.vue";
-import CardHeader from "@/shared/components/ui/card/CardHeader.vue";
-import CardTitle from "@/shared/components/ui/card/CardTitle.vue";
 import Input from "@/shared/components/ui/input/Input.vue";
 import Textarea from "@/shared/components/ui/textarea/Textarea.vue";
 import PageHeader from "@/shared/components/PageHeader.vue";
+import BackButton from "@/shared/components/BackButton.vue";
 import Table from "@/shared/components/ui/table/Table.vue";
 import TableBody from "@/shared/components/ui/table/TableBody.vue";
 import TableCell from "@/shared/components/ui/table/TableCell.vue";
@@ -155,6 +156,7 @@ import { useNotifications } from "@/shared/composables/useNotifications.js";
 import { useListContext } from "@/shared/composables/useListContext.js";
 import { formatDateTime, formatNumber } from "@/shared/utils/format.js";
 
+const router = useRouter();
 const { showErrorNotification, showSuccessNotification, showWarningNotification } = useNotifications();
 const { shouldRestore, saveContext, restoreContext, restoreScroll } = useListContext("broadcast-segments");
 const segments = ref([]);
@@ -176,6 +178,9 @@ const paginatedSegments = computed(() => {
   const start = (page.value - 1) * pageSize.value;
   return segments.value.slice(start, start + pageSize.value);
 });
+const goBack = () => {
+  router.push("/broadcasts");
+};
 
 const loadSegments = async ({ preservePage = false } = {}) => {
   isLoading.value = true;

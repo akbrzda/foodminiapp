@@ -2,7 +2,7 @@
   <div class="space-y-6">
     <Card>
       <CardContent>
-        <PageHeader title="Роли и доступы" description="Управление ролями и их правами доступа">
+        <PageHeader title="Роли и доступы" description="Управление ролями и правами доступа">
           <template #actions>
             <Button variant="outline" :disabled="loading" @click="loadInitialData">
               <RefreshCcw :size="16" />

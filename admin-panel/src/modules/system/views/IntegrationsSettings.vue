@@ -2,7 +2,7 @@
   <div class="space-y-6">
     <Card>
       <CardContent>
-        <PageHeader title="Интеграции" description="Настройки внешних сервисов и управление синхронизацией">
+        <PageHeader title="Интеграции" description="Управление внешними сервисами и синхронизацией">
           <template #actions>
             <Button variant="secondary" :disabled="isBusy()" @click="loadAll">
               <RefreshCcw :size="16" />
@@ -855,7 +855,6 @@ const LOCAL_PAYMENT_METHOD_OPTIONS = [
 ];
 
 const menuReadiness = computed(() => readiness.value?.modules?.menu || null);
-const stopListReadiness = computed(() => readiness.value?.modules?.stoplist || null);
 
 const formatDateTime = (value) => {
   if (!value) return "—";

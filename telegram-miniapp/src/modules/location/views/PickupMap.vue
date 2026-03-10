@@ -286,7 +286,6 @@ function normalizeCoords(latValue, lonValue) {
   const lon = parseCoord(lonValue);
   if (Number.isFinite(lat) && Number.isFinite(lon)) {
     const latInRange = Math.abs(lat) <= 90;
-    const lonInRange = Math.abs(lon) <= 180;
     const swappedLatInRange = Math.abs(lon) <= 90;
     const swappedLonInRange = Math.abs(lat) <= 180;
     if (!latInRange && swappedLatInRange && swappedLonInRange) {

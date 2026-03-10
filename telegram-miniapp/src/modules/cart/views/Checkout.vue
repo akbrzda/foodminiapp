@@ -173,7 +173,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from "vue";
 import { useRouter } from "vue-router";
-import { Banknote, CreditCard, Phone, Store, Truck, Clock, Pencil } from "lucide-vue-next";
+import { Banknote, CreditCard, Clock, Pencil } from "lucide-vue-next";
 import { useCartStore } from "@/modules/cart/stores/cart.js";
 import { useLoyaltyStore } from "@/modules/loyalty/stores/loyalty.js";
 import { useLocationStore } from "@/modules/location/stores/location.js";
@@ -183,7 +183,6 @@ import { useKeyboardHandler } from "@/shared/composables/useKeyboardHandler";
 import { citiesAPI, addressesAPI, ordersAPI, menuAPI, bonusesAPI } from "@/shared/api/endpoints.js";
 import { hapticFeedback, showAlert } from "@/shared/services/telegram.js";
 import { formatPrice } from "@/shared/utils/format";
-import { formatPhone, normalizePhone } from "@/shared/utils/phone";
 import { calculateDeliveryCost } from "@/shared/utils/deliveryTariffs";
 import { getBranchOpenState, normalizeWorkHours } from "@/shared/utils/workingHours";
 import { devError } from "@/shared/utils/logger.js";

@@ -2,7 +2,7 @@
   <div class="space-y-6">
     <Card>
       <CardContent>
-        <PageHeader title="Филиалы" description="Управление филиалами и временем приготовления">
+        <PageHeader title="Филиалы" description="Список филиалов и настройки времени приготовления">
           <template #actions>
             <Badge variant="secondary">Всего: {{ branches.length }}</Badge>
             <Button v-if="!isManager" class="w-full md:w-auto" :disabled="!cityId" @click="goToCreate">

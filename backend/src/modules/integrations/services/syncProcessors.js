@@ -6,8 +6,6 @@ import { finishIntegrationEvent, logIntegrationEvent, startIntegrationEvent } fr
 import { notifyMenuUpdated } from "../../../websocket/runtime.js";
 import { decryptEmail } from "../../../utils/encryption.js";
 
-const nowIso = () => new Date().toISOString();
-
 function nextSyncState(attempts) {
   if (attempts >= MAX_SYNC_ATTEMPTS) return SYNC_STATUS.FAILED;
   return SYNC_STATUS.ERROR;
@@ -2705,10 +2703,6 @@ export async function processIikoStopListSync(reason = "manual", branchId = null
   });
 
   return data;
-}
-
-function normalizeIikoTerminalGroupId(value) {
-  return String(value || "").trim();
 }
 
 export async function retryFailedSyncs() {

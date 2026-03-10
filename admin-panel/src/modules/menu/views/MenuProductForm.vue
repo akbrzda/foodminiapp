@@ -1149,13 +1149,6 @@ const onDrop = (e) => {
   const file = e.dataTransfer.files[0];
   if (file) handleFile(file);
 };
-const readFileAsDataUrl = (file) =>
-  new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
 const handleFile = async (file) => {
   if (file.size > 10 * 1024 * 1024) {
     uploadState.value.error = "Файл больше 10MB";

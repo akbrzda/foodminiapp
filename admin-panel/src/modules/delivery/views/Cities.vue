@@ -2,7 +2,7 @@
   <div class="space-y-6">
     <Card>
       <CardContent>
-        <PageHeader title="Города" description="Управление городами доставки">
+        <PageHeader title="Города" description="Список городов доставки и управление">
           <template #actions>
             <Badge variant="secondary">Всего: {{ cities.length }}</Badge>
             <Button @click="goToCreate">

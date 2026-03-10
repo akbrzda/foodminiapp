@@ -2,16 +2,16 @@
   <div class="space-y-6">
     <Card>
       <CardContent>
-        <PageHeader title="Пользователи панели" description="Администраторы и менеджеры">
+        <PageHeader title="Пользователи панели" description="Список администраторов и менеджеров">
           <template #actions>
             <Badge variant="secondary">Всего: {{ users.length }}</Badge>
-            <Button @click="openModal()">
-              <Plus :size="16" />
-              Добавить пользователя
-            </Button>
             <Button v-if="authStore.hasPermission('system.access.manage')" variant="outline" @click="openAccessRolesPage">
               <KeyRound :size="16" />
               Роли и доступы
+            </Button>
+            <Button @click="openModal()">
+              <Plus :size="16" />
+              Добавить пользователя
             </Button>
           </template>
         </PageHeader>

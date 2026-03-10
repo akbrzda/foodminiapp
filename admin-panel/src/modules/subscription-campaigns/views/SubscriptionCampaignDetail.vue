@@ -2,7 +2,7 @@
   <div class="space-y-6">
     <Card>
       <CardContent>
-        <PageHeader :title="campaign?.title || 'Кампания подписки'" description="Статистика и участники">
+        <PageHeader :title="campaign?.title || 'Кампания подписки'" description="Детальная статистика и участники">
           <template #actions>
             <BackButton @click="goBack" />
             <Button variant="secondary" @click="editCampaign">

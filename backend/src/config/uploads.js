@@ -1,8 +1,5 @@
 import path from "path";
-import { fileURLToPath } from "url";
 import fs from "fs/promises";
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 export const CDN_BASE_URL = process.env.CDN_BASE_URL || "https://cdn.akbrzda.ru";
 export const CDN_IMAGES_PATH = process.env.CDN_IMAGES_PATH || "/var/www/cdn.akbrzda.ru/images";
 export const IMAGE_CATEGORIES = {

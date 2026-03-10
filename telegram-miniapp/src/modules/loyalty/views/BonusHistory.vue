@@ -168,8 +168,7 @@
 </template>
 <script setup>
 import { computed, ref, onMounted, onBeforeUnmount } from "vue";
-import { X, Plus, Minus, Award, Trophy, AlertTriangle, Info } from "lucide-vue-next";
-import PageHeader from "@/shared/components/PageHeader.vue";
+import { X, Plus, Minus, Award } from "lucide-vue-next";
 import { bonusesAPI } from "@/shared/api/endpoints.js";
 import { formatPrice } from "@/shared/utils/format";
 import { formatCalendarDateTime, formatDate as formatDateByTz } from "@/shared/utils/date";
@@ -185,7 +184,6 @@ const inactiveBonusAmount = ref(0);
 const inactiveBonusActivationText = ref("");
 const loading = ref(true);
 const loadingMore = ref(false);
-const expiringDaysThreshold = 14;
 const historyPage = ref(1);
 const historyHasMore = ref(false);
 const nowTs = ref(Date.now());

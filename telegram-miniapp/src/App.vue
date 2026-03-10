@@ -169,27 +169,6 @@ function setupWebSocket() {
     );
   }
 }
-function getStatusText(status) {
-  const statuses = {
-    pending: "Ожидает подтверждения",
-    confirmed: "Подтверждён",
-    preparing: "Готовится",
-    ready: "Готов к выдаче",
-    delivering: "В пути",
-    completed: "Доставлен",
-    cancelled: "Отменён",
-  };
-  return statuses[status] || status;
-}
-function shouldBlurOnEvent(event) {
-  const target = event?.target;
-  if (!target) return true;
-  if (target.closest?.("[data-keep-focus='true']")) {
-    return false;
-  }
-  const isEditable = target.closest?.("input, textarea, [contenteditable='true']");
-  return !isEditable;
-}
 function blurActiveElement() {
   const active = document.activeElement;
   if (!active) return;

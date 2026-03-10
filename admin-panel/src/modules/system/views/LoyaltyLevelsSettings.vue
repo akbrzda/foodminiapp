@@ -2,7 +2,7 @@
   <div class="space-y-6">
     <Card>
       <CardContent>
-        <PageHeader title="Уровни лояльности" description="Настройка отображаемых уровней и маппинга на PremiumBonus">
+        <PageHeader title="Уровни лояльности" description="Управление уровнями и маппингом на PremiumBonus">
           <template #actions>
             <Button variant="secondary" :disabled="loading || saving" @click="loadLevels">
               <RefreshCcw :size="16" />

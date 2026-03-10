@@ -2,7 +2,7 @@
   <div class="space-y-6">
     <Card>
       <CardContent class="space-y-4">
-        <PageHeader title="Аналитика" description="Сводка по заказам и клиентам" />
+        <PageHeader title="Дашборд" description="Сводная аналитика заказов и клиентов" />
       </CardContent>
     </Card>
     <BaseFilters v-model="filtersModel" :fields="filterFields" :show-reset="false">

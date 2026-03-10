@@ -2,7 +2,7 @@
   <div class="space-y-6">
     <Card>
       <CardContent>
-        <PageHeader title="Группы модификаторов" description="Одиночный и множественный выбор">
+        <PageHeader title="Группы модификаторов" description="Список групп модификаторов и управление">
           <template #actions>
             <Button @click="openModal()">
               <Plus :size="16" />
@@ -663,13 +663,6 @@ const onDrop = (event) => {
   const file = event.dataTransfer.files?.[0];
   if (file) handleFile(file);
 };
-const readFileAsDataUrl = (file) =>
-  new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
 const handleFile = async (file) => {
   if (!file.type.startsWith("image/")) {
     uploadState.value.error = "Только изображения";

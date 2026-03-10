@@ -2,7 +2,7 @@
   <div class="space-y-6">
     <Card>
       <CardContent>
-        <PageHeader title="Действия администраторов" description="История изменений в системе">
+        <PageHeader title="Действия администраторов" description="Журнал изменений в системе">
           <template #actions>
             <Badge variant="secondary">Всего: {{ formatNumber(pagination.total) }}</Badge>
           </template>

@@ -2,7 +2,7 @@
   <div class="space-y-6">
     <Card>
       <CardContent>
-        <PageHeader title="Теги меню" description="Управление тегами для фильтрации блюд">
+        <PageHeader title="Теги меню" description="Список тегов для фильтрации блюд">
           <template #actions>
             <Button @click="openModal()">
               <Plus :size="16" />

@@ -2,7 +2,7 @@
   <div class="space-y-6">
     <Card>
       <CardContent>
-        <PageHeader title="Системные настройки" description="Включение и отключение ключевых модулей и их настройка">
+        <PageHeader title="Системные настройки" description="Управление ключевыми модулями и их параметрами">
           <template #actions>
             <div v-if="activeTab === 0" class="flex flex-wrap items-center gap-3">
               <Button variant="secondary" :disabled="moduleLoading || moduleSaving" @click="loadModuleSettings">

@@ -1,5 +1,4 @@
 import redis from "../config/redis.js";
-import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import { extractBearerToken } from "../config/auth.js";
 

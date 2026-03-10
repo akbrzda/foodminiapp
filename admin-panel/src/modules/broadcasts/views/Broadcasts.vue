@@ -2,13 +2,9 @@
   <div class="space-y-6">
     <Card>
       <CardContent>
-        <PageHeader title="Рассылки" description="Управление маркетинговыми рассылками">
+        <PageHeader title="Рассылки" description="Список маркетинговых рассылок и управление">
           <template #actions>
             <Badge variant="secondary">Показано: {{ paginatedCampaigns.length }} / {{ filteredCampaigns.length }}</Badge>
-            <Button @click="createCampaign">
-              <Plus :size="16" />
-              Создать рассылку
-            </Button>
             <Button variant="secondary" @click="openDashboard">
               <ChartLine :size="16" />
               Дашборд
@@ -16,6 +12,10 @@
             <Button variant="secondary" @click="openSegments">
               <Users :size="16" />
               Сегменты
+            </Button>
+            <Button @click="createCampaign">
+              <Plus :size="16" />
+              Создать рассылку
             </Button>
           </template>
         </PageHeader>
