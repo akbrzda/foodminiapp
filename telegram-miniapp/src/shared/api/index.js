@@ -1,7 +1,8 @@
 import axios from "axios";
 import { useAuthStore } from "@/modules/auth/stores/auth.js";
+import { fetchCsrfToken, setCsrfToken, withCsrfHeader } from "@/shared/api/csrf.js";
 
-const apiBase = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
+const apiBase = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "").replace(/\/api$/i, "");
 const api = axios.create({
   baseURL: `${apiBase}/api`,
   withCredentials: true,
@@ -11,22 +12,6 @@ const api = axios.create({
     Accept: "application/json; charset=utf-8",
   },
 });
-
-const getCookieValue = (name) => {
-  if (typeof document === "undefined") return "";
-  const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const match = document.cookie.match(new RegExp(`(?:^|; )${escapedName}=([^;]*)`));
-  return match ? decodeURIComponent(match[1]) : "";
-};
-
-const withCsrfHeader = (headers = {}) => {
-  const csrfToken = getCookieValue("csrf_token");
-  if (!csrfToken) return headers;
-  return {
-    ...headers,
-    "X-CSRF-Token": csrfToken,
-  };
-};
 
 const normalizeErrorMessage = (message) => {
   if (!message) return "Произошла ошибка";
@@ -38,24 +23,30 @@ const refreshToken = async () => {
   if (refreshPromise) return refreshPromise;
   refreshPromise = axios
     .post(`${apiBase}/api/auth/refresh`, null, {
-      headers: withCsrfHeader({
+      headers: await withCsrfHeader({
         "Content-Type": "application/json; charset=utf-8",
         Accept: "application/json; charset=utf-8",
       }),
       withCredentials: true,
       timeout: 10000,
     })
-    .then((response) => response.data)
+    .then((response) => {
+      const nextCsrfToken = String(response?.data?.csrfToken || "").trim();
+      if (nextCsrfToken) {
+        setCsrfToken(nextCsrfToken);
+      }
+      return response.data;
+    })
     .finally(() => {
       refreshPromise = null;
     });
   return refreshPromise;
 };
 api.interceptors.request.use(
-  (config) => {
+  async (config) => {
     const method = String(config.method || "get").toUpperCase();
     if (!["GET", "HEAD", "OPTIONS"].includes(method)) {
-      config.headers = withCsrfHeader(config.headers || {});
+      config.headers = await withCsrfHeader(config.headers || {});
     }
     return config;
   },
@@ -65,6 +56,10 @@ api.interceptors.request.use(
 );
 api.interceptors.response.use(
   (response) => {
+    const nextCsrfToken = String(response?.data?.csrfToken || "").trim();
+    if (nextCsrfToken) {
+      setCsrfToken(nextCsrfToken);
+    }
     if (response.data && typeof response.data === "object") {
       response.data = JSON.parse(JSON.stringify(response.data));
     }
@@ -75,8 +70,15 @@ api.interceptors.response.use(
     if (error.response) {
       const status = error.response.status;
       const originalRequest = error.config;
+      const errorMessage = String(error?.response?.data?.error || "").trim();
       const isRefreshRequest = originalRequest?.url?.includes("/auth/refresh");
       const isAuthRequest = originalRequest?.url?.includes("/auth/telegram");
+      const isCsrfError = status === 403 && errorMessage.startsWith("CSRF validation failed");
+      if (isCsrfError && !originalRequest?._csrfRetry) {
+        originalRequest._csrfRetry = true;
+        await fetchCsrfToken({ force: true });
+        return api(originalRequest);
+      }
       if (status === 401 && !isAuthRequest && !isRefreshRequest && !originalRequest?._retry) {
         originalRequest._retry = true;
         try {

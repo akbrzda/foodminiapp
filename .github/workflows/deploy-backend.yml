@@ -58,6 +58,7 @@ jobs:
           NODE_ENV=${{ secrets.NODE_ENV }}
           PORT=${{ secrets.PORT }}
           WORKERS_MODE=external
+          TRUST_PROXY=${{ secrets.TRUST_PROXY }}
           DB_HOST=${{ secrets.DB_HOST }}
           DB_PORT=${{ secrets.DB_PORT }}
           DB_NAME=${{ secrets.DB_NAME }}
@@ -74,6 +75,8 @@ jobs:
           BOT_SERVICE_URL=${{ secrets.BOT_SERVICE_URL }}
           BOT_SERVICE_TOKEN=${{ secrets.BOT_SERVICE_TOKEN }}
           CORS_ORIGINS=${{ secrets.CORS_ORIGINS }}
+          AUTH_COOKIE_SECURE=${{ secrets.AUTH_COOKIE_SECURE }}
+          AUTH_COOKIE_SAMESITE=${{ secrets.AUTH_COOKIE_SAMESITE }}
           CDN_BASE_URL=${{ secrets.CDN_BASE_URL }}
           CDN_IMAGES_PATH=${{ secrets.CDN_IMAGES_PATH }}
           BROADCAST_WORKER_ENABLED=${{ secrets.BROADCAST_WORKER_ENABLED }}

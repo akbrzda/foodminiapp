@@ -1,5 +1,6 @@
 import { defineStore } from "pinia";
 import { getInitData } from "@/shared/services/telegram.js";
+import { clearCsrfToken, setCsrfToken, withCsrfHeader } from "@/shared/api/csrf.js";
 
 const SESSION_USER_KEY = "user";
 const SESSION_HINT_KEY = "auth_session_hint";
@@ -22,23 +23,7 @@ const STORAGE_KEYS = [
   "geo_permission_state",
 ];
 
-const getApiBase = () => (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
-const getCookieValue = (name) => {
-  if (typeof document === "undefined") return "";
-  const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const match = document.cookie.match(new RegExp(`(?:^|; )${escapedName}=([^;]*)`));
-  return match ? decodeURIComponent(match[1]) : "";
-};
-
-const withCsrfHeader = (headers = {}) => {
-  const csrfToken = getCookieValue("csrf_token");
-  if (!csrfToken) return headers;
-  return {
-    ...headers,
-    "X-CSRF-Token": csrfToken,
-  };
-};
-
+const getApiBase = () => (import.meta.env.VITE_API_URL || "").replace(/\/$/, "").replace(/\/api$/i, "");
 const readSessionUser = () => {
   const raw = sessionStorage.getItem(SESSION_USER_KEY) || "null";
   try {
@@ -62,16 +47,21 @@ const fetchUserProfile = async () => {
 };
 
 const tryRefreshSession = async () => {
+  const headers = await withCsrfHeader({
+    "Content-Type": "application/json; charset=utf-8",
+    Accept: "application/json; charset=utf-8",
+  });
   const response = await fetch(`${getApiBase()}/api/auth/refresh`, {
     method: "POST",
-    headers: withCsrfHeader({
-      "Content-Type": "application/json; charset=utf-8",
-      Accept: "application/json; charset=utf-8",
-    }),
+    headers,
     credentials: "include",
   });
   if (!response.ok) return false;
   const payload = await response.json();
+  const nextCsrfToken = String(payload?.csrfToken || "").trim();
+  if (nextCsrfToken) {
+    setCsrfToken(nextCsrfToken);
+  }
   return payload?.ok === true;
 };
 
@@ -148,35 +138,42 @@ export const useAuthStore = defineStore("auth", {
     async loginWithTelegramInitData() {
       const initData = getInitData();
       if (!initData) return false;
+      const headers = await withCsrfHeader({
+        "Content-Type": "application/json; charset=utf-8",
+        Accept: "application/json; charset=utf-8",
+      });
       const response = await fetch(`${getApiBase()}/api/auth/telegram`, {
         method: "POST",
-        headers: withCsrfHeader({
-          "Content-Type": "application/json; charset=utf-8",
-          Accept: "application/json; charset=utf-8",
-        }),
+        headers,
         credentials: "include",
         body: JSON.stringify({ initData }),
       });
       if (!response.ok) return false;
       const payload = await response.json();
+      const nextCsrfToken = String(payload?.csrfToken || "").trim();
+      if (nextCsrfToken) {
+        setCsrfToken(nextCsrfToken);
+      }
       this.setUser(payload?.user || null);
       return Boolean(payload?.user);
     },
     async logout({ notifyServer = true, clearAppState = true } = {}) {
       if (notifyServer) {
         try {
+          const headers = await withCsrfHeader({
+            "Content-Type": "application/json; charset=utf-8",
+            Accept: "application/json; charset=utf-8",
+          });
           await fetch(`${getApiBase()}/api/auth/logout`, {
             method: "POST",
-            headers: withCsrfHeader({
-              "Content-Type": "application/json; charset=utf-8",
-              Accept: "application/json; charset=utf-8",
-            }),
+            headers,
             credentials: "include",
           });
         } catch {
           // Ошибка logout на сервере не блокирует локальную очистку.
         }
       }
+      clearCsrfToken();
       this.user = null;
       this.isAuthenticated = false;
       this.sessionChecked = true;

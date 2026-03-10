@@ -9,6 +9,7 @@ const CSRF_TOKEN_OPTIONAL_PATHS = new Set([
   "/api/auth/telegram",
   "/api/auth/admin/login",
   "/api/auth/refresh",
+  "/api/auth/logout",
   "/api/auth/eruda",
 ]);
 

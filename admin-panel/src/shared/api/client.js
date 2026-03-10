@@ -1,5 +1,6 @@
 import axios from "axios";
 import { useAuthStore } from "@/shared/stores/auth.js";
+import { fetchCsrfToken, setCsrfToken, withCsrfHeader } from "@/shared/api/csrf.js";
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || "http://localhost:3000",
@@ -8,22 +9,6 @@ const api = axios.create({
     "Content-Type": "application/json",
   },
 });
-
-const getCookieValue = (name) => {
-  if (typeof document === "undefined") return "";
-  const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const match = document.cookie.match(new RegExp(`(?:^|; )${escapedName}=([^;]*)`));
-  return match ? decodeURIComponent(match[1]) : "";
-};
-
-const withCsrfHeader = (headers = {}) => {
-  const csrfToken = getCookieValue("csrf_token");
-  if (!csrfToken) return headers;
-  return {
-    ...headers,
-    "X-CSRF-Token": csrfToken,
-  };
-};
 
 let refreshPromise = null;
 const AUTH_ERRORS = new Set([
@@ -59,33 +44,54 @@ const refreshToken = async () => {
   if (refreshPromise) return refreshPromise;
   refreshPromise = axios
     .post(`${(import.meta.env.VITE_API_URL || "http://localhost:3000").replace(/\/$/, "")}/api/auth/refresh`, null, {
-      headers: withCsrfHeader({
+      headers: await withCsrfHeader({
         "Content-Type": "application/json; charset=utf-8",
         Accept: "application/json; charset=utf-8",
       }),
       withCredentials: true,
       timeout: 10000,
     })
-    .then((response) => response.data)
+    .then((response) => {
+      const nextCsrfToken = String(response?.data?.csrfToken || "").trim();
+      if (nextCsrfToken) {
+        setCsrfToken(nextCsrfToken);
+      }
+      return response.data;
+    })
     .finally(() => {
       refreshPromise = null;
     });
   return refreshPromise;
 };
-api.interceptors.request.use((config) => {
+api.interceptors.request.use(async (config) => {
   const method = String(config.method || "get").toUpperCase();
   if (!["GET", "HEAD", "OPTIONS"].includes(method)) {
-    config.headers = withCsrfHeader(config.headers || {});
+    config.headers = await withCsrfHeader(config.headers || {});
   }
   return config;
 });
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    const nextCsrfToken = String(response?.data?.csrfToken || "").trim();
+    if (nextCsrfToken) {
+      setCsrfToken(nextCsrfToken);
+    }
+    return response;
+  },
   async (error) => {
     const authStore = useAuthStore();
     const status = error.response?.status;
     const originalRequest = error.config;
     const isRefreshRequest = originalRequest?.url?.includes("/api/auth/refresh");
+    const errorMessage = String(error?.response?.data?.error || "").trim();
+    const isCsrfError = status === 403 && errorMessage.startsWith("CSRF validation failed");
+
+    if (isCsrfError && !originalRequest?._csrfRetry) {
+      originalRequest._csrfRetry = true;
+      await fetchCsrfToken({ force: true });
+      return api(originalRequest);
+    }
+
     if (status === 401 && !isRefreshRequest && !originalRequest?._retry) {
       originalRequest._retry = true;
       try {

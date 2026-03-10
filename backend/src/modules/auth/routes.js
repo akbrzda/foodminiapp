@@ -308,12 +308,13 @@ router.post("/telegram", telegramAuthLimiter, async (req, res, next) => {
     // Устанавливаем cookie с токеном
     setAuthCookie(res, accessToken, CLIENT_ACCESS_TOKEN_COOKIE_MAX_AGE);
     setRefreshCookie(res, refreshToken, CLIENT_REFRESH_TOKEN_COOKIE_MAX_AGE);
-    setCsrfCookie(res, createCsrfToken(), CLIENT_REFRESH_TOKEN_COOKIE_MAX_AGE);
+    const csrfToken = createCsrfToken();
+    setCsrfCookie(res, csrfToken, CLIENT_REFRESH_TOKEN_COOKIE_MAX_AGE);
 
     // Логируем успешный вход
     await logger.auth.login(userId, "client", req.ip);
 
-    res.json({ user });
+    res.json({ user, csrfToken });
   } catch (error) {
     next(error);
   }
@@ -426,7 +427,8 @@ router.post("/admin/login", authLimiter, strictAuthLimiter, async (req, res, nex
     // Устанавливаем cookie с токеном
     setAuthCookie(res, accessToken, ADMIN_ACCESS_TOKEN_COOKIE_MAX_AGE);
     setRefreshCookie(res, refreshToken, ADMIN_REFRESH_TOKEN_COOKIE_MAX_AGE);
-    setCsrfCookie(res, createCsrfToken(), ADMIN_REFRESH_TOKEN_COOKIE_MAX_AGE);
+    const csrfToken = createCsrfToken();
+    setCsrfCookie(res, csrfToken, ADMIN_REFRESH_TOKEN_COOKIE_MAX_AGE);
 
     // Логируем успешный вход
     await logger.auth.login(user.id, user.role, req.ip);
@@ -441,6 +443,7 @@ router.post("/admin/login", authLimiter, strictAuthLimiter, async (req, res, nex
 
     res.json({
       user: buildAdminSessionUser({ user, cities, branches, permissions }),
+      csrfToken,
     });
   } catch (error) {
     next(error);
@@ -563,11 +566,27 @@ router.post("/refresh", refreshLimiter, async (req, res) => {
     await addToBlacklist(refreshToken, getTokenTtlSeconds(decoded));
     setAuthCookie(res, nextAccessToken, accessMaxAge);
     setRefreshCookie(res, nextRefreshToken, refreshMaxAge);
-    setCsrfCookie(res, createCsrfToken(), refreshMaxAge);
-    res.json({ ok: true });
+    const csrfToken = createCsrfToken();
+    setCsrfCookie(res, csrfToken, refreshMaxAge);
+    res.json({ ok: true, csrfToken });
   } catch (error) {
     return res.status(401).json({ error: "Invalid or expired refresh token" });
   }
+});
+
+router.get("/csrf", (req, res) => {
+  const hasAuthCookies = Boolean(req.cookies?.access_token || req.cookies?.refresh_token);
+  if (!hasAuthCookies) {
+    return res.status(401).json({ error: "Authentication required" });
+  }
+
+  let csrfToken = String(req.cookies?.csrf_token || "").trim();
+  if (!csrfToken) {
+    csrfToken = createCsrfToken();
+    setCsrfCookie(res, csrfToken, CSRF_TOKEN_COOKIE_MAX_AGE);
+  }
+
+  return res.json({ csrfToken });
 });
 
 router.get("/session", authenticateToken, async (req, res, next) => {

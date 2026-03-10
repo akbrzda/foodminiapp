@@ -1,15 +1,9 @@
 import { devLog, devWarn } from "@/shared/utils/logger.js";
+import { withCsrfHeader } from "@/shared/api/csrf.js";
 
 const normalizeApiBase = (value) => {
   const raw = String(value || "").trim().replace(/\/$/, "");
   return raw.replace(/\/api$/i, "");
-};
-
-const getCookieValue = (name) => {
-  if (typeof document === "undefined") return "";
-  const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const match = document.cookie.match(new RegExp(`(?:^|; )${escapedName}=([^;]*)`));
-  return match ? decodeURIComponent(match[1]) : "";
 };
 
 class WebSocketService {
@@ -23,14 +17,10 @@ class WebSocketService {
   }
   async requestTicket() {
     const apiBase = normalizeApiBase(import.meta.env.VITE_API_URL);
-    const csrfToken = getCookieValue("csrf_token");
-    const headers = {
+    const headers = await withCsrfHeader({
       "Content-Type": "application/json; charset=utf-8",
       Accept: "application/json; charset=utf-8",
-    };
-    if (csrfToken) {
-      headers["X-CSRF-Token"] = csrfToken;
-    }
+    });
     const response = await fetch(`${apiBase}/api/auth/ws-ticket`, {
       method: "POST",
       headers,
