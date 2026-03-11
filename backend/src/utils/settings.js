@@ -216,6 +216,13 @@ export const SETTINGS_SCHEMA = {
     group: "Интеграции",
     type: "string",
   },
+  iiko_webhook_allow_order_number_fallback: {
+    default: false,
+    label: "Fallback поиска заказа по номеру (iiko webhook)",
+    description: "Разрешает искать заказ по external_number, если iiko_order_id не найден",
+    group: "Интеграции",
+    type: "boolean",
+  },
   premiumbonus_enabled: {
     default: false,
     label: "Интеграция PremiumBonus",

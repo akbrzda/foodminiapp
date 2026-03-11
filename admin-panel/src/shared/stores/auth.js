@@ -1,13 +1,14 @@
 import { defineStore } from "pinia";
 import api from "@/shared/api/client.js";
 import { useNavigationContextStore } from "./navigationContext.js";
-import { clearCsrfToken, withCsrfHeader } from "@/shared/api/csrf.js";
+import { clearCsrfToken } from "@/shared/api/csrf.js";
 
 const STORAGE_USER = "admin_user";
 const LEGACY_STORAGE_USER = "admin_user";
 const AUTH_SYNC_KEY = "admin_auth_sync_event";
 const POST_LOGIN_REDIRECT_KEY = "admin_post_login_redirect";
 let crossTabSyncAttached = false;
+const LOGOUT_SERVER_TIMEOUT_MS = 1500;
 
 const LOGIN_ERROR_MAP = {
   "Invalid credentials": "Неверный email или пароль.",
@@ -50,6 +51,30 @@ const readSessionUser = () => {
     return JSON.parse(raw);
   } catch {
     return null;
+  }
+};
+
+const wait = (ms) =>
+  new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+
+const notifyServerLogout = async (apiBase) => {
+  try {
+    await Promise.race([
+      fetch(`${apiBase}/api/auth/logout`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json; charset=utf-8",
+          Accept: "application/json; charset=utf-8",
+        },
+        credentials: "include",
+        keepalive: true,
+      }),
+      wait(LOGOUT_SERVER_TIMEOUT_MS),
+    ]);
+  } catch {
+    // Ошибка server-logout не должна влиять на уже завершенный локальный logout.
   }
 };
 
@@ -185,22 +210,10 @@ export const useAuthStore = defineStore("auth", {
       }
 
       if (notifyServer) {
-        withCsrfHeader({
-          "Content-Type": "application/json; charset=utf-8",
-          Accept: "application/json; charset=utf-8",
-        })
-          .then((headers) =>
-            fetch(`${apiBase}/api/auth/logout`, {
-              method: "POST",
-              headers,
-              credentials: "include",
-              keepalive: true,
-            }),
-          )
-          .catch(() => {
-            // Ошибка server-logout не должна влиять на уже завершенный локальный logout.
-          });
+        await notifyServerLogout(apiBase);
       }
+
+      clearCsrfToken();
 
       if (redirect && window.location.pathname !== "/login") {
         window.location.assign("/login");
