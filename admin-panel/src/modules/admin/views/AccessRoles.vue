@@ -9,10 +9,6 @@
                 <RefreshCcw :size="16" />
                 Обновить
               </Button>
-              <Button v-if="canManageAccess" @click="openRoleDialog()">
-                <Plus :size="16" />
-                Новая роль
-              </Button>
             </div>
           </template>
         </PageHeader>
@@ -47,22 +43,12 @@
                   <div class="text-xs text-muted-foreground">{{ role.code }}</div>
                 </div>
                 <div class="flex items-center gap-2">
-                  <Badge variant="outline">{{ getScopeRoleLabel(role.scope_role) }}</Badge>
+                  <Badge variant="outline">{{ getSystemRoleLabel(role.code) }}</Badge>
                   <Badge v-if="role.is_system" variant="secondary">Системная</Badge>
                   <Badge :variant="role.is_active ? 'default' : 'outline'">{{ role.is_active ? "Активна" : "Неактивна" }}</Badge>
                 </div>
               </div>
               <div class="mt-2 text-xs text-muted-foreground">Прав: {{ role.permissions_count || 0 }}</div>
-              <div v-if="canManageAccess" class="mt-3 flex justify-end gap-2">
-                <Button variant="ghost" size="sm" @click.stop="openRoleDialog(role)">
-                  <Pencil :size="16" />
-                  Изменить
-                </Button>
-                <Button v-if="!role.is_system" variant="ghost" size="sm" class="text-red-600 hover:text-red-700" @click.stop="deleteRole(role)">
-                  <Trash2 :size="16" />
-                  Удалить
-                </Button>
-              </div>
             </button>
           </div>
         </CardContent>
@@ -81,6 +67,9 @@
               <Save :size="16" />
               Сохранить права
             </Button>
+          </div>
+          <div class="rounded-lg border border-border p-3 text-xs text-muted-foreground">
+            Создание, удаление и изменение метаданных ролей отключено. Доступно только управление правами системных ролей.
           </div>
 
           <div v-if="permissionsLoading" class="space-y-2">
@@ -116,70 +105,12 @@
         </CardContent>
       </Card>
     </div>
-
-    <Dialog v-if="roleDialogOpen" :open="roleDialogOpen" @update:open="(value) => (value ? null : closeRoleDialog())">
-      <DialogContent class="w-full max-w-md">
-        <DialogHeader>
-          <DialogTitle>{{ editingRole ? "Редактировать роль" : "Новая роль" }}</DialogTitle>
-          <DialogDescription>
-            {{ editingRole ? "Обновите название и статус роли" : "Создайте дополнительную роль для гибкой выдачи доступов" }}
-          </DialogDescription>
-        </DialogHeader>
-        <form class="space-y-4" @submit.prevent="submitRole">
-          <Field>
-            <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Код роли</FieldLabel>
-            <FieldContent>
-              <Input v-model="roleForm.code" :disabled="Boolean(editingRole)" required placeholder="например, support" />
-            </FieldContent>
-          </Field>
-          <Field>
-            <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Название</FieldLabel>
-            <FieldContent>
-              <Input v-model="roleForm.name" required placeholder="Например, Поддержка" />
-            </FieldContent>
-          </Field>
-          <Field>
-            <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Статус</FieldLabel>
-            <FieldContent>
-              <Select v-model="roleForm.is_active">
-                <SelectTrigger class="w-full">
-                  <SelectValue placeholder="Выберите статус" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem :value="true">Активна</SelectItem>
-                  <SelectItem :value="false">Неактивна</SelectItem>
-                </SelectContent>
-              </Select>
-            </FieldContent>
-          </Field>
-          <Field>
-            <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Системный скоуп</FieldLabel>
-            <FieldContent>
-              <Select v-model="roleForm.scope_role" :disabled="Boolean(editingRole?.is_system)">
-                <SelectTrigger class="w-full">
-                  <SelectValue placeholder="Выберите скоуп" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem v-for="option in scopeRoleOptions" :key="option.value" :value="option.value">{{ option.label }}</SelectItem>
-                </SelectContent>
-              </Select>
-            </FieldContent>
-          </Field>
-          <div class="form-actions">
-            <Button type="submit" :disabled="roleSaving || !canManageAccess">
-              <Save :size="16" />
-              Сохранить
-            </Button>
-          </div>
-        </form>
-      </DialogContent>
-    </Dialog>
   </div>
 </template>
 
 <script setup>
 import { computed, onMounted, ref } from "vue";
-import { Pencil, Plus, RefreshCcw, Save, Trash2 } from "lucide-vue-next";
+import { RefreshCcw, Save } from "lucide-vue-next";
 import api from "@/shared/api/client.js";
 import { devError } from "@/shared/utils/logger";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
@@ -189,12 +120,8 @@ import Button from "@/shared/components/ui/button/Button.vue";
 import Card from "@/shared/components/ui/card/Card.vue";
 import CardContent from "@/shared/components/ui/card/CardContent.vue";
 import PageHeader from "@/shared/components/PageHeader.vue";
-import Input from "@/shared/components/ui/input/Input.vue";
 import Skeleton from "@/shared/components/ui/skeleton/Skeleton.vue";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/shared/components/ui/dialog/index.js";
-import { Field, FieldContent, FieldLabel } from "@/shared/components/ui/field";
 import { Label } from "@/shared/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/components/ui/select";
 
 const { showErrorNotification, showSuccessNotification } = useNotifications();
 const authStore = useAuthStore();
@@ -203,26 +130,11 @@ const canManageAccess = computed(() => authStore.hasPermission("system.access.ma
 const loading = ref(false);
 const permissionsLoading = ref(false);
 const permissionsSaving = ref(false);
-const roleSaving = ref(false);
 
 const roles = ref([]);
 const permissions = ref([]);
 const selectedRole = ref(null);
 const selectedPermissionCodes = ref([]);
-
-const roleDialogOpen = ref(false);
-const editingRole = ref(null);
-const roleForm = ref({
-  code: "",
-  name: "",
-  is_active: true,
-  scope_role: "manager",
-});
-const scopeRoleOptions = [
-  { value: "ceo", label: "CEO" },
-  { value: "admin", label: "Администратор" },
-  { value: "manager", label: "Менеджер" },
-];
 
 const groupedPermissions = computed(() => {
   const groups = new Map();
@@ -254,13 +166,13 @@ const formatModule = (value) => {
   };
   return labels[value] || value;
 };
-const getScopeRoleLabel = (value) => {
+const getSystemRoleLabel = (value) => {
   const labels = {
-    admin: "Скоуп: Admin",
-    manager: "Скоуп: Manager",
-    ceo: "Скоуп: CEO",
+    admin: "Admin",
+    manager: "Manager",
+    ceo: "CEO",
   };
-  return labels[value] || `Скоуп: ${value}`;
+  return labels[value] || value;
 };
 
 const loadRoles = async () => {
@@ -323,78 +235,6 @@ const saveRolePermissions = async () => {
     showErrorNotification(error.response?.data?.error || "Не удалось сохранить права роли");
   } finally {
     permissionsSaving.value = false;
-  }
-};
-
-const openRoleDialog = (role = null) => {
-  if (!canManageAccess.value) return;
-  editingRole.value = role;
-  roleForm.value = role
-    ? {
-        code: role.code,
-        name: role.name,
-        is_active: Boolean(role.is_active),
-        scope_role: role.scope_role || "manager",
-      }
-    : {
-        code: "",
-        name: "",
-        is_active: true,
-        scope_role: "manager",
-      };
-  roleDialogOpen.value = true;
-};
-
-const closeRoleDialog = () => {
-  roleDialogOpen.value = false;
-  editingRole.value = null;
-};
-
-const submitRole = async () => {
-  if (!canManageAccess.value) return;
-  roleSaving.value = true;
-  try {
-    const isEditMode = Boolean(editingRole.value);
-    if (editingRole.value) {
-      await api.put(`/api/admin/access/roles/${editingRole.value.id}`, {
-        name: roleForm.value.name,
-        is_active: roleForm.value.is_active,
-        scope_role: roleForm.value.scope_role,
-      });
-    } else {
-      await api.post("/api/admin/access/roles", {
-        code: roleForm.value.code,
-        name: roleForm.value.name,
-        is_active: roleForm.value.is_active,
-        scope_role: roleForm.value.scope_role,
-      });
-    }
-
-    closeRoleDialog();
-    showSuccessNotification(isEditMode ? "Роль обновлена" : "Роль создана");
-    await loadInitialData();
-  } catch (error) {
-    devError("Ошибка сохранения роли:", error);
-    showErrorNotification(error.response?.data?.error || "Не удалось сохранить роль");
-  } finally {
-    roleSaving.value = false;
-  }
-};
-
-const deleteRole = async (role) => {
-  if (!canManageAccess.value) return;
-  if (!confirm(`Удалить роль "${role.name}"?`)) return;
-  try {
-    await api.delete(`/api/admin/access/roles/${role.id}`);
-    showSuccessNotification("Роль удалена");
-    if (selectedRole.value?.id === role.id) {
-      selectedRole.value = null;
-      selectedPermissionCodes.value = [];
-    }
-    await loadRoles();
-  } catch (error) {
-    devError("Ошибка удаления роли:", error);
-    showErrorNotification(error.response?.data?.error || "Не удалось удалить роль");
   }
 };
 

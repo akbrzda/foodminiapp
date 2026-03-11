@@ -83,9 +83,9 @@ export const DEFAULT_ROLE_PERMISSIONS = {
 };
 
 export const SYSTEM_ROLE_DEFINITIONS = [
-  { code: "ceo", name: "CEO", scope_role: "ceo", is_system: true },
-  { code: "admin", name: "Администратор", scope_role: "admin", is_system: true },
-  { code: "manager", name: "Менеджер", scope_role: "manager", is_system: true },
+  { code: "ceo", name: "CEO", is_system: true },
+  { code: "admin", name: "Администратор", is_system: true },
+  { code: "manager", name: "Менеджер", is_system: true },
 ];
 
 export const getDefaultRolePermissions = (roleCode) => {

@@ -292,7 +292,6 @@ CREATE TABLE `admin_roles` (
   `id` int NOT NULL AUTO_INCREMENT,
   `code` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
   `name` varchar(120) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `scope_role` enum('admin','manager','ceo') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'manager',
   `is_system` tinyint(1) NOT NULL DEFAULT '0',
   `is_active` tinyint(1) NOT NULL DEFAULT '1',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
@@ -1181,10 +1180,10 @@ INSERT INTO `loyalty_levels` (`id`, `name`, `threshold_amount`, `earn_percentage
 
 INSERT INTO `order_number_sequence` (`id`, `last_number`) VALUES (1, 0);
 
-INSERT INTO `admin_roles` (`id`, `code`, `name`, `scope_role`, `is_system`, `is_active`) VALUES
-(1, 'ceo', 'CEO', 'ceo', 1, 1),
-(2, 'admin', 'Администратор', 'admin', 1, 1),
-(3, 'manager', 'Менеджер', 'manager', 1, 1);
+INSERT INTO `admin_roles` (`id`, `code`, `name`, `is_system`, `is_active`) VALUES
+(1, 'ceo', 'CEO', 1, 1),
+(2, 'admin', 'Администратор', 1, 1),
+(3, 'manager', 'Менеджер', 1, 1);
 
 INSERT INTO `admin_permissions` (`id`, `code`, `module`, `action`, `description`, `is_active`) VALUES
 (1, 'dashboard.view', 'dashboard', 'view', 'Просмотр дашборда', 1),

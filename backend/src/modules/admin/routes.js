@@ -60,6 +60,7 @@ const getManagerCityIds = (req) => {
 };
 
 const ACCESS_TABLE_MISSING_CODES = new Set(["ER_NO_SUCH_TABLE", "ER_BAD_TABLE_ERROR"]);
+const SYSTEM_ROLE_CODES = new Set(SYSTEM_ROLE_DEFINITIONS.map((role) => role.code));
 
 const isAccessSchemaMissingError = (error) => {
   if (!error) return false;
@@ -195,6 +196,7 @@ router.get("/access/roles", requirePermission("system.access.manage"), async (re
       `SELECT r.id, r.code, r.name, r.is_system, r.is_active, r.created_at, r.updated_at, COUNT(rp.permission_id) AS permissions_count
        FROM admin_roles r
        LEFT JOIN admin_role_permissions rp ON rp.role_id = r.id
+       WHERE r.is_system = 1
        GROUP BY r.id, r.code, r.name, r.is_system, r.is_active, r.created_at, r.updated_at
        ORDER BY r.is_system DESC, r.code ASC`,
     );
@@ -216,42 +218,9 @@ router.get("/access/roles", requirePermission("system.access.manage"), async (re
 
 router.post("/access/roles", requirePermission("system.access.manage"), async (req, res, next) => {
   try {
-    const code = String(req.body?.code || "")
-      .trim()
-      .toLowerCase();
-    const name = String(req.body?.name || "").trim();
-    const isActive = req.body?.is_active === undefined ? true : req.body.is_active === true;
-
-    if (!code || !name) {
-      return res.status(400).json({
-        success: false,
-        error: "Поля code и name обязательны",
-      });
-    }
-    if (!/^[a-z0-9_]{2,50}$/.test(code)) {
-      return res.status(400).json({
-        success: false,
-        error: "code может содержать только a-z, 0-9 и _, длина 2-50",
-      });
-    }
-    if (SYSTEM_ROLE_DEFINITIONS.some((role) => role.code === code)) {
-      return res.status(400).json({
-        success: false,
-        error: "Код роли зарезервирован системной ролью",
-      });
-    }
-
-    const [result] = await db.query(`INSERT INTO admin_roles (code, name, is_system, is_active) VALUES (?, ?, 0, ?)`, [code, name, isActive]);
-    const [rows] = await db.query(
-      `SELECT id, code, name, is_system, is_active, created_at, updated_at
-       FROM admin_roles
-       WHERE id = ?`,
-      [result.insertId],
-    );
-
-    res.status(201).json({
-      success: true,
-      data: rows[0],
+    return res.status(403).json({
+      success: false,
+      error: "Создание ролей отключено. Разрешено управление только системными ролями.",
     });
   } catch (error) {
     if (isAccessSchemaMissingError(error)) {
@@ -270,71 +239,11 @@ router.post("/access/roles", requirePermission("system.access.manage"), async (r
   }
 });
 
-router.put("/access/roles/:id", requirePermission("system.access.manage"), async (req, res, next) => {
+router.put("/access/roles/:id", requirePermission("system.access.manage"), async (_req, res, next) => {
   try {
-    const roleId = Number(req.params.id);
-    if (!Number.isInteger(roleId) || roleId <= 0) {
-      return res.status(400).json({
-        success: false,
-        error: "Некорректный id роли",
-      });
-    }
-
-    const [existingRows] = await db.query(`SELECT id, code, is_system FROM admin_roles WHERE id = ? LIMIT 1`, [roleId]);
-    if (existingRows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        error: "Роль не найдена",
-      });
-    }
-
-    const role = existingRows[0];
-    const updates = [];
-    const values = [];
-
-    if (req.body?.name !== undefined) {
-      const name = String(req.body.name || "").trim();
-      if (!name) {
-        return res.status(400).json({
-          success: false,
-          error: "name не может быть пустым",
-        });
-      }
-      updates.push("name = ?");
-      values.push(name);
-    }
-    if (req.body?.is_active !== undefined) {
-      updates.push("is_active = ?");
-      values.push(req.body.is_active === true);
-    }
-
-    if (updates.length === 0) {
-      return res.status(400).json({
-        success: false,
-        error: "Нет полей для обновления",
-      });
-    }
-
-    if (role.is_system && req.body?.is_active === false) {
-      return res.status(400).json({
-        success: false,
-        error: "Системную роль нельзя деактивировать",
-      });
-    }
-
-    values.push(roleId);
-    await db.query(`UPDATE admin_roles SET ${updates.join(", ")} WHERE id = ?`, values);
-
-    const [rows] = await db.query(
-      `SELECT id, code, name, is_system, is_active, created_at, updated_at
-       FROM admin_roles
-       WHERE id = ?`,
-      [roleId],
-    );
-
-    res.json({
-      success: true,
-      data: rows[0],
+    return res.status(403).json({
+      success: false,
+      error: "Изменение метаданных ролей отключено. Разрешено только управление правами системных ролей.",
     });
   } catch (error) {
     if (isAccessSchemaMissingError(error)) {
@@ -347,35 +256,11 @@ router.put("/access/roles/:id", requirePermission("system.access.manage"), async
   }
 });
 
-router.delete("/access/roles/:id", requirePermission("system.access.manage"), async (req, res, next) => {
+router.delete("/access/roles/:id", requirePermission("system.access.manage"), async (_req, res, next) => {
   try {
-    const roleId = Number(req.params.id);
-    if (!Number.isInteger(roleId) || roleId <= 0) {
-      return res.status(400).json({
-        success: false,
-        error: "Некорректный id роли",
-      });
-    }
-
-    const [existingRows] = await db.query(`SELECT id, code, is_system FROM admin_roles WHERE id = ? LIMIT 1`, [roleId]);
-    if (existingRows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        error: "Роль не найдена",
-      });
-    }
-
-    if (existingRows[0].is_system) {
-      return res.status(400).json({
-        success: false,
-        error: "Системную роль нельзя удалить",
-      });
-    }
-
-    await db.query(`DELETE FROM admin_roles WHERE id = ?`, [roleId]);
-    res.json({
-      success: true,
-      data: { deleted: true },
+    return res.status(403).json({
+      success: false,
+      error: "Удаление ролей отключено.",
     });
   } catch (error) {
     if (isAccessSchemaMissingError(error)) {
@@ -403,6 +288,12 @@ router.get("/access/roles/:id/permissions", requirePermission("system.access.man
       return res.status(404).json({
         success: false,
         error: "Роль не найдена",
+      });
+    }
+    if (!SYSTEM_ROLE_CODES.has(String(roleRows[0].code || "").trim().toLowerCase())) {
+      return res.status(404).json({
+        success: false,
+        error: "Роль недоступна для управления",
       });
     }
 
@@ -454,12 +345,19 @@ router.put("/access/roles/:id/permissions", requirePermission("system.access.man
     connection = await db.getConnection();
     await connection.beginTransaction();
 
-    const [roleRows] = await connection.query(`SELECT id FROM admin_roles WHERE id = ? LIMIT 1`, [roleId]);
+    const [roleRows] = await connection.query(`SELECT id, code FROM admin_roles WHERE id = ? LIMIT 1`, [roleId]);
     if (roleRows.length === 0) {
       await connection.rollback();
       return res.status(404).json({
         success: false,
         error: "Роль не найдена",
+      });
+    }
+    if (!SYSTEM_ROLE_CODES.has(String(roleRows[0].code || "").trim().toLowerCase())) {
+      await connection.rollback();
+      return res.status(404).json({
+        success: false,
+        error: "Роль недоступна для управления",
       });
     }
 

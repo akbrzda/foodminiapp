@@ -26,7 +26,7 @@ import { addToBlacklist, isBlacklisted } from "../../middleware/tokenBlacklist.j
 import { authenticateToken } from "../../middleware/auth.js";
 import { logger } from "../../utils/logger.js";
 import { authLimiter, createLimiter, refreshLimiter, telegramAuthLimiter } from "../../middleware/rateLimiter.js";
-import { getRoleByCode, resolveAdminPermissions, resolveScopeRole } from "../access/index.js";
+import { getRoleByCode, resolveAdminPermissions } from "../access/index.js";
 
 const router = express.Router();
 const CLIENT_ACCESS_TOKEN_TTL = "15m";
@@ -129,7 +129,7 @@ const resolveAdminRoleContext = async (roleCode) => {
   const normalizedCode = String(roleCode || "")
     .trim()
     .toLowerCase();
-  const role = await getRoleByCode(db, roleCode);
+  const role = await getRoleByCode(db, normalizedCode);
   if (!role) {
     if (!SYSTEM_SCOPE_ROLES.has(normalizedCode)) {
       return null;
@@ -139,21 +139,16 @@ const resolveAdminRoleContext = async (roleCode) => {
       name: normalizedCode.toUpperCase(),
       is_system: true,
       is_active: true,
-      scope_role: resolveScopeRole("", normalizedCode),
     };
   }
-
-  return {
-    ...role,
-    scope_role: resolveScopeRole(role.scope_role, role.code),
-  };
+  return role;
 };
 
-const getAdminScope = async (adminId, scopeRole) => {
+const getAdminScope = async (adminId, roleCode) => {
   let cities = [];
   let branches = [];
 
-  if (scopeRole === "manager") {
+  if (roleCode === "manager") {
     const [userCities] = await db.query(`SELECT city_id FROM admin_user_cities WHERE admin_user_id = ?`, [adminId]);
     cities = userCities.map((city) => city.city_id);
 
@@ -176,10 +171,8 @@ const getAdminScope = async (adminId, scopeRole) => {
 const buildAdminAuthPayload = ({ user, roleContext, cities, branches, permissions }) => ({
   id: user.id,
   email: user.email,
-  role: roleContext.scope_role,
-  role_code: roleContext.code,
+  role: roleContext.code,
   role_name: roleContext.name,
-  scope_role: roleContext.scope_role,
   cities,
   permissions,
   permission_version: Number(user.permission_version || 1),
@@ -190,7 +183,6 @@ const buildAdminAuthPayload = ({ user, roleContext, cities, branches, permission
 
 const buildAdminSessionUser = ({ user, roleContext, cities, branches, permissions }) => ({
   ...user,
-  scope_role: roleContext.scope_role,
   role_name: roleContext.name,
   cities,
   permissions,
@@ -421,7 +413,7 @@ router.post("/admin/login", authLimiter, async (req, res, next) => {
       return res.status(403).json({ error: "Role is disabled" });
     }
 
-    const { cities, branches } = await getAdminScope(user.id, roleContext.scope_role);
+    const { cities, branches } = await getAdminScope(user.id, roleContext.code);
     const { permissions } = await resolveAdminPermissions(db, { adminUserId: user.id, roleCode: user.role });
     const authPayload = buildAdminAuthPayload({ user, roleContext, cities, branches, permissions });
     const accessToken = signAccessToken(authPayload, JWT_AUDIENCE_ADMIN, ADMIN_ACCESS_TOKEN_TTL);
@@ -434,7 +426,7 @@ router.post("/admin/login", authLimiter, async (req, res, next) => {
     setCsrfCookie(res, csrfToken, ADMIN_REFRESH_TOKEN_COOKIE_MAX_AGE);
 
     // Логируем успешный вход
-    await logger.auth.login(user.id, roleContext.scope_role, req.ip);
+    await logger.auth.login(user.id, roleContext.code, req.ip);
     await logAdminAuthAction({
       adminUserId: user.id,
       action: "auth_login_success",
@@ -547,7 +539,7 @@ router.post("/refresh", refreshLimiter, async (req, res) => {
       if (!roleContext || !roleContext.is_active) {
         return res.status(401).json({ error: "Admin role is inactive" });
       }
-      const { cities, branches } = await getAdminScope(admin.id, roleContext.scope_role);
+      const { cities, branches } = await getAdminScope(admin.id, roleContext.code);
       const { permissions } = await resolveAdminPermissions(db, { adminUserId: admin.id, roleCode: admin.role });
       const payload = buildAdminAuthPayload({ user: admin, roleContext, cities, branches, permissions });
       nextAccessToken = signAccessToken(payload, JWT_AUDIENCE_ADMIN, ADMIN_ACCESS_TOKEN_TTL);
@@ -605,7 +597,7 @@ router.get("/session", authenticateToken, async (req, res, next) => {
     if (!roleContext || !roleContext.is_active) {
       return res.status(401).json({ error: "Admin role is inactive" });
     }
-    const { cities, branches } = await getAdminScope(admin.id, roleContext.scope_role);
+    const { cities, branches } = await getAdminScope(admin.id, roleContext.code);
     const { permissions } = await resolveAdminPermissions(db, { adminUserId: admin.id, roleCode: admin.role });
     res.json({
       user: buildAdminSessionUser({ user: admin, roleContext, cities, branches, permissions }),

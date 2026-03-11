@@ -7,25 +7,9 @@ const isTableMissingError = (error) => {
   return TABLE_MISSING_CODES.has(error.code);
 };
 
-const SYSTEM_SCOPE_ROLES = new Set(["admin", "manager", "ceo"]);
-
-export const resolveScopeRole = (scopeRole, fallbackRoleCode = "") => {
-  const normalizedScope = String(scopeRole || "").trim().toLowerCase();
-  if (SYSTEM_SCOPE_ROLES.has(normalizedScope)) {
-    return normalizedScope;
-  }
-
-  const normalizedFallback = String(fallbackRoleCode || "").trim().toLowerCase();
-  if (SYSTEM_SCOPE_ROLES.has(normalizedFallback)) {
-    return normalizedFallback;
-  }
-
-  return "manager";
-};
-
 export const getRoleByCode = async (db, roleCode) => {
   const [rows] = await db.query(
-    `SELECT id, code, name, scope_role, is_system, is_active, created_at, updated_at
+    `SELECT id, code, name, is_system, is_active, created_at, updated_at
      FROM admin_roles
      WHERE code = ?
      LIMIT 1`,

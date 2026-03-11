@@ -2,7 +2,7 @@ import jwt from "jsonwebtoken";
 import { isBlacklisted } from "./tokenBlacklist.js";
 import { logger } from "../utils/logger.js";
 import { JWT_ISSUER, JWT_ACCESS_AUDIENCES, extractBearerToken, getJwtSecret } from "../config/auth.js";
-import { canPermission, getDefaultRolePermissions, resolveScopeRole } from "../modules/access/index.js";
+import { canPermission, getDefaultRolePermissions } from "../modules/access/index.js";
 import db from "../config/database.js";
 
 const normalizeCityIds = (value) => {
@@ -38,8 +38,6 @@ const normalizePermissions = (value, role) => {
   return getDefaultRolePermissions(role);
 };
 
-const getUserScopeRole = (user) => resolveScopeRole(user?.scope_role, user?.role);
-
 export const authenticateToken = async (req, res, next) => {
   try {
     // Пытаемся получить токен из cookie (приоритет) или header
@@ -67,15 +65,10 @@ export const authenticateToken = async (req, res, next) => {
       issuer: JWT_ISSUER,
       audience: JWT_ACCESS_AUDIENCES,
     });
-    const scopeRole = getUserScopeRole(user);
-    const roleCode = String(user?.role_code || user?.role || "").trim();
     req.user = {
       ...user,
-      role: scopeRole,
-      scope_role: scopeRole,
-      role_code: roleCode,
       cities: normalizeCityIds(user?.cities),
-      permissions: normalizePermissions(user?.permissions, roleCode || scopeRole),
+      permissions: normalizePermissions(user?.permissions, user?.role),
     };
 
     if (req.user?.type === "admin") {
@@ -122,8 +115,7 @@ export const requireRole = (...roles) => {
         error: "Authentication required",
       });
     }
-    const scopeRole = getUserScopeRole(req.user);
-    if (roles.includes(scopeRole)) {
+    if (roles.includes(req.user.role)) {
       return next();
     }
 
@@ -138,6 +130,11 @@ export const requirePermission = (...permissions) => {
     if (!req.user) {
       return res.status(401).json({
         error: "Authentication required",
+      });
+    }
+    if (req.user?.type !== "admin") {
+      return res.status(403).json({
+        error: "Insufficient permissions",
       });
     }
 
@@ -160,8 +157,7 @@ export const checkCityAccess = (req, res, next) => {
       error: "Authentication required",
     });
   }
-  const scopeRole = getUserScopeRole(req.user);
-  if (scopeRole === "admin" || scopeRole === "ceo") {
+  if (req.user.role === "admin" || req.user.role === "ceo") {
     return next();
   }
   const cityId = parseInt(req.params.cityId || req.query.cityId || req.body.cityId);

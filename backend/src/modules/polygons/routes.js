@@ -15,7 +15,7 @@ const hasPermission = (req, permissionCode) => {
   const permissions = Array.isArray(req.user?.permissions) ? req.user.permissions : [];
   if (permissions.includes(permissionCode)) return true;
 
-  const scopeRole = req.user?.scope_role || req.user?.role;
+  const scopeRole = req.user?.role;
   if (permissions.length === 0 && ["admin", "ceo"].includes(scopeRole)) {
     return true;
   }
