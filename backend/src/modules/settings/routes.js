@@ -30,6 +30,12 @@ const filterPublicSettings = (settings) => {
   return result;
 };
 
+const buildMapsPublicPayload = (settings) => ({
+  yandex_js_api_key: String(settings?.yandex_public_js_api_key || "").trim(),
+  language: String(settings?.maps_default_language || "ru_RU").trim() || "ru_RU",
+  country: String(settings?.maps_default_country || "RU").trim() || "RU",
+});
+
 const buildYandexRequestHeaders = (req) => {
   const incomingReferer = String(req.headers?.referer || "").trim();
   const incomingOrigin = String(req.headers?.origin || "").trim();
@@ -64,12 +70,7 @@ router.get("/maps-public", async (req, res, next) => {
     const settings = await getSystemSettings();
     res.json({
       success: true,
-      data: {
-        yandex_js_api_key: String(settings?.yandex_js_api_key || "").trim(),
-        yandex_suggest_api_key: String(settings?.yandex_suggest_api_key || "").trim(),
-        language: String(settings?.maps_default_language || "ru_RU").trim() || "ru_RU",
-        country: String(settings?.maps_default_country || "RU").trim() || "RU",
-      },
+      data: buildMapsPublicPayload(settings),
     });
   } catch (error) {
     next(error);
@@ -97,7 +98,7 @@ router.post("/admin/maps/test", authenticateToken, requirePermission("system.set
     const query = "Москва, Тверская улица, 1";
 
     if (!geocoderKey) {
-      return res.status(400).json({ success: false, error: "Не задан yandex_js_api_key (единый ключ JS API + HTTP Геокодер)" });
+      return res.status(400).json({ success: false, error: "Не задан yandex_js_api_key (серверный ключ HTTP Геокодера)" });
     }
     if (!suggestKey) {
       return res.status(400).json({ success: false, error: "Не задан yandex_suggest_api_key" });

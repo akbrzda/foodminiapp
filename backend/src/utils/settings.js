@@ -268,7 +268,14 @@ export const SETTINGS_SCHEMA = {
   yandex_js_api_key: {
     default: "",
     label: "Yandex JS API Key",
-    description: "Единый ключ для JavaScript API и HTTP Геокодера Яндекс Карт",
+    description: "Серверный ключ для HTTP Геокодера Яндекс Карт",
+    group: "Карты",
+    type: "string",
+  },
+  yandex_public_js_api_key: {
+    default: "",
+    label: "Yandex Public JS API Key",
+    description: "Публичный ключ для JavaScript API Яндекс Карт (frontend)",
     group: "Карты",
     type: "string",
   },
@@ -350,7 +357,7 @@ const validateMapsSetting = (key, value) => {
     return null;
   }
 
-  if (key === "yandex_js_api_key" || key === "yandex_suggest_api_key") {
+  if (key === "yandex_js_api_key" || key === "yandex_suggest_api_key" || key === "yandex_public_js_api_key") {
     if (!value) return null;
     if (value.length < 8) {
       return `${key} слишком короткий`;

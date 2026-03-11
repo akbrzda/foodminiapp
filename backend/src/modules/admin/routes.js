@@ -218,63 +218,6 @@ router.get("/access/roles", requirePermission("system.access.manage"), async (re
   }
 });
 
-router.post("/access/roles", requirePermission("system.access.manage"), async (req, res, next) => {
-  try {
-    return res.status(403).json({
-      success: false,
-      error: "Создание ролей отключено. Разрешено управление только системными ролями.",
-    });
-  } catch (error) {
-    if (isAccessSchemaMissingError(error)) {
-      return res.status(503).json({
-        success: false,
-        error: "Схема доступов не инициализирована. Примените миграцию 052.",
-      });
-    }
-    if (error?.code === "ER_DUP_ENTRY") {
-      return res.status(409).json({
-        success: false,
-        error: "Роль с таким code уже существует",
-      });
-    }
-    next(error);
-  }
-});
-
-router.put("/access/roles/:id", requirePermission("system.access.manage"), async (_req, res, next) => {
-  try {
-    return res.status(403).json({
-      success: false,
-      error: "Изменение метаданных ролей отключено. Разрешено только управление правами системных ролей.",
-    });
-  } catch (error) {
-    if (isAccessSchemaMissingError(error)) {
-      return res.status(503).json({
-        success: false,
-        error: "Схема доступов не инициализирована. Примените миграцию 052.",
-      });
-    }
-    next(error);
-  }
-});
-
-router.delete("/access/roles/:id", requirePermission("system.access.manage"), async (_req, res, next) => {
-  try {
-    return res.status(403).json({
-      success: false,
-      error: "Удаление ролей отключено.",
-    });
-  } catch (error) {
-    if (isAccessSchemaMissingError(error)) {
-      return res.status(503).json({
-        success: false,
-        error: "Схема доступов не инициализирована. Примените миграцию 052.",
-      });
-    }
-    next(error);
-  }
-});
-
 router.get("/access/roles/:id/permissions", requirePermission("system.access.manage"), async (req, res, next) => {
   try {
     const roleId = Number(req.params.id);
