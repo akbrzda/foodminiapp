@@ -135,9 +135,20 @@ router.post("/register", async (req, res, next) => {
 router.get("/profile", authenticateToken, async (req, res, next) => {
   try {
     const userId = req.user.id;
+    const [users] = await db.query(
+      `SELECT u.id, u.telegram_id, u.phone, u.first_name, u.last_name, u.email, u.date_of_birth,
+              u.loyalty_balance, u.current_loyalty_level_id, u.loyalty_joined_at, u.created_at, u.updated_at, u.pb_client_id
+       FROM users u
+       WHERE u.id = ?`,
+      [userId],
+    );
+    if (users.length === 0) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
     const systemSettings = await getSystemSettings();
     const pbAutoSyncEnabled = systemSettings.premiumbonus_enabled && systemSettings.premiumbonus_auto_sync_enabled !== false;
-    if (pbAutoSyncEnabled) {
+    if (pbAutoSyncEnabled && users[0].pb_client_id) {
       try {
         await processPremiumBonusClientSync(userId, "profile-get");
       } catch (pbError) {
@@ -148,19 +159,19 @@ router.get("/profile", authenticateToken, async (req, res, next) => {
       }
     }
 
-    const [users] = await db.query(
+    const [freshUsers] = await db.query(
       `SELECT u.id, u.telegram_id, u.phone, u.first_name, u.last_name, u.email, u.date_of_birth,
               u.loyalty_balance, u.current_loyalty_level_id, u.loyalty_joined_at, u.created_at, u.updated_at
        FROM users u
        WHERE u.id = ?`,
       [userId],
     );
-    if (users.length === 0) {
+    if (freshUsers.length === 0) {
       return res.status(404).json({ error: "User not found" });
     }
 
     // Дешифрование перед отправкой клиенту
-    const decryptedUser = decryptUserData(users[0]);
+    const decryptedUser = decryptUserData(freshUsers[0]);
     res.json({ user: decryptedUser });
   } catch (error) {
     next(error);
@@ -241,15 +252,17 @@ router.put("/profile", authenticateToken, async (req, res, next) => {
   try {
     const userId = req.user.id;
     const { first_name, last_name, email, date_of_birth, phone } = req.body;
-    const [currentUsers] = await db.query("SELECT id, phone FROM users WHERE id = ? LIMIT 1", [userId]);
+    const [currentUsers] = await db.query("SELECT id, phone, pb_client_id FROM users WHERE id = ? LIMIT 1", [userId]);
     if (currentUsers.length === 0) {
       return res.status(404).json({ error: "User not found" });
     }
-    const hadPhoneBeforeUpdate = Boolean(String(currentUsers[0].phone || "").trim());
+    const currentUser = currentUsers[0];
+    const hadPhoneBeforeUpdate = Boolean(String(currentUser.phone || "").trim());
 
     const updates = [];
     const values = [];
     let shouldGrantRegistrationBonus = false;
+    let isPhoneChanged = false;
 
     if (first_name !== undefined) {
       const nameValidation = validateName(first_name);
@@ -313,6 +326,7 @@ router.put("/profile", authenticateToken, async (req, res, next) => {
       updates.push("phone = ?");
       values.push(normalizedPhone);
       shouldGrantRegistrationBonus = !hadPhoneBeforeUpdate;
+      isPhoneChanged = normalizedPhone !== String(currentUser.phone || "").trim();
     }
 
     if (updates.length === 0) {
@@ -333,12 +347,23 @@ router.put("/profile", authenticateToken, async (req, res, next) => {
 
     if (systemSettings.premiumbonus_enabled) {
       const pbAutoSyncEnabled = systemSettings.premiumbonus_auto_sync_enabled !== false;
-      await db.query("UPDATE users SET pb_sync_status = ?, loyalty_mode = ? WHERE id = ?", [
-        pbAutoSyncEnabled ? "pending" : "synced",
-        "premiumbonus",
-        userId,
-      ]);
-      if (pbAutoSyncEnabled) {
+      if (isPhoneChanged) {
+        // Блокируем автоперепривязку PB при неподтвержденной смене телефона.
+        await db.query("UPDATE users SET pb_sync_status = ?, pb_sync_error = ?, loyalty_mode = ? WHERE id = ?", [
+          "pending",
+          "Требуется подтверждение нового номера телефона перед синхронизацией PremiumBonus",
+          "premiumbonus",
+          userId,
+        ]);
+      } else {
+        await db.query("UPDATE users SET pb_sync_status = ?, pb_sync_error = ?, loyalty_mode = ? WHERE id = ?", [
+          pbAutoSyncEnabled ? "pending" : "synced",
+          null,
+          "premiumbonus",
+          userId,
+        ]);
+      }
+      if (pbAutoSyncEnabled && !isPhoneChanged) {
         try {
           await processPremiumBonusClientSync(userId, "profile-update");
         } catch (pbError) {

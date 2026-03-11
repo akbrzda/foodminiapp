@@ -18,6 +18,37 @@ const normalizeBonusAmount = (value) => {
   return Math.floor(parsed);
 };
 
+const createHttpError = (message, statusCode) => {
+  const error = new Error(message);
+  error.status = statusCode;
+  return error;
+};
+
+const resolveSecurePremiumBonusPhoneContext = async (userId) => {
+  const [users] = await db.query("SELECT pb_client_id FROM users WHERE id = ?", [userId]);
+  if (users.length === 0) {
+    throw createHttpError("Пользователь не найден", 404);
+  }
+
+  const pbClientId = String(users[0].pb_client_id || "").trim();
+  if (!pbClientId) {
+    throw createHttpError("Аккаунт PremiumBonus не привязан. Требуется подтверждение номера телефона.", 409);
+  }
+
+  const client = await getPremiumBonusClientOrNull();
+  if (!client) {
+    throw createHttpError("Клиент PremiumBonus недоступен", 503);
+  }
+
+  const info = await client.buyerInfo({ identificator: pbClientId });
+  const normalizedPhone = normalizePhoneForPremiumBonus(info?.phone);
+  if (!normalizedPhone || normalizedPhone.length !== 11) {
+    throw createHttpError("Не удалось определить подтвержденный номер PremiumBonus", 502);
+  }
+
+  return { client, phone: normalizedPhone };
+};
+
 const ensureBonusesEnabled = async (res) => {
   const settings = await getSystemSettings();
   const loyaltyEnabled = Boolean(settings.bonuses_enabled) || Boolean(settings.premiumbonus_enabled);
@@ -100,17 +131,7 @@ export function createClientLoyaltyController({ loyaltyService }) {
           return res.status(400).json({ error: "Промокод обязателен" });
         }
 
-        const [users] = await db.query("SELECT phone, pb_client_id FROM users WHERE id = ?", [req.user.id]);
-        if (users.length === 0) {
-          return res.status(404).json({ error: "Пользователь не найден" });
-        }
-
-        const client = await getPremiumBonusClientOrNull();
-        if (!client) {
-          return res.status(503).json({ error: "Клиент PremiumBonus недоступен" });
-        }
-
-        const normalizedPhone = normalizePhoneForPremiumBonus(users[0].phone);
+        const { client, phone: normalizedPhone } = await resolveSecurePremiumBonusPhoneContext(req.user.id);
         const result = await client.activatePromocode({
           phone: normalizedPhone,
           code,
@@ -139,17 +160,7 @@ export function createClientLoyaltyController({ loyaltyService }) {
           return res.status(400).json({ error: "write_off_bonus должен быть больше 0" });
         }
 
-        const [users] = await db.query("SELECT phone FROM users WHERE id = ?", [req.user.id]);
-        if (users.length === 0) {
-          return res.status(404).json({ error: "Пользователь не найден" });
-        }
-
-        const client = await getPremiumBonusClientOrNull();
-        if (!client) {
-          return res.status(503).json({ error: "Клиент PremiumBonus недоступен" });
-        }
-
-        const normalizedPhone = normalizePhoneForPremiumBonus(users[0].phone);
+        const { client, phone: normalizedPhone } = await resolveSecurePremiumBonusPhoneContext(req.user.id);
         const result = await client.sendWriteOffConfirmationCode({
           phone: normalizedPhone,
           purchase_amount: Number(purchaseAmount.toFixed(2)),
@@ -174,17 +185,7 @@ export function createClientLoyaltyController({ loyaltyService }) {
           return res.status(400).json({ error: "Код подтверждения обязателен" });
         }
 
-        const [users] = await db.query("SELECT phone FROM users WHERE id = ?", [req.user.id]);
-        if (users.length === 0) {
-          return res.status(404).json({ error: "Пользователь не найден" });
-        }
-
-        const client = await getPremiumBonusClientOrNull();
-        if (!client) {
-          return res.status(503).json({ error: "Клиент PremiumBonus недоступен" });
-        }
-
-        const normalizedPhone = normalizePhoneForPremiumBonus(users[0].phone);
+        const { client, phone: normalizedPhone } = await resolveSecurePremiumBonusPhoneContext(req.user.id);
         const result = await client.verifyConfirmationCode({
           phone: normalizedPhone,
           code,

@@ -891,6 +891,11 @@ export async function processPremiumBonusClientSync(userId, source = "queue") {
     if (!normalizedPhone || normalizedPhone.length < 11) {
       throw new Error("У пользователя отсутствует корректный телефон для синхронизации с PremiumBonus");
     }
+    const normalizedStoredPbClientId = String(user.pb_client_id || "").trim() || null;
+    const isProfileSource = source === "profile-update" || source === "profile-get";
+    if (!normalizedStoredPbClientId && isProfileSource) {
+      throw new Error("Автопривязка PremiumBonus по телефону запрещена для обновления/просмотра профиля");
+    }
 
     const email = user.email ? decryptEmail(user.email) : null;
     const baseProfilePayload = {
@@ -928,29 +933,29 @@ export async function processPremiumBonusClientSync(userId, source = "queue") {
 
     let info = null;
     try {
-      info = await client.buyerInfo({ identificator: normalizedPhone || user.pb_client_id });
+      info = await client.buyerInfo({ identificator: normalizedStoredPbClientId || normalizedPhone });
     } catch (error) {
       if (!isBuyerNotFoundError(error)) {
         throw error;
       }
     }
 
-    let pbClientId = extractPremiumBonusClientId(info) || user.pb_client_id || null;
+    let pbClientId = normalizedStoredPbClientId || extractPremiumBonusClientId(info) || null;
     let responsePayload = info;
     const buyerFound = isPremiumBonusBuyerFound(info);
 
     if (buyerFound) {
       responsePayload = await sendProfilePayloadWithFallback("edit");
-      pbClientId = extractPremiumBonusClientId(responsePayload) || pbClientId;
+      pbClientId = pbClientId || extractPremiumBonusClientId(responsePayload);
     } else {
       const registration = await sendProfilePayloadWithFallback("register");
-      pbClientId = extractPremiumBonusClientId(registration) || pbClientId;
+      pbClientId = pbClientId || extractPremiumBonusClientId(registration);
       responsePayload = registration;
     }
 
     let effectiveInfo = null;
     try {
-      effectiveInfo = await client.buyerInfo({ identificator: normalizedPhone || pbClientId });
+      effectiveInfo = await client.buyerInfo({ identificator: pbClientId || normalizedPhone });
     } catch (refreshError) {
       effectiveInfo = info;
     }
@@ -1045,7 +1050,7 @@ export async function processPremiumBonusPurchaseSync(orderId, action = "create"
 
   try {
     const normalizedPhone = normalizePhoneForPremiumBonus(user.phone);
-    const customerIdentificator = normalizedPhone || user.pb_client_id;
+    const customerIdentificator = user.pb_client_id || normalizedPhone;
     if (!customerIdentificator) {
       throw new Error("У пользователя заказа отсутствует идентификатор для PremiumBonus");
     }

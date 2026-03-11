@@ -610,13 +610,12 @@ async function syncLocalLoyaltyMirror(userId, payload = {}) {
 
 export class LoyaltyAdapter {
   async resolvePremiumBonusContext(userId) {
-    const [users] = await db.query("SELECT pb_client_id, phone, loyalty_balance FROM users WHERE id = ?", [userId]);
+    const [users] = await db.query("SELECT pb_client_id, loyalty_balance FROM users WHERE id = ?", [userId]);
     if (users.length === 0) throw new Error("Пользователь не найден");
 
-    const normalizedPhone = normalizePhoneForPremiumBonus(users[0].phone);
-    const identificator = normalizedPhone || users[0].pb_client_id;
-    if (!identificator) {
-      throw new Error("У пользователя отсутствует идентификатор PremiumBonus");
+    const pbClientId = String(users[0].pb_client_id || "").trim();
+    if (!pbClientId) {
+      throw new Error("У пользователя отсутствует безопасная привязка PremiumBonus (pb_client_id)");
     }
 
     const client = await getPremiumBonusClientOrNull();
@@ -624,24 +623,24 @@ export class LoyaltyAdapter {
 
     return {
       user: users[0],
-      normalizedPhone,
-      identificator,
+      identificator: pbClientId,
       client,
     };
   }
 
   async getPremiumBonusLevelsSummary(userId) {
-    const { client, identificator, normalizedPhone } = await this.resolvePremiumBonusContext(userId);
+    const { client, identificator } = await this.resolvePremiumBonusContext(userId);
 
     try {
       const info = await client.buyerInfo({
         identificator,
         extra_fields: ["payments_amount"],
       });
+      const premiumBonusPhone = normalizePhoneForPremiumBonus(info?.phone);
 
       const [groupsResult, transitionsResult] = await Promise.allSettled([
         client.buyerGroups({}),
-        normalizedPhone ? client.statusTransitionInfo({ phone: normalizedPhone }) : Promise.resolve(null),
+        premiumBonusPhone ? client.statusTransitionInfo({ phone: premiumBonusPhone }) : Promise.resolve(null),
       ]);
 
       const groupsResponse = groupsResult.status === "fulfilled" ? groupsResult.value : null;
@@ -797,17 +796,19 @@ export class LoyaltyAdapter {
       return localLoyaltyService.getHistory(userId, 1, 50);
     }
 
-    const [users] = await db.query("SELECT pb_client_id, phone FROM users WHERE id = ?", [userId]);
+    const [users] = await db.query("SELECT pb_client_id FROM users WHERE id = ?", [userId]);
     if (users.length === 0) throw new Error("Пользователь не найден");
-    const normalizedPhone = normalizePhoneForPremiumBonus(users[0].phone);
+    const pbClientId = String(users[0].pb_client_id || "").trim();
+    if (!pbClientId) {
+      throw new Error("У пользователя отсутствует безопасная привязка PremiumBonus (pb_client_id)");
+    }
 
     const client = await getPremiumBonusClientOrNull();
     if (!client) throw new Error("Клиент PremiumBonus недоступен");
 
     try {
       const response = await client.transactionHistory({
-        phone: normalizedPhone,
-        identificator: normalizedPhone || users[0].pb_client_id,
+        identificator: pbClientId,
       });
       const localOrderReferences = await buildLocalOrderReferenceSet(userId);
       const filteredPurchases = filterPbPurchasesByLocalOrders(response?.list || [], localOrderReferences);
@@ -847,15 +848,18 @@ export class LoyaltyAdapter {
       return localLoyaltyService.calculateMaxSpend(userId, orderTotal, deliveryCost);
     }
 
-    const [users] = await db.query("SELECT pb_client_id, phone FROM users WHERE id = ?", [userId]);
+    const [users] = await db.query("SELECT pb_client_id, loyalty_balance FROM users WHERE id = ?", [userId]);
     if (users.length === 0) throw new Error("Пользователь не найден");
-    const normalizedPhone = normalizePhoneForPremiumBonus(users[0].phone);
+    const pbClientId = String(users[0].pb_client_id || "").trim();
+    if (!pbClientId) {
+      throw new Error("У пользователя отсутствует безопасная привязка PremiumBonus (pb_client_id)");
+    }
 
     const client = await getPremiumBonusClientOrNull();
     if (!client) throw new Error("Клиент PremiumBonus недоступен");
 
     const payload = {
-      identificator: normalizedPhone || users[0].pb_client_id,
+      identificator: pbClientId,
       items: mapOrderItemsToPremiumBonus(options?.items),
       discount: Number(options?.discount) || 0,
       promocode: String(options?.promocode || "").trim() || undefined,

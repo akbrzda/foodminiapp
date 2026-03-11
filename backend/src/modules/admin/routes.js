@@ -6,7 +6,9 @@ import { authenticateToken, requirePermission, requireRole } from "../../middlew
 import { telegramQueue, imageQueue, getQueueStats, getFailedJobs, retryFailedJobs, cleanQueue } from "../../queues/config.js";
 import { getSystemSettings } from "../../utils/settings.js";
 import { logger } from "../../utils/logger.js";
-import { decryptUserData, encryptEmail, encryptPhone } from "../../utils/encryption.js";
+import { decryptUserData, encryptEmail } from "../../utils/encryption.js";
+import { normalizePhone } from "../../utils/phone.js";
+import { validateEmail, validatePhone } from "../../utils/validation.js";
 import loyaltyAdapter from "../integrations/adapters/loyaltyAdapter.js";
 import { getRolePermissions, resolveAdminPermissions, SYSTEM_ROLE_DEFINITIONS } from "../access/index.js";
 const router = express.Router();
@@ -1011,10 +1013,41 @@ router.put("/clients/:id", requireRole("admin", "manager", "ceo"), async (req, r
     if (users.length === 0) {
       return res.status(404).json({ error: "User not found" });
     }
-    const encryptedPhone = phone ? encryptPhone(phone) : null;
-    const encryptedEmail = email ? encryptEmail(email) : null;
+    let normalizedPhone = null;
+    if (phone !== undefined) {
+      const hasPhoneValue = String(phone || "").trim().length > 0;
+      if (hasPhoneValue) {
+        const phoneValidation = validatePhone(phone);
+        if (!phoneValidation.valid) {
+          return res.status(400).json({ error: phoneValidation.error });
+        }
+
+        normalizedPhone = normalizePhone(phoneValidation.phone);
+        if (!normalizedPhone) {
+          return res.status(400).json({ error: "Invalid phone format" });
+        }
+
+        const [existingUsers] = await db.query("SELECT id FROM users WHERE phone = ? AND id != ?", [normalizedPhone, userId]);
+        if (existingUsers.length > 0) {
+          return res.status(409).json({ error: "Phone number already in use" });
+        }
+      }
+    }
+
+    let encryptedEmail = null;
+    if (email !== undefined) {
+      const hasEmailValue = String(email || "").trim().length > 0;
+      if (hasEmailValue) {
+        const emailValidation = validateEmail(email);
+        if (!emailValidation.valid) {
+          return res.status(400).json({ error: emailValidation.error });
+        }
+        encryptedEmail = encryptEmail(emailValidation.email);
+      }
+    }
+
     await db.query("UPDATE users SET phone = ?, first_name = ?, last_name = ?, email = ? WHERE id = ?", [
-      encryptedPhone,
+      normalizedPhone,
       first_name || null,
       last_name || null,
       encryptedEmail,
