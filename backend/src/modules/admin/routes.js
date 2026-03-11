@@ -2,13 +2,13 @@ import express from "express";
 import bcrypt from "bcrypt";
 import db from "../../config/database.js";
 import redis from "../../config/redis.js";
-import { authenticateToken, requirePermission } from "../../middleware/auth.js";
+import { authenticateToken, requirePermission, requireRole } from "../../middleware/auth.js";
 import { telegramQueue, imageQueue, getQueueStats, getFailedJobs, retryFailedJobs, cleanQueue } from "../../queues/config.js";
 import { getSystemSettings } from "../../utils/settings.js";
 import { logger } from "../../utils/logger.js";
 import { decryptUserData, encryptEmail, encryptPhone } from "../../utils/encryption.js";
 import loyaltyAdapter from "../integrations/adapters/loyaltyAdapter.js";
-import { getRoleByCode, getRolePermissions, resolveAdminPermissions, resolveScopeRole, SYSTEM_ROLE_DEFINITIONS } from "../access/index.js";
+import { getRolePermissions, resolveAdminPermissions, SYSTEM_ROLE_DEFINITIONS } from "../access/index.js";
 const router = express.Router();
 router.use(authenticateToken);
 const ADMIN_LOGIN_ATTEMPTS_PREFIX = "auth:admin:attempts";
@@ -60,74 +60,18 @@ const getManagerCityIds = (req) => {
 };
 
 const ACCESS_TABLE_MISSING_CODES = new Set(["ER_NO_SUCH_TABLE", "ER_BAD_TABLE_ERROR"]);
-const SYSTEM_SCOPE_ROLES = new Set(["admin", "manager", "ceo"]);
 
 const isAccessSchemaMissingError = (error) => {
   if (!error) return false;
   return ACCESS_TABLE_MISSING_CODES.has(error.code);
 };
-
-const incrementUserPermissionVersion = async (executor, userId) => {
-  await executor.query(
-    `UPDATE admin_users
-     SET permission_version = permission_version + 1
-     WHERE id = ?`,
-    [userId],
-  );
-};
-
-const incrementRoleUsersPermissionVersion = async (executor, roleCode) => {
-  await executor.query(
-    `UPDATE admin_users
-     SET permission_version = permission_version + 1
-     WHERE role = ?`,
-    [roleCode],
-  );
-};
-
-const resolveRoleContext = async (roleCode, { requireActive = false } = {}) => {
-  const normalizedCode = String(roleCode || "")
-    .trim()
-    .toLowerCase();
-  if (!normalizedCode) return null;
-
-  const dbRole = await getRoleByCode(db, normalizedCode);
-  if (!dbRole) {
-    if (SYSTEM_SCOPE_ROLES.has(normalizedCode)) {
-      return {
-        code: normalizedCode,
-        name: normalizedCode.toUpperCase(),
-        scope_role: normalizedCode,
-        is_system: true,
-        is_active: true,
-      };
-    }
-    return null;
-  }
-
-  const role = {
-    ...dbRole,
-    scope_role: resolveScopeRole(dbRole.scope_role, dbRole.code),
-  };
-
-  if (requireActive && !role.is_active) {
-    return null;
-  }
-
-  return role;
-};
-
-const isManagerScope = (scopeRole) => resolveScopeRole(scopeRole) === "manager";
-router.get("/users/admins", requirePermission("system.admin_users.manage"), async (req, res, next) => {
+router.get("/users/admins", requireRole("admin", "ceo"), async (req, res, next) => {
   try {
     const [admins] = await db.query(
-      `SELECT au.id, au.email, au.first_name, au.last_name, au.role,
-              COALESCE(ar.name, au.role) AS role_name,
-              COALESCE(ar.scope_role, au.role) AS scope_role
-       FROM admin_users au
-       LEFT JOIN admin_roles ar ON ar.code = au.role
-       WHERE au.is_active = true
-       ORDER BY au.first_name, au.last_name`,
+      `SELECT id, email, first_name, last_name, role
+       FROM admin_users
+       WHERE is_active = true
+       ORDER BY first_name, last_name`,
     );
     res.json({ admins });
   } catch (error) {
@@ -135,16 +79,13 @@ router.get("/users/admins", requirePermission("system.admin_users.manage"), asyn
     next(error);
   }
 });
-router.get("/users", requirePermission("system.admin_users.manage"), async (req, res, next) => {
+router.get("/users", requireRole("admin", "ceo"), async (req, res, next) => {
   try {
     const { role, is_active } = req.query;
     let query = `
-      SELECT au.id, au.email, au.first_name, au.last_name, au.role,
-             COALESCE(ar.name, au.role) AS role_name,
-             COALESCE(ar.scope_role, au.role) AS scope_role,
+      SELECT au.id, au.email, au.first_name, au.last_name, au.role, 
              au.is_active, au.telegram_id, au.eruda_enabled, au.branch_id, au.created_at, au.updated_at
       FROM admin_users au
-      LEFT JOIN admin_roles ar ON ar.code = au.role
       WHERE 1=1
     `;
     const params = [];
@@ -158,75 +99,48 @@ router.get("/users", requirePermission("system.admin_users.manage"), async (req,
     }
     query += " ORDER BY au.created_at DESC";
     const [users] = await db.query(query, params);
-    const managerIds = users.filter((user) => isManagerScope(user.scope_role)).map((user) => user.id);
-    let citiesByManager = new Map();
-    let branchesByManager = new Map();
-
-    if (managerIds.length > 0) {
-      const [cityRows] = await db.query(
-        `SELECT auc.admin_user_id, c.id, c.name
-         FROM admin_user_cities auc
-         JOIN cities c ON auc.city_id = c.id
-         WHERE auc.admin_user_id IN (?)`,
-        [managerIds],
-      );
-      citiesByManager = cityRows.reduce((acc, row) => {
-        if (!acc.has(row.admin_user_id)) {
-          acc.set(row.admin_user_id, []);
-        }
-        acc.get(row.admin_user_id).push({ id: row.id, name: row.name });
-        return acc;
-      }, new Map());
-
-      const [branchRows] = await db.query(
-        `SELECT aub.admin_user_id, b.id, b.name, b.city_id
-         FROM admin_user_branches aub
-         JOIN branches b ON aub.branch_id = b.id
-         WHERE aub.admin_user_id IN (?)`,
-        [managerIds],
-      );
-      branchesByManager = branchRows.reduce((acc, row) => {
-        if (!acc.has(row.admin_user_id)) {
-          acc.set(row.admin_user_id, []);
-        }
-        acc.get(row.admin_user_id).push({ id: row.id, name: row.name, city_id: row.city_id });
-        return acc;
-      }, new Map());
-    }
-
     for (let user of users) {
-      if (!isManagerScope(user.scope_role)) {
+      if (user.role === "manager") {
+        const [cities] = await db.query(
+          `SELECT c.id, c.name 
+           FROM admin_user_cities auc
+           JOIN cities c ON auc.city_id = c.id
+           WHERE auc.admin_user_id = ?`,
+          [user.id],
+        );
+        user.cities = cities;
+        const [branches] = await db.query(
+          `SELECT b.id, b.name, b.city_id
+           FROM admin_user_branches aub
+           JOIN branches b ON aub.branch_id = b.id
+           WHERE aub.admin_user_id = ?`,
+          [user.id],
+        );
+        user.branches = branches || [];
+      } else {
         user.cities = [];
         user.branches = [];
-        continue;
       }
-      user.cities = citiesByManager.get(user.id) || [];
-      user.branches = branchesByManager.get(user.id) || [];
     }
     res.json({ users });
   } catch (error) {
     next(error);
   }
 });
-router.get("/users/:id", requirePermission("system.admin_users.manage"), async (req, res, next) => {
+router.get("/users/:id", requireRole("admin", "ceo"), async (req, res, next) => {
   try {
     const userId = req.params.id;
     const [users] = await db.query(
-      `SELECT au.id, au.email, au.first_name, au.last_name, au.role,
-              COALESCE(ar.name, au.role) AS role_name,
-              COALESCE(ar.scope_role, au.role) AS scope_role,
-              au.is_active,
-              au.telegram_id, au.eruda_enabled, au.branch_id, au.created_at, au.updated_at
-       FROM admin_users au
-       LEFT JOIN admin_roles ar ON ar.code = au.role
-       WHERE au.id = ?`,
+      `SELECT id, email, first_name, last_name, role, is_active, 
+              telegram_id, eruda_enabled, branch_id, created_at, updated_at
+       FROM admin_users WHERE id = ?`,
       [userId],
     );
     if (users.length === 0) {
       return res.status(404).json({ error: "User not found" });
     }
     const user = users[0];
-    if (isManagerScope(user.scope_role)) {
+    if (user.role === "manager") {
       const [cities] = await db.query(
         `SELECT c.id, c.name 
          FROM admin_user_cities auc
@@ -275,13 +189,13 @@ router.get("/access/permissions", requirePermission("system.access.manage"), asy
   }
 });
 
-router.get("/access/roles", requirePermission("system.roles.view", "system.access.manage", "system.admin_users.manage"), async (req, res, next) => {
+router.get("/access/roles", requirePermission("system.access.manage"), async (req, res, next) => {
   try {
     const [roles] = await db.query(
-      `SELECT r.id, r.code, r.name, r.scope_role, r.is_system, r.is_active, r.created_at, r.updated_at, COUNT(rp.permission_id) AS permissions_count
+      `SELECT r.id, r.code, r.name, r.is_system, r.is_active, r.created_at, r.updated_at, COUNT(rp.permission_id) AS permissions_count
        FROM admin_roles r
        LEFT JOIN admin_role_permissions rp ON rp.role_id = r.id
-       GROUP BY r.id, r.code, r.name, r.scope_role, r.is_system, r.is_active, r.created_at, r.updated_at
+       GROUP BY r.id, r.code, r.name, r.is_system, r.is_active, r.created_at, r.updated_at
        ORDER BY r.is_system DESC, r.code ASC`,
     );
 
@@ -306,7 +220,6 @@ router.post("/access/roles", requirePermission("system.access.manage"), async (r
       .trim()
       .toLowerCase();
     const name = String(req.body?.name || "").trim();
-    const scopeRole = resolveScopeRole(req.body?.scope_role, "manager");
     const isActive = req.body?.is_active === undefined ? true : req.body.is_active === true;
 
     if (!code || !name) {
@@ -321,12 +234,6 @@ router.post("/access/roles", requirePermission("system.access.manage"), async (r
         error: "code может содержать только a-z, 0-9 и _, длина 2-50",
       });
     }
-    if (!SYSTEM_SCOPE_ROLES.has(scopeRole)) {
-      return res.status(400).json({
-        success: false,
-        error: "scope_role должен быть одним из: admin, manager, ceo",
-      });
-    }
     if (SYSTEM_ROLE_DEFINITIONS.some((role) => role.code === code)) {
       return res.status(400).json({
         success: false,
@@ -334,14 +241,9 @@ router.post("/access/roles", requirePermission("system.access.manage"), async (r
       });
     }
 
-    const [result] = await db.query(`INSERT INTO admin_roles (code, name, scope_role, is_system, is_active) VALUES (?, ?, ?, 0, ?)`, [
-      code,
-      name,
-      scopeRole,
-      isActive,
-    ]);
+    const [result] = await db.query(`INSERT INTO admin_roles (code, name, is_system, is_active) VALUES (?, ?, 0, ?)`, [code, name, isActive]);
     const [rows] = await db.query(
-      `SELECT id, code, name, scope_role, is_system, is_active, created_at, updated_at
+      `SELECT id, code, name, is_system, is_active, created_at, updated_at
        FROM admin_roles
        WHERE id = ?`,
       [result.insertId],
@@ -378,7 +280,7 @@ router.put("/access/roles/:id", requirePermission("system.access.manage"), async
       });
     }
 
-    const [existingRows] = await db.query(`SELECT id, code, scope_role, is_system FROM admin_roles WHERE id = ? LIMIT 1`, [roleId]);
+    const [existingRows] = await db.query(`SELECT id, code, is_system FROM admin_roles WHERE id = ? LIMIT 1`, [roleId]);
     if (existingRows.length === 0) {
       return res.status(404).json({
         success: false,
@@ -405,23 +307,6 @@ router.put("/access/roles/:id", requirePermission("system.access.manage"), async
       updates.push("is_active = ?");
       values.push(req.body.is_active === true);
     }
-    if (req.body?.scope_role !== undefined) {
-      const scopeRole = resolveScopeRole(req.body.scope_role, role.scope_role);
-      if (!SYSTEM_SCOPE_ROLES.has(scopeRole)) {
-        return res.status(400).json({
-          success: false,
-          error: "scope_role должен быть одним из: admin, manager, ceo",
-        });
-      }
-      if (role.is_system && scopeRole !== role.scope_role) {
-        return res.status(400).json({
-          success: false,
-          error: "Системной роли нельзя изменить scope_role",
-        });
-      }
-      updates.push("scope_role = ?");
-      values.push(scopeRole);
-    }
 
     if (updates.length === 0) {
       return res.status(400).json({
@@ -439,12 +324,9 @@ router.put("/access/roles/:id", requirePermission("system.access.manage"), async
 
     values.push(roleId);
     await db.query(`UPDATE admin_roles SET ${updates.join(", ")} WHERE id = ?`, values);
-    if (req.body?.scope_role !== undefined || req.body?.is_active !== undefined) {
-      await incrementRoleUsersPermissionVersion(db, role.code);
-    }
 
     const [rows] = await db.query(
-      `SELECT id, code, name, scope_role, is_system, is_active, created_at, updated_at
+      `SELECT id, code, name, is_system, is_active, created_at, updated_at
        FROM admin_roles
        WHERE id = ?`,
       [roleId],
@@ -490,14 +372,6 @@ router.delete("/access/roles/:id", requirePermission("system.access.manage"), as
       });
     }
 
-    const [usageRows] = await db.query(`SELECT COUNT(*) AS total FROM admin_users WHERE role = ?`, [existingRows[0].code]);
-    if (Number(usageRows[0]?.total || 0) > 0) {
-      return res.status(400).json({
-        success: false,
-        error: "Роль назначена пользователям и не может быть удалена",
-      });
-    }
-
     await db.query(`DELETE FROM admin_roles WHERE id = ?`, [roleId]);
     res.json({
       success: true,
@@ -514,7 +388,7 @@ router.delete("/access/roles/:id", requirePermission("system.access.manage"), as
   }
 });
 
-router.get("/access/roles/:id/permissions", requirePermission("system.roles.view", "system.access.manage"), async (req, res, next) => {
+router.get("/access/roles/:id/permissions", requirePermission("system.access.manage"), async (req, res, next) => {
   try {
     const roleId = Number(req.params.id);
     if (!Number.isInteger(roleId) || roleId <= 0) {
@@ -524,7 +398,7 @@ router.get("/access/roles/:id/permissions", requirePermission("system.roles.view
       });
     }
 
-    const [roleRows] = await db.query(`SELECT id, code, name, scope_role, is_system, is_active FROM admin_roles WHERE id = ? LIMIT 1`, [roleId]);
+    const [roleRows] = await db.query(`SELECT id, code, name, is_system, is_active FROM admin_roles WHERE id = ? LIMIT 1`, [roleId]);
     if (roleRows.length === 0) {
       return res.status(404).json({
         success: false,
@@ -580,7 +454,7 @@ router.put("/access/roles/:id/permissions", requirePermission("system.access.man
     connection = await db.getConnection();
     await connection.beginTransaction();
 
-    const [roleRows] = await connection.query(`SELECT id, code FROM admin_roles WHERE id = ? LIMIT 1`, [roleId]);
+    const [roleRows] = await connection.query(`SELECT id FROM admin_roles WHERE id = ? LIMIT 1`, [roleId]);
     if (roleRows.length === 0) {
       await connection.rollback();
       return res.status(404).json({
@@ -609,7 +483,6 @@ router.put("/access/roles/:id/permissions", requirePermission("system.access.man
       const values = permissionIds.map((permissionId) => [roleId, permissionId]);
       await connection.query(`INSERT INTO admin_role_permissions (role_id, permission_id) VALUES ?`, [values]);
     }
-    await incrementRoleUsersPermissionVersion(connection, roleRows[0].code);
 
     await connection.commit();
     res.json({
@@ -752,7 +625,6 @@ router.put("/access/users/:id/overrides", requirePermission("system.access.manag
         [values],
       );
     }
-    await incrementUserPermissionVersion(connection, userId);
 
     await connection.commit();
 
@@ -798,7 +670,6 @@ router.delete("/access/users/:id/overrides", requirePermission("system.access.ma
     }
 
     await db.query(`DELETE FROM admin_user_permission_overrides WHERE admin_user_id = ?`, [userId]);
-    await incrementUserPermissionVersion(db, userId);
     const resolved = await resolveAdminPermissions(db, { adminUserId: userId, roleCode: users[0].role });
 
     res.json({
@@ -820,7 +691,7 @@ router.delete("/access/users/:id/overrides", requirePermission("system.access.ma
   }
 });
 
-router.get("/users/:id/security", requirePermission("system.auth_limits.manage", "system.admin_users.manage"), async (req, res, next) => {
+router.get("/users/:id/security", requireRole("admin"), async (req, res, next) => {
   try {
     const userId = Number(req.params.id);
     if (!Number.isInteger(userId) || userId <= 0) {
@@ -861,7 +732,6 @@ router.get("/users/:id/security", requirePermission("system.auth_limits.manage",
        FROM admin_action_logs
        WHERE admin_user_id = ?
          AND entity_type = 'auth'
-         AND action IN ('auth_login_success', 'auth_logout')
        ORDER BY created_at DESC
        LIMIT 30`,
       [userId],
@@ -878,7 +748,7 @@ router.get("/users/:id/security", requirePermission("system.auth_limits.manage",
     next(error);
   }
 });
-router.post("/users/:id/security/reset", requirePermission("system.auth_limits.manage", "system.admin_users.manage"), async (req, res, next) => {
+router.post("/users/:id/security/reset", requireRole("admin"), async (req, res, next) => {
   try {
     const userId = Number(req.params.id);
     const ip = typeof req.body?.ip === "string" ? req.body.ip.trim() : "";
@@ -953,7 +823,7 @@ router.post("/users/:id/security/reset", requirePermission("system.auth_limits.m
     next(error);
   }
 });
-router.get("/clients", requirePermission("clients.view"), async (req, res, next) => {
+router.get("/clients", requireRole("admin", "manager", "ceo"), async (req, res, next) => {
   try {
     const {
       search,
@@ -982,7 +852,7 @@ router.get("/clients", requirePermission("clients.view"), async (req, res, next)
       return Number.isFinite(normalized) ? normalized : null;
     };
 
-    let whereClause = "WHERE u.phone IS NOT NULL AND TRIM(u.phone) <> ''";
+    let whereClause = "WHERE 1=1";
     const params = [];
 
     if (search) {
@@ -1118,7 +988,7 @@ const ensureManagerClientAccess = async (req, userId) => {
   const [orders] = await db.query("SELECT id FROM orders WHERE user_id = ? AND city_id IN (?) LIMIT 1", [userId, cityIds]);
   return orders.length > 0;
 };
-router.get("/clients/:id", requirePermission("clients.view"), async (req, res, next) => {
+router.get("/clients/:id", requireRole("admin", "manager", "ceo"), async (req, res, next) => {
   try {
     const userId = req.params.id;
     const hasAccess = await ensureManagerClientAccess(req, userId);
@@ -1231,7 +1101,7 @@ router.get("/clients/:id", requirePermission("clients.view"), async (req, res, n
     next(error);
   }
 });
-router.put("/clients/:id", requirePermission("clients.manage"), async (req, res, next) => {
+router.put("/clients/:id", requireRole("admin", "manager", "ceo"), async (req, res, next) => {
   try {
     const userId = req.params.id;
     const { phone, first_name, last_name, email } = req.body;
@@ -1278,7 +1148,7 @@ router.put("/clients/:id", requirePermission("clients.manage"), async (req, res,
     next(error);
   }
 });
-router.delete("/clients/:id", requirePermission("clients.manage"), async (req, res, next) => {
+router.delete("/clients/:id", requireRole("admin", "manager", "ceo"), async (req, res, next) => {
   try {
     const userId = req.params.id;
     const hasAccess = await ensureManagerClientAccess(req, userId);
@@ -1295,7 +1165,7 @@ router.delete("/clients/:id", requirePermission("clients.manage"), async (req, r
     next(error);
   }
 });
-router.get("/clients/:id/orders", requirePermission("clients.view"), async (req, res, next) => {
+router.get("/clients/:id/orders", requireRole("admin", "manager", "ceo"), async (req, res, next) => {
   try {
     const userId = req.params.id;
     const statusGroup = String(req.query.status_group || "active").trim().toLowerCase();
@@ -1374,7 +1244,7 @@ router.get("/clients/:id/orders", requirePermission("clients.view"), async (req,
     next(error);
   }
 });
-router.post("/users", requirePermission("system.admin_users.manage"), async (req, res, next) => {
+router.post("/users", requireRole("admin", "ceo"), async (req, res, next) => {
   try {
     const { email, password, first_name, last_name, role, telegram_id, eruda_enabled, cities, branch_ids } = req.body;
     if (!email || !password || !first_name || !last_name || !role) {
@@ -1382,11 +1252,13 @@ router.post("/users", requirePermission("system.admin_users.manage"), async (req
         error: "Email, password, first_name, last_name, and role are required",
       });
     }
-    const selectedRole = await resolveRoleContext(role, { requireActive: true });
-    if (!selectedRole) {
-      return res.status(400).json({ error: "Выбранная роль не найдена или неактивна" });
+    const validRoles = ["admin", "manager", "ceo"];
+    if (!validRoles.includes(role)) {
+      return res.status(400).json({
+        error: "Invalid role. Must be one of: admin, manager, ceo",
+      });
     }
-    if (req.user.role === "ceo" && selectedRole.scope_role === "admin") {
+    if (req.user.role === "ceo" && role === "admin") {
       return res.status(403).json({ error: "CEO не может создавать администраторов" });
     }
     const [existingUsers] = await db.query("SELECT id FROM admin_users WHERE email = ?", [email]);
@@ -1394,7 +1266,7 @@ router.post("/users", requirePermission("system.admin_users.manage"), async (req
       return res.status(400).json({ error: "Email already exists" });
     }
     let managerBranchIds = [];
-    if (isManagerScope(selectedRole.scope_role) && Array.isArray(branch_ids) && branch_ids.length > 0) {
+    if (role === "manager" && Array.isArray(branch_ids) && branch_ids.length > 0) {
       const [branches] = await db.query("SELECT id, city_id FROM branches WHERE id IN (?)", [branch_ids]);
       if (branches.length !== branch_ids.length) {
         return res.status(400).json({ error: "One or more branches not found" });
@@ -1406,7 +1278,7 @@ router.post("/users", requirePermission("system.admin_users.manage"), async (req
           return res.status(400).json({ error: "Branch city must be included in manager cities" });
         }
       }
-      managerBranchIds = branch_ids.map((branchId) => Number(branchId));
+      managerBranchIds = branch_ids;
     }
     const passwordHash = await bcrypt.hash(password, 12);
     if (req.user.role === "ceo" && eruda_enabled !== undefined) {
@@ -1418,27 +1290,23 @@ router.post("/users", requirePermission("system.admin_users.manage"), async (req
     const [result] = await db.query(
       `INSERT INTO admin_users (email, password_hash, first_name, last_name, role, telegram_id, eruda_enabled, branch_id)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [email, passwordHash, first_name, last_name, selectedRole.code, telegram_id || null, eruda_enabled === true, null],
+      [email, passwordHash, first_name, last_name, role, telegram_id || null, eruda_enabled === true, null],
     );
     const newUserId = result.insertId;
-    if (isManagerScope(selectedRole.scope_role) && cities && cities.length > 0) {
+    if (role === "manager" && cities && cities.length > 0) {
       for (let cityId of cities) {
         await db.query("INSERT INTO admin_user_cities (admin_user_id, city_id) VALUES (?, ?)", [newUserId, cityId]);
       }
     }
-    if (isManagerScope(selectedRole.scope_role) && managerBranchIds.length > 0) {
+    if (role === "manager" && managerBranchIds.length > 0) {
       for (let branchId of managerBranchIds) {
         await db.query("INSERT INTO admin_user_branches (admin_user_id, branch_id) VALUES (?, ?)", [newUserId, branchId]);
       }
     }
     const [newUser] = await db.query(
-      `SELECT au.id, au.email, au.first_name, au.last_name, au.role,
-              COALESCE(ar.name, au.role) AS role_name,
-              COALESCE(ar.scope_role, au.role) AS scope_role,
-              au.is_active, au.telegram_id, au.eruda_enabled, au.branch_id, au.created_at, au.updated_at
-       FROM admin_users au
-       LEFT JOIN admin_roles ar ON ar.code = au.role
-       WHERE au.id = ?`,
+      `SELECT id, email, first_name, last_name, role, is_active, 
+              telegram_id, eruda_enabled, branch_id, created_at, updated_at
+       FROM admin_users WHERE id = ?`,
       [newUserId],
     );
     res.status(201).json({ user: newUser[0] });
@@ -1446,7 +1314,7 @@ router.post("/users", requirePermission("system.admin_users.manage"), async (req
     next(error);
   }
 });
-router.put("/users/:id", requirePermission("system.admin_users.manage"), async (req, res, next) => {
+router.put("/users/:id", requireRole("admin", "ceo"), async (req, res, next) => {
   try {
     const userId = req.params.id;
     const { email, password, first_name, last_name, role, telegram_id, eruda_enabled, is_active, cities, branch_ids } = req.body;
@@ -1454,16 +1322,11 @@ router.put("/users/:id", requirePermission("system.admin_users.manage"), async (
     if (existingUsers.length === 0) {
       return res.status(404).json({ error: "User not found" });
     }
-    const existingRole = await resolveRoleContext(existingUsers[0].role);
-    if (!existingRole) {
-      return res.status(400).json({ error: "У пользователя назначена несуществующая роль" });
-    }
-    if (req.user.role === "ceo" && existingRole.scope_role === "admin") {
+    if (req.user.role === "ceo" && existingUsers[0].role === "admin") {
       return res.status(403).json({ error: "CEO не может изменять администраторов" });
     }
     const updates = [];
     const values = [];
-    let selectedRole = null;
     if (email !== undefined) {
       const [emailCheck] = await db.query("SELECT id FROM admin_users WHERE email = ? AND id != ?", [email, userId]);
       if (emailCheck.length > 0) {
@@ -1486,15 +1349,17 @@ router.put("/users/:id", requirePermission("system.admin_users.manage"), async (
       values.push(last_name);
     }
     if (role !== undefined) {
-      selectedRole = await resolveRoleContext(role, { requireActive: true });
-      if (!selectedRole) {
-        return res.status(400).json({ error: "Выбранная роль не найдена или неактивна" });
+      const validRoles = ["admin", "manager", "ceo"];
+      if (!validRoles.includes(role)) {
+        return res.status(400).json({
+          error: "Invalid role. Must be one of: admin, manager, ceo",
+        });
       }
-      if (req.user.role === "ceo" && selectedRole.scope_role === "admin") {
+      if (req.user.role === "ceo" && role === "admin") {
         return res.status(403).json({ error: "CEO не может назначать роль администратора" });
       }
       updates.push("role = ?");
-      values.push(selectedRole.code);
+      values.push(role);
     }
     if (telegram_id !== undefined) {
       const normalizedTelegramId = telegram_id === "" ? null : telegram_id;
@@ -1517,8 +1382,8 @@ router.put("/users/:id", requirePermission("system.admin_users.manage"), async (
       updates.push("is_active = ?");
       values.push(is_active);
     }
-    const finalRoleScope = selectedRole?.scope_role || existingRole.scope_role;
-    if (!isManagerScope(finalRoleScope)) {
+    const finalRole = role || existingUsers[0].role;
+    if (finalRole !== "manager") {
       updates.push("branch_id = ?");
       values.push(null);
     }
@@ -1526,10 +1391,7 @@ router.put("/users/:id", requirePermission("system.admin_users.manage"), async (
       values.push(userId);
       await db.query(`UPDATE admin_users SET ${updates.join(", ")} WHERE id = ?`, values);
     }
-    if (role !== undefined) {
-      await incrementUserPermissionVersion(db, userId);
-    }
-    if (isManagerScope(finalRoleScope) && cities !== undefined) {
+    if (finalRole === "manager" && cities !== undefined) {
       await db.query("DELETE FROM admin_user_cities WHERE admin_user_id = ?", [userId]);
       if (cities && cities.length > 0) {
         for (let cityId of cities) {
@@ -1537,7 +1399,7 @@ router.put("/users/:id", requirePermission("system.admin_users.manage"), async (
         }
       }
     }
-    if (isManagerScope(finalRoleScope) && branch_ids !== undefined) {
+    if (finalRole === "manager" && branch_ids !== undefined) {
       const branchList = Array.isArray(branch_ids) ? branch_ids : [];
       if (branchList.length > 0) {
         const [branches] = await db.query("SELECT id, city_id FROM branches WHERE id IN (?)", [branchList]);
@@ -1561,21 +1423,17 @@ router.put("/users/:id", requirePermission("system.admin_users.manage"), async (
       for (let branchId of branchList) {
         await db.query("INSERT INTO admin_user_branches (admin_user_id, branch_id) VALUES (?, ?)", [userId, branchId]);
       }
-    } else if (!isManagerScope(finalRoleScope)) {
+    } else if (finalRole !== "manager") {
       await db.query("DELETE FROM admin_user_branches WHERE admin_user_id = ?", [userId]);
     }
     const [updatedUser] = await db.query(
-      `SELECT au.id, au.email, au.first_name, au.last_name, au.role,
-              COALESCE(ar.name, au.role) AS role_name,
-              COALESCE(ar.scope_role, au.role) AS scope_role,
-              au.is_active, au.telegram_id, au.branch_id, au.created_at, au.updated_at
-       FROM admin_users au
-       LEFT JOIN admin_roles ar ON ar.code = au.role
-       WHERE au.id = ?`,
+      `SELECT id, email, first_name, last_name, role, is_active, 
+              telegram_id, branch_id, created_at, updated_at
+       FROM admin_users WHERE id = ?`,
       [userId],
     );
     const user = updatedUser[0];
-    if (isManagerScope(user.scope_role)) {
+    if (user.role === "manager") {
       const [userCities] = await db.query(
         `SELECT c.id, c.name 
          FROM admin_user_cities auc
@@ -1601,18 +1459,14 @@ router.put("/users/:id", requirePermission("system.admin_users.manage"), async (
     next(error);
   }
 });
-router.delete("/users/:id", requirePermission("system.admin_users.manage"), async (req, res, next) => {
+router.delete("/users/:id", requireRole("admin", "ceo"), async (req, res, next) => {
   try {
     const userId = req.params.id;
     const [users] = await db.query("SELECT id, role FROM admin_users WHERE id = ?", [userId]);
     if (users.length === 0) {
       return res.status(404).json({ error: "User not found" });
     }
-    const targetRole = await resolveRoleContext(users[0].role);
-    if (!targetRole) {
-      return res.status(400).json({ error: "У пользователя назначена несуществующая роль" });
-    }
-    if (req.user.role === "ceo" && targetRole.scope_role === "admin") {
+    if (req.user.role === "ceo" && users[0].role === "admin") {
       return res.status(403).json({ error: "CEO не может удалять администраторов" });
     }
     if (req.user.id === parseInt(userId)) {
@@ -1624,7 +1478,7 @@ router.delete("/users/:id", requirePermission("system.admin_users.manage"), asyn
     next(error);
   }
 });
-router.get("/queues", requirePermission("system.queues.manage"), async (req, res, next) => {
+router.get("/queues", requireRole("admin", "ceo"), async (req, res, next) => {
   try {
     const [telegramStats, imageStats] = await Promise.all([getQueueStats(telegramQueue), getQueueStats(imageQueue)]);
     res.json({
@@ -1644,7 +1498,7 @@ router.get("/queues", requirePermission("system.queues.manage"), async (req, res
     next(error);
   }
 });
-router.get("/queues/:queueType/failed", requirePermission("system.queues.manage"), async (req, res, next) => {
+router.get("/queues/:queueType/failed", requireRole("admin", "ceo"), async (req, res, next) => {
   try {
     const { queueType } = req.params;
     const { limit = 50, offset = 0 } = req.query;
@@ -1668,7 +1522,7 @@ router.get("/queues/:queueType/failed", requirePermission("system.queues.manage"
     next(error);
   }
 });
-router.post("/queues/:queueType/retry", requirePermission("system.queues.manage"), async (req, res, next) => {
+router.post("/queues/:queueType/retry", requireRole("admin", "ceo"), async (req, res, next) => {
   try {
     const { queueType } = req.params;
     let queue;
@@ -1689,7 +1543,7 @@ router.post("/queues/:queueType/retry", requirePermission("system.queues.manage"
     next(error);
   }
 });
-router.post("/queues/:queueType/clean", requirePermission("system.queues.manage"), async (req, res, next) => {
+router.post("/queues/:queueType/clean", requireRole("admin", "ceo"), async (req, res, next) => {
   try {
     const { queueType } = req.params;
     const { grace = 86400000 } = req.body;
@@ -1711,7 +1565,7 @@ router.post("/queues/:queueType/clean", requirePermission("system.queues.manage"
     next(error);
   }
 });
-router.get("/logs", requirePermission("system.logs.view"), async (req, res, next) => {
+router.get("/logs", requireRole("admin", "ceo"), async (req, res, next) => {
   try {
     const { admin_id, action_type, object_type, date_from, date_to, page = 1, limit = 50 } = req.query;
     let whereClause = "WHERE 1=1";
