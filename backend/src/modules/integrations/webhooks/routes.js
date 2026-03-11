@@ -180,7 +180,7 @@ function detectWebhookPayloadKind(payload = {}) {
   return "unknown";
 }
 
-async function processOrderStatusWebhookPayload(payload = {}) {
+async function processOrderStatusWebhookPayload(payload = {}, options = {}) {
   const eventInfoPayload = extractEventInfoPayload(payload);
   const orderInfoPayload = payload?.orderInfo && typeof payload.orderInfo === "object" ? payload.orderInfo : eventInfoPayload;
   const orderPayload = orderInfoPayload?.order && typeof orderInfoPayload.order === "object" ? orderInfoPayload.order : {};
@@ -188,6 +188,7 @@ async function processOrderStatusWebhookPayload(payload = {}) {
   const externalNumber =
     payload.external_number || payload.externalNumber || orderInfoPayload.externalNumber || orderPayload.externalNumber || orderPayload.number || null;
   const iikoStatus = payload.status || payload.order_status || orderInfoPayload.status || orderPayload.status || null;
+  const allowOrderNumberFallback = options.allowOrderNumberFallback === true;
 
   if (!iikoOrderId || !iikoStatus) {
     return { ok: false, statusCode: 400, error: "order_id и status обязательны" };
@@ -206,18 +207,16 @@ async function processOrderStatusWebhookPayload(payload = {}) {
     orders = rows;
   }
 
-  let resolvedByExternalNumber = false;
-  if (orders.length === 0 && externalNumber) {
+  if (allowOrderNumberFallback && orders.length === 0 && externalNumber) {
     const [rows] = await db.query(
       `SELECT id, status, user_id, total, subtotal, delivery_cost, bonus_spent, bonus_earn_amount, order_number
        FROM orders
-       WHERE (order_number = ? OR CAST(id AS CHAR) = ?)
+       WHERE order_number = ?
        ORDER BY created_at DESC
        LIMIT 1`,
-      [String(externalNumber), String(externalNumber)],
+      [String(externalNumber)],
     );
     orders = rows;
-    resolvedByExternalNumber = orders.length > 0;
   }
 
   if (orders.length === 0) {
@@ -226,16 +225,15 @@ async function processOrderStatusWebhookPayload(payload = {}) {
       module: INTEGRATION_MODULE.ORDERS,
       action: "webhook_order_status",
       status: "failed",
-      errorMessage: "Заказ по iiko_order_id/externalNumber не найден",
+      errorMessage: allowOrderNumberFallback
+        ? "Заказ по iiko_order_id/externalNumber не найден"
+        : "Заказ по iiko_order_id не найден",
       requestData: payload,
     });
     return { ok: false, statusCode: 404, error: "Заказ не найден" };
   }
 
   const order = orders[0];
-  if (resolvedByExternalNumber && iikoOrderId) {
-    await db.query("UPDATE orders SET iiko_order_id = COALESCE(iiko_order_id, ?), iiko_last_sync_at = NOW() WHERE id = ?", [String(iikoOrderId), order.id]);
-  }
 
   if (mappedStatus && order.status !== mappedStatus) {
     const oldStatus = order.status;
@@ -401,7 +399,9 @@ router.post("/event", async (req, res, next) => {
       const eventPayload = events[index] && typeof events[index] === "object" ? events[index] : {};
       const kind = detectWebhookPayloadKind(eventPayload);
       if (kind === "order-status") {
-        const result = await processOrderStatusWebhookPayload(eventPayload);
+        const result = await processOrderStatusWebhookPayload(eventPayload, {
+          allowOrderNumberFallback: settings.iikoAllowOrderNumberFallback,
+        });
         results.push({ index, kind, ...result });
         continue;
       }
@@ -448,7 +448,9 @@ router.post("/order-status", async (req, res, next) => {
       await rejectInvalidSignature({ req, module: INTEGRATION_MODULE.ORDERS, path: "/order-status" });
       return res.status(401).json({ error: "Неверная подпись webhook" });
     }
-    const result = await processOrderStatusWebhookPayload(req.body || {});
+    const result = await processOrderStatusWebhookPayload(req.body || {}, {
+      allowOrderNumberFallback: settings.iikoAllowOrderNumberFallback,
+    });
     if (!result.ok) {
       return res.status(result.statusCode || 400).json({ ok: false, error: result.error, jobs: result.jobs || [] });
     }
