@@ -424,14 +424,8 @@ const clientNameForTitle = computed(() => {
   const parts = [client.value.first_name, client.value.last_name].filter(Boolean).join(" ");
   return parts ? `Клиент: ${parts}` : "Клиент";
 });
-const totalSpentValue = computed(() => loyaltyStats.value?.total_spent_all_time ?? loyaltyStats.value?.total_spent_60_days ?? 0);
-const totalSpentLabel = computed(() => {
-  const periodDays = Number(loyaltyStats.value?.period_days);
-  if (Number.isFinite(periodDays) && periodDays > 0) {
-    return `Сумма за ${periodDays} дней`;
-  }
-  return "Сумма заказов";
-});
+const totalSpentValue = computed(() => loyaltyStats.value?.total_spent_all_time || 0);
+const totalSpentLabel = computed(() => "Сумма заказов за всё время");
 const canManageClient = computed(() => authStore.hasPermission("clients.manage"));
 const canAdjustLoyalty = computed(() => authStore.hasPermission("clients.loyalty.adjust"));
 const updateBreadcrumbs = () => {

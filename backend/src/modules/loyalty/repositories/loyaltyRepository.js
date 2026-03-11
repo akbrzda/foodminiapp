@@ -37,15 +37,14 @@ export async function getLoyaltyLevels({ connection = null } = {}) {
   return rows;
 }
 
-export async function getTotalSpentForPeriod(userId, periodDays, { connection = null } = {}) {
+export async function getTotalSpentForPeriod(userId, _periodDays, { connection = null } = {}) {
   const executor = getExecutor(connection);
   const [totals] = await executor.query(
     `SELECT COALESCE(SUM(GREATEST(0, total)), 0) as total_spent
      FROM orders
      WHERE user_id = ?
-       AND status IN ('delivered','completed')
-       AND created_at >= (NOW() - INTERVAL ? DAY)`,
-    [userId, periodDays],
+       AND status IN ('delivered','completed')`,
+    [userId],
   );
   return parseFloat(totals[0]?.total_spent) || 0;
 }

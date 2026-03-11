@@ -84,12 +84,7 @@
             <div class="progress-bar">
               <span class="progress-fill" :style="{ width: `${progressPercent}%` }"></span>
             </div>
-            <div class="progress-caption" v-if="nextLevel">
-              <template v-if="isAllTimeLevelCalculation">
-                До обновления статуса — {{ formatPrice(amountToNextLevel) }} ₽ за всё время
-              </template>
-              <template v-else> До обновления статуса — {{ formatPrice(amountToNextLevel) }} ₽ за последние {{ levelCalculationDays }} дней </template>
-            </div>
+            <div class="progress-caption" v-if="nextLevel">До обновления статуса — {{ formatPrice(amountToNextLevel) }} ₽ за всё время</div>
             <div class="progress-caption" v-else>У вас максимальный статус</div>
           </div>
 
@@ -200,9 +195,6 @@ const currentRateLabel = computed(() => Math.round(currentLevel.value.rate * 100
 const maxRedeemPercentLabel = computed(() => Math.round(loyaltyStore.maxRedeemPercent * 100));
 const progressPercent = computed(() => Math.round(loyaltyStore.progressToNextLevel * 100));
 const amountToNextLevel = computed(() => loyaltyStore.amountToNextLevel);
-
-const levelCalculationDays = computed(() => loyaltyStore.periodDays || 60);
-const isAllTimeLevelCalculation = computed(() => !Number.isFinite(Number(loyaltyStore.periodDays)) || Number(loyaltyStore.periodDays) <= 0);
 
 const formattedLevels = computed(() =>
   loyaltyStore.levels.map((level) => ({

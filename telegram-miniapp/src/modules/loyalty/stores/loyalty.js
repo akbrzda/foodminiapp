@@ -17,7 +17,7 @@ export const useLoyaltyStore = defineStore("loyalty", {
     updatedAt: null,
     levels: LOYALTY_LEVELS,
     fallbackRedeemPercent: MAX_BONUS_REDEEM_PERCENT,
-    periodDays: 60,
+    periodDays: null,
   }),
   getters: {
     currentLevel: (state) => getLoyaltyLevel(state.totalSpent, state.levels),
@@ -83,13 +83,9 @@ export const useLoyaltyStore = defineStore("loyalty", {
       this.loading = true;
       try {
         const response = await bonusesAPI.getLevels();
-        const totalSpent = response.data?.total_spent_all_time ?? response.data?.total_spent_60_days ?? 0;
+        const totalSpent = response.data?.total_spent_all_time || 0;
         this.setTotalSpent(totalSpent);
-        if (Object.prototype.hasOwnProperty.call(response.data || {}, "period_days")) {
-          this.periodDays = response.data?.period_days;
-        } else {
-          this.periodDays = 60;
-        }
+        this.periodDays = null;
         this.applyLevels(response.data?.levels || [], {
           fallbackRedeemPercent: response.data?.max_spend_percent,
         });

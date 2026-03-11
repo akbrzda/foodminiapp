@@ -387,8 +387,7 @@ export function createAdminLoyaltyController({ loyaltyService }) {
           data = {
             user: users[0],
             stats: {
-              total_spent_60_days: Math.floor(Number(levelsSummary?.total_spent_60_days) || 0),
-              total_spent_all_time: Math.floor(Number(levelsSummary?.total_spent_all_time) || Number(levelsSummary?.total_spent_60_days) || 0),
+              total_spent_all_time: Math.floor(Number(levelsSummary?.total_spent_all_time) || 0),
               total_earned: Math.floor(totalEarned),
               total_spent: Math.floor(totalSpent),
               total_expired: Math.floor(totalExpired),
@@ -396,7 +395,6 @@ export function createAdminLoyaltyController({ loyaltyService }) {
               amount_to_next_level: Math.floor(Number(levelsSummary?.amount_to_next_level) || 0),
               current_level: levelsSummary?.current_level || null,
               next_level: levelsSummary?.next_level || null,
-              period_days: levelsSummary?.period_days ?? null,
               stale: balanceSummary?.stale === true || levelsSummary?.stale === true || historySummary?.stale === true,
             },
             transactions,
