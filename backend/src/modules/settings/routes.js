@@ -31,7 +31,7 @@ const filterPublicSettings = (settings) => {
 };
 
 const buildMapsPublicPayload = (settings) => ({
-  yandex_js_api_key: String(settings?.yandex_public_js_api_key || "").trim(),
+  yandex_js_api_key: String(settings?.yandex_js_api_key || "").trim(),
   language: String(settings?.maps_default_language || "ru_RU").trim() || "ru_RU",
   country: String(settings?.maps_default_country || "RU").trim() || "RU",
 });
@@ -98,7 +98,7 @@ router.post("/admin/maps/test", authenticateToken, requirePermission("system.set
     const query = "Москва, Тверская улица, 1";
 
     if (!geocoderKey) {
-      return res.status(400).json({ success: false, error: "Не задан yandex_js_api_key (серверный ключ HTTP Геокодера)" });
+      return res.status(400).json({ success: false, error: "Не задан yandex_js_api_key (единый ключ JS API + HTTP Геокодер)" });
     }
     if (!suggestKey) {
       return res.status(400).json({ success: false, error: "Не задан yandex_suggest_api_key" });

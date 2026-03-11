@@ -873,13 +873,7 @@ const canManageStopListReasons = computed(() => authStore.hasPermission("menu.st
 const modalTitle = computed(() => (editing.value ? "Редактировать причину" : "Новая причина"));
 const modalSubtitle = computed(() => (editing.value ? "Измените параметры" : "Создайте причину стоп-листа"));
 const percentKeys = new Set();
-const MAP_SETTING_KEYS = new Set([
-  "yandex_js_api_key",
-  "yandex_public_js_api_key",
-  "yandex_suggest_api_key",
-  "maps_default_language",
-  "maps_default_country",
-]);
+const MAP_SETTING_KEYS = new Set(["yandex_js_api_key", "yandex_suggest_api_key", "maps_default_language", "maps_default_country"]);
 const APPEARANCE_SETTING_KEYS = new Set(["menu_badges_enabled", "menu_cards_layout"]);
 const primitiveTypes = new Set(["boolean", "string", "number"]);
 const TELEGRAM_ORDER_PLACEHOLDERS = [
