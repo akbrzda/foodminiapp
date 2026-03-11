@@ -2,9 +2,18 @@
   <div class="space-y-6">
     <Card>
       <CardContent>
-        <PageHeader :title="isEditing ? 'Редактирование кампании подписки' : 'Новая кампания подписки'" description="Настройка deep-link и условий участия">
+        <PageHeader
+          :title="isEditing ? 'Редактирование кампании подписки' : 'Новая кампания подписки'"
+          description="Настройка deep-link и условий участия"
+        >
           <template #actions>
-            <BackButton @click="goBack" />
+            <div class="header-actions">
+              <BackButton @click="goBack" />
+              <Button :disabled="isSaving" @click="saveCampaign">
+                <Save :size="16" />
+                {{ isSaving ? "Сохранение..." : "Сохранить" }}
+              </Button>
+            </div>
           </template>
         </PageHeader>
       </CardContent>
@@ -198,14 +207,6 @@
           </Field>
         </CardContent>
       </Card>
-
-      <div class="flex flex-wrap gap-3">
-        <Button :disabled="isSaving" @click="saveCampaign">
-          <Save :size="16" />
-          {{ isSaving ? "Сохранение..." : "Сохранить" }}
-        </Button>
-        <Button variant="secondary" @click="goBack">Отмена</Button>
-      </div>
     </template>
   </div>
 </template>

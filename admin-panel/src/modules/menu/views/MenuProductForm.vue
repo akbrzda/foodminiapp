@@ -4,11 +4,13 @@
       <CardContent>
         <PageHeader :title="modalTitle" :description="modalSubtitle">
           <template #actions>
-            <BackButton label="Назад к списку" @click="goBack" />
-            <Button v-if="canManageProducts" type="button" @click="saveAll" :disabled="saving || isInitialLoading">
-              <Save :size="16" />
-              {{ saving ? "Сохранение..." : "Сохранить" }}
-            </Button>
+            <div class="header-actions">
+              <BackButton label="Назад" @click="goBack" />
+              <Button v-if="canManageProducts" type="button" @click="saveAll" :disabled="saving || isInitialLoading">
+                <Save :size="16" />
+                {{ saving ? "Сохранение..." : "Сохранить" }}
+              </Button>
+            </div>
           </template>
         </PageHeader>
       </CardContent>

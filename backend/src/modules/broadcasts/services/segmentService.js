@@ -198,6 +198,9 @@ const buildCondition = (condition, params) => {
       const expression = "MAX(u.loyalty_balance)";
       return buildComparison(expression, condition.operator, condition.value, params);
     }
+    case "bot_started_no_phone": {
+      return "MAX(u.registration_type) = 'bot_only' AND MAX(u.telegram_id) IS NOT NULL AND (MAX(u.phone) IS NULL OR TRIM(MAX(u.phone)) = '')";
+    }
     default:
       throw new Error(`Неизвестный тип условия сегментации: ${type}`);
   }

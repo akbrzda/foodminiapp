@@ -4,10 +4,12 @@
       <CardContent>
         <PageHeader title="Группы модификаторов" description="Список групп модификаторов и управление">
           <template #actions>
-            <Button v-if="canManageModifiers" @click="openModal()">
-              <Plus :size="16" />
-              Добавить группу
-            </Button>
+            <div class="header-actions">
+              <Button v-if="canManageModifiers" @click="openModal()">
+                <Plus :size="16" />
+                Добавить группу
+              </Button>
+            </div>
           </template>
         </PageHeader>
       </CardContent>
@@ -141,10 +143,12 @@
               </FieldContent>
             </Field>
           </FieldGroup>
-          <Button v-if="canManageModifiers" class="w-full" type="submit">
-            <Save :size="16" />
-            Сохранить
-          </Button>
+          <div class="form-actions">
+            <Button v-if="canManageModifiers" type="submit">
+              <Save :size="16" />
+              Сохранить
+            </Button>
+          </div>
         </form>
       </DialogContent>
     </Dialog>
@@ -232,10 +236,12 @@
               </FieldContent>
             </Field>
           </FieldGroup>
-          <Button v-if="canManageModifiers" class="w-full" type="submit">
-            <Save :size="16" />
-            Сохранить
-          </Button>
+          <div class="form-actions">
+            <Button v-if="canManageModifiers" type="submit">
+              <Save :size="16" />
+              Сохранить
+            </Button>
+          </div>
         </form>
       </DialogContent>
     </Dialog>
@@ -281,10 +287,12 @@
               </div>
             </div>
           </div>
-          <Button v-if="canManageModifiers" class="w-full" type="submit" :disabled="saving">
-            <Save :size="16" />
-            {{ saving ? "Сохранение..." : "Сохранить цены" }}
-          </Button>
+          <div class="form-actions">
+            <Button v-if="canManageModifiers" type="submit" :disabled="saving">
+              <Save :size="16" />
+              {{ saving ? "Сохранение..." : "Сохранить цены" }}
+            </Button>
+          </div>
         </form>
       </DialogContent>
     </Dialog>
@@ -323,10 +331,12 @@
               />
             </div>
           </div>
-          <Button v-if="canManageModifiers" class="w-full" type="submit" :disabled="saving">
-            <Save :size="16" />
-            {{ saving ? "Сохранение..." : "Сохранить цены групп" }}
-          </Button>
+          <div class="form-actions">
+            <Button v-if="canManageModifiers" type="submit" :disabled="saving">
+              <Save :size="16" />
+              {{ saving ? "Сохранение..." : "Сохранить цены групп" }}
+            </Button>
+          </div>
         </form>
       </DialogContent>
     </Dialog>

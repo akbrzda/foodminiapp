@@ -355,10 +355,12 @@
               </FieldContent>
             </Field>
           </FieldGroup>
-          <Button class="w-full" type="submit">
-            <Save :size="16" />
-            Сохранить
-          </Button>
+          <div class="form-actions">
+            <Button type="submit">
+              <Save :size="16" />
+              Сохранить
+            </Button>
+          </div>
         </form>
       </DialogContent>
     </Dialog>

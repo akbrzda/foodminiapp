@@ -4,19 +4,21 @@
       <CardContent>
         <PageHeader title="Уровни лояльности" description="Управление уровнями и маппингом на PremiumBonus">
           <template #actions>
-            <Button v-if="canManageLoyaltyLevels" variant="secondary" :disabled="loading || saving" @click="loadLevels">
-              <RefreshCcw :size="16" />
-              Обновить
-            </Button>
-            <Button v-if="canManageLoyaltyLevels" variant="secondary" :disabled="loading || saving" @click="addLevel">
-              <Plus :size="16" />
-              Добавить уровень
-            </Button>
-            <Button v-if="canManageLoyaltyLevels" :disabled="loading || saving" @click="saveLevels">
-              <Save v-if="!saving" :size="16" />
-              <RefreshCcw v-else class="h-4 w-4 animate-spin" />
-              {{ saving ? "Сохранение..." : "Сохранить" }}
-            </Button>
+            <div class="header-actions">
+              <Button v-if="canManageLoyaltyLevels" variant="secondary" :disabled="loading || saving" @click="loadLevels">
+                <RefreshCcw :size="16" />
+                Обновить
+              </Button>
+              <Button v-if="canManageLoyaltyLevels" variant="secondary" :disabled="loading || saving" @click="addLevel">
+                <Plus :size="16" />
+                Добавить уровень
+              </Button>
+              <Button v-if="canManageLoyaltyLevels" :disabled="loading || saving" @click="saveLevels">
+                <Save v-if="!saving" :size="16" />
+                <RefreshCcw v-else class="h-4 w-4 animate-spin" />
+                {{ saving ? "Сохранение..." : "Сохранить" }}
+              </Button>
+            </div>
           </template>
         </PageHeader>
       </CardContent>

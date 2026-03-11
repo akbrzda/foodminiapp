@@ -4,15 +4,17 @@
       <CardContent>
         <PageHeader title="Интеграции" description="Управление внешними сервисами и синхронизацией">
           <template #actions>
-            <Button variant="secondary" :disabled="isBusy()" @click="loadAll">
-              <RefreshCcw :size="16" />
-              Обновить
-            </Button>
-            <Button v-if="canManageIntegrations" :disabled="isBusy()" @click="saveSettings">
-              <RefreshCcw v-if="saving" class="h-4 w-4 animate-spin" />
-              <PlugZap v-else :size="16" />
-              {{ saving ? "Сохранение..." : "Сохранить" }}
-            </Button>
+            <div class="header-actions">
+              <Button variant="secondary" :disabled="isBusy()" @click="loadAll">
+                <RefreshCcw :size="16" />
+                Обновить
+              </Button>
+              <Button v-if="canManageIntegrations" :disabled="isBusy()" @click="saveSettings">
+                <RefreshCcw v-if="saving" class="h-4 w-4 animate-spin" />
+                <PlugZap v-else :size="16" />
+                {{ saving ? "Сохранение..." : "Сохранить" }}
+              </Button>
+            </div>
           </template>
         </PageHeader>
       </CardContent>

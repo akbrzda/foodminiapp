@@ -4,15 +4,17 @@
       <CardContent>
         <PageHeader title="Пользователи панели" description="Список администраторов и менеджеров">
           <template #actions>
-            <Badge variant="secondary">Всего: {{ users.length }}</Badge>
-            <Button v-if="authStore.hasPermission('system.access.manage')" variant="outline" @click="openAccessRolesPage">
-              <KeyRound :size="16" />
-              Роли и доступы
-            </Button>
-            <Button @click="openModal()">
-              <Plus :size="16" />
-              Добавить пользователя
-            </Button>
+            <div class="header-actions">
+              <Badge variant="secondary">Всего: {{ users.length }}</Badge>
+              <Button v-if="authStore.hasPermission('system.access.manage')" variant="outline" @click="openAccessRolesPage">
+                <KeyRound :size="16" />
+                Роли и доступы
+              </Button>
+              <Button @click="openModal()">
+                <Plus :size="16" />
+                Добавить пользователя
+              </Button>
+            </div>
           </template>
         </PageHeader>
       </CardContent>
@@ -300,10 +302,12 @@
               </FieldContent>
             </Field>
           </FieldGroup>
-          <Button class="w-full" type="submit">
-            <Save :size="16" />
-            Сохранить
-          </Button>
+          <div class="form-actions">
+            <Button type="submit">
+              <Save :size="16" />
+              Сохранить
+            </Button>
+          </div>
         </form>
       </DialogContent>
     </Dialog>

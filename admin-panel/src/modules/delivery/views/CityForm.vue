@@ -75,10 +75,12 @@
             </Field>
           </FieldGroup>
 
-          <Button class="w-full" type="submit" :disabled="saving">
-            <Save :size="16" />
-            {{ saving ? "Сохранение..." : "Сохранить" }}
-          </Button>
+          <div class="form-actions">
+            <Button type="submit" :disabled="saving">
+              <Save :size="16" />
+              {{ saving ? "Сохранение..." : "Сохранить" }}
+            </Button>
+          </div>
         </form>
       </CardContent>
     </Card>

@@ -2,7 +2,7 @@ import axios from "axios";
 import { logger } from "../utils/logger.js";
 import { sendTelegramStartMessage } from "../services/startMessageService.js";
 import { answerCallbackQuery, requestTelegram } from "../services/telegramApi.js";
-import { handleCheckSubscriptionCallback, handleStartWithSubscriptionTag } from "../services/subscriptionCampaignService.js";
+import { handleCheckSubscriptionCallback, handleStartWithSubscriptionTag, upsertBotUser } from "../services/subscriptionCampaignService.js";
 
 const POLL_TIMEOUT_SECONDS = 25;
 const RETRY_DELAY_MS = 2000;
@@ -79,6 +79,14 @@ export const createTelegramCommandBot = () => {
     const command = normalizeCommand(message?.text || "");
     if (!command) return;
     if (command !== "/start") return;
+
+    try {
+      await upsertBotUser(message?.from);
+    } catch (error) {
+      logger.warn("Не удалось обновить пользователя при /start", {
+        error: error?.message || String(error),
+      });
+    }
 
     const startArg = parseStartArgument(message?.text || "");
     if (startArg) {

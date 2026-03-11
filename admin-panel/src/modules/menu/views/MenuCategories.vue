@@ -4,11 +4,13 @@
       <CardContent>
         <PageHeader title="Категории меню" description="Список категорий и управление">
           <template #actions>
-            <Badge variant="secondary">Показано: {{ paginatedCategories.length }} / {{ filteredCategories.length }}</Badge>
-            <Button v-if="canManageCategories" class="w-full md:w-auto" @click="openModal()">
-              <Plus :size="16" />
-              Добавить категорию
-            </Button>
+            <div class="header-actions">
+              <Badge variant="secondary">Показано: {{ paginatedCategories.length }} / {{ filteredCategories.length }}</Badge>
+              <Button v-if="canManageCategories" class="w-full md:w-auto" @click="openModal()">
+                <Plus :size="16" />
+                Добавить категорию
+              </Button>
+            </div>
           </template>
         </PageHeader>
       </CardContent>
@@ -193,10 +195,12 @@
               </FieldContent>
             </Field>
           </FieldGroup>
-          <Button v-if="canManageCategories" class="w-full" type="submit" :disabled="saving">
-            <Save :size="16" />
-            {{ saving ? "Сохранение..." : "Сохранить" }}
-          </Button>
+          <div class="form-actions">
+            <Button v-if="canManageCategories" type="submit" :disabled="saving">
+              <Save :size="16" />
+              {{ saving ? "Сохранение..." : "Сохранить" }}
+            </Button>
+          </div>
         </form>
       </DialogContent>
     </Dialog>

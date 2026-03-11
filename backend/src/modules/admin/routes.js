@@ -982,7 +982,7 @@ router.get("/clients", requirePermission("clients.view"), async (req, res, next)
       return Number.isFinite(normalized) ? normalized : null;
     };
 
-    let whereClause = "WHERE 1=1";
+    let whereClause = "WHERE u.phone IS NOT NULL AND TRIM(u.phone) <> ''";
     const params = [];
 
     if (search) {

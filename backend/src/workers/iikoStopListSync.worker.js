@@ -1,6 +1,7 @@
 import { UnrecoverableError, Worker } from "bullmq";
 import { logger } from "../utils/logger.js";
 import { processIikoStopListSync } from "../modules/integrations/services/syncProcessors.js";
+import { BULLMQ_WORKER_OPTIONS } from "./bullmqWorkerOptions.js";
 
 const isBlockedApiLoginError = (error) => {
   const message = String(error?.message || "").toLowerCase();
@@ -22,7 +23,7 @@ export function createIikoStopListSyncWorker(connection) {
       }
       return { ok: true };
     },
-    { connection, concurrency: 1 },
+    { connection, concurrency: 1, ...BULLMQ_WORKER_OPTIONS },
   );
 
   worker.on("failed", (job, err) => {

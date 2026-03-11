@@ -27,7 +27,7 @@
       Добавьте хотя бы одно условие сегментации.
     </div>
 
-    <div v-for="(condition, index) in conditions" :key="condition.id" class="rounded-xl border border-border bg-muted/20 p-4">
+    <div v-for="(condition, index) in conditions" :key="condition.id" class="rounded-xl border border-border bg-muted/20 p-3">
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Условие #{{ index + 1 }}</div>
         <Button type="button" size="icon" variant="ghost" @click="removeCondition(index)">
@@ -55,6 +55,7 @@
                 <SelectItem value="birthday_range">Диапазон дат рождения</SelectItem>
                 <SelectItem value="loyalty_level">Уровень лояльности</SelectItem>
                 <SelectItem value="bonus_balance">Баланс бонусов</SelectItem>
+                <SelectItem value="bot_started_no_phone">Запустили бота, без номера</SelectItem>
               </SelectContent>
             </Select>
           </FieldContent>
@@ -101,7 +102,7 @@
           <div class="max-w-xl rounded-md border border-border bg-card">
             <CalendarView
               :model-value="getConditionRange(condition)"
-              :number-of-months="1"
+              :number-of-months="calendarMonths"
               locale="ru-RU"
               multiple
               @update:modelValue="(value) => updateConditionRange(condition, value)"
@@ -188,7 +189,7 @@
   </div>
 </template>
 <script setup>
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { Plus, Trash2 } from "lucide-vue-next";
 import { parseDate as parseCalendarDate } from "@internationalized/date";
 import { useReferenceStore } from "@/shared/stores/reference.js";
@@ -206,6 +207,11 @@ const referenceStore = useReferenceStore();
 const localOperator = ref(props.modelValue?.operator || "AND");
 const conditions = ref([]);
 const lastEmittedJson = ref("");
+const getCalendarMonthCount = () => (window.innerWidth < 1280 ? 1 : 2);
+const calendarMonths = ref(getCalendarMonthCount());
+const handleResize = () => {
+  calendarMonths.value = getCalendarMonthCount();
+};
 const months = [
   { value: 1, label: "Январь" },
   { value: 2, label: "Февраль" },
@@ -235,7 +241,7 @@ const createCondition = () => ({
   date_to: "",
 });
 
-const showOperator = (condition) => !["new_users", "birthday_range"].includes(condition.type);
+const showOperator = (condition) => !["new_users", "birthday_range", "bot_started_no_phone"].includes(condition.type);
 const showValue = (condition) => {
   if (requiresBetween(condition)) return false;
   return ["inactive_days", "active_in_period", "total_spent", "avg_check", "order_count", "bonus_balance"].includes(condition.type);
@@ -301,6 +307,9 @@ const buildConfig = () => {
     .map((condition) => {
       if (!condition.type) return null;
       const base = { type: condition.type };
+      if (condition.type === "bot_started_no_phone") {
+        return base;
+      }
       if (showOperator(condition)) {
         base.operator = condition.operator || ">=";
       }
@@ -389,9 +398,14 @@ watch(
 );
 
 onMounted(async () => {
+  window.addEventListener("resize", handleResize);
   await referenceStore.fetchCitiesAndBranches();
   if (!conditions.value.length) {
     addCondition();
   }
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener("resize", handleResize);
 });
 </script>

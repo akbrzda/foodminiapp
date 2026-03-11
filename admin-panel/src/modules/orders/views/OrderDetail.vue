@@ -345,7 +345,7 @@ const returnFromClientId = computed(() => {
   if (from !== "client" || !clientId) return null;
   return clientId;
 });
-const backButtonLabel = computed(() => (returnFromClientId.value ? "Назад к клиенту" : "Назад к заказам"));
+const backButtonLabel = computed(() => (returnFromClientId.value ? "Назад" : "Назад"));
 const updateBreadcrumbs = () => {
   const orderNumber = order.value?.order_number || route.params.id;
   if (returnFromClientId.value) {

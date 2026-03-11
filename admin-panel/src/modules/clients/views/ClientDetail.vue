@@ -2,8 +2,8 @@
   <div class="space-y-6">
     <PageHeader :title="clientNameForTitle" description="Данные профиля и лояльность">
       <template #actions>
-        <div class="flex items-center gap-2">
-          <BackButton label="Назад к клиентам" @click="goBack" />
+        <div class="header-actions">
+          <BackButton label="Назад" @click="goBack" />
           <Button v-if="canManageClient" variant="destructive" size="sm" :disabled="deletingClient" @click="deleteClient">
             <Trash2 :size="16" />
             {{ deletingClient ? "Удаление..." : "Удалить клиента" }}
@@ -338,10 +338,12 @@
               </FieldContent>
             </Field>
           </FieldGroup>
-          <Button class="w-full" type="submit" :disabled="adjustSaving">
-            <Spinner v-if="adjustSaving" class="h-4 w-4" />
-            <span>{{ adjustSaving ? "Сохранение..." : "Сохранить" }}</span>
-          </Button>
+          <div class="form-actions">
+            <Button type="submit" :disabled="adjustSaving">
+              <Spinner v-if="adjustSaving" class="h-4 w-4" />
+              <span>{{ adjustSaving ? "Сохранение..." : "Сохранить" }}</span>
+            </Button>
+          </div>
         </form>
       </DialogContent>
     </Dialog>

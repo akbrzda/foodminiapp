@@ -4,14 +4,16 @@
       <CardContent>
         <PageHeader title="Роли и доступы" description="Управление ролями и правами доступа">
           <template #actions>
-            <Button variant="outline" :disabled="loading" @click="loadInitialData">
-              <RefreshCcw :size="16" />
-              Обновить
-            </Button>
-            <Button v-if="canManageAccess" @click="openRoleDialog()">
-              <Plus :size="16" />
-              Новая роль
-            </Button>
+            <div class="header-actions">
+              <Button variant="outline" :disabled="loading" @click="loadInitialData">
+                <RefreshCcw :size="16" />
+                Обновить
+              </Button>
+              <Button v-if="canManageAccess" @click="openRoleDialog()">
+                <Plus :size="16" />
+                Новая роль
+              </Button>
+            </div>
           </template>
         </PageHeader>
       </CardContent>
@@ -163,10 +165,12 @@
               </Select>
             </FieldContent>
           </Field>
-          <Button class="w-full" type="submit" :disabled="roleSaving || !canManageAccess">
-            <Save :size="16" />
-            Сохранить
-          </Button>
+          <div class="form-actions">
+            <Button type="submit" :disabled="roleSaving || !canManageAccess">
+              <Save :size="16" />
+              Сохранить
+            </Button>
+          </div>
         </form>
       </DialogContent>
     </Dialog>

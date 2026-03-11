@@ -4,7 +4,9 @@
       <CardContent>
         <PageHeader :title="pageTitle" :description="pageSubtitle">
           <template #actions>
-            <BackButton @click="goBack" />
+            <div class="header-actions">
+              <BackButton @click="goBack" />
+            </div>
           </template>
         </PageHeader>
       </CardContent>
@@ -77,7 +79,10 @@
           <SegmentBuilder v-model="segmentConfig" />
         </div>
         <div class="flex flex-wrap items-center gap-2">
-          <Button v-if="canManageBroadcasts" variant="outline" type="button" @click="calculateAudience">Рассчитать аудиторию</Button>
+          <Button v-if="canManageBroadcasts" variant="outline" type="button" @click="calculateAudience">
+            <Calculator :size="16" />
+            Рассчитать аудиторию
+          </Button>
           <span v-if="estimatedSize !== null" class="text-xs text-muted-foreground">Примерный размер: {{ estimatedSize }}</span>
         </div>
       </CardContent>
@@ -330,9 +335,15 @@
             </FieldContent>
           </Field>
         </FieldGroup>
-        <div class="flex flex-wrap gap-2">
-          <Button v-if="canManageBroadcasts" variant="outline" type="button" @click="previewCampaign">Предпросмотр</Button>
-          <Button v-if="canManageBroadcasts" variant="outline" type="button" @click="sendTest">Отправить тест</Button>
+        <div class="form-actions">
+          <Button v-if="canManageBroadcasts" variant="outline" type="button" @click="previewCampaign">
+            <Eye :size="16" />
+            Предпросмотр
+          </Button>
+          <Button v-if="canManageBroadcasts" variant="outline" type="button" @click="sendTest">
+            <FlaskConical :size="16" />
+            Отправить тест
+          </Button>
         </div>
         <div v-if="previewText" class="rounded-lg border border-border bg-muted/30 p-4 text-sm text-foreground whitespace-pre-wrap">
           {{ previewText }}
@@ -340,14 +351,14 @@
       </CardContent>
     </Card>
 
-    <div class="flex flex-wrap gap-3">
-      <Button v-if="canManageBroadcasts" :disabled="saving" @click="saveCampaign">
-        <Save :size="16" />
-        {{ saving ? "Сохранение..." : "Сохранить" }}
-      </Button>
+    <div class="form-actions">
       <Button v-if="canManageBroadcasts" variant="secondary" :disabled="sending" @click="sendCampaign">
         <Send :size="16" />
         {{ sending ? "Отправка..." : "Отправить" }}
+      </Button>
+      <Button v-if="canManageBroadcasts" :disabled="saving" @click="saveCampaign">
+        <Save :size="16" />
+        {{ saving ? "Сохранение..." : "Сохранить" }}
       </Button>
     </div>
   </div>
@@ -355,7 +366,7 @@
 <script setup>
 import { devError } from "@/shared/utils/logger";
 import { computed, onMounted, ref, watch } from "vue";
-import { Calendar as CalendarIcon, Plus, Save, Send, Trash2, UploadCloud } from "lucide-vue-next";
+import { Calendar as CalendarIcon, Calculator, Eye, FlaskConical, Plus, Save, Send, Trash2, UploadCloud } from "lucide-vue-next";
 import { DateFormatter, getLocalTimeZone, parseDate as parseCalendarDate } from "@internationalized/date";
 import { useRoute, useRouter } from "vue-router";
 import api from "@/shared/api/client.js";

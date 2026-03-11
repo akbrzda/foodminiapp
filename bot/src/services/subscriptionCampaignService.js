@@ -51,7 +51,7 @@ const resolveCampaignById = async (campaignId) => {
   return rows[0] || null;
 };
 
-const upsertBotUser = async (telegramUser) => {
+export const upsertBotUser = async (telegramUser) => {
   const telegramId = Number(telegramUser?.id);
   if (!Number.isFinite(telegramId) || telegramId <= 0) return null;
   const firstName = telegramUser?.first_name || null;
@@ -353,6 +353,7 @@ export const handleCheckSubscriptionCallback = async ({ callbackQuery }) => {
 };
 
 export default {
+  upsertBotUser,
   handleStartWithSubscriptionTag,
   handleCheckSubscriptionCallback,
 };

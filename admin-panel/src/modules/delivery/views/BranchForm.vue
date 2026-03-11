@@ -4,7 +4,9 @@
       <CardContent>
         <PageHeader :title="pageTitle" :description="pageSubtitle">
           <template #actions>
-            <BackButton @click="goBack" />
+            <div class="header-actions">
+              <BackButton @click="goBack" />
+            </div>
           </template>
         </PageHeader>
       </CardContent>
@@ -242,10 +244,12 @@
             </div>
           </div>
 
-          <Button class="w-full" type="submit" :disabled="saving">
-            <Save :size="16" />
-            {{ saving ? "Сохранение..." : "Сохранить" }}
-          </Button>
+          <div class="form-actions">
+            <Button type="submit" :disabled="saving">
+              <Save :size="16" />
+              {{ saving ? "Сохранение..." : "Сохранить" }}
+            </Button>
+          </div>
         </form>
       </CardContent>
     </Card>

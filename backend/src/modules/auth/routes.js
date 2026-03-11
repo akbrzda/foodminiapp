@@ -22,8 +22,6 @@ import {
 import { parseTelegramUser, validateTelegramData } from "../../utils/telegram.js";
 import { normalizePhone } from "../../utils/phone.js";
 import { decryptPhone } from "../../utils/encryption.js";
-import { getSystemSettings } from "../../utils/settings.js";
-import { grantRegistrationBonus } from "../loyalty/services/loyaltyService.js";
 import { addToBlacklist, isBlacklisted } from "../../middleware/tokenBlacklist.js";
 import { authenticateToken } from "../../middleware/auth.js";
 import { logger } from "../../utils/logger.js";
@@ -261,7 +259,6 @@ router.post("/telegram", telegramAuthLimiter, async (req, res, next) => {
     );
     let userId;
     let user;
-    let isNewUser = false;
     if (users.length > 0) {
       userId = users[0].id;
       user = users[0];
@@ -303,7 +300,6 @@ router.post("/telegram", telegramAuthLimiter, async (req, res, next) => {
         }
       }
     } else {
-      isNewUser = true;
       const [result] = await db.query(
         "INSERT INTO users (telegram_id, registration_type, bot_registered_at, phone, first_name, last_name) VALUES (?, 'miniapp', NULL, ?, ?, ?)",
         [id, null, first_name || null, last_name || null],
@@ -318,16 +314,6 @@ router.post("/telegram", telegramAuthLimiter, async (req, res, next) => {
         [userId],
       );
       user = newUser[0];
-    }
-    if (isNewUser) {
-      try {
-        const systemSettings = await getSystemSettings();
-        if (systemSettings.bonuses_enabled) {
-          await grantRegistrationBonus(userId, null);
-        }
-      } catch (bonusError) {
-        // Registration bonus errors are non-critical
-      }
     }
     const authPayload = {
       id: userId,

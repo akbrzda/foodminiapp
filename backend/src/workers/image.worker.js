@@ -4,6 +4,7 @@ import fs from "fs/promises";
 import path from "path";
 import { logger } from "../utils/logger.js";
 import { CDN_IMAGES_PATH } from "../config/uploads.js";
+import { BULLMQ_WORKER_OPTIONS } from "./bullmqWorkerOptions.js";
 const UPLOAD_DIR = CDN_IMAGES_PATH;
 const OPTIMIZED_DIR = path.join(UPLOAD_DIR, "optimized");
 const THUMBNAILS_DIR = path.join(UPLOAD_DIR, "thumbnails");
@@ -150,6 +151,7 @@ export function createImageWorker(connection) {
   const worker = new Worker("image-processing", processImageOptimization, {
     connection,
     concurrency: 3,
+    ...BULLMQ_WORKER_OPTIONS,
   });
   worker.on("completed", (job, result) => {
     console.log(`   Original: ${(result.optimization.originalSize / 1024).toFixed(2)} KB`);

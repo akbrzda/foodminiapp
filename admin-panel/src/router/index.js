@@ -522,7 +522,7 @@ router.beforeEach(async (to, from) => {
     return { name: "login", query: { redirect: to.fullPath } };
   }
   if (to.meta.public && authStore.isAuthenticated && to.name === "login") {
-    return { name: "orders" };
+    return { name: "dashboard" };
   }
   const requiredPermissions = Array.isArray(to.meta.permissions)
     ? to.meta.permissions

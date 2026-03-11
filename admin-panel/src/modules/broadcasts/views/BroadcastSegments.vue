@@ -4,12 +4,14 @@
       <CardContent>
         <PageHeader title="Сегменты" description="Список сохраненных сегментов аудитории">
           <template #actions>
-            <BackButton label="Назад" @click="goBack" />
-            <Badge variant="secondary">Всего: {{ segments.length }}</Badge>
-            <Button v-if="canManageBroadcasts" @click="openModal()">
-              <Plus :size="16" />
-              Создать сегмент
-            </Button>
+            <div class="header-actions">
+              <Badge variant="secondary">Всего: {{ segments.length }}</Badge>
+              <BackButton label="Назад" @click="goBack" />
+              <Button v-if="canManageBroadcasts" @click="openModal()">
+                <Plus :size="16" />
+                Создать сегмент
+              </Button>
+            </div>
           </template>
         </PageHeader>
       </CardContent>
@@ -103,21 +105,27 @@
           <DialogDescription>{{ modalSubtitle }}</DialogDescription>
         </DialogHeader>
         <form class="space-y-4" @submit.prevent="saveSegment">
-          <div class="space-y-2">
+          <div class="space-y-1">
             <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Название</label>
             <Input v-model="form.name" required />
           </div>
-          <div class="space-y-2">
+          <div class="space-y-1">
             <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Описание</label>
             <Textarea v-model="form.description" rows="3" />
           </div>
           <SegmentBuilder v-model="segmentConfig" />
-          <div v-if="canManageBroadcasts" class="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" @click="calculate">Рассчитать аудиторию</Button>
+          <div v-if="canManageBroadcasts" class="flex flex-wrap gap-2 items-center">
+            <Button type="button" variant="outline" @click="calculate">
+              <Calculator :size="16" />
+              Рассчитать аудиторию
+            </Button>
             <span v-if="estimatedSize !== null" class="text-xs text-muted-foreground">Размер: {{ estimatedSize }}</span>
           </div>
-          <DialogFooter class="gap-2">
-            <Button type="button" variant="outline" @click="closeModal">Отмена</Button>
+          <DialogFooter class="form-actions sm:gap-2">
+            <Button type="button" variant="outline" @click="closeModal">
+              <X :size="16" />
+              Отмена
+            </Button>
             <Button v-if="canManageBroadcasts" type="submit">
               <Save :size="16" />
               Сохранить
@@ -131,7 +139,7 @@
 <script setup>
 import { devError } from "@/shared/utils/logger";
 import { computed, onMounted, ref, watch } from "vue";
-import { Pencil, Plus, Save, Trash2 } from "lucide-vue-next";
+import { Calculator, Pencil, Plus, Save, Trash2, X } from "lucide-vue-next";
 import { useRouter } from "vue-router";
 import api from "@/shared/api/client.js";
 import Badge from "@/shared/components/ui/badge/Badge.vue";

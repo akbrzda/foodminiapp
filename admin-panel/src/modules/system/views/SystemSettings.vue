@@ -4,7 +4,7 @@
       <CardContent>
         <PageHeader title="Системные настройки" description="Управление ключевыми модулями и их параметрами">
           <template #actions>
-            <div v-if="activeTab === 0 && canManageSettings" class="flex flex-wrap items-center gap-3">
+            <div v-if="activeTab === 0 && canManageSettings" class="header-actions">
               <Button variant="secondary" :disabled="moduleLoading || moduleSaving" @click="loadModuleSettings">
                 <Spinner v-if="moduleLoading" class="h-4 w-4" />
                 <RefreshCcw v-else :size="16" />
@@ -16,7 +16,7 @@
                 {{ moduleSaving ? "Сохранение..." : "Сохранить" }}
               </Button>
             </div>
-            <div v-else-if="activeTab === 1 && canManageSettings" class="flex flex-wrap items-center gap-3">
+            <div v-else-if="activeTab === 1 && canManageSettings" class="header-actions">
               <Button variant="secondary" :disabled="moduleLoading || moduleSaving || mapsTesting" @click="loadModuleSettings">
                 <Spinner v-if="moduleLoading" class="h-4 w-4" />
                 <RefreshCcw v-else :size="16" />
@@ -33,7 +33,7 @@
                 {{ moduleSaving ? "Сохранение..." : "Сохранить" }}
               </Button>
             </div>
-            <div v-else-if="activeTab === 2 && canManageSettings" class="flex flex-wrap items-center gap-3">
+            <div v-else-if="activeTab === 2 && canManageSettings" class="header-actions">
               <Button variant="secondary" :disabled="moduleLoading || moduleSaving" @click="loadModuleSettings">
                 <Spinner v-if="moduleLoading" class="h-4 w-4" />
                 <RefreshCcw v-else :size="16" />
@@ -45,7 +45,7 @@
                 {{ moduleSaving ? "Сохранение..." : "Сохранить" }}
               </Button>
             </div>
-            <div v-else-if="activeTab === 4 && canManageSettings" class="flex flex-wrap items-center gap-3">
+            <div v-else-if="activeTab === 4 && canManageSettings" class="header-actions">
               <Button variant="secondary" :disabled="telegramLoading || telegramSaving || telegramTesting" @click="loadTelegramStartSettings">
                 <Spinner v-if="telegramLoading" class="h-4 w-4" />
                 <RefreshCcw v-else :size="16" />
@@ -62,7 +62,7 @@
                 {{ telegramSaving ? "Сохранение..." : "Сохранить" }}
               </Button>
             </div>
-            <div v-else-if="activeTab === 5 && canManageSettings" class="flex flex-wrap items-center gap-3">
+            <div v-else-if="activeTab === 5 && canManageSettings" class="header-actions">
               <Button
                 variant="secondary"
                 :disabled="telegramLoading || telegramSaving || telegramOrderTesting || telegramCitiesLoading"
@@ -763,11 +763,13 @@
               </Field>
             </FieldGroup>
           </FieldGroup>
-          <Button v-if="canManageStopListReasons" class="w-full" type="submit" :disabled="savingReason">
-            <Spinner v-if="savingReason" class="h-4 w-4" />
-            <Save v-else :size="16" />
-            {{ savingReason ? "Сохранение..." : "Сохранить" }}
-          </Button>
+          <div class="form-actions">
+            <Button v-if="canManageStopListReasons" type="submit" :disabled="savingReason">
+              <Spinner v-if="savingReason" class="h-4 w-4" />
+              <Save v-else :size="16" />
+              {{ savingReason ? "Сохранение..." : "Сохранить" }}
+            </Button>
+          </div>
         </form>
       </DialogContent>
     </Dialog>

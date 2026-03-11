@@ -857,6 +857,10 @@ export async function grantRegistrationBonus(userId, connection = null) {
   if (amount <= 0) {
     return null;
   }
+  const user = await getUserById(userId, { connection });
+  if (!user || !String(user.phone || "").trim()) {
+    return null;
+  }
   const snapshot = await getUserLoyaltySnapshot(userId, { connection, forUpdate: Boolean(connection) });
   if (!snapshot) {
     throw new Error("User not found");

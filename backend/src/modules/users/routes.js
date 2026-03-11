@@ -241,8 +241,15 @@ router.put("/profile", authenticateToken, async (req, res, next) => {
   try {
     const userId = req.user.id;
     const { first_name, last_name, email, date_of_birth, phone } = req.body;
+    const [currentUsers] = await db.query("SELECT id, phone FROM users WHERE id = ? LIMIT 1", [userId]);
+    if (currentUsers.length === 0) {
+      return res.status(404).json({ error: "User not found" });
+    }
+    const hadPhoneBeforeUpdate = Boolean(String(currentUsers[0].phone || "").trim());
+
     const updates = [];
     const values = [];
+    let shouldGrantRegistrationBonus = false;
 
     if (first_name !== undefined) {
       const nameValidation = validateName(first_name);
@@ -305,6 +312,7 @@ router.put("/profile", authenticateToken, async (req, res, next) => {
 
       updates.push("phone = ?");
       values.push(normalizedPhone);
+      shouldGrantRegistrationBonus = !hadPhoneBeforeUpdate;
     }
 
     if (updates.length === 0) {
@@ -315,6 +323,14 @@ router.put("/profile", authenticateToken, async (req, res, next) => {
     await db.query(`UPDATE users SET ${updates.join(", ")} WHERE id = ?`, values);
 
     const systemSettings = await getSystemSettings();
+    if (shouldGrantRegistrationBonus && systemSettings.bonuses_enabled && !systemSettings.premiumbonus_enabled) {
+      try {
+        await grantRegistrationBonus(userId, null);
+      } catch (bonusError) {
+        logger.error("Failed to grant registration bonus after phone confirmation", { userId, error: bonusError });
+      }
+    }
+
     if (systemSettings.premiumbonus_enabled) {
       const pbAutoSyncEnabled = systemSettings.premiumbonus_auto_sync_enabled !== false;
       await db.query("UPDATE users SET pb_sync_status = ?, loyalty_mode = ? WHERE id = ?", [

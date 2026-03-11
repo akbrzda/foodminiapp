@@ -1,6 +1,7 @@
 import { Worker } from "bullmq";
 import { logger } from "../utils/logger.js";
 import { processPremiumBonusClientSync } from "../modules/integrations/services/syncProcessors.js";
+import { BULLMQ_WORKER_OPTIONS } from "./bullmqWorkerOptions.js";
 
 export function createPbClientSyncWorker(connection) {
   const worker = new Worker(
@@ -14,7 +15,7 @@ export function createPbClientSyncWorker(connection) {
       await processPremiumBonusClientSync(userId, "queue");
       return { ok: true };
     },
-    { connection, concurrency: 3 },
+    { connection, concurrency: 3, ...BULLMQ_WORKER_OPTIONS },
   );
 
   worker.on("failed", (job, err) => {

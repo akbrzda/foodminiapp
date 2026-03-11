@@ -4,7 +4,13 @@
       <CardContent>
         <PageHeader title="Редактирование пользователя" description="Профиль, роль и индивидуальные доступы">
           <template #actions>
-             <BackButton label="Назад" @click="goBack" />
+            <div class="header-actions">
+              <BackButton label="Назад" @click="goBack" />
+              <Button type="button" :disabled="isSaving" @click="submitForm">
+                <Save :size="16" />
+                Сохранить
+              </Button>
+            </div>
           </template>
         </PageHeader>
       </CardContent>
@@ -117,7 +123,8 @@
                 class="text-primary"
                 @click="router.push({ name: 'admin-users-access-roles' })"
               >
-                + Новая роль
+                <Plus :size="16" />
+                Новая роль
               </Button>
             </div>
           </div>
@@ -155,6 +162,7 @@
             <div class="text-sm font-semibold text-foreground">Доступы пользователя</div>
             <div class="flex gap-2">
               <Button type="button" variant="outline" :disabled="accessLoading || isSaving" @click="resetAccessToRole">
+                <RotateCcw :size="16" />
                 Сбросить до роли
               </Button>
             </div>
@@ -234,18 +242,13 @@
           </p>
         </CardContent>
       </Card>
-
-      <div class="flex flex-wrap justify-end gap-2">
-        <Button type="button" variant="outline" @click="router.push({ name: 'admin-users' })">Отмена</Button>
-        <Button type="submit" :disabled="isSaving">Сохранить</Button>
-      </div>
     </form>
   </div>
 </template>
 
 <script setup>
 import { computed, onMounted, ref, watch } from "vue";
-import { ChevronRight } from "lucide-vue-next";
+import { ChevronRight, Plus, RotateCcw, Save } from "lucide-vue-next";
 import { useRoute, useRouter } from "vue-router";
 import api from "@/shared/api/client.js";
 import { useReferenceStore } from "@/shared/stores/reference.js";

@@ -4,10 +4,12 @@
       <CardContent>
         <PageHeader title="Теги меню" description="Список тегов для фильтрации блюд">
           <template #actions>
-            <Button v-if="canManageTags" @click="openModal()">
-              <Plus :size="16" />
-              Добавить тег
-            </Button>
+            <div class="header-actions">
+              <Button v-if="canManageTags" @click="openModal()">
+                <Plus :size="16" />
+                Добавить тег
+              </Button>
+            </div>
           </template>
         </PageHeader>
       </CardContent>
@@ -99,10 +101,12 @@
               </FieldContent>
             </Field>
           </FieldGroup>
-          <Button v-if="canManageTags" class="w-full" type="submit">
-            <Save :size="16" />
-            Сохранить
-          </Button>
+          <div class="form-actions">
+            <Button v-if="canManageTags" type="submit">
+              <Save :size="16" />
+              Сохранить
+            </Button>
+          </div>
         </form>
       </DialogContent>
     </Dialog>

@@ -117,3 +117,17 @@ a,
     @apply bg-background text-foreground;
   }
 }
+
+@layer components {
+  .header-actions {
+    @apply flex flex-wrap items-center justify-end gap-2;
+  }
+
+  .form-actions {
+    @apply flex flex-col-reverse gap-2 sm:flex-row sm:justify-end;
+  }
+
+  .form-actions > * {
+    @apply w-full sm:w-auto;
+  }
+}
