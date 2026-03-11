@@ -119,8 +119,11 @@ export const logger = {
   },
   auth: {
     login: (userId, role, ip) => logSystem("info", "auth", `User logged in`, { userId, role, ip }),
+    logout: (userId, role, ip) => logSystem("info", "auth", `User logged out`, { userId, role, ip }),
     loginFailed: (identifier, reason, ip) => logSystem("warn", "auth", `Login failed: ${reason}`, { identifier, reason, ip }),
     tokenExpired: (userId) => logSystem("info", "auth", `Token expired for user ${userId}`, { userId }),
+    wsTicketIssued: (userId, type, ip) => logSystem("info", "auth", `WS ticket issued`, { userId, type, ip }),
+    refreshSuccess: (userId, type, ip) => logSystem("info", "auth", `Session refreshed`, { userId, type, ip }),
     unauthorized: (path, ip) => logSystem("warn", "auth", `Unauthorized access attempt to ${path}`, { path, ip }),
   },
   bonus: {

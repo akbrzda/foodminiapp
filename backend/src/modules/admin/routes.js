@@ -861,6 +861,7 @@ router.get("/users/:id/security", requirePermission("system.auth_limits.manage",
        FROM admin_action_logs
        WHERE admin_user_id = ?
          AND entity_type = 'auth'
+         AND action IN ('auth_login_success', 'auth_logout')
        ORDER BY created_at DESC
        LIMIT 30`,
       [userId],

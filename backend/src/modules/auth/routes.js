@@ -392,15 +392,6 @@ router.post("/admin/login", authLimiter, async (req, res, next) => {
       const attempts = await getAdminLoginAttempts(email, req.ip);
       if (attempts >= ADMIN_LOGIN_BLOCK_LIMIT) {
         await logger.auth.loginFailed(email, "Too many failed attempts", req.ip);
-        const [admins] = await db.query("SELECT id FROM admin_users WHERE email = ? LIMIT 1", [email]);
-        if (admins.length > 0) {
-          await logAdminAuthAction({
-            adminUserId: admins[0].id,
-            action: "auth_login_blocked",
-            description: "Вход заблокирован из-за превышения лимита неудачных попыток",
-            req,
-          });
-        }
         return res.status(429).json({ error: "Слишком много неудачных попыток. Попробуйте позже" });
       }
     }
@@ -426,12 +417,6 @@ router.post("/admin/login", authLimiter, async (req, res, next) => {
     if (!user.is_active) {
       await registerAdminLoginFailure(email, req.ip);
       await logger.auth.loginFailed(email, "Account disabled", req.ip);
-      await logAdminAuthAction({
-        adminUserId: user.id,
-        action: "auth_login_failed_disabled",
-        description: "Неудачная попытка входа: аккаунт отключен",
-        req,
-      });
       return res.status(403).json({ error: "Account is disabled" });
     }
 
@@ -440,12 +425,6 @@ router.post("/admin/login", authLimiter, async (req, res, next) => {
     if (!isValidPassword) {
       await registerAdminLoginFailure(email, req.ip);
       await logger.auth.loginFailed(email, "Invalid password", req.ip);
-      await logAdminAuthAction({
-        adminUserId: user.id,
-        action: "auth_login_failed_password",
-        description: "Неудачная попытка входа: неверный пароль",
-        req,
-      });
       return res.status(401).json({ error: "Invalid credentials" });
     }
     await clearAdminLoginFailures(email, req.ip);
@@ -514,14 +493,7 @@ router.post("/ws-ticket", authenticateToken, createLimiter, async (req, res, nex
       issued_at: Date.now(),
     });
     await redis.set(redisKey, payload, "EX", WS_TICKET_TTL_SECONDS);
-    if (req.user?.type === "admin") {
-      await logAdminAuthAction({
-        adminUserId: req.user.id,
-        action: "auth_ws_ticket_issued",
-        description: "Выдан WS ticket для админ-сессии",
-        req,
-      });
-    }
+    await logger.auth.wsTicketIssued(req.user?.id, req.user?.type || "client", req.ip);
     res.json({
       ticket,
       expires_in: WS_TICKET_TTL_SECONDS,
@@ -572,6 +544,7 @@ router.post("/refresh", refreshLimiter, async (req, res) => {
       nextRefreshToken = signRefreshToken(payload, JWT_AUDIENCE_REFRESH_CLIENT, CLIENT_REFRESH_TOKEN_TTL);
       accessMaxAge = CLIENT_ACCESS_TOKEN_COOKIE_MAX_AGE;
       refreshMaxAge = CLIENT_REFRESH_TOKEN_COOKIE_MAX_AGE;
+      await logger.auth.refreshSuccess(user.id, "client", req.ip);
     } else if (decoded?.type === "admin") {
       const [admins] = await db.query(
         `SELECT id, email, role, is_active, permission_version
@@ -595,12 +568,7 @@ router.post("/refresh", refreshLimiter, async (req, res) => {
       nextRefreshToken = signRefreshToken(payload, JWT_AUDIENCE_REFRESH_ADMIN, ADMIN_REFRESH_TOKEN_TTL);
       accessMaxAge = ADMIN_ACCESS_TOKEN_COOKIE_MAX_AGE;
       refreshMaxAge = ADMIN_REFRESH_TOKEN_COOKIE_MAX_AGE;
-      await logAdminAuthAction({
-        adminUserId: admin.id,
-        action: "auth_refresh_success",
-        description: "Успешное обновление админ-сессии",
-        req,
-      });
+      await logger.auth.refreshSuccess(admin.id, "admin", req.ip);
     } else {
       return res.status(403).json({ error: "Invalid refresh token payload" });
     }
@@ -706,6 +674,7 @@ router.post("/logout", async (req, res, next) => {
     res.clearCookie("csrf_token", getClearCsrfCookieOptions());
 
     if (logoutAdminUserId) {
+      await logger.auth.logout(logoutAdminUserId, "admin", req.ip);
       await logAdminAuthAction({
         adminUserId: logoutAdminUserId,
         action: "auth_logout",
