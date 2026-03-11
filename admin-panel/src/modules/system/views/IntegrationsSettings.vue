@@ -219,7 +219,10 @@
                 <div class="space-y-2">
                   <div v-for="option in LOCAL_ORDER_TYPE_OPTIONS" :key="`order-type-${option.key}`" class="grid gap-2 md:grid-cols-2">
                     <div class="flex items-center rounded-md border border-border/60 px-3 text-sm">{{ option.label }}</div>
-                    <Select :model-value="getSelectedOrderTypeId(option.key)" @update:model-value="(value) => updateOrderTypeMapping(option.key, value)">
+                    <Select
+                      :model-value="getSelectedOrderTypeId(option.key)"
+                      @update:model-value="(value) => updateOrderTypeMapping(option.key, value)"
+                    >
                       <SelectTrigger>
                         <SelectValue placeholder="Выберите тип заказа iiko" />
                       </SelectTrigger>
@@ -238,7 +241,10 @@
                 <div class="space-y-2">
                   <div v-for="option in LOCAL_PAYMENT_METHOD_OPTIONS" :key="`payment-method-${option.key}`" class="grid gap-2 md:grid-cols-2">
                     <div class="flex items-center rounded-md border border-border/60 px-3 text-sm">{{ option.label }}</div>
-                    <Select :model-value="getSelectedPaymentTypeId(option.key)" @update:model-value="(value) => updatePaymentTypeMapping(option.key, value)">
+                    <Select
+                      :model-value="getSelectedPaymentTypeId(option.key)"
+                      @update:model-value="(value) => updatePaymentTypeMapping(option.key, value)"
+                    >
                       <SelectTrigger>
                         <SelectValue placeholder="Выберите оплату iiko" />
                       </SelectTrigger>
@@ -269,7 +275,8 @@
                   </Select>
                 </div>
                 <div class="text-xs text-muted-foreground">
-                  Если выбрано — списание бонусов уйдёт в iiko как строка скидки (`discountsInfo`). Если нет — как отдельная оплата `bonus` (fallback).
+                  Если выбрано — списание бонусов уйдёт в iiko как строка скидки (`discountsInfo`). Если нет — как отдельная оплата `bonus`
+                  (fallback).
                 </div>
               </div>
               <div class="text-xs text-muted-foreground">
@@ -527,21 +534,13 @@
             <Field>
               <FieldLabel>Trigger event (начисление)</FieldLabel>
               <FieldContent>
-                <Input
-                  v-model="form.premiumbonus_trigger_adjust_earn_event_name"
-                  placeholder="manual_bonus_earn"
-                  autocomplete="off"
-                />
+                <Input v-model="form.premiumbonus_trigger_adjust_earn_event_name" placeholder="manual_bonus_earn" autocomplete="off" />
               </FieldContent>
             </Field>
             <Field>
               <FieldLabel>Trigger event (списание)</FieldLabel>
               <FieldContent>
-                <Input
-                  v-model="form.premiumbonus_trigger_adjust_spend_event_name"
-                  placeholder="manual_bonus_spend"
-                  autocomplete="off"
-                />
+                <Input v-model="form.premiumbonus_trigger_adjust_spend_event_name" placeholder="manual_bonus_spend" autocomplete="off" />
               </FieldContent>
             </Field>
           </FieldGroup>
@@ -549,15 +548,6 @@
             <Button v-if="canManageIntegrations" variant="secondary" :disabled="testLoading.pb" @click="testPb">
               <PlugZap :size="16" />
               Тест PremiumBonus
-            </Button>
-            <Button
-              v-if="canManageIntegrations"
-              variant="outline"
-              :disabled="pbAutoSyncToggleLoading || loading || saving"
-              @click="togglePbAutoSync"
-            >
-              <RefreshCcw v-if="pbAutoSyncToggleLoading" class="h-4 w-4 animate-spin" />
-              {{ form.premiumbonus_auto_sync_enabled ? "Отключить автосинк PB" : "Включить автосинк PB" }}
             </Button>
           </div>
         </template>
@@ -753,20 +743,10 @@
           </div>
         </div>
         <div class="mt-4 flex flex-wrap justify-end gap-2">
-          <Button
-            v-if="canManageIntegrations"
-            type="button"
-            variant="outline"
-            :disabled="onboardingLoading"
-            @click="runOnboarding('defer')"
+          <Button v-if="canManageIntegrations" type="button" variant="outline" :disabled="onboardingLoading" @click="runOnboarding('defer')"
             >Отложить</Button
           >
-          <Button
-            v-if="canManageIntegrations"
-            type="button"
-            variant="outline"
-            :disabled="onboardingLoading"
-            @click="runOnboarding('delete')"
+          <Button v-if="canManageIntegrations" type="button" variant="outline" :disabled="onboardingLoading" @click="runOnboarding('delete')"
             >Очистить локальные данные (DELETE)</Button
           >
           <Button v-if="canManageIntegrations" type="button" :disabled="onboardingLoading" @click="runOnboarding('merge')"

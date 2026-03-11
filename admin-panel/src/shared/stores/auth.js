@@ -170,22 +170,9 @@ export const useAuthStore = defineStore("auth", {
     async logout({ redirect = true, notifyServer = true, sync = true } = {}) {
       this.rememberPostLoginRedirect();
       const apiBase = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
-      if (notifyServer) {
-        const headers = await withCsrfHeader({
-          "Content-Type": "application/json; charset=utf-8",
-          Accept: "application/json; charset=utf-8",
-        });
-        try {
-          await fetch(`${apiBase}/api/auth/logout`, {
-            method: "POST",
-            headers,
-            credentials: "include",
-            keepalive: true,
-          });
-        } catch {
-          // Ошибка server-logout не блокирует локальную очистку.
-        }
-      }
+
+      // Критично для безопасности: сначала мгновенно закрываем локальную сессию,
+      // чтобы UI и роутер сразу потеряли доступ к защищенным разделам.
       clearCsrfToken();
       this.applySession(null);
 
@@ -196,6 +183,25 @@ export const useAuthStore = defineStore("auth", {
       if (sync) {
         this.syncAuthEvent({ type: "logout" });
       }
+
+      if (notifyServer) {
+        withCsrfHeader({
+          "Content-Type": "application/json; charset=utf-8",
+          Accept: "application/json; charset=utf-8",
+        })
+          .then((headers) =>
+            fetch(`${apiBase}/api/auth/logout`, {
+              method: "POST",
+              headers,
+              credentials: "include",
+              keepalive: true,
+            }),
+          )
+          .catch(() => {
+            // Ошибка server-logout не должна влиять на уже завершенный локальный logout.
+          });
+      }
+
       if (redirect && window.location.pathname !== "/login") {
         window.location.assign("/login");
       }

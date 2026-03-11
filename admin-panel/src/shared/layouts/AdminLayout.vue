@@ -1,6 +1,6 @@
 <template>
   <div class="min-h-screen bg-background text-foreground">
-    <div class="flex min-h-screen overflow-x-clip">
+    <div v-if="authStore.isAuthenticated" class="flex min-h-screen overflow-x-clip">
       <SidebarNav v-if="!isMobile" class="flex" :is-open="true" :is-collapsed="sidebarCollapsed" />
       <div class="flex min-h-screen min-w-0 flex-1 flex-col">
         <TopBar :title="pageTitle" :subtitle="pageSubtitle" @toggle-menu="handleSidebarToggle" />
@@ -9,12 +9,17 @@
         </main>
       </div>
     </div>
+    <div v-else class="min-h-screen" aria-hidden="true"></div>
     <Transition name="fade">
-      <div v-if="isMobile && mobileMenuOpen" class="fixed inset-0 z-40 bg-black/40" @click="mobileMenuOpen = false"></div>
+      <div
+        v-if="authStore.isAuthenticated && isMobile && mobileMenuOpen"
+        class="fixed inset-0 z-40 bg-black/40"
+        @click="mobileMenuOpen = false"
+      ></div>
     </Transition>
     <Transition name="slide">
       <SidebarNav
-        v-if="isMobile && mobileMenuOpen"
+        v-if="authStore.isAuthenticated && isMobile && mobileMenuOpen"
         class="lg:hidden"
         :is-open="mobileMenuOpen"
         :is-collapsed="false"
@@ -98,6 +103,7 @@ watch(
       ordersStore.refreshNewOrdersCount();
       ordersStore.connectWebSocket();
     } else {
+      mobileMenuOpen.value = false;
       ordersStore.disconnectWebSocket();
     }
   },
