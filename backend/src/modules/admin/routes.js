@@ -754,6 +754,13 @@ router.get("/clients", requireRole("admin", "manager", "ceo"), async (req, res, 
 
     let whereClause = "WHERE 1=1";
     const params = [];
+    let ordersAggregateScopeClause = "";
+    const ordersAggregateScopeParams = [];
+    const requestedCityId = city_id !== undefined && city_id !== null && city_id !== "" ? Number(city_id) : null;
+
+    if (requestedCityId !== null && (!Number.isInteger(requestedCityId) || requestedCityId <= 0)) {
+      return res.status(400).json({ error: "Invalid city_id" });
+    }
 
     if (search) {
       whereClause += " AND (u.phone LIKE ? OR u.first_name LIKE ? OR u.last_name LIKE ?)";
@@ -765,11 +772,19 @@ router.get("/clients", requireRole("admin", "manager", "ceo"), async (req, res, 
       if (!cityIds || cityIds.length === 0) {
         return res.json({ clients: [] });
       }
+      const managerScopedCityIds = requestedCityId !== null ? [requestedCityId] : cityIds;
+      if (requestedCityId !== null && !cityIds.includes(requestedCityId)) {
+        return res.json({ clients: [] });
+      }
       whereClause += " AND EXISTS (SELECT 1 FROM orders o2 WHERE o2.user_id = u.id AND o2.city_id IN (?))";
-      params.push(cityIds);
-    } else if (city_id) {
+      params.push(managerScopedCityIds);
+      ordersAggregateScopeClause = "WHERE o.city_id IN (?)";
+      ordersAggregateScopeParams.push(managerScopedCityIds);
+    } else if (requestedCityId !== null) {
       whereClause += " AND EXISTS (SELECT 1 FROM orders o2 WHERE o2.user_id = u.id AND o2.city_id = ?)";
-      params.push(city_id);
+      params.push(requestedCityId);
+      ordersAggregateScopeClause = "WHERE o.city_id = ?";
+      ordersAggregateScopeParams.push(requestedCityId);
     }
 
     const ordersCountFrom = toNumberOrNull(orders_count_from);
@@ -866,6 +881,7 @@ router.get("/clients", requireRole("admin", "manager", "ceo"), async (req, res, 
           MAX(o.created_at) as last_order_at,
           SUBSTRING_INDEX(GROUP_CONCAT(o.city_id ORDER BY o.created_at DESC), ',', 1) as last_order_city_id
         FROM orders o
+        ${ordersAggregateScopeClause}
         GROUP BY o.user_id
       ) oa ON oa.user_id = u.id
       LEFT JOIN cities c ON c.id = oa.last_order_city_id
@@ -873,8 +889,8 @@ router.get("/clients", requireRole("admin", "manager", "ceo"), async (req, res, 
       ORDER BY u.created_at DESC, u.id DESC
       LIMIT ? OFFSET ?
     `;
-    params.push(parseInt(limit), parseInt(offset));
-    const [clients] = await db.query(query, params);
+    const queryParams = [...ordersAggregateScopeParams, ...params, parseInt(limit), parseInt(offset)];
+    const [clients] = await db.query(query, queryParams);
     const decryptedClients = clients.map((client) => decryptUserData(client));
     res.json({ clients: decryptedClients });
   } catch (error) {
@@ -906,6 +922,20 @@ router.get("/clients/:id", requireRole("admin", "manager", "ceo"), async (req, r
         // В режиме буфера не блокируем ответ админки при недоступности PB.
       }
     }
+    let orderScopeClause = "";
+    const orderScopeParams = [];
+    let latestOrderScopeClause = "";
+    const latestOrderScopeParams = [];
+    if (req.user.role === "manager") {
+      const cityIds = getManagerCityIds(req);
+      if (!cityIds || cityIds.length === 0) {
+        return res.status(403).json({ error: "You do not have access to this user" });
+      }
+      orderScopeClause = "WHERE o.city_id IN (?)";
+      orderScopeParams.push(cityIds);
+      latestOrderScopeClause = "AND city_id IN (?)";
+      latestOrderScopeParams.push(cityIds);
+    }
     const [users] = await db.query(
       `SELECT u.id, u.phone, u.first_name, u.last_name, u.email, u.telegram_id, u.loyalty_balance, u.pb_client_id, u.created_at, u.date_of_birth,
               COALESCE(oa.total_orders_sum, 0) as total_orders_sum,
@@ -917,14 +947,15 @@ router.get("/clients/:id", requireRole("admin", "manager", "ceo"), async (req, r
                 SUM(CASE WHEN o.status = 'completed' THEN o.total ELSE 0 END) as total_orders_sum,
                 AVG(CASE WHEN o.status = 'completed' THEN o.total ELSE NULL END) as avg_check
          FROM orders o
+         ${orderScopeClause}
          GROUP BY o.user_id
        ) oa ON oa.user_id = u.id
        LEFT JOIN orders o ON o.id = (
-         SELECT id FROM orders WHERE user_id = u.id ORDER BY created_at DESC LIMIT 1
+         SELECT id FROM orders WHERE user_id = u.id ${latestOrderScopeClause} ORDER BY created_at DESC LIMIT 1
        )
        LEFT JOIN cities c ON c.id = o.city_id
        WHERE u.id = ?`,
-      [userId],
+      [...orderScopeParams, ...latestOrderScopeParams, userId],
     );
     if (users.length === 0) {
       return res.status(404).json({ error: "User not found" });
@@ -1053,6 +1084,20 @@ router.put("/clients/:id", requireRole("admin", "manager", "ceo"), async (req, r
       encryptedEmail,
       userId,
     ]);
+    let orderScopeClause = "";
+    const orderScopeParams = [];
+    let latestOrderScopeClause = "";
+    const latestOrderScopeParams = [];
+    if (req.user.role === "manager") {
+      const cityIds = getManagerCityIds(req);
+      if (!cityIds || cityIds.length === 0) {
+        return res.status(403).json({ error: "You do not have access to this user" });
+      }
+      orderScopeClause = "WHERE o.city_id IN (?)";
+      orderScopeParams.push(cityIds);
+      latestOrderScopeClause = "AND city_id IN (?)";
+      latestOrderScopeParams.push(cityIds);
+    }
     const [updated] = await db.query(
       `SELECT u.id, u.phone, u.first_name, u.last_name, u.email, u.telegram_id, u.loyalty_balance, u.pb_client_id, u.created_at, u.date_of_birth,
               COALESCE(oa.total_orders_sum, 0) as total_orders_sum,
@@ -1064,14 +1109,15 @@ router.put("/clients/:id", requireRole("admin", "manager", "ceo"), async (req, r
                 SUM(CASE WHEN o.status = 'completed' THEN o.total ELSE 0 END) as total_orders_sum,
                 AVG(CASE WHEN o.status = 'completed' THEN o.total ELSE NULL END) as avg_check
          FROM orders o
+         ${orderScopeClause}
          GROUP BY o.user_id
        ) oa ON oa.user_id = u.id
        LEFT JOIN orders o ON o.id = (
-         SELECT id FROM orders WHERE user_id = u.id ORDER BY created_at DESC LIMIT 1
+         SELECT id FROM orders WHERE user_id = u.id ${latestOrderScopeClause} ORDER BY created_at DESC LIMIT 1
        )
        LEFT JOIN cities c ON c.id = o.city_id
        WHERE u.id = ?`,
-      [userId],
+      [...orderScopeParams, ...latestOrderScopeParams, userId],
     );
     const decryptedUser = decryptUserData(updated[0]);
     res.json({ user: decryptedUser });
