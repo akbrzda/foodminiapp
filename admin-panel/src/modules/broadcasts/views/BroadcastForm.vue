@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-6">
+  <div class="space-y-5">
     <Card>
       <CardContent>
         <PageHeader :title="pageTitle" :description="pageSubtitle">
@@ -16,7 +16,7 @@
       <CardHeader>
         <CardTitle>Основные настройки</CardTitle>
       </CardHeader>
-      <CardContent class="space-y-6">
+      <CardContent class="space-y-5">
         <FieldGroup>
           <Field>
             <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Название</FieldLabel>
@@ -60,7 +60,7 @@
       <CardHeader>
         <CardTitle>Сегментация аудитории</CardTitle>
       </CardHeader>
-      <CardContent class="space-y-6">
+      <CardContent class="space-y-5">
         <Field>
           <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Сохраненный сегмент</FieldLabel>
           <FieldContent>
@@ -92,7 +92,7 @@
       <CardHeader>
         <CardTitle>Контент сообщения</CardTitle>
       </CardHeader>
-      <CardContent class="space-y-6">
+      <CardContent class="space-y-5">
         <Field>
           <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Текст сообщения</FieldLabel>
           <FieldContent>
@@ -200,7 +200,7 @@
       <CardHeader>
         <CardTitle>Планирование отправки</CardTitle>
       </CardHeader>
-      <CardContent class="space-y-6">
+      <CardContent class="space-y-5">
         <FieldGroup class="grid gap-4 md:grid-cols-2">
           <Field>
             <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Дата отправки</FieldLabel>
@@ -266,7 +266,7 @@
       <CardHeader>
         <CardTitle>Триггер</CardTitle>
       </CardHeader>
-      <CardContent class="space-y-6">
+      <CardContent class="space-y-5">
         <FieldGroup class="grid gap-4 md:grid-cols-2">
           <Field>
             <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Тип триггера</FieldLabel>

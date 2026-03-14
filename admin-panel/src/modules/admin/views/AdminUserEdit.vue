@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-6">
+  <div class="space-y-5">
     <Card>
       <CardContent>
         <PageHeader title="Редактирование пользователя" description="Профиль, роль и индивидуальные доступы">
@@ -25,9 +25,9 @@
       </CardContent>
     </Card>
 
-    <form v-else class="space-y-6" @submit.prevent="submitForm">
+    <form v-else class="space-y-5" @submit.prevent="submitForm">
       <Card>
-        <CardContent class="space-y-4">
+        <CardContent class="space-y-3.5">
           <div class="text-sm font-semibold text-foreground">Основные данные</div>
           <FieldGroup class="grid gap-4 md:grid-cols-2">
             <Field>
@@ -43,21 +43,22 @@
               </FieldContent>
             </Field>
           </FieldGroup>
- <FieldGroup class="grid gap-4 md:grid-cols-2">
-          <Field>
-            <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Email</FieldLabel>
-            <FieldContent>
-              <Input v-model="form.email" type="email" required />
-            </FieldContent>
-          </Field>
-
-          <Field>
-            <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Новый пароль (Оставьте пустым, чтобы не менять пароль.)</FieldLabel>
-            <FieldContent>
-              <Input v-model="form.password" type="password" minlength="6" />
-            </FieldContent>
-          </Field>
-        </fieldgroup>
+          <FieldGroup class="grid gap-4 md:grid-cols-2">
+            <Field>
+              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Email</FieldLabel>
+              <FieldContent>
+                <Input v-model="form.email" type="email" required />
+              </FieldContent>
+            </Field>
+            <Field>
+              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Новый пароль (Оставьте пустым, чтобы не менять пароль.)
+              </FieldLabel>
+              <FieldContent>
+                <Input v-model="form.password" type="password" minlength="6" />
+              </FieldContent>
+            </Field>
+          </FieldGroup>
           <FieldGroup class="grid gap-4 md:grid-cols-2">
             <Field>
               <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Статус</FieldLabel>
@@ -80,29 +81,29 @@
               </FieldContent>
             </Field>
           </FieldGroup>
-<FieldGroup class="grid gap-4 md:grid-cols-2">
-          <Field>
-            <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Eruda</FieldLabel>
-            <FieldContent>
-              <Select v-model="form.eruda_enabled" :disabled="!hasTelegramId || authStore.scopeRole === 'ceo'">
-                <SelectTrigger class="w-full">
-                  <SelectValue placeholder="Выберите статус" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem :value="true">Включено</SelectItem>
-                  <SelectItem :value="false">Выключено</SelectItem>
-                </SelectContent>
-              </Select>
-              <p v-if="authStore.scopeRole === 'ceo'" class="text-xs text-muted-foreground">CEO не может включать Eruda.</p>
-              <p v-else-if="!hasTelegramId" class="text-xs text-muted-foreground">Для включения нужен Telegram ID.</p>
-            </FieldContent>
-          </Field>
+          <FieldGroup class="grid gap-4 md:grid-cols-2">
+            <Field>
+              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Eruda</FieldLabel>
+              <FieldContent>
+                <Select v-model="form.eruda_enabled" :disabled="!hasTelegramId || authStore.scopeRole === 'ceo'">
+                  <SelectTrigger class="w-full">
+                    <SelectValue placeholder="Выберите статус" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem :value="true">Включено</SelectItem>
+                    <SelectItem :value="false">Выключено</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p v-if="authStore.scopeRole === 'ceo'" class="text-xs text-muted-foreground">CEO не может включать Eruda.</p>
+                <p v-else-if="!hasTelegramId" class="text-xs text-muted-foreground">Для включения нужен Telegram ID.</p>
+              </FieldContent>
+            </Field>
           </FieldGroup>
         </CardContent>
       </Card>
 
       <Card>
-        <CardContent class="space-y-4">
+        <CardContent class="space-y-3.5">
           <div class="space-y-2">
             <div class="text-sm font-semibold text-foreground">Роль</div>
             <div class="flex flex-wrap items-center gap-2">
@@ -157,7 +158,7 @@
       </Card>
 
       <Card v-if="authStore.hasPermission('system.access.manage')">
-        <CardContent class="space-y-4">
+        <CardContent class="space-y-3.5">
           <div class="flex flex-wrap items-center justify-between gap-2">
             <div class="text-sm font-semibold text-foreground">Доступы пользователя</div>
             <div class="flex gap-2">

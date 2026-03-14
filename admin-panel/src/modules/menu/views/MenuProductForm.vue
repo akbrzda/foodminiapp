@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-6">
+  <div class="space-y-5">
     <Card>
       <CardContent>
         <PageHeader :title="modalTitle" :description="modalSubtitle">
@@ -15,7 +15,7 @@
         </PageHeader>
       </CardContent>
     </Card>
-    <div v-if="isInitialLoading" class="space-y-4">
+    <div v-if="isInitialLoading" class="space-y-3">
       <Card>
         <CardHeader class="space-y-2">
           <Skeleton class="h-6 w-56" />
@@ -46,13 +46,13 @@
       <TabsList>
         <TabsTrigger v-for="(tab, index) in tabLabels" :key="tab" :value="index">{{ tab }}</TabsTrigger>
       </TabsList>
-      <TabsContent :value="0" class="space-y-4">
+      <TabsContent :value="0" class="space-y-3">
         <Card>
           <CardHeader>
             <CardTitle class="text-base">Основная информация</CardTitle>
           </CardHeader>
-          <CardContent class="space-y-4">
-            <FieldGroup>
+          <CardContent class="space-y-3">
+            <FieldGroup class="grid gap-4 md:grid-cols-2">
               <Field>
                 <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Название *</FieldLabel>
                 <FieldContent>
@@ -62,7 +62,7 @@
               <Field>
                 <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Описание</FieldLabel>
                 <FieldContent>
-                  <Textarea v-model="form.description" rows="3" />
+                  <Textarea v-model="form.description" rows="2" />
                 </FieldContent>
               </Field>
               <Field>
@@ -93,7 +93,7 @@
                   </div>
                 </FieldContent>
               </Field>
-              <FieldGroup v-if="!hasVariants" class="grid gap-4 md:grid-cols-3">
+              <FieldGroup v-if="!hasVariants" class="grid gap-4 md:col-span-2 md:grid-cols-3">
                 <Field>
                   <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Вес *</FieldLabel>
                   <FieldContent>

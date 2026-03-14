@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger } from "@/shared/compo
 const props = defineProps({
   modelValue: { type: Object, required: true },
   fields: { type: Array, default: () => [] },
-  gridClass: { type: String, default: "grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-12" },
+  gridClass: { type: String, default: "grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-12" },
   resetLabel: { type: String, default: "Сбросить" },
   showReset: { type: Boolean, default: true },
   resetColClass: { type: String, default: "sm:col-span-2 xl:col-span-12" },
@@ -29,10 +29,10 @@ const resolveFieldClass = (field) => {
   if (field.colClass) return field.colClass;
 
   if (field.type === "text" && (field.key === "search" || String(field.key || "").includes("search"))) {
-    return "space-y-1 sm:col-span-2 xl:col-span-3";
+    return "space-y-1 sm:col-span-2 xl:col-span-4 2xl:col-span-3";
   }
 
-  return "space-y-1 xl:col-span-2";
+  return "space-y-1 xl:col-span-2 xl:max-w-[320px]";
 };
 
 const defaultModelValue = computed(() => {
@@ -114,7 +114,7 @@ const resetFilters = () => {
 
 <template>
   <Card v-if="withCard">
-    <CardContent>
+    <CardContent class="px-3 py-3 sm:px-4">
       <div :class="gridClass">
         <slot name="before" :model-value="modelValue" :update-field="updateField" :has-active-filters="hasActiveFilters" :reset-filters="resetFilters" />
 

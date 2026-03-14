@@ -1,6 +1,6 @@
 <template>
   <Card v-if="total > 0">
-    <CardContent class="px-3 py-4 sm:px-6">
+    <CardContent class="px-3 py-3 sm:px-4">
       <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div class="text-sm text-muted-foreground sm:pr-4">
           Показаны записи {{ from }} - {{ to }} из {{ total }}

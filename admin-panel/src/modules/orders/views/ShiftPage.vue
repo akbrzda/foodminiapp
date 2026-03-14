@@ -12,11 +12,11 @@
       @open-admin-panel="openAdminPanel"
     />
 
-    <div class="border-b border-border bg-background/90 px-3 py-2 backdrop-blur lg:hidden">
+    <div class="border-b border-border bg-background/90 px-3 py-1.5 backdrop-blur lg:hidden">
       <div class="grid grid-cols-2 gap-2">
         <button
           type="button"
-          class="rounded-md border px-3 py-2 text-sm font-medium transition-colors"
+          class="rounded-md border px-3 py-1.5 text-sm font-medium transition-colors"
           :class="mobilePane === 'orders' ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground'"
           @click="mobilePane = 'orders'"
         >
@@ -24,7 +24,7 @@
         </button>
         <button
           type="button"
-          class="rounded-md border px-3 py-2 text-sm font-medium transition-colors"
+          class="rounded-md border px-3 py-1.5 text-sm font-medium transition-colors"
           :class="mobilePane === 'map' ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground'"
           @click="mobilePane = 'map'"
         >
@@ -652,32 +652,47 @@ const loadPolygons = async () => {
       const latLngRing = toYandexPolygonCoords(ring, getReferenceCenter());
       if (latLngRing.length < 3) return;
       const name = polygon.name || `Полигон #${polygon.id || ""}`;
-      const branchName = polygon.branch_name || "";
+      const branchName = polygon.branch_name || "Филиал не указан";
       const deliveryTime = polygon.delivery_time || 30;
       const tariffsCount = Number(polygon.tariffs_count || 0);
+      const minOrderAmount = Number(polygon.min_order_amount || 0);
+      const deliveryCost = Number(polygon.delivery_cost || 0);
       const isBlocked = Boolean(polygon.is_blocked);
       const isInactive = polygon.is_active === 0 || polygon.is_active === false;
       let statusBadge = "";
       if (isBlocked) {
         statusBadge =
-          '<span style="display:inline-block;background:rgba(239,68,68,0.12);color:#ef4444;padding:2px 6px;border-radius:999px;font-size:11px;margin-top:6px;">Заблокирован</span>';
+          '<span style="display:inline-flex;align-items:center;gap:6px;background:rgba(239,68,68,0.12);color:#b91c1c;padding:4px 8px;border-radius:999px;font-size:11px;font-weight:600;line-height:1.1;">Заблокирован</span>';
       } else if (isInactive) {
         statusBadge =
-          '<span style="display:inline-block;background:rgba(148,163,184,0.18);color:#94a3b8;padding:2px 6px;border-radius:999px;font-size:11px;margin-top:6px;">Неактивен</span>';
+          '<span style="display:inline-flex;align-items:center;gap:6px;background:rgba(148,163,184,0.18);color:#475569;padding:4px 8px;border-radius:999px;font-size:11px;font-weight:600;line-height:1.1;">Неактивен</span>';
       }
       const polygonObject = new yandexMaps.Polygon(
         [latLngRing],
         {
           balloonContentBody: `
-            <div class="space-y-1.5 font-sans">
-              <div class="text-sm font-semibold text-foreground">${name}</div>
-              <div class="text-xs text-muted-foreground">${branchName}</div>
-              <div class="grid gap-1 text-xs text-muted-foreground">
-                <div>Время доставки: ${deliveryTime} мин</div>
-                <div style="background: inherit;">Мин. заказ: 0 ₽</div>
-                <div>Тарифы: ${tariffsCount} шт.</div>
+            <div style="min-width:260px;max-width:320px;padding:2px 2px 0;font-family:Montserrat,Arial,sans-serif;">
+              <div style="font-size:17px;font-weight:700;line-height:1.25;color:#111827;letter-spacing:-0.01em;">${name}</div>
+              <div style="margin-top:4px;font-size:12px;line-height:1.3;color:#6b7280;">${branchName}</div>
+              <div style="margin-top:10px;display:grid;gap:6px;">
+                <div style="display:flex;justify-content:space-between;gap:12px;font-size:13px;line-height:1.25;color:#4b5563;">
+                  <span style="color:#6b7280;">Время доставки</span>
+                  <span style="font-weight:600;color:#111827;">${deliveryTime} мин</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;gap:12px;font-size:13px;line-height:1.25;color:#4b5563;">
+                  <span style="color:#6b7280;">Мин. заказ</span>
+                  <span style="font-weight:600;color:#111827;">${minOrderAmount} ₽</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;gap:12px;font-size:13px;line-height:1.25;color:#4b5563;">
+                  <span style="color:#6b7280;">Доставка</span>
+                  <span style="font-weight:600;color:#111827;">${deliveryCost} ₽</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;gap:12px;font-size:13px;line-height:1.25;color:#4b5563;">
+                  <span style="color:#6b7280;">Тарифы</span>
+                  <span style="font-weight:600;color:#111827;">${tariffsCount} шт.</span>
+                </div>
               </div>
-              ${statusBadge}
+              ${statusBadge ? `<div style="margin-top:10px;">${statusBadge}</div>` : ""}
             </div>
           `,
         },

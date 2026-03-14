@@ -1,16 +1,20 @@
 <template>
-  <div class="space-y-6">
-    <PageHeader :title="clientNameForTitle" description="Данные профиля и лояльность">
-      <template #actions>
-        <div class="header-actions">
-          <BackButton label="Назад" @click="goBack" />
-          <Button v-if="canManageClient" variant="destructive" size="sm" :disabled="deletingClient" @click="deleteClient">
-            <Trash2 :size="16" />
-            {{ deletingClient ? "Удаление..." : "Удалить клиента" }}
-          </Button>
-        </div>
-      </template>
-    </PageHeader>
+  <div class="space-y-5">
+    <Card>
+      <CardContent>
+        <PageHeader :title="clientNameForTitle" description="Данные профиля и лояльность">
+          <template #actions>
+            <div class="header-actions">
+              <BackButton label="Назад" @click="goBack" />
+              <Button v-if="canManageClient" variant="destructive" size="sm" :disabled="deletingClient" @click="deleteClient">
+                <Trash2 :size="16" />
+                {{ deletingClient ? "Удаление..." : "Удалить клиента" }}
+              </Button>
+            </div>
+          </template>
+        </PageHeader>
+      </CardContent>
+    </Card>
     <Card>
       <CardHeader>
         <CardTitle>Данные клиента</CardTitle>
@@ -19,7 +23,7 @@
           {{ client?.city_name || "—" }}
         </CardDescription>
       </CardHeader>
-      <CardContent class="p-3 space-y-4">
+      <CardContent class="p-3 space-y-3.5">
         <FieldGroup class="grid gap-4 md:grid-cols-2">
           <Field>
             <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Имя</FieldLabel>
@@ -75,8 +79,8 @@
         </div>
         <Button v-if="canAdjustLoyalty" variant="secondary" @click="openAdjustModal"> Корректировка баланса </Button>
       </CardHeader>
-      <CardContent class="p-3 space-y-6">
-        <div class="grid gap-4 md:grid-cols-3">
+      <CardContent class="p-3 space-y-4">
+        <div class="grid gap-3 md:grid-cols-3">
           <div class="rounded-xl border border-border/60 bg-background px-4 py-3">
             <div class="text-xs text-muted-foreground">Текущий уровень</div>
             <div class="text-base font-semibold text-foreground">{{ loyaltyStats?.current_level?.name || "—" }}</div>
@@ -90,7 +94,7 @@
             <div class="text-base font-semibold text-foreground">{{ formatNumber(loyaltyStats?.amount_to_next_level || 0) }}</div>
           </div>
         </div>
-        <div class="grid gap-4 md:grid-cols-3">
+        <div class="grid gap-3 md:grid-cols-3">
           <div class="rounded-xl border border-border/60 bg-background px-4 py-3">
             <div class="text-xs text-muted-foreground">Начислено</div>
             <div class="text-base font-semibold text-foreground">{{ formatNumber(loyaltyStats?.total_earned || 0) }}</div>
@@ -139,11 +143,13 @@
         </div>
         <div class="p-4 pb-0">
           <Tabs v-model="ordersTab">
-            <TabsList class="grid w-full grid-cols-3">
-              <TabsTrigger value="completed">Завершенные ({{ ordersSummary.completed }})</TabsTrigger>
-              <TabsTrigger value="active">Активные ({{ ordersSummary.active }})</TabsTrigger>
-              <TabsTrigger value="cancelled">Отмененные ({{ ordersSummary.cancelled }})</TabsTrigger>
-            </TabsList>
+            <div class="overflow-x-auto pb-1">
+              <TabsList class="inline-flex min-w-max whitespace-nowrap">
+                <TabsTrigger value="completed">Завершенные ({{ ordersSummary.completed }})</TabsTrigger>
+                <TabsTrigger value="active">Активные ({{ ordersSummary.active }})</TabsTrigger>
+                <TabsTrigger value="cancelled">Отмененные ({{ ordersSummary.cancelled }})</TabsTrigger>
+              </TabsList>
+            </div>
           </Tabs>
         </div>
         <div v-if="ordersLoading" class="p-4">
@@ -195,7 +201,7 @@
         </div>
       </CardContent>
     </Card>
-    <div class="grid gap-6 lg:grid-cols-2">
+    <div class="grid gap-4 lg:grid-cols-2">
       <Card class="min-h-[280px]">
         <CardHeader>
           <CardTitle>Любимые категории</CardTitle>

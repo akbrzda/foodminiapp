@@ -1,11 +1,11 @@
 <template>
   <div class="relative h-full min-h-[calc(100vh-80px)] bg-background">
     <div id="map" class="absolute inset-0 z-0"></div>
-    <div class="absolute bottom-4 right-4 z-20 flex flex-col gap-2">
-      <Button type="button" size="icon" variant="secondary" class="h-10 w-10 shadow-lg" @click="zoomInMap">
+    <div class="absolute bottom-3 right-3 z-20 flex flex-col gap-1.5">
+      <Button type="button" size="icon" variant="secondary" class="h-9 w-9 shadow-lg" @click="zoomInMap">
         <Plus :size="18" />
       </Button>
-      <Button type="button" size="icon" variant="secondary" class="h-10 w-10 shadow-lg" @click="zoomOutMap">
+      <Button type="button" size="icon" variant="secondary" class="h-9 w-9 shadow-lg" @click="zoomOutMap">
         <Minus :size="18" />
       </Button>
     </div>
@@ -17,7 +17,7 @@
       @change="handleGeoJsonFileChange"
     />
     <div class="absolute left-2 right-2 top-2 z-10 md:hidden">
-      <div class="space-y-2 rounded-xl border border-border bg-background/95 p-2 shadow-lg backdrop-blur">
+      <div class="space-y-1.5 rounded-xl border border-border bg-background/95 p-1.5 shadow-lg backdrop-blur">
         <div class="grid grid-cols-1 gap-2">
           <Button variant="secondary" size="sm" class="w-full" @click="showMobileFilters = true">
             <SlidersHorizontal :size="16" />
@@ -32,12 +32,12 @@
       </div>
     </div>
     <div
-      class="absolute left-4 top-4 z-10 hidden w-[360px] max-w-[calc(100%-2rem)] rounded-xl border border-border bg-background/95 shadow-xl backdrop-blur md:block"
+      class="absolute left-3 top-3 z-10 hidden w-[332px] max-w-[calc(100%-1.5rem)] rounded-xl border border-border bg-background/95 shadow-xl backdrop-blur md:block"
     >
-      <div class="p-4 space-y-4">
-        <div class="space-y-4">
+      <div class="p-3 space-y-3">
+        <div class="space-y-3">
           <PageHeader title="Зоны доставки" description="Управление зонами доставки и фильтры" />
-          <div class="space-y-3">
+          <div class="space-y-2.5">
             <Field>
               <FieldContent>
                 <Select v-model="cityId" @update:modelValue="onCityChange">
@@ -90,7 +90,7 @@
               </FieldContent>
             </Field>
           </div>
-          <div class="pt-3 border-t border-border">
+          <div class="border-t border-border pt-2.5">
             <p class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-2">Легенда</p>
             <div v-if="branchLegendItems.length" class="space-y-1.5">
               <div v-for="item in branchLegendItems" :key="item.branchId" class="flex items-center gap-2 text-xs">
@@ -100,7 +100,7 @@
             </div>
             <p v-else class="text-xs text-muted-foreground">Выберите город, чтобы увидеть распределение филиалов.</p>
           </div>
-          <div v-if="cityId" class="pt-3 border-t border-border">
+          <div v-if="cityId" class="border-t border-border pt-2.5">
             <div v-if="canManageDeliveryZones" class="space-y-2">
               <Button class="w-full" size="sm" :disabled="!activeBranchIdForActions" @click="startDrawing">
                 <Plus :size="16" />
@@ -122,7 +122,7 @@
           <div v-if="filteredPolygons.length > 0" class="pt-2 text-xs text-muted-foreground text-center">
             {{ filteredPolygons.length }} {{ getPluralForm(filteredPolygons.length) }}
           </div>
-          <div class="space-y-2 border-t border-border pt-3">
+          <div class="space-y-2 border-t border-border pt-2.5">
             <div v-if="canToggleDeliveryZones" class="grid gap-2">
               <Button size="sm" variant="outline" @click="activateBulkMode('transfer')">Групповое переключение</Button>
               <Button size="sm" variant="outline" @click="activateBulkMode('block')">Групповая блокировка</Button>
@@ -135,7 +135,7 @@
       v-if="cityId && canManageDeliveryZones"
       type="button"
       size="sm"
-      class="absolute bottom-4 left-2 z-10 md:hidden"
+      class="absolute bottom-3 left-2 z-10 md:hidden"
       :disabled="!activeBranchIdForActions"
       @click="startDrawing"
     >
@@ -219,16 +219,16 @@
     </Dialog>
     <div
       v-if="isBulkModeActive"
-      class="absolute right-4 top-4 bottom-4 z-20 w-[360px] max-w-[calc(100%-2rem)] overflow-hidden rounded-xl border border-border bg-background/95 shadow-xl backdrop-blur flex flex-col"
+      class="absolute bottom-3 right-3 top-3 z-20 flex w-[332px] max-w-[calc(100%-1.5rem)] flex-col overflow-hidden rounded-xl border border-border bg-background/95 shadow-xl backdrop-blur"
     >
-      <div class="flex items-center justify-between border-b border-border px-4 py-3">
+      <div class="flex items-center justify-between border-b border-border px-3 py-2.5">
         <div class="min-w-0">
           <p class="truncate text-lg font-semibold text-foreground">{{ bulkModeTitle }}</p>
           <p class="text-xs text-muted-foreground">Выбрано: {{ selectedPolygons.length }} {{ getPluralForm(selectedPolygons.length) }}</p>
         </div>
         <Button variant="ghost" size="icon" class="h-8 w-8" @click="closeBulkMode"> ✕ </Button>
       </div>
-      <div class="flex-1 space-y-3 overflow-y-auto px-4 py-3">
+      <div class="flex-1 space-y-2.5 overflow-y-auto px-3 py-2.5">
         <div v-if="bulkSelectedPolygons.length" class="space-y-1.5">
           <div v-for="polygon in bulkSelectedPolygons" :key="polygon.id" class="flex items-center justify-between gap-2 text-sm">
             <span class="truncate text-foreground">{{ polygon.name || `Полигон #${polygon.id}` }}</span>
@@ -237,21 +237,21 @@
         </div>
         <p v-else class="text-sm text-muted-foreground">Выберите полигоны для {{ bulkMode === "transfer" ? "переключения" : "блокировки" }}.</p>
       </div>
-      <div class="border-t border-border px-4 py-3">
+      <div class="border-t border-border px-3 py-2.5">
         <Button class="w-full" :disabled="!selectedPolygons.length" @click="submitBulkModeAction">
           {{ bulkModeActionLabel }}
         </Button>
       </div>
     </div>
     <Dialog v-if="showBulkTransferDialog" :open="showBulkTransferDialog" @update:open="(value) => (value ? null : closeBulkTransferDialog())">
-      <DialogContent class="w-full max-w-lg">
+      <DialogContent class="w-full max-w-md">
         <DialogHeader>
           <DialogTitle>Групповое переключение</DialogTitle>
           <DialogDescription
             >Выберите филиал для переноса {{ selectedPolygons.length }} {{ getPluralForm(selectedPolygons.length) }}.</DialogDescription
           >
         </DialogHeader>
-        <div class="space-y-4">
+        <div class="space-y-3">
           <Field>
             <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Целевой филиал</FieldLabel>
             <FieldContent>
@@ -277,12 +277,12 @@
       </DialogContent>
     </Dialog>
     <Dialog v-if="showModal" :open="showModal" @update:open="(value) => (value ? null : closeModal())">
-      <DialogContent class="w-full max-w-2xl">
+      <DialogContent class="w-full max-w-xl">
         <DialogHeader>
           <DialogTitle>{{ modalTitle }}</DialogTitle>
           <DialogDescription>{{ modalSubtitle }}</DialogDescription>
         </DialogHeader>
-        <form class="space-y-4" @submit.prevent="submitPolygon">
+        <form class="space-y-3.5" @submit.prevent="submitPolygon">
           <FieldGroup>
             <Field>
               <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Название</FieldLabel>
@@ -319,7 +319,7 @@
       </DialogContent>
     </Dialog>
     <Dialog v-if="showBlockModalWindow" :open="showBlockModalWindow" @update:open="(value) => (value ? null : closeBlockModal())">
-      <DialogContent class="w-full max-w-2xl">
+      <DialogContent class="w-full max-w-xl">
         <DialogHeader>
           <DialogTitle>
             {{ blockingPolygon?.id === "bulk" ? `Блокировка полигонов (${blockingPolygon.ids.length})` : "Блокировка полигона" }}
@@ -328,7 +328,7 @@
             {{ blockingPolygon?.id === "bulk" ? "Укажите параметры для массовой блокировки" : "Укажите параметры блокировки" }}
           </DialogDescription>
         </DialogHeader>
-        <form class="space-y-4" @submit.prevent="submitBlock">
+        <form class="space-y-3.5" @submit.prevent="submitBlock">
           <FieldGroup>
             <Field>
               <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Тип блокировки</FieldLabel>
@@ -374,18 +374,18 @@
       </DialogContent>
     </Dialog>
     <Dialog v-if="showGeoJsonImportDialog" :open="showGeoJsonImportDialog" @update:open="(value) => (value ? null : closeGeoJsonImportDialog())">
-      <DialogContent class="w-full max-w-3xl">
+      <DialogContent class="w-full max-w-2xl">
         <DialogHeader>
           <DialogTitle>Импорт GeoJSON</DialogTitle>
           <DialogDescription>
             Проверьте полигоны из файла <span class="font-medium text-foreground">{{ geoJsonImportFileName }}</span> и подтвердите сохранение.
           </DialogDescription>
         </DialogHeader>
-        <div class="space-y-3">
-          <div class="rounded-lg border border-border p-3 text-sm text-muted-foreground">
+        <div class="space-y-2.5">
+          <div class="rounded-lg border border-border p-2.5 text-sm text-muted-foreground">
             Предпросмотр выполнен на карте: импортируемые полигоны подсвечены пунктиром.
           </div>
-          <div class="rounded-lg border border-border p-3 text-xs text-muted-foreground">
+          <div class="rounded-lg border border-border p-2.5 text-xs text-muted-foreground">
             Найдено полигонов: <span class="font-semibold text-foreground">{{ geoJsonImportItems.length }}</span>
           </div>
         </div>
@@ -1297,22 +1297,38 @@ const renderPolygonsOnMap = () => {
     let statusBadge = "";
     if (isPolygonBlocked(polygon)) {
       statusBadge =
-        '<span style="display: inline-block; background: rgba(239,68,68,0.12); color: #ef4444; padding: 2px 6px; border-radius: 999px; font-size: 11px; margin-top: 4px;">Заблокирован</span>';
+        '<span style="display:inline-flex;align-items:center;gap:6px;background:rgba(239,68,68,0.12);color:#b91c1c;padding:4px 8px;border-radius:999px;font-size:11px;font-weight:600;line-height:1.1;">Заблокирован</span>';
     } else if (!polygon.is_active) {
       statusBadge =
-        '<span style="display: inline-block; background: rgba(148,163,184,0.18); color: #94a3b8; padding: 2px 6px; border-radius: 999px; font-size: 11px; margin-top: 4px;">Неактивен</span>';
+        '<span style="display:inline-flex;align-items:center;gap:6px;background:rgba(148,163,184,0.18);color:#475569;padding:4px 8px;border-radius:999px;font-size:11px;font-weight:600;line-height:1.1;">Неактивен</span>';
     }
+    const polygonName = polygon.name || `Полигон #${polygon.id}`;
+    const branchName = polygon.branch_name || "Филиал не указан";
+    const minOrderLabel = Number(polygon.tariffs_count || 0) > 0 ? "по тарифам" : `${Number(polygon.min_order_amount || 0)} ₽`;
+    const deliveryCostLabel = Number(polygon.tariffs_count || 0) > 0 ? "по тарифам" : `${Number(polygon.delivery_cost || 0)} ₽`;
     const popupContent = `
-      <div class="space-y-1.5 font-sans">
-        <div class="text-sm font-semibold text-foreground">${polygon.name || `Полигон #${polygon.id}`}</div>
-        <div class="text-xs text-muted-foreground">${polygon.branch_name || ""}</div>
-        <div class="grid gap-1 text-xs text-muted-foreground">
-          <div>Время доставки: ${polygon.delivery_time || 30} мин</div>
-          <div style="background: inherit;">Мин. заказ: ${Number(polygon.tariffs_count || 0) > 0 ? "по тарифам" : `${Number(polygon.min_order_amount || 0)} ₽`}</div>
-          <div style="background: inherit;">Доставка: ${Number(polygon.tariffs_count || 0) > 0 ? "по тарифам" : `${Number(polygon.delivery_cost || 0)} ₽`}</div>
-          <div>Тарифы: ${Number(polygon.tariffs_count || 0)} шт.</div>
+      <div style="min-width:260px;max-width:320px;padding:2px 2px 0;font-family:Montserrat,Arial,sans-serif;">
+        <div style="font-size:17px;font-weight:700;line-height:1.25;color:#111827;letter-spacing:-0.01em;">${polygonName}</div>
+        <div style="margin-top:4px;font-size:12px;line-height:1.3;color:#6b7280;">${branchName}</div>
+        <div style="margin-top:10px;display:grid;gap:6px;">
+          <div style="display:flex;justify-content:space-between;gap:12px;font-size:13px;line-height:1.25;color:#4b5563;">
+            <span style="color:#6b7280;">Время доставки</span>
+            <span style="font-weight:600;color:#111827;">${polygon.delivery_time || 30} мин</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;gap:12px;font-size:13px;line-height:1.25;color:#4b5563;">
+            <span style="color:#6b7280;">Мин. заказ</span>
+            <span style="font-weight:600;color:#111827;">${minOrderLabel}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;gap:12px;font-size:13px;line-height:1.25;color:#4b5563;">
+            <span style="color:#6b7280;">Доставка</span>
+            <span style="font-weight:600;color:#111827;">${deliveryCostLabel}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;gap:12px;font-size:13px;line-height:1.25;color:#4b5563;">
+            <span style="color:#6b7280;">Тарифы</span>
+            <span style="font-weight:600;color:#111827;">${Number(polygon.tariffs_count || 0)} шт.</span>
+          </div>
         </div>
-        ${statusBadge}
+        ${statusBadge ? `<div style="margin-top:10px;">${statusBadge}</div>` : ""}
       </div>
     `;
     layer.properties.set("balloonContentBody", popupContent);

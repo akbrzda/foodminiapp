@@ -45,7 +45,9 @@ const isMobile = ref(window.innerWidth < 1024);
 const pageTitle = computed(() => route.meta.title || "Админ-панель");
 const pageSubtitle = computed(() => route.meta.subtitle || "Операционная панель");
 const mainClasses = computed(() =>
-  route.meta.fullBleed ? "flex-1 min-w-0" : "flex-1 min-w-0 px-3 pb-8 pt-4 sm:px-4 sm:pt-5 lg:px-6 lg:pb-12 lg:pt-6",
+  route.meta.fullBleed
+    ? "flex-1 min-w-0"
+    : "mx-auto flex-1 min-w-0 w-full max-w-[1680px] px-3 pb-6 pt-3 sm:px-4 sm:pt-4 lg:px-6 lg:pb-8 lg:pt-5",
 );
 const syncDocumentTitle = () => {
   const baseTitle = pageTitle.value || "Админ-панель";

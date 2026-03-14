@@ -1,5 +1,5 @@
 <template>
-  <section class="flex h-full min-h-0 w-full flex-1 flex-col border-border bg-muted/40 p-3 sm:p-4 lg:w-[42%] lg:min-w-[420px] lg:border-r">
+  <section class="flex h-full min-h-0 w-full flex-col border-border bg-muted/40 p-2.5 sm:p-3 lg:w-[35%] lg:min-w-[360px] lg:flex-none lg:border-r">
     <!-- Табы и фильтры -->
     <div class="flex items-center gap-1 sm:gap-2">
       <div class="min-w-0 flex-1">
@@ -80,7 +80,7 @@
     </div>
 
     <!-- Список заказов -->
-    <div class="mt-4 min-h-0 flex-1 overflow-y-auto pr-1">
+    <div class="mt-3 min-h-0 flex-1 overflow-y-auto pr-1">
       <div v-if="visibleOrders.length === 0" class="flex h-full flex-col items-center justify-center gap-3 text-center text-sm text-muted-foreground">
         <component :is="emptyStateIcon" :size="28" />
         <div class="max-w-[240px]">
@@ -89,7 +89,7 @@
         </div>
       </div>
 
-      <div v-else class="space-y-3 pb-6">
+      <div v-else class="space-y-2.5 pb-4">
         <OrderCard
           v-for="order in visibleOrders"
           :key="order.id"

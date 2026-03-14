@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-6">
+  <div class="space-y-5">
     <Card>
       <CardContent>
         <PageHeader title="Кампании подписки" description="Список кампаний привлечения подписчиков в Telegram-канал">

@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-6">
+  <div class="space-y-5">
     <PageHeader title="Детали заказа" description="Управление заказом и составом">
       <template #actions>
         <div class="flex items-center gap-2">
@@ -20,7 +20,7 @@
         </div>
       </CardContent>
     </Card>
-    <div v-else class="space-y-6">
+    <div v-else class="space-y-5">
       <Tabs v-model="activeTab">
         <TabsList class="grid w-full grid-cols-3">
           <TabsTrigger value="general">Общая информация</TabsTrigger>
@@ -28,7 +28,7 @@
           <TabsTrigger value="history">История статусов</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="general" class="space-y-6">
+        <TabsContent value="general" class="space-y-5">
           <div class="grid gap-4 lg:grid-cols-2">
             <Card>
               <CardHeader>
@@ -158,7 +158,7 @@
           </Card>
         </TabsContent>
 
-        <TabsContent value="details" class="space-y-6">
+        <TabsContent value="details" class="space-y-5">
           <Card>
             <CardHeader>
               <CardTitle>Состав заказа</CardTitle>
@@ -227,7 +227,7 @@
           </Card>
         </TabsContent>
 
-        <TabsContent value="history" class="space-y-6">
+        <TabsContent value="history" class="space-y-5">
           <Card>
             <CardHeader>
               <CardTitle>История статусов</CardTitle>

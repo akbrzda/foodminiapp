@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-6">
+  <div class="space-y-5">
     <Card>
       <CardContent>
         <PageHeader title="Стоп-лист" description="Список временно недоступных блюд по филиалам">
@@ -137,7 +137,7 @@
           <DialogTitle>Добавить в стоп-лист</DialogTitle>
           <DialogDescription>Временно сделать блюдо недоступным</DialogDescription>
         </DialogHeader>
-        <form class="space-y-6" @submit.prevent="submitStopList">
+        <form class="space-y-5" @submit.prevent="submitStopList">
           <div v-if="step === 1" class="space-y-5">
             <FieldGroup>
               <FieldGroup class="grid gap-4 md:grid-cols-2">

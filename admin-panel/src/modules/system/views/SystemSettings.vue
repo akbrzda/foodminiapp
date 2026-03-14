@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-6">
+  <div class="space-y-5">
     <Card>
       <CardContent>
         <PageHeader title="Системные настройки" description="Управление ключевыми модулями и их параметрами">
@@ -98,7 +98,7 @@
           <TabsTrigger v-for="(tab, index) in tabs" :key="tab" :value="index">{{ tab }}</TabsTrigger>
         </TabsList>
       </div>
-      <TabsContent :value="0" class="space-y-6">
+      <TabsContent :value="0" class="space-y-4">
         <Card v-if="moduleLoading">
           <CardContent class="space-y-3 pt-6">
             <Skeleton class="h-4 w-56" />
@@ -113,22 +113,22 @@
             <CardDescription>Управление состоянием сервисных блоков</CardDescription>
           </CardHeader>
           <CardContent class="pt-0">
-            <div class="space-y-6">
+            <div class="space-y-4">
               <div v-for="group in moduleGroups" :key="group.name" class="space-y-4">
                 <div class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   {{ group.name }}
                 </div>
-                <div class="space-y-3">
+                <div class="space-y-2.5">
                   <div
                     v-for="item in group.items"
                     :key="item.key"
-                    class="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-border/60 bg-background px-4 py-3"
+                    class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/60 bg-background px-3 py-2.5"
                   >
                     <div class="min-w-0">
                       <div class="text-sm font-semibold text-foreground">{{ item.label }}</div>
                       <div class="text-xs text-muted-foreground">{{ item.description }}</div>
                     </div>
-                    <div class="w-40">
+                    <div class="w-36">
                       <Select v-if="item.type === 'boolean' || typeof moduleForm[item.key] === 'boolean'" v-model="moduleForm[item.key]">
                         <SelectTrigger class="w-full">
                           <SelectValue placeholder="Выберите статус" />
@@ -174,7 +174,7 @@
         </Card>
       </TabsContent>
 
-      <TabsContent :value="1" class="space-y-6">
+      <TabsContent :value="1" class="space-y-4">
         <Card v-if="moduleLoading">
           <CardContent class="space-y-3 pt-6">
             <Skeleton class="h-4 w-56" />
@@ -188,23 +188,23 @@
             <CardTitle>Карты и геокодинг</CardTitle>
             <CardDescription>Ключи API и параметры локализации карт</CardDescription>
           </CardHeader>
-          <CardContent class="space-y-6 pt-0">
-            <div class="space-y-6">
+          <CardContent class="space-y-4 pt-0">
+            <div class="space-y-4">
               <div v-for="group in mapGroups" :key="`maps-${group.name}`" class="space-y-4">
                 <div class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   {{ group.name }}
                 </div>
-                <div class="space-y-3">
+                <div class="space-y-2.5">
                   <div
                     v-for="item in group.items"
                     :key="item.key"
-                    class="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-border/60 bg-background px-4 py-3"
+                    class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/60 bg-background px-3 py-2.5"
                   >
                     <div class="min-w-0">
                       <div class="text-sm font-semibold text-foreground">{{ item.label }}</div>
                       <div class="text-xs text-muted-foreground">{{ item.description }}</div>
                     </div>
-                    <div class="w-56">
+                    <div class="w-52">
                       <Input
                         v-if="item.type === 'string'"
                         v-model="mapForm[item.key]"
@@ -234,7 +234,7 @@
         </Card>
       </TabsContent>
 
-      <TabsContent :value="2" class="space-y-6">
+      <TabsContent :value="2" class="space-y-4">
         <Card v-if="moduleLoading">
           <CardContent class="space-y-3 pt-6">
             <Skeleton class="h-4 w-56" />
@@ -248,22 +248,22 @@
             <CardDescription>Управление бейджами карточек и раскладкой в Mini App</CardDescription>
           </CardHeader>
           <CardContent class="pt-0">
-            <div class="space-y-6">
+            <div class="space-y-4">
               <div v-for="group in appearanceGroups" :key="`appearance-${group.name}`" class="space-y-4">
                 <div class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   {{ group.name }}
                 </div>
-                <div class="space-y-3">
+                <div class="space-y-2.5">
                   <div
                     v-for="item in group.items"
                     :key="item.key"
-                    class="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-border/60 bg-background px-4 py-3"
+                    class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/60 bg-background px-3 py-2.5"
                   >
                     <div class="min-w-0">
                       <div class="text-sm font-semibold text-foreground">{{ item.label }}</div>
                       <div class="text-xs text-muted-foreground">{{ item.description }}</div>
                     </div>
-                    <div class="w-56">
+                    <div class="w-52">
                       <Select
                         v-if="item.key === 'menu_cards_layout'"
                         v-model="appearanceForm[item.key]"
@@ -301,7 +301,7 @@
         </Card>
       </TabsContent>
 
-      <TabsContent :value="3" class="space-y-6">
+      <TabsContent :value="3" class="space-y-4">
         <Card>
           <CardContent class="!p-0">
             <div class="flex flex-col gap-2 border-b border-border/60 px-4 py-3 md:flex-row md:items-center md:justify-between">
@@ -367,7 +367,7 @@
         </Card>
       </TabsContent>
 
-      <TabsContent :value="4" class="space-y-6">
+      <TabsContent :value="4" class="space-y-4">
         <Card v-if="telegramLoading">
           <CardContent class="space-y-3 pt-6">
             <Skeleton class="h-10 w-full" />
@@ -382,7 +382,7 @@
             <CardTitle>Приветствие команды /start</CardTitle>
             <CardDescription>Настройка текста, изображения и кнопки в Telegram-боте</CardDescription>
           </CardHeader>
-          <CardContent class="space-y-6 pt-0">
+          <CardContent class="space-y-4 pt-0">
             <FieldGroup class="grid gap-4 md:grid-cols-2">
               <Field>
                 <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Статус</FieldLabel>
@@ -539,7 +539,7 @@
         </Card>
       </TabsContent>
 
-      <TabsContent :value="5" class="space-y-6">
+      <TabsContent :value="5" class="space-y-4">
         <Card v-if="telegramLoading || telegramCitiesLoading">
           <CardContent class="space-y-3 pt-6">
             <Skeleton class="h-10 w-full" />
@@ -554,7 +554,7 @@
             <CardTitle>Telegram-уведомления по заказам</CardTitle>
             <CardDescription>События, группа, thread по городам и шаблон сообщения о новом заказе</CardDescription>
           </CardHeader>
-          <CardContent class="space-y-6 pt-0">
+          <CardContent class="space-y-4 pt-0">
             <FieldGroup class="grid gap-4 md:grid-cols-2">
               <Field>
                 <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Статус</FieldLabel>
@@ -687,7 +687,7 @@
                 <div
                   v-for="city in telegramCities"
                   :key="city.id"
-                  class="grid gap-3 rounded-xl border border-border/60 bg-background px-4 py-3 md:grid-cols-[1fr_240px] md:items-center"
+                  class="grid gap-2.5 rounded-xl border border-border/60 bg-background px-3 py-2.5 md:grid-cols-[1fr_220px] md:items-center"
                 >
                   <div class="text-sm font-medium text-foreground">{{ city.name }}</div>
                   <Input

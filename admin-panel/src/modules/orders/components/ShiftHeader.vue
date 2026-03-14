@@ -1,9 +1,9 @@
 <template>
   <header class="sticky top-0 z-30 border-b border-border bg-background/90 backdrop-blur">
-    <div class="flex flex-col gap-3 px-3 py-2 sm:px-4 lg:flex-row lg:items-center lg:justify-between lg:gap-6 lg:px-6">
+    <div class="flex flex-col gap-2.5 px-3 py-1.5 sm:px-4 lg:flex-row lg:items-center lg:justify-between lg:gap-4 lg:px-6">
       <div class="min-w-0">
         <div class="flex items-start justify-between gap-3">
-          <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary text-sm font-semibold">
+          <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary text-sm font-semibold">
             <svg
               xmlns="http://www.w3.org/2000/svg"
               width="24"
@@ -35,7 +35,7 @@
               type="button"
               variant="outline"
               size="icon"
-              class="h-10 w-10 shrink-0 lg:hidden"
+              class="h-9 w-9 shrink-0 lg:hidden"
               aria-label="Открыть настройки смены"
               @click="mobileSettingsOpen = true"
             >
@@ -45,7 +45,7 @@
         </div>
       </div>
 
-      <div class="hidden w-full grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto] lg:grid lg:w-auto lg:min-w-[520px]">
+      <div class="hidden w-full grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto] lg:grid lg:w-auto lg:min-w-[500px]">
         <Select v-model="branchModel">
           <SelectTrigger class="w-full">
             <SelectValue placeholder="Выберите филиал" />

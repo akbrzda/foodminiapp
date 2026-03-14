@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-6">
+  <div class="space-y-5">
     <Card>
       <CardContent>
         <PageHeader title="Интеграции" description="Управление внешними сервисами и синхронизацией">
@@ -35,8 +35,8 @@
         <CardTitle>iiko</CardTitle>
         <CardDescription>Настройки подключения и синхронизации</CardDescription>
       </CardHeader>
-      <CardContent class="space-y-4">
-        <div v-if="loading && !settingsLoaded" class="space-y-4">
+      <CardContent class="space-y-3.5">
+        <div v-if="loading && !settingsLoaded" class="space-y-3.5">
           <div class="grid gap-4 md:grid-cols-2">
             <Skeleton class="h-16 w-full" />
             <Skeleton class="h-16 w-full" />
@@ -204,7 +204,7 @@
               Сопоставление завершено. Модуль меню готов к работе в интеграционном режиме.
             </div>
           </div>
-          <div class="space-y-3 rounded-lg border border-border/60 p-3">
+          <div class="space-y-2.5 rounded-lg border border-border/60 p-2.5">
             <div class="flex flex-wrap items-center justify-between gap-2">
               <div class="text-sm font-medium">Маппинг типов заказа и способов оплаты</div>
               <Button type="button" variant="outline" size="sm" :disabled="orderPaymentOptionsLoading" @click="loadIikoOrderPaymentOptions">
@@ -348,17 +348,17 @@
             <div v-if="mappingLoading" class="space-y-2">
               <Skeleton v-for="index in 4" :key="`mapping-skeleton-${index}`" class="h-10 w-full" />
             </div>
-            <div v-else-if="mappingCandidates.length > 0" class="space-y-3">
-              <div v-for="candidate in mappingCandidates" :key="candidate.id" class="rounded-lg border border-border/60 p-3">
-                <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div v-else-if="mappingCandidates.length > 0" class="space-y-2.5">
+              <div v-for="candidate in mappingCandidates" :key="candidate.id" class="rounded-lg border border-border/60 p-2.5">
+                <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
                   <div class="text-xs text-muted-foreground">
                     #{{ candidate.id }} · {{ candidate.entity_type }} · {{ candidate.external_entity_id }}
                   </div>
                   <span :class="resolveCandidateStateClass(candidate.state)">{{ resolveCandidateStateLabel(candidate.state) }}</span>
                 </div>
-                <div class="grid gap-3 lg:grid-cols-2">
-                  <div class="rounded-md border border-border/60 p-3">
-                    <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Локальные данные</div>
+                <div class="grid gap-2.5 lg:grid-cols-2">
+                  <div class="rounded-md border border-border/60 p-2.5">
+                    <div class="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Локальные данные</div>
                     <div class="space-y-1 text-xs">
                       <div class="font-medium text-foreground">
                         {{ getCandidateSideData(candidate, "local")?.name || candidate.local_name || "—" }}
@@ -375,8 +375,8 @@
                       class="mt-2 h-20 w-20 rounded-md border border-border/60 object-cover"
                     />
                   </div>
-                  <div class="rounded-md border border-border/60 p-3">
-                    <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Данные iiko</div>
+                  <div class="rounded-md border border-border/60 p-2.5">
+                    <div class="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Данные iiko</div>
                     <div v-if="canManageIntegrations && canResolveCandidate(candidate)" class="mb-2 space-y-2">
                       <div class="flex gap-2">
                         <Input
@@ -427,7 +427,7 @@
                     />
                   </div>
                 </div>
-                <div class="mt-3 flex flex-wrap justify-end gap-1">
+                <div class="mt-2 flex flex-wrap justify-end gap-1">
                   <Button
                     v-if="canManageIntegrations"
                     type="button"
@@ -472,8 +472,8 @@
         <CardTitle>PremiumBonus</CardTitle>
         <CardDescription>Настройки лояльности и клиентов</CardDescription>
       </CardHeader>
-      <CardContent class="space-y-4">
-        <div v-if="loading && !settingsLoaded" class="space-y-4">
+      <CardContent class="space-y-3.5">
+        <div v-if="loading && !settingsLoaded" class="space-y-3.5">
           <div class="grid gap-4 md:grid-cols-2">
             <Skeleton class="h-16 w-full" />
             <Skeleton class="h-16 w-full" />
@@ -560,10 +560,10 @@
       <CardHeader>
         <CardTitle>Статус синхронизации</CardTitle>
       </CardHeader>
-      <CardContent class="space-y-3 text-sm">
+      <CardContent class="space-y-2.5 text-sm">
         <div v-if="statusLoading && !statusLoaded" class="grid gap-3 md:grid-cols-3">
-          <div v-for="index in 3" :key="`status-skeleton-${index}`" class="rounded-lg border border-border/60 p-3">
-            <Skeleton class="mb-2 h-4 w-24" />
+          <div v-for="index in 3" :key="`status-skeleton-${index}`" class="rounded-lg border border-border/60 p-2.5">
+            <Skeleton class="mb-1.5 h-4 w-24" />
             <Skeleton class="mb-1 h-4 w-20" />
             <Skeleton class="mb-1 h-4 w-20" />
             <Skeleton class="mb-1 h-4 w-20" />
@@ -571,8 +571,8 @@
           </div>
         </div>
         <div v-else class="grid gap-3 md:grid-cols-3">
-          <div class="rounded-lg border border-border/60 p-3 md:col-span-3">
-            <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <div class="rounded-lg border border-border/60 p-2.5 md:col-span-3">
+            <div class="mb-1.5 flex flex-wrap items-center justify-between gap-2">
               <div class="font-medium">Автосинк iiko</div>
               <Button
                 v-if="canManageIntegrations"
@@ -590,8 +590,8 @@
               автопостановка заказов в очередь iiko и фоновый retry.
             </div>
           </div>
-          <div class="rounded-lg border border-border/60 p-3 md:col-span-3">
-            <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <div class="rounded-lg border border-border/60 p-2.5 md:col-span-3">
+            <div class="mb-1.5 flex flex-wrap items-center justify-between gap-2">
               <div class="font-medium">Автосинк PremiumBonus</div>
               <Button
                 v-if="canManageIntegrations"
@@ -609,21 +609,21 @@
               клиентов/покупок PremiumBonus и фоновый retry.
             </div>
           </div>
-          <div class="rounded-lg border border-border/60 p-3">
+          <div class="rounded-lg border border-border/60 p-2.5">
             <div class="font-medium">Заказы iiko</div>
             <div class="text-muted-foreground">synced: {{ syncStatus.iikoOrders?.synced || 0 }}</div>
             <div class="text-muted-foreground">pending: {{ syncStatus.iikoOrders?.pending || 0 }}</div>
             <div class="text-muted-foreground">error: {{ syncStatus.iikoOrders?.error || 0 }}</div>
             <div class="text-muted-foreground">failed: {{ syncStatus.iikoOrders?.failed || 0 }}</div>
           </div>
-          <div class="rounded-lg border border-border/60 p-3">
+          <div class="rounded-lg border border-border/60 p-2.5">
             <div class="font-medium">Клиенты PB</div>
             <div class="text-muted-foreground">synced: {{ syncStatus.premiumbonusClients?.synced || 0 }}</div>
             <div class="text-muted-foreground">pending: {{ syncStatus.premiumbonusClients?.pending || 0 }}</div>
             <div class="text-muted-foreground">error: {{ syncStatus.premiumbonusClients?.error || 0 }}</div>
             <div class="text-muted-foreground">failed: {{ syncStatus.premiumbonusClients?.failed || 0 }}</div>
           </div>
-          <div class="rounded-lg border border-border/60 p-3">
+          <div class="rounded-lg border border-border/60 p-2.5">
             <div class="font-medium">Покупки PB</div>
             <div class="text-muted-foreground">synced: {{ syncStatus.premiumbonusPurchases?.synced || 0 }}</div>
             <div class="text-muted-foreground">pending: {{ syncStatus.premiumbonusPurchases?.pending || 0 }}</div>
@@ -714,7 +714,7 @@
               <TableCell>
                 <span :class="resolveLogStatusClass(log.status)">{{ log.status }}</span>
               </TableCell>
-              <TableCell class="max-w-[340px] truncate text-xs text-muted-foreground">{{ log.error_message || "—" }}</TableCell>
+              <TableCell class="max-w-[280px] truncate text-xs text-muted-foreground">{{ log.error_message || "—" }}</TableCell>
             </TableRow>
             <TableRow v-if="!logsLoading && !syncLogs.length">
               <TableCell colspan="6" class="text-center text-muted-foreground">Логи отсутствуют</TableCell>
@@ -730,21 +730,21 @@
           <DialogTitle>Первичное включение интеграции iiko</DialogTitle>
           <DialogDescription>Найдены локальные записи без внешних ID. Выберите сценарий первичной настройки.</DialogDescription>
         </DialogHeader>
-        <div class="space-y-3 text-sm">
-          <div class="rounded-md border border-border/60 p-3">
+        <div class="space-y-2.5 text-sm">
+          <div class="rounded-md border border-border/60 p-2.5">
             <div class="font-medium">Слить (с сопоставлением)</div>
             <div class="text-xs text-muted-foreground">Синхронизирует меню, предложит сопоставления и сохранит локальные маркетинговые поля.</div>
           </div>
-          <div class="rounded-md border border-border/60 p-3">
+          <div class="rounded-md border border-border/60 p-2.5">
             <div class="font-medium">Очистить локальные данные (DELETE)</div>
             <div class="text-xs text-muted-foreground">Полностью удалит локальный каталог и загрузит меню из iiko.</div>
           </div>
-          <div class="rounded-md border border-border/60 p-3">
+          <div class="rounded-md border border-border/60 p-2.5">
             <div class="font-medium">Отложить</div>
             <div class="text-xs text-muted-foreground">Интеграция останется включенной, но модуль получит статус «требуется сопоставление».</div>
           </div>
         </div>
-        <div class="mt-4 flex flex-wrap justify-end gap-2">
+        <div class="mt-3 flex flex-wrap justify-end gap-2">
           <Button v-if="canManageIntegrations" type="button" variant="outline" :disabled="onboardingLoading" @click="runOnboarding('defer')"
             >Отложить</Button
           >
