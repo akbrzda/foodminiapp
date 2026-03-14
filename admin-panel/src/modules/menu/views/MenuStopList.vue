@@ -5,12 +5,12 @@
         <PageHeader title="Стоп-лист" description="Список временно недоступных блюд по филиалам">
           <template #actions>
             <div class="flex flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
-              <div v-if="isIikoIntegrationEnabled" class="rounded-lg border border-border/60 bg-muted/20 px-3 py-2 text-left">
+              <div v-if="canShowIikoSyncControls" class="rounded-lg border border-border/60 bg-muted/20 px-3 py-2 text-left">
                 <div class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Последняя синхронизация iiko</div>
                 <div class="text-sm font-medium text-foreground">{{ stopListSyncLabel }}</div>
                 <div class="text-xs text-muted-foreground">{{ stopListSyncStatusLabel }}</div>
               </div>
-              <Button v-if="canManageStopList && isIikoIntegrationEnabled" variant="secondary" :disabled="syncLoading" @click="syncStopListNow">
+              <Button v-if="canManageStopList && canShowIikoSyncControls" variant="secondary" :disabled="syncLoading" @click="syncStopListNow">
                 <RefreshCcw :size="16" />
                 {{ syncLoading ? "Синхронизация..." : "Синхронизировать стоп-лист" }}
               </Button>
@@ -416,7 +416,8 @@ const page = ref(1);
 const pageSize = ref(20);
 const reasons = ref([]);
 const stopListSyncInfo = ref(null);
-const isIikoIntegrationEnabled = ref(true);
+const isIikoIntegrationEnabled = ref(false);
+const integrationSettingsLoaded = ref(false);
 const showModal = ref(false);
 const saving = ref(false);
 const syncLoading = ref(false);
@@ -534,6 +535,7 @@ const isModifierType = computed(() => form.value.type === "modifier");
 const isProductType = computed(() => form.value.type === "product");
 const timeStep = computed(() => (isProductType.value ? 3 : 2));
 const isFinalStep = computed(() => step.value === timeStep.value);
+const canShowIikoSyncControls = computed(() => integrationSettingsLoaded.value && isIikoIntegrationEnabled.value);
 const canProceedFromStep1 = computed(() => {
   if (!form.value.branch_id || !form.value.type) return false;
   if (!form.value.fulfillment_types.length) return false;
@@ -698,6 +700,9 @@ const loadIntegrationSettings = async () => {
     isIikoIntegrationEnabled.value = Boolean(response.data?.settings?.iiko_enabled);
   } catch (error) {
     devError("Failed to load integration settings:", error);
+    isIikoIntegrationEnabled.value = false;
+  } finally {
+    integrationSettingsLoaded.value = true;
   }
 };
 const loadModifiers = async () => {
