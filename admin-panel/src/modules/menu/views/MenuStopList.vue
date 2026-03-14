@@ -5,12 +5,12 @@
         <PageHeader title="Стоп-лист" description="Список временно недоступных блюд по филиалам">
           <template #actions>
             <div class="flex flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
-              <div class="rounded-lg border border-border/60 bg-muted/20 px-3 py-2 text-left">
+              <div v-if="isIikoIntegrationEnabled" class="rounded-lg border border-border/60 bg-muted/20 px-3 py-2 text-left">
                 <div class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Последняя синхронизация iiko</div>
                 <div class="text-sm font-medium text-foreground">{{ stopListSyncLabel }}</div>
                 <div class="text-xs text-muted-foreground">{{ stopListSyncStatusLabel }}</div>
               </div>
-              <Button v-if="canManageStopList" variant="secondary" :disabled="syncLoading" @click="syncStopListNow">
+              <Button v-if="canManageStopList && isIikoIntegrationEnabled" variant="secondary" :disabled="syncLoading" @click="syncStopListNow">
                 <RefreshCcw :size="16" />
                 {{ syncLoading ? "Синхронизация..." : "Синхронизировать стоп-лист" }}
               </Button>
@@ -416,6 +416,7 @@ const page = ref(1);
 const pageSize = ref(20);
 const reasons = ref([]);
 const stopListSyncInfo = ref(null);
+const isIikoIntegrationEnabled = ref(true);
 const showModal = ref(false);
 const saving = ref(false);
 const syncLoading = ref(false);
@@ -691,6 +692,14 @@ const loadReasons = async () => {
     reasons.value = [];
   }
 };
+const loadIntegrationSettings = async () => {
+  try {
+    const response = await api.get("/api/admin/integrations/settings");
+    isIikoIntegrationEnabled.value = Boolean(response.data?.settings?.iiko_enabled);
+  } catch (error) {
+    devError("Failed to load integration settings:", error);
+  }
+};
 const loadModifiers = async () => {
   loadingModifiers.value = true;
   try {
@@ -920,7 +929,7 @@ const removeFromStopList = async (item) => {
   }
 };
 const syncStopListNow = async () => {
-  if (!canManageStopList.value) return;
+  if (!canManageStopList.value || !isIikoIntegrationEnabled.value) return;
   syncLoading.value = true;
   try {
     const previousLogId = Number(stopListSyncInfo.value?.id || 0);
@@ -956,7 +965,8 @@ const syncStopListNow = async () => {
 onMounted(async () => {
   try {
     await referenceStore.fetchCitiesAndBranches();
-    await Promise.all([loadReasons(), loadStopListSyncInfo()]);
+    await loadIntegrationSettings();
+    await Promise.all([loadReasons(), ...(isIikoIntegrationEnabled.value ? [loadStopListSyncInfo()] : [])]);
     if (shouldRestore.value) {
       const context = restoreContext();
       if (context) {
