@@ -280,6 +280,7 @@ const calendarMonths = ref(getCalendarMonthCount());
 const filters = reactive({
   search: "",
   city_id: "",
+  phone_filter: "with_phone",
   birthday_from: "",
   birthday_to: "",
   registration_from: "",
@@ -321,6 +322,18 @@ const filterFields = computed(() => [
         value: String(city.id),
         label: city.name,
       })),
+    ],
+  },
+  {
+    key: "phone_filter",
+    label: "Телефон",
+    placeholder: "Только с номером",
+    type: "select",
+    defaultValue: "with_phone",
+    options: [
+      { value: "with_phone", label: "Только с номером" },
+      { value: "without_phone", label: "Без номера" },
+      { value: "all", label: "Все" },
     ],
   },
 ]);

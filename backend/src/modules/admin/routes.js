@@ -671,6 +671,7 @@ router.get("/clients", requireRole("admin", "manager", "ceo"), async (req, res, 
     const {
       search,
       city_id,
+      phone_filter,
       orders_count_from,
       orders_count_to,
       birthday_from,
@@ -700,6 +701,19 @@ router.get("/clients", requireRole("admin", "manager", "ceo"), async (req, res, 
     let ordersAggregateScopeClause = "";
     const ordersAggregateScopeParams = [];
     const requestedCityId = city_id !== undefined && city_id !== null && city_id !== "" ? Number(city_id) : null;
+    const normalizedPhoneFilter = String(phone_filter || "with_phone")
+      .trim()
+      .toLowerCase();
+
+    if (!["with_phone", "without_phone", "all"].includes(normalizedPhoneFilter)) {
+      return res.status(400).json({ error: "Invalid phone_filter" });
+    }
+
+    if (normalizedPhoneFilter === "without_phone") {
+      whereClause += " AND (u.phone IS NULL OR TRIM(u.phone) = '')";
+    } else if (normalizedPhoneFilter === "with_phone") {
+      whereClause += " AND (u.phone IS NOT NULL AND TRIM(u.phone) <> '')";
+    }
 
     if (requestedCityId !== null && (!Number.isInteger(requestedCityId) || requestedCityId <= 0)) {
       return res.status(400).json({ error: "Invalid city_id" });
