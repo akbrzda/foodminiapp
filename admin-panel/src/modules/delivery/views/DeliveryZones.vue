@@ -452,6 +452,7 @@ import PageHeader from "@/shared/components/PageHeader.vue";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
 import { useListContext } from "@/shared/composables/useListContext.js";
 import { loadYandexMaps } from "@/shared/services/yandexMaps.js";
+import { buildPolygonBalloonContent } from "@/shared/utils/polygonBalloon.js";
 
 const MAP_DANGER = "#ef4444";
 const hexToRgba = (hex, alpha) => {
@@ -1294,43 +1295,13 @@ const renderPolygonsOnMap = () => {
       }
       openPolygonSidebar(polygon);
     });
-    let statusBadge = "";
-    if (isPolygonBlocked(polygon)) {
-      statusBadge =
-        '<span style="display:inline-flex;align-items:center;gap:6px;background:rgba(239,68,68,0.12);color:#b91c1c;padding:4px 8px;border-radius:999px;font-size:11px;font-weight:600;line-height:1.1;">Заблокирован</span>';
-    } else if (!polygon.is_active) {
-      statusBadge =
-        '<span style="display:inline-flex;align-items:center;gap:6px;background:rgba(148,163,184,0.18);color:#475569;padding:4px 8px;border-radius:999px;font-size:11px;font-weight:600;line-height:1.1;">Неактивен</span>';
-    }
-    const polygonName = polygon.name || `Полигон #${polygon.id}`;
-    const branchName = polygon.branch_name || "Филиал не указан";
-    const minOrderLabel = Number(polygon.tariffs_count || 0) > 0 ? "по тарифам" : `${Number(polygon.min_order_amount || 0)} ₽`;
-    const deliveryCostLabel = Number(polygon.tariffs_count || 0) > 0 ? "по тарифам" : `${Number(polygon.delivery_cost || 0)} ₽`;
-    const popupContent = `
-      <div style="min-width:260px;max-width:320px;padding:2px 2px 0;font-family:Montserrat,Arial,sans-serif;">
-        <div style="font-size:17px;font-weight:700;line-height:1.25;color:#111827;letter-spacing:-0.01em;">${polygonName}</div>
-        <div style="margin-top:4px;font-size:12px;line-height:1.3;color:#6b7280;">${branchName}</div>
-        <div style="margin-top:10px;display:grid;gap:6px;">
-          <div style="display:flex;justify-content:space-between;gap:12px;font-size:13px;line-height:1.25;color:#4b5563;">
-            <span style="color:#6b7280;">Время доставки</span>
-            <span style="font-weight:600;color:#111827;">${polygon.delivery_time || 30} мин</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;gap:12px;font-size:13px;line-height:1.25;color:#4b5563;">
-            <span style="color:#6b7280;">Мин. заказ</span>
-            <span style="font-weight:600;color:#111827;">${minOrderLabel}</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;gap:12px;font-size:13px;line-height:1.25;color:#4b5563;">
-            <span style="color:#6b7280;">Доставка</span>
-            <span style="font-weight:600;color:#111827;">${deliveryCostLabel}</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;gap:12px;font-size:13px;line-height:1.25;color:#4b5563;">
-            <span style="color:#6b7280;">Тарифы</span>
-            <span style="font-weight:600;color:#111827;">${Number(polygon.tariffs_count || 0)} шт.</span>
-          </div>
-        </div>
-        ${statusBadge ? `<div style="margin-top:10px;">${statusBadge}</div>` : ""}
-      </div>
-    `;
+    const popupContent = buildPolygonBalloonContent(polygon, {
+      fallbackName: "Полигон",
+      fallbackBranchName: "Филиал не указан",
+      useTariffBasedLabels: true,
+      isBlocked: isPolygonBlocked(polygon),
+      isInactive: !polygon.is_active,
+    });
     layer.properties.set("balloonContentBody", popupContent);
     map.geoObjects.add(layer);
     renderedPolygonLayers.push(layer);
