@@ -18,22 +18,16 @@
     />
     <div class="absolute left-2 right-2 top-2 z-10 md:hidden">
       <div class="space-y-2 rounded-xl border border-border bg-background/95 p-2 shadow-lg backdrop-blur">
-        <div class="grid grid-cols-2 gap-2">
+        <div class="grid grid-cols-1 gap-2">
           <Button variant="secondary" size="sm" class="w-full" @click="showMobileFilters = true">
             <SlidersHorizontal :size="16" />
             Фильтры
-          </Button>
-          <Button variant="secondary" size="sm" class="w-full" @click="showMobilePolygonList = true">
-            <List :size="16" />
-            Список зон
           </Button>
         </div>
         <div class="text-[11px] text-muted-foreground">
           <span class="font-medium text-foreground">{{ activeCityName }}</span>
           <span> · </span>
-          <span>{{ activeBranchName }}</span>
-          <span> · </span>
-          <span>{{ statusFilterLabel }}</span>
+          <span>{{ polygonFilterLabel }}</span>
         </div>
       </div>
     </div>
@@ -41,27 +35,7 @@
       class="absolute left-4 top-4 z-10 hidden w-[360px] max-w-[calc(100%-2rem)] rounded-xl border border-border bg-background/95 shadow-xl backdrop-blur md:block"
     >
       <div class="p-4 space-y-4">
-        <div class="grid grid-cols-2 gap-2">
-          <button
-            type="button"
-            class="rounded-lg border px-3 py-2 text-sm font-medium transition"
-            :class="leftTab === 'zones' ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:text-foreground'"
-            @click="leftTab = 'zones'"
-          >
-            Зоны доставки
-          </button>
-          <button
-            type="button"
-            class="rounded-lg border px-3 py-2 text-sm font-medium transition"
-            :class="
-              leftTab === 'addresses' ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:text-foreground'
-            "
-            @click="leftTab = 'addresses'"
-          >
-            Адреса
-          </button>
-        </div>
-        <div v-if="leftTab === 'zones'" class="space-y-4">
+        <div class="space-y-4">
           <PageHeader title="Зоны доставки" description="Управление зонами доставки и фильтры" />
           <div class="space-y-3">
             <Field>
@@ -83,16 +57,16 @@
             </Field>
             <Field v-if="cityId">
               <FieldContent>
-                <Select v-model="branchId" @update:modelValue="onBranchChange">
+                <Select v-model="polygonFilterId" @update:modelValue="onPolygonFilterChange">
                   <SelectTrigger class="w-full">
-                    <span class="truncate text-start" :class="!branchId ? 'text-muted-foreground' : ''">
-                      {{ branchFilterTriggerLabel }}
+                    <span class="truncate text-start" :class="!polygonFilterId ? 'text-muted-foreground' : ''">
+                      {{ polygonFilterTriggerLabel }}
                     </span>
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="">Все</SelectItem>
-                    <SelectItem v-for="branch in branches" :key="branch.id" :value="branch.id">
-                      {{ branch.name }}
+                    <SelectItem v-for="polygon in polygonsForSelect" :key="polygon.id" :value="String(polygon.id)">
+                      {{ polygon.name || `Полигон #${polygon.id}` }}
                     </SelectItem>
                   </SelectContent>
                 </Select>
@@ -118,33 +92,26 @@
           </div>
           <div class="pt-3 border-t border-border">
             <p class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-2">Легенда</p>
-            <div class="space-y-1.5">
-              <div class="flex items-center gap-2 text-xs">
-                <div class="h-3 w-3 rounded-sm border border-[#FFD200] bg-[#FFD200]/30"></div>
-                <span class="text-foreground">Активные</span>
-              </div>
-              <div class="flex items-center gap-2 text-xs">
-                <div class="h-3 w-3 rounded-sm border border-gray-400 bg-gray-400/30"></div>
-                <span class="text-foreground">Неактивные</span>
-              </div>
-              <div class="flex items-center gap-2 text-xs">
-                <div class="h-3 w-3 rounded-sm border border-red-500 bg-red-500/30"></div>
-                <span class="text-foreground">Заблокированные</span>
+            <div v-if="branchLegendItems.length" class="space-y-1.5">
+              <div v-for="item in branchLegendItems" :key="item.branchId" class="flex items-center gap-2 text-xs">
+                <div class="h-3 w-3 rounded-sm border" :style="{ borderColor: item.stroke, backgroundColor: item.fill }"></div>
+                <span class="text-foreground">{{ item.branchName }}</span>
               </div>
             </div>
+            <p v-else class="text-xs text-muted-foreground">Выберите город, чтобы увидеть распределение филиалов.</p>
           </div>
-          <div v-if="branchId" class="pt-3 border-t border-border">
+          <div v-if="cityId" class="pt-3 border-t border-border">
             <div v-if="canManageDeliveryZones" class="space-y-2">
-              <Button class="w-full" size="sm" @click="startDrawing">
+              <Button class="w-full" size="sm" :disabled="!activeBranchIdForActions" @click="startDrawing">
                 <Plus :size="16" />
                 Добавить полигон
               </Button>
               <div class="grid grid-cols-2 gap-2">
-                <Button variant="outline" size="sm" @click="triggerGeoJsonImport">
+                <Button variant="outline" size="sm" :disabled="!activeBranchIdForActions" @click="triggerGeoJsonImport">
                   <Upload :size="16" />
                   Импорт
                 </Button>
-                <Button variant="outline" size="sm" :disabled="!polygons.length || geoJsonExporting" @click="exportGeoJson">
+                <Button variant="outline" size="sm" :disabled="!activeBranchPolygons.length || geoJsonExporting" @click="exportGeoJson">
                   <Download :size="16" />
                   Экспорт
                 </Button>
@@ -156,64 +123,22 @@
             {{ filteredPolygons.length }} {{ getPluralForm(filteredPolygons.length) }}
           </div>
           <div class="space-y-2 border-t border-border pt-3">
-            <div class="flex items-center justify-between">
-              <p class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Список зон</p>
-              <button
-                v-if="selectedPolygons.length"
-                type="button"
-                class="text-xs text-primary transition hover:underline"
-                @click="selectedPolygons = []"
-              >
-                Сбросить выбор
-              </button>
-            </div>
-            <div
-              v-if="!filteredPolygons.length"
-              class="rounded-lg border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground"
-            >
-              {{ listEmptyStateLabel }}
-            </div>
-            <div v-else class="max-h-60 space-y-2 overflow-y-auto pr-1">
-              <div
-                v-for="polygon in filteredPolygons"
-                :key="polygon.id"
-                class="rounded-lg border border-border bg-card/50 px-3 py-2 transition hover:bg-muted/40"
-              >
-                <div class="flex items-start gap-2">
-                  <input
-                    type="checkbox"
-                    class="mt-0.5 h-4 w-4 rounded border-border text-primary focus:ring-primary"
-                    :checked="selectedPolygons.includes(polygon.id)"
-                    :disabled="!canToggleDeliveryZones"
-                    @change="togglePolygonSelection(polygon.id)"
-                  />
-                  <button type="button" class="min-w-0 flex-1 text-left" @click="focusPolygonOnMap(polygon, true)">
-                    <p class="truncate text-sm font-semibold text-foreground">{{ polygon.name || `Полигон #${polygon.id}` }}</p>
-                    <p class="truncate text-[11px] text-muted-foreground">{{ polygon.branch_name || "Без филиала" }}</p>
-                    <div class="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
-                      <span>{{ polygon.delivery_time || 30 }} мин</span>
-                      <span>·</span>
-                      <span>Тарифов: {{ Number(polygon.tariffs_count || 0) }}</span>
-                    </div>
-                  </button>
-                  <span class="rounded-full px-2 py-0.5 text-[10px] font-semibold" :class="getPolygonStatusClass(polygon)">
-                    {{ getPolygonStatusLabel(polygon) }}
-                  </span>
-                </div>
-              </div>
-            </div>
-            <div v-if="selectedPolygons.length && canToggleDeliveryZones" class="grid grid-cols-2 gap-2 pt-1">
-              <Button size="sm" variant="outline" @click="bulkBlock">Блок. ({{ selectedPolygons.length }})</Button>
-              <Button size="sm" variant="outline" @click="bulkUnblock">Разблок.</Button>
+            <div v-if="canToggleDeliveryZones" class="grid gap-2">
+              <Button size="sm" variant="outline" @click="activateBulkMode('transfer')">Групповое переключение</Button>
+              <Button size="sm" variant="outline" @click="activateBulkMode('block')">Групповая блокировка</Button>
             </div>
           </div>
         </div>
-        <div v-else class="space-y-2 text-sm text-muted-foreground">
-          <p>Раздел адресов появится в следующем обновлении.</p>
-        </div>
       </div>
     </div>
-    <Button v-if="branchId && canManageDeliveryZones" type="button" size="sm" class="absolute bottom-4 left-2 z-10 md:hidden" @click="startDrawing">
+    <Button
+      v-if="cityId && canManageDeliveryZones"
+      type="button"
+      size="sm"
+      class="absolute bottom-4 left-2 z-10 md:hidden"
+      :disabled="!activeBranchIdForActions"
+      @click="startDrawing"
+    >
       <Plus :size="16" />
       Добавить полигон
     </Button>
@@ -221,7 +146,7 @@
       <DialogContent class="w-full max-w-2xl">
         <DialogHeader>
           <DialogTitle>Фильтры зон доставки</DialogTitle>
-          <DialogDescription>Выберите город, филиал и статус отображения.</DialogDescription>
+          <DialogDescription>Выберите город, полигон и статус отображения.</DialogDescription>
         </DialogHeader>
         <div class="space-y-3">
           <Field>
@@ -243,16 +168,16 @@
           </Field>
           <Field v-if="cityId">
             <FieldContent>
-              <Select v-model="branchId" @update:modelValue="onBranchChange">
+              <Select v-model="polygonFilterId" @update:modelValue="onPolygonFilterChange">
                 <SelectTrigger class="w-full">
-                  <span class="truncate text-start" :class="!branchId ? 'text-muted-foreground' : ''">
-                    {{ branchFilterTriggerLabel }}
+                  <span class="truncate text-start" :class="!polygonFilterId ? 'text-muted-foreground' : ''">
+                    {{ polygonFilterTriggerLabel }}
                   </span>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="">Все</SelectItem>
-                  <SelectItem v-for="branch in branches" :key="branch.id" :value="branch.id">
-                    {{ branch.name }}
+                  <SelectItem v-for="polygon in polygonsForSelect" :key="polygon.id" :value="String(polygon.id)">
+                    {{ polygon.name || `Полигон #${polygon.id}` }}
                   </SelectItem>
                 </SelectContent>
               </Select>
@@ -275,49 +200,78 @@
               </Select>
             </FieldContent>
           </Field>
-          <div v-if="branchId && canManageDeliveryZones" class="grid grid-cols-2 gap-2 border-t border-border pt-3">
-            <Button variant="outline" size="sm" @click="triggerGeoJsonImport">
+          <div v-if="cityId && canManageDeliveryZones" class="grid grid-cols-2 gap-2 border-t border-border pt-3">
+            <Button variant="outline" size="sm" :disabled="!activeBranchIdForActions" @click="triggerGeoJsonImport">
               <Upload :size="16" />
               Импорт
             </Button>
-            <Button variant="outline" size="sm" :disabled="!polygons.length || geoJsonExporting" @click="exportGeoJson">
+            <Button variant="outline" size="sm" :disabled="!activeBranchPolygons.length || geoJsonExporting" @click="exportGeoJson">
               <Download :size="16" />
               Экспорт
             </Button>
           </div>
+          <div class="grid grid-cols-2 gap-2 border-t border-border pt-3">
+            <Button size="sm" variant="outline" @click="activateBulkMode('transfer')">Групповое переключение</Button>
+            <Button size="sm" variant="outline" @click="activateBulkMode('block')">Групповая блокировка</Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
-    <Dialog v-if="showMobilePolygonList" :open="showMobilePolygonList" @update:open="(value) => (showMobilePolygonList = value)">
-      <DialogContent class="w-full max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Зоны доставки</DialogTitle>
-          <DialogDescription>
-            {{ filteredPolygons.length }} {{ getPluralForm(filteredPolygons.length) }} · {{ statusFilterLabel }}
-          </DialogDescription>
-        </DialogHeader>
-        <div class="space-y-2">
-          <div
-            v-if="!filteredPolygons.length"
-            class="rounded-lg border border-dashed border-border px-3 py-5 text-center text-sm text-muted-foreground"
-          >
-            {{ listEmptyStateLabel }}
+    <div
+      v-if="isBulkModeActive"
+      class="absolute right-4 top-4 bottom-4 z-20 w-[360px] max-w-[calc(100%-2rem)] overflow-hidden rounded-xl border border-border bg-background/95 shadow-xl backdrop-blur flex flex-col"
+    >
+      <div class="flex items-center justify-between border-b border-border px-4 py-3">
+        <div class="min-w-0">
+          <p class="truncate text-lg font-semibold text-foreground">{{ bulkModeTitle }}</p>
+          <p class="text-xs text-muted-foreground">Выбрано: {{ selectedPolygons.length }} {{ getPluralForm(selectedPolygons.length) }}</p>
+        </div>
+        <Button variant="ghost" size="icon" class="h-8 w-8" @click="closeBulkMode"> ✕ </Button>
+      </div>
+      <div class="flex-1 space-y-3 overflow-y-auto px-4 py-3">
+        <div v-if="bulkSelectedPolygons.length" class="space-y-1.5">
+          <div v-for="polygon in bulkSelectedPolygons" :key="polygon.id" class="flex items-center justify-between gap-2 text-sm">
+            <span class="truncate text-foreground">{{ polygon.name || `Полигон #${polygon.id}` }}</span>
+            <button type="button" class="text-destructive transition hover:opacity-80" @click="removeSelectedPolygon(polygon.id)">✕</button>
           </div>
-          <div v-else class="max-h-[60dvh] space-y-2 overflow-y-auto pr-1">
-            <div v-for="polygon in filteredPolygons" :key="polygon.id" class="rounded-lg border border-border bg-card px-3 py-2">
-              <div class="flex items-start justify-between gap-3">
-                <button type="button" class="min-w-0 flex-1 text-left" @click="focusPolygonOnMap(polygon, true)">
-                  <p class="truncate text-sm font-semibold text-foreground">{{ polygon.name || `Полигон #${polygon.id}` }}</p>
-                  <p class="truncate text-xs text-muted-foreground">{{ polygon.branch_name || "Без филиала" }}</p>
-                  <p class="mt-1 text-[11px] text-muted-foreground">
-                    Время: {{ polygon.delivery_time || 30 }} мин · Тарифов: {{ Number(polygon.tariffs_count || 0) }}
-                  </p>
-                </button>
-                <span class="rounded-full px-2 py-0.5 text-[10px] font-semibold" :class="getPolygonStatusClass(polygon)">
-                  {{ getPolygonStatusLabel(polygon) }}
-                </span>
-              </div>
-            </div>
+        </div>
+        <p v-else class="text-sm text-muted-foreground">Выберите полигоны для {{ bulkMode === "transfer" ? "переключения" : "блокировки" }}.</p>
+      </div>
+      <div class="border-t border-border px-4 py-3">
+        <Button class="w-full" :disabled="!selectedPolygons.length" @click="submitBulkModeAction">
+          {{ bulkModeActionLabel }}
+        </Button>
+      </div>
+    </div>
+    <Dialog v-if="showBulkTransferDialog" :open="showBulkTransferDialog" @update:open="(value) => (value ? null : closeBulkTransferDialog())">
+      <DialogContent class="w-full max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Групповое переключение</DialogTitle>
+          <DialogDescription
+            >Выберите филиал для переноса {{ selectedPolygons.length }} {{ getPluralForm(selectedPolygons.length) }}.</DialogDescription
+          >
+        </DialogHeader>
+        <div class="space-y-4">
+          <Field>
+            <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Целевой филиал</FieldLabel>
+            <FieldContent>
+              <Select v-model="bulkTransferBranchId">
+                <SelectTrigger class="w-full">
+                  <SelectValue placeholder="Выберите филиал" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem v-for="branch in branches" :key="branch.id" :value="String(branch.id)">
+                    {{ branch.name }}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </FieldContent>
+          </Field>
+          <div class="flex gap-2">
+            <Button type="button" variant="outline" class="flex-1" :disabled="bulkTransferSaving" @click="closeBulkTransferDialog">Отмена</Button>
+            <Button type="button" class="flex-1" :disabled="!bulkTransferBranchId || bulkTransferSaving" @click="submitBulkTransfer">
+              {{ bulkTransferSaving ? "Переключение..." : "Переключить" }}
+            </Button>
           </div>
         </div>
       </DialogContent>
@@ -479,7 +433,7 @@
 <script setup>
 import { devError } from "@/shared/utils/logger";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
-import { Download, List, Lock, Minus, Plus, Save, SlidersHorizontal, Upload } from "lucide-vue-next";
+import { Download, Lock, Minus, Plus, Save, SlidersHorizontal, Upload } from "lucide-vue-next";
 import { parseDate as parseCalendarDate } from "@internationalized/date";
 import api from "@/shared/api/client.js";
 import PolygonSidebar from "@/shared/components/PolygonSidebar.vue";
@@ -499,29 +453,24 @@ import { useNotifications } from "@/shared/composables/useNotifications.js";
 import { useListContext } from "@/shared/composables/useListContext.js";
 import { loadYandexMaps } from "@/shared/services/yandexMaps.js";
 
-const MAP_ACCENT = "#ffd200";
-const MAP_ACCENT_FILL = "rgba(255, 210, 0, 0.26)";
 const MAP_DANGER = "#ef4444";
-const MAP_MUTED = "#9ca3af";
-
-const createAdminPointMarkerSvg = (label = "Я") =>
-  `
-<svg xmlns="http://www.w3.org/2000/svg" width="48" height="73" viewBox="0 0 48 73">
-  <line x1="24" y1="36" x2="24" y2="61" stroke="#111827" stroke-width="3" stroke-linecap="round"/>
-  <circle cx="24" cy="24" r="24" fill="#111827"/>
-  <text x="24" y="31" text-anchor="middle" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="18" font-weight="700">${label}</text>
-</svg>`.trim();
-
-const createAdminPointMarkerOptions = (label = "Я") => {
-  const svg = createAdminPointMarkerSvg(label);
-  const href = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
-  return {
-    iconLayout: "default#image",
-    iconImageHref: href,
-    iconImageSize: [48, 73],
-    iconImageOffset: [-24, -61],
-  };
+const hexToRgba = (hex, alpha) => {
+  const cleaned = String(hex || "").replace("#", "");
+  if (![3, 6].includes(cleaned.length)) return `rgba(34, 197, 94, ${alpha})`;
+  const normalized =
+    cleaned.length === 3
+      ? cleaned
+          .split("")
+          .map((char) => `${char}${char}`)
+          .join("")
+      : cleaned;
+  const int = Number.parseInt(normalized, 16);
+  const r = (int >> 16) & 255;
+  const g = (int >> 8) & 255;
+  const b = int & 255;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 };
+
 const referenceStore = useReferenceStore();
 const authStore = useAuthStore();
 const route = useRoute();
@@ -530,21 +479,22 @@ const { showErrorNotification, showSuccessNotification, showWarningNotification 
 const { shouldRestore, saveContext, restoreContext, restoreScroll } = useListContext("delivery-zones");
 const isManager = computed(() => authStore.scopeRole === "manager");
 const canManageDeliveryZones = computed(() => authStore.hasPermission("locations.delivery_zones.manage"));
-const canToggleDeliveryZones = computed(() =>
-  authStore.hasAnyPermission(["locations.delivery_zones.manage", "locations.delivery_zones.toggle"]),
-);
+const canToggleDeliveryZones = computed(() => authStore.hasAnyPermission(["locations.delivery_zones.manage", "locations.delivery_zones.toggle"]));
 const cityId = ref("");
 const branchId = ref("");
+const polygonFilterId = ref("");
 const branches = ref([]);
-const polygons = ref([]);
 const allPolygons = ref([]);
 const showModal = ref(false);
 const showBlockModalWindow = ref(false);
+const showBulkTransferDialog = ref(false);
+const bulkTransferSaving = ref(false);
+const bulkTransferBranchId = ref("");
+const mapSelectionMode = ref(false);
+const bulkMode = ref("");
 const editing = ref(null);
 const blockingPolygon = ref(null);
-const leftTab = ref("zones");
 const showMobileFilters = ref(false);
-const showMobilePolygonList = ref(false);
 const form = ref({
   name: "",
   delivery_time: 30,
@@ -602,10 +552,19 @@ const geoJsonImportFileName = ref("");
 const geoJsonImportItems = ref([]);
 const geoJsonImportSaving = ref(false);
 const geoJsonExporting = ref(false);
+const BRANCH_COLOR_PALETTE = [
+  { stroke: "#22c55e", fill: "rgba(34, 197, 94, 0.28)" },
+  { stroke: "#06b6d4", fill: "rgba(6, 182, 212, 0.28)" },
+  { stroke: "#f97316", fill: "rgba(249, 115, 22, 0.28)" },
+  { stroke: "#3b82f6", fill: "rgba(59, 130, 246, 0.28)" },
+  { stroke: "#f59e0b", fill: "rgba(245, 158, 11, 0.28)" },
+  { stroke: "#ef4444", fill: "rgba(239, 68, 68, 0.22)" },
+  { stroke: "#14b8a6", fill: "rgba(20, 184, 166, 0.28)" },
+  { stroke: "#84cc16", fill: "rgba(132, 204, 22, 0.28)" },
+];
 const availableTariffSources = computed(() => {
   if (!selectedPolygon.value) return [];
-  const pool = allPolygons.value.length ? allPolygons.value : polygons.value;
-  return pool.filter(
+  return allPolygons.value.filter(
     (polygon) =>
       polygon.branch_id === selectedPolygon.value.branch_id && polygon.id !== selectedPolygon.value.id && Number(polygon.tariffs_count || 0) > 0,
   );
@@ -613,7 +572,6 @@ const availableTariffSources = computed(() => {
 let map = null;
 let yandexMaps = null;
 let currentLayer = null;
-let branchMarker = null;
 const polygonLayers = new Map();
 const renderedPolygonLayers = [];
 const importPreviewLayers = [];
@@ -637,23 +595,76 @@ const ensureToggleAccess = (message) => {
   showWarningNotification(message || "Недостаточно прав для выполнения действия");
   return false;
 };
-const filteredPolygons = computed(() => {
-  const polygonsList = branchId.value
-    ? polygons.value
-    : cityId.value
-      ? allPolygons.value.filter((polygon) => polygon.city_id === parseInt(cityId.value))
-      : allPolygons.value;
-  if (statusFilter.value === "all") {
-    return polygonsList;
-  } else if (statusFilter.value === "active") {
-    return polygonsList.filter((p) => p.is_active && !isPolygonBlocked(p));
-  } else if (statusFilter.value === "inactive") {
-    return polygonsList.filter((p) => !p.is_active);
-  } else if (statusFilter.value === "blocked") {
-    return polygonsList.filter((p) => isPolygonBlocked(p));
-  }
-  return polygonsList;
+const cityPolygons = computed(() => {
+  if (!cityId.value) return [];
+  return allPolygons.value.filter((polygon) => polygon.city_id === parseInt(cityId.value, 10));
 });
+const statusFilteredPolygons = computed(() => {
+  if (statusFilter.value === "all") {
+    return cityPolygons.value;
+  } else if (statusFilter.value === "active") {
+    return cityPolygons.value.filter((polygon) => polygon.is_active && !isPolygonBlocked(polygon));
+  } else if (statusFilter.value === "inactive") {
+    return cityPolygons.value.filter((polygon) => !polygon.is_active);
+  } else if (statusFilter.value === "blocked") {
+    return cityPolygons.value.filter((polygon) => isPolygonBlocked(polygon));
+  }
+  return cityPolygons.value;
+});
+const polygonsForSelect = computed(() =>
+  statusFilteredPolygons.value
+    .slice()
+    .sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), "ru"))
+    .map((polygon) => ({
+      ...polygon,
+      branch_name: polygon.branch_name || branches.value.find((branch) => branch.id === polygon.branch_id)?.name || "Без филиала",
+    })),
+);
+const filteredPolygons = computed(() => {
+  return statusFilteredPolygons.value;
+});
+const activeBranchIdForActions = computed(() => {
+  const polygonByFilter = filteredPolygons.value.find((polygon) => String(polygon.id) === String(polygonFilterId.value));
+  if (polygonByFilter?.branch_id) return String(polygonByFilter.branch_id);
+  if (selectedPolygon.value?.branch_id) return String(selectedPolygon.value.branch_id);
+  if (branchId.value) return String(branchId.value);
+  if (branches.value.length === 1) return String(branches.value[0].id);
+  return "";
+});
+const activeBranchPolygons = computed(() => {
+  if (!activeBranchIdForActions.value) return [];
+  return cityPolygons.value.filter((polygon) => String(polygon.branch_id) === String(activeBranchIdForActions.value));
+});
+const branchColorById = computed(() => {
+  const mapById = new Map();
+  cityPolygons.value
+    .map((polygon) => Number(polygon.branch_id))
+    .filter(Number.isFinite)
+    .sort((a, b) => a - b)
+    .forEach((branchNumericId, index) => {
+      mapById.set(branchNumericId, BRANCH_COLOR_PALETTE[index % BRANCH_COLOR_PALETTE.length]);
+    });
+  return mapById;
+});
+const branchLegendItems = computed(() =>
+  Array.from(new Set(cityPolygons.value.map((polygon) => Number(polygon.branch_id)).filter(Number.isFinite)))
+    .sort((a, b) => a - b)
+    .map((branchNumericId) => {
+      const color = branchColorById.value.get(branchNumericId) || BRANCH_COLOR_PALETTE[0];
+      const branch = branches.value.find((item) => Number(item.id) === branchNumericId);
+      return {
+        branchId: branchNumericId,
+        branchName: branch?.name || `Филиал #${branchNumericId}`,
+        stroke: color.stroke,
+        fill: color.fill,
+      };
+    }),
+);
+const getBranchColor = (branchIdValue) => {
+  const numeric = Number(branchIdValue);
+  if (!Number.isFinite(numeric)) return BRANCH_COLOR_PALETTE[0];
+  return branchColorById.value.get(numeric) || BRANCH_COLOR_PALETTE[numeric % BRANCH_COLOR_PALETTE.length];
+};
 const activeCityName = computed(() => {
   if (!cityId.value) return "Все города";
   return referenceStore.cities.find((city) => city.id === parseInt(cityId.value, 10))?.name || "Город не выбран";
@@ -663,16 +674,21 @@ const cityFilterTriggerLabel = computed(() => {
   const cityName = referenceStore.cities.find((city) => city.id === parseInt(cityId.value, 10))?.name;
   return `Город: ${cityName || "—"}`;
 });
-const activeBranchName = computed(() => {
-  if (!cityId.value) return "Выберите город";
-  if (!branchId.value) return "Все филиалы";
-  return branches.value.find((branch) => branch.id === parseInt(branchId.value, 10))?.name || "Филиал не выбран";
+const polygonFilterLabel = computed(() => {
+  if (!polygonFilterId.value) return "Все зоны";
+  const polygon = polygonsForSelect.value.find((item) => String(item.id) === String(polygonFilterId.value));
+  return polygon?.name || "Полигон не выбран";
 });
-const branchFilterTriggerLabel = computed(() => {
-  if (!cityId.value) return "Филиал: Выберите город";
-  if (!branchId.value) return "Филиал: Все";
-  const branchName = branches.value.find((branch) => branch.id === parseInt(branchId.value, 10))?.name;
-  return `Филиал: ${branchName || "—"}`;
+const polygonFilterTriggerLabel = computed(() => {
+  if (!cityId.value) return "Полигон: выберите город";
+  if (!polygonFilterId.value) return "Полигон: Все";
+  const polygon = polygonsForSelect.value.find((item) => String(item.id) === String(polygonFilterId.value));
+  return `Полигон: ${polygon?.name || "—"}`;
+});
+const focusedPolygonId = computed(() => {
+  if (selectedPolygon.value?.id) return String(selectedPolygon.value.id);
+  if (polygonFilterId.value) return String(polygonFilterId.value);
+  return "";
 });
 const statusFilterLabel = computed(() => {
   if (statusFilter.value === "active") return "Активные";
@@ -687,10 +703,16 @@ const statusFilterTriggerLabel = computed(() => {
   if (statusFilter.value === "blocked") return "Статус: Заблокированные";
   return "Статус: —";
 });
-const listEmptyStateLabel = computed(() => {
-  if (!cityId.value) return "Выберите город для отображения зон";
-  if (!branchId.value) return "Выберите филиал, чтобы работать с зонами";
-  return "По текущим фильтрам зоны не найдены";
+const bulkTargetIds = computed(() => {
+  return selectedPolygons.value;
+});
+const bulkTargetCount = computed(() => bulkTargetIds.value.length);
+const isBulkModeActive = computed(() => bulkMode.value === "transfer" || bulkMode.value === "block");
+const bulkModeTitle = computed(() => (bulkMode.value === "transfer" ? "Групповое переключение" : "Групповая блокировка"));
+const bulkModeActionLabel = computed(() => (bulkMode.value === "transfer" ? "Переключить" : "Заблокировать"));
+const bulkSelectedPolygons = computed(() => {
+  const selectedIds = new Set(selectedPolygons.value.map((id) => Number(id)));
+  return allPolygons.value.filter((polygon) => selectedIds.has(Number(polygon.id)));
 });
 const loadBranches = async () => {
   if (!cityId.value) {
@@ -708,22 +730,6 @@ const loadBranches = async () => {
     if (requestId === branchesRequestId) {
       branches.value = [];
     }
-  }
-};
-const loadPolygons = async () => {
-  if (!branchId.value) {
-    polygons.value = [];
-    return;
-  }
-  try {
-    const response = await api.get(`/api/polygons/admin/branch/${branchId.value}`);
-    const branchName = branches.value.find((branch) => branch.id === parseInt(branchId.value))?.name || "";
-    polygons.value = (response.data.polygons || []).map((polygon) => ({
-      ...polygon,
-      branch_name: polygon.branch_name || branchName,
-    }));
-  } catch (error) {
-    devError("Ошибка загрузки полигонов:", error);
   }
 };
 const loadAllPolygons = async () => {
@@ -748,7 +754,7 @@ const distanceSq = (a, b) => {
   return dLat * dLat + dLng * dLng;
 };
 const getReferenceCenter = () => {
-  const selectedBranch = branches.value.find((branch) => branch.id === parseInt(branchId.value, 10));
+  const selectedBranch = branches.value.find((branch) => String(branch.id) === String(activeBranchIdForActions.value));
   if (selectedBranch?.latitude && selectedBranch?.longitude) {
     return { lat: Number(selectedBranch.latitude), lng: Number(selectedBranch.longitude) };
   }
@@ -966,7 +972,9 @@ const convertFeatureToImportItems = (feature, index) => {
   const preferredOrder = resolveCoordinateOrder(feature?.properties?.coordinates_order || feature?.properties?.coordinate_order);
   if (geometry.type === "Polygon") {
     const ring = normalizePolygonRing(geometry.coordinates?.[0], referenceCenter, preferredOrder);
-    return ring ? [{ name: baseName, delivery_time: deliveryTime, min_order_amount: minOrderAmount, delivery_cost: deliveryCost, polygon: ring, tariffs }] : [];
+    return ring
+      ? [{ name: baseName, delivery_time: deliveryTime, min_order_amount: minOrderAmount, delivery_cost: deliveryCost, polygon: ring, tariffs }]
+      : [];
   }
   return (geometry.coordinates || [])
     .map((polygonCoords, partIndex) => {
@@ -993,8 +1001,33 @@ const closeGeoJsonImportDialog = () => {
     geoJsonInputRef.value.value = "";
   }
 };
+const closeBulkMode = () => {
+  bulkMode.value = "";
+  mapSelectionMode.value = false;
+  selectedPolygons.value = [];
+};
+const activateBulkMode = (mode) => {
+  if (!ensureToggleAccess("Недостаточно прав для групповых операций")) return;
+  if (showSidebar.value) {
+    closeSidebar();
+  }
+  bulkMode.value = mode;
+  mapSelectionMode.value = true;
+};
+const removeSelectedPolygon = (polygonId) => {
+  selectedPolygons.value = selectedPolygons.value.filter((id) => Number(id) !== Number(polygonId));
+};
+const submitBulkModeAction = () => {
+  if (bulkMode.value === "transfer") {
+    openBulkTransferDialog();
+    return;
+  }
+  if (bulkMode.value === "block") {
+    bulkBlock();
+  }
+};
 const triggerGeoJsonImport = () => {
-  if (!branchId.value || !geoJsonInputRef.value) return;
+  if (!activeBranchIdForActions.value || !geoJsonInputRef.value) return;
   geoJsonInputRef.value.click();
 };
 const handleGeoJsonFileChange = async (event) => {
@@ -1027,13 +1060,13 @@ const handleGeoJsonFileChange = async (event) => {
   }
 };
 const confirmGeoJsonImport = async () => {
-  if (!branchId.value || !geoJsonImportItems.value.length || geoJsonImportSaving.value) return;
+  if (!activeBranchIdForActions.value || !geoJsonImportItems.value.length || geoJsonImportSaving.value) return;
   geoJsonImportSaving.value = true;
   const total = geoJsonImportItems.value.length;
   try {
     for (const item of geoJsonImportItems.value) {
       const createResponse = await api.post("/api/polygons/admin", {
-        branch_id: parseInt(branchId.value, 10),
+        branch_id: parseInt(activeBranchIdForActions.value, 10),
         name: item.name,
         delivery_time: item.delivery_time,
         min_order_amount: item.min_order_amount,
@@ -1047,7 +1080,6 @@ const confirmGeoJsonImport = async () => {
         });
       }
     }
-    await loadPolygons();
     await loadAllPolygons();
     closeGeoJsonImportDialog();
     showSuccessNotification(`Импортировано полигонов: ${total}`);
@@ -1061,14 +1093,16 @@ const confirmGeoJsonImport = async () => {
 };
 const sanitizeFileName = (value) => value.replace(/[^a-zA-Z0-9а-яА-ЯёЁ_-]+/g, "_").replace(/^_+|_+$/g, "");
 const exportGeoJson = async () => {
-  if (!branchId.value || !polygons.value.length) {
+  if (!activeBranchIdForActions.value || !activeBranchPolygons.value.length) {
     showWarningNotification("Нет полигонов для экспорта");
     return;
   }
   geoJsonExporting.value = true;
   try {
-    const branchName = branches.value.find((branch) => branch.id === parseInt(branchId.value, 10))?.name || `branch_${branchId.value}`;
-    const polygonsForExport = polygons.value.filter(
+    const branchName =
+      branches.value.find((branch) => String(branch.id) === String(activeBranchIdForActions.value))?.name ||
+      `branch_${activeBranchIdForActions.value}`;
+    const polygonsForExport = activeBranchPolygons.value.filter(
       (polygon) => polygon?.polygon?.type === "Polygon" && Array.isArray(polygon?.polygon?.coordinates),
     );
     if (!polygonsForExport.length) {
@@ -1141,33 +1175,35 @@ const exportGeoJson = async () => {
     geoJsonExporting.value = false;
   }
 };
-const onCityChange = () => {
+const onCityChange = async () => {
   branchId.value = "";
-  polygons.value = [];
+  polygonFilterId.value = "";
   selectedPolygons.value = [];
-  showMobilePolygonList.value = false;
+  mapSelectionMode.value = false;
+  bulkMode.value = "";
   closeGeoJsonImportDialog();
-  loadBranches();
-  loadAllPolygons();
+  await loadBranches();
+  await loadAllPolygons();
   if (map) {
     map.destroy();
     map = null;
   }
   clearRenderedPolygons();
   clearGeoJsonImportPreview();
-  branchMarker = null;
   currentLayer = null;
-  nextTick(() => {
-    void initMap();
-  });
-};
-const onBranchChange = async () => {
-  polygons.value = [];
-  selectedPolygons.value = [];
-  closeGeoJsonImportDialog();
-  await loadPolygons();
   await nextTick();
   await initMap();
+};
+const onPolygonFilterChange = () => {
+  selectedPolygons.value = [];
+  if (!polygonFilterId.value) return;
+  const polygon = cityPolygons.value.find((item) => String(item.id) === String(polygonFilterId.value));
+  if (polygon?.branch_id) {
+    branchId.value = String(polygon.branch_id);
+  }
+  if (polygon) {
+    focusPolygonOnMap(polygon, true);
+  }
 };
 const zoomInMap = () => {
   if (!map) return;
@@ -1186,7 +1222,7 @@ const initMap = async () => {
   const container = document.getElementById("map");
   if (!container) return;
   let center = [55.751244, 37.618423];
-  const selectedBranch = branches.value.find((b) => b.id === parseInt(branchId.value));
+  const selectedBranch = branches.value.find((b) => String(b.id) === String(activeBranchIdForActions.value));
   if (selectedBranch?.latitude && selectedBranch?.longitude) {
     center = [selectedBranch.latitude, selectedBranch.longitude];
   } else if (cityId.value) {
@@ -1206,16 +1242,6 @@ const initMap = async () => {
       suppressMapOpenBlock: true,
     },
   );
-  if (selectedBranch) {
-    branchMarker = new ymaps.Placemark(
-      center,
-      {
-        balloonContentBody: `<strong>${selectedBranch.name}</strong><br>${selectedBranch.address || ""}`,
-      },
-      createAdminPointMarkerOptions("Я"),
-    );
-    map.geoObjects.add(branchMarker);
-  }
   renderPolygonsOnMap();
   renderGeoJsonImportPreview();
 };
@@ -1227,17 +1253,24 @@ const renderPolygonsOnMap = () => {
   const referenceCenter = getReferenceCenter();
   visiblePolygons.forEach((polygon) => {
     if (!polygon.polygon) return;
-    let color;
-    let fillOpacity;
+    const isFocused = focusedPolygonId.value && String(polygon.id) === focusedPolygonId.value;
+    const isSelectedForBulk = selectedPolygons.value.includes(polygon.id);
+    const branchColor = getBranchColor(polygon.branch_id);
+    let fillColor = branchColor.fill;
+    let strokeColor = branchColor.stroke;
+    let fillOpacity = 0.38;
     if (isPolygonBlocked(polygon)) {
-      color = MAP_DANGER;
-      fillOpacity = 0.3;
-    } else if (!polygon.is_active) {
-      color = MAP_MUTED;
+      strokeColor = MAP_DANGER;
       fillOpacity = 0.2;
-    } else {
-      color = MAP_ACCENT_FILL;
-      fillOpacity = 1;
+    } else if (!polygon.is_active) {
+      fillColor = "rgba(148, 163, 184, 0.22)";
+      strokeColor = branchColor.stroke;
+      fillOpacity = 0.22;
+    }
+    if (isFocused || isSelectedForBulk) {
+      fillColor = hexToRgba(branchColor.stroke, 0.68);
+      fillOpacity = 0.96;
+      strokeColor = branchColor.stroke;
     }
     const rawCoords = polygon.polygon?.coordinates?.[0];
     if (!rawCoords?.length) return;
@@ -1247,14 +1280,18 @@ const renderPolygonsOnMap = () => {
       [coords],
       {},
       {
-        strokeColor: MAP_ACCENT,
-        fillColor: color,
+        strokeColor,
+        fillColor,
         fillOpacity: isImportPreviewActive ? Math.min(fillOpacity, 0.08) : fillOpacity,
         strokeWidth: isImportPreviewActive ? 2 : 3,
-        opacity: isImportPreviewActive ? 0.35 : 0.9,
+        opacity: isImportPreviewActive ? 0.35 : isFocused ? 1 : 0.9,
       },
     );
     layer.events.add("click", () => {
+      if (mapSelectionMode.value && canToggleDeliveryZones.value) {
+        toggleMapPolygonSelection(polygon.id);
+        return;
+      }
       openPolygonSidebar(polygon);
     });
     let statusBadge = "";
@@ -1287,8 +1324,8 @@ const renderPolygonsOnMap = () => {
 const saveDeliveryZonesContext = () => {
   const additionalData = {
     branchId: branchId.value,
+    polygonFilterId: polygonFilterId.value,
     statusFilter: statusFilter.value,
-    leftTab: leftTab.value,
   };
   if (map) {
     const center = map.getCenter();
@@ -1297,12 +1334,16 @@ const saveDeliveryZonesContext = () => {
   saveContext({ cityId: cityId.value }, additionalData);
 };
 const startDrawing = () => {
-  if (!branchId.value) return;
+  const targetBranchId = activeBranchIdForActions.value;
+  if (!targetBranchId) {
+    showWarningNotification("Выберите полигон филиала, чтобы определить филиал для новой зоны");
+    return;
+  }
   if (!ensureEditAccess("Недостаточно прав для создания полигона")) return;
   saveDeliveryZonesContext();
   router.push({
     name: "delivery-zone-editor",
-    params: { branchId: branchId.value, polygonId: "new" },
+    params: { branchId: targetBranchId, polygonId: "new" },
     query: { cityId: cityId.value },
   });
 };
@@ -1311,7 +1352,7 @@ const editPolygon = (polygon) => {
   saveDeliveryZonesContext();
   router.push({
     name: "delivery-zone-editor",
-    params: { branchId: branchId.value, polygonId: polygon.id },
+    params: { branchId: polygon.branch_id, polygonId: polygon.id },
     query: { cityId: cityId.value },
   });
 };
@@ -1320,7 +1361,7 @@ const deletePolygon = async (polygon) => {
   if (!confirm("Удалить полигон?")) return;
   try {
     await api.delete(`/api/polygons/admin/${polygon.id}`);
-    await loadPolygons();
+    await loadAllPolygons();
   } catch (error) {
     devError("Ошибка удаления полигона:", error);
     showErrorNotification("Не удалось удалить полигон");
@@ -1352,7 +1393,6 @@ const focusPolygonOnMap = (polygon, openSidebar = false) => {
     }
   }
   if (openSidebar) {
-    showMobilePolygonList.value = false;
     openPolygonSidebar(polygon);
   }
 };
@@ -1407,10 +1447,11 @@ const submitBlock = async () => {
         ...payload,
       });
       selectedPolygons.value = [];
+      mapSelectionMode.value = false;
+      bulkMode.value = "";
     } else {
       await api.post(`/api/polygons/admin/${blockingPolygon.value.id}/block`, payload);
     }
-    await loadPolygons();
     await loadAllPolygons();
     closeBlockModal();
   } catch (error) {
@@ -1423,7 +1464,6 @@ const unblockPolygon = async (polygon) => {
   if (!confirm("Разблокировать полигон?")) return;
   try {
     await api.post(`/api/polygons/admin/${polygon.id}/unblock`);
-    await loadPolygons();
     await loadAllPolygons();
   } catch (error) {
     devError("Ошибка разблокировки полигона:", error);
@@ -1437,7 +1477,7 @@ const onFilterChange = () => {
     }
   });
 };
-const togglePolygonSelection = (polygonId) => {
+const toggleMapPolygonSelection = (polygonId) => {
   const index = selectedPolygons.value.indexOf(polygonId);
   if (index === -1) {
     selectedPolygons.value.push(polygonId);
@@ -1445,9 +1485,60 @@ const togglePolygonSelection = (polygonId) => {
     selectedPolygons.value.splice(index, 1);
   }
 };
+const openBulkTransferDialog = () => {
+  if (!ensureToggleAccess("Недостаточно прав для группового переключения зон")) return;
+  if (!bulkTargetCount.value) {
+    mapSelectionMode.value = true;
+    showWarningNotification("Выберите полигоны на карте для группового переключения");
+    return;
+  }
+  selectedPolygons.value = [...bulkTargetIds.value];
+  bulkTransferBranchId.value = "";
+  showBulkTransferDialog.value = true;
+};
+const closeBulkTransferDialog = () => {
+  showBulkTransferDialog.value = false;
+  bulkTransferBranchId.value = "";
+  bulkTransferSaving.value = false;
+};
+const submitBulkTransfer = async () => {
+  if (!bulkTransferBranchId.value || !selectedPolygons.value.length) return;
+  bulkTransferSaving.value = true;
+  try {
+    const results = await Promise.allSettled(
+      selectedPolygons.value.map((polygonId) =>
+        api.post(`/api/polygons/admin/${polygonId}/transfer`, {
+          new_branch_id: Number(bulkTransferBranchId.value),
+        }),
+      ),
+    );
+    const successCount = results.filter((result) => result.status === "fulfilled").length;
+    const failedCount = results.length - successCount;
+    await loadAllPolygons();
+    mapSelectionMode.value = false;
+    selectedPolygons.value = [];
+    bulkMode.value = "";
+    closeBulkTransferDialog();
+    if (failedCount > 0) {
+      showWarningNotification(`Перенесено: ${successCount}, ошибок: ${failedCount}`);
+    } else {
+      showSuccessNotification(`Перенесено: ${successCount}`);
+    }
+  } catch (error) {
+    devError("Ошибка группового переключения зон:", error);
+    showErrorNotification("Не удалось выполнить групповое переключение");
+  } finally {
+    bulkTransferSaving.value = false;
+  }
+};
 const bulkBlock = () => {
   if (!ensureToggleAccess("Недостаточно прав для блокировки зон доставки")) return;
-  if (selectedPolygons.value.length === 0) return;
+  if (!bulkTargetCount.value) {
+    mapSelectionMode.value = true;
+    showWarningNotification("Выберите полигоны на карте для групповой блокировки");
+    return;
+  }
+  selectedPolygons.value = [...bulkTargetIds.value];
   const firstPolygon = filteredPolygons.value.find((p) => p.id === selectedPolygons.value[0]);
   if (firstPolygon) {
     blockingPolygon.value = { id: "bulk", ids: selectedPolygons.value };
@@ -1458,22 +1549,6 @@ const bulkBlock = () => {
       block_reason: "",
     };
     showBlockModalWindow.value = true;
-  }
-};
-const bulkUnblock = async () => {
-  if (!ensureToggleAccess("Недостаточно прав для разблокировки зон доставки")) return;
-  if (selectedPolygons.value.length === 0) return;
-  if (!confirm(`Разблокировать ${selectedPolygons.value.length} ${getPluralForm(selectedPolygons.value.length)}?`)) return;
-  try {
-    await api.post("/api/polygons/admin/bulk-unblock", {
-      polygon_ids: selectedPolygons.value,
-    });
-    selectedPolygons.value = [];
-    await loadPolygons();
-    await loadAllPolygons();
-  } catch (error) {
-    devError("Ошибка массовой разблокировки:", error);
-    showErrorNotification("Не удалось разблокировать полигоны");
   }
 };
 const getPluralForm = (count) => {
@@ -1505,7 +1580,6 @@ const openPolygonSidebar = (polygon) => {
   }
   selectedPolygon.value = enrichedPolygon;
   showMobileFilters.value = false;
-  showMobilePolygonList.value = false;
   showSidebar.value = true;
   selectedTariffs.value = [];
   loadTariffsForPolygon(enrichedPolygon.id);
@@ -1531,7 +1605,6 @@ const saveTariffs = async (payload) => {
     selectedTariffs.value = response.data?.tariffs || [];
     tariffEditorOpen.value = false;
     showSuccessNotification("Тарифы сохранены");
-    await loadPolygons();
     await loadAllPolygons();
   } catch (error) {
     devError("Ошибка сохранения тарифов:", error);
@@ -1570,7 +1643,6 @@ const confirmTariffCopy = async (value) => {
     selectedTariffs.value = response.data?.tariffs || [];
     closeTariffCopy();
     showSuccessNotification("Тарифы скопированы");
-    await loadPolygons();
     await loadAllPolygons();
   } catch (error) {
     devError("Ошибка копирования тарифов:", error);
@@ -1594,7 +1666,6 @@ const savePolygonFromSidebar = async (data) => {
           is_active: data.is_active ? 1 : 0,
         };
     await api.put(`/api/polygons/admin/${data.id}`, payload);
-    await loadPolygons();
     await loadAllPolygons();
     showSuccessNotification("Полигон сохранен");
     stopPolygonEditing();
@@ -1624,7 +1695,6 @@ const transferPolygon = async (data) => {
     await api.post(`/api/polygons/admin/${data.polygonId}/transfer`, {
       new_branch_id: data.newBranchId,
     });
-    await loadPolygons();
     await loadAllPolygons();
     closeSidebar();
   } catch (error) {
@@ -1652,6 +1722,10 @@ const closeModal = () => {
 };
 const submitPolygon = async () => {
   if (!ensureEditAccess("Недостаточно прав для сохранения полигона")) return;
+  if (!activeBranchIdForActions.value) {
+    showWarningNotification("Выберите полигон филиала для определения целевого филиала");
+    return;
+  }
   if (!currentLayer?.geometry?.getCoordinates) {
     showWarningNotification("Сначала нарисуйте полигон");
     return;
@@ -1669,7 +1743,7 @@ const submitPolygon = async () => {
   }
   try {
     const payload = {
-      branch_id: parseInt(branchId.value),
+      branch_id: parseInt(activeBranchIdForActions.value, 10),
       name: form.value.name,
       delivery_time: form.value.delivery_time,
       min_order_amount: Math.max(0, Number(form.value.min_order_amount) || 0),
@@ -1681,7 +1755,7 @@ const submitPolygon = async () => {
     } else {
       await api.post("/api/polygons/admin", payload);
     }
-    await loadPolygons();
+    await loadAllPolygons();
     showSuccessNotification(editing.value ? "Полигон обновлен" : "Полигон создан");
     closeModal();
   } catch (error) {
@@ -1699,7 +1773,7 @@ watch(
   },
 );
 watch(
-  () => [allPolygons.value, polygons.value, cityId.value, branchId.value],
+  () => [allPolygons.value, cityId.value, branchId.value, polygonFilterId.value, statusFilter.value],
   () => {
     if (map) {
       renderPolygonsOnMap();
@@ -1713,6 +1787,31 @@ watch(
   (ids) => {
     const allowedIds = new Set(ids);
     selectedPolygons.value = selectedPolygons.value.filter((id) => allowedIds.has(id));
+  },
+);
+watch(
+  () => selectedPolygons.value.slice(),
+  () => {
+    if (map) {
+      renderPolygonsOnMap();
+    }
+  },
+);
+watch(
+  () => selectedPolygon.value?.id || "",
+  () => {
+    if (map) {
+      renderPolygonsOnMap();
+    }
+  },
+);
+watch(
+  () => polygonsForSelect.value.map((polygon) => String(polygon.id)),
+  (ids) => {
+    if (!polygonFilterId.value) return;
+    if (!ids.includes(String(polygonFilterId.value))) {
+      polygonFilterId.value = "";
+    }
   },
 );
 watch(
@@ -1738,8 +1837,8 @@ onMounted(async () => {
   if (context) {
     cityId.value = context.filters?.cityId ? String(context.filters.cityId) : "";
     branchId.value = context.branchId ? String(context.branchId) : "";
+    polygonFilterId.value = context.polygonFilterId ? String(context.polygonFilterId) : "";
     statusFilter.value = context.statusFilter || "all";
-    leftTab.value = context.leftTab || "zones";
   } else {
     cityId.value = initialCity || getManagerDefaultCityId();
     branchId.value = initialBranch;
@@ -1747,9 +1846,6 @@ onMounted(async () => {
 
   if (cityId.value) {
     await loadBranches();
-  }
-  if (branchId.value) {
-    await loadPolygons();
   }
 
   await nextTick();

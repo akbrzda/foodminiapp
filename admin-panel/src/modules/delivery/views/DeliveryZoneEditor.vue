@@ -9,7 +9,7 @@
         <Minus :size="18" />
       </Button>
     </div>
-    <div class="absolute left-4 top-4 z-10 w-[260px] rounded-xl border border-border bg-background/95 shadow-xl backdrop-blur">
+    <div class="absolute left-4 top-4 z-10 w-[300px] rounded-xl border border-border bg-background/95 shadow-xl backdrop-blur">
       <div class="p-4 space-y-3">
         <PageHeader :title="pageTitle" description="Редактирование полигона">
           <template #actions>
@@ -27,7 +27,9 @@
           <button
             type="button"
             class="rounded-full border px-3 py-1 text-xs font-medium transition"
-            :class="activeTab === 'general' ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:text-foreground'"
+            :class="
+              activeTab === 'general' ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:text-foreground'
+            "
             @click="activeTab = 'general'"
           >
             Общая информация
@@ -35,7 +37,9 @@
           <button
             type="button"
             class="rounded-full border px-3 py-1 text-xs font-medium transition"
-            :class="activeTab === 'delivery' ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:text-foreground'"
+            :class="
+              activeTab === 'delivery' ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:text-foreground'
+            "
             @click="activeTab = 'delivery'"
           >
             Доставка
@@ -57,22 +61,7 @@
                 <Input v-model.number="form.delivery_time" type="number" min="0" required />
               </FieldContent>
             </Field>
-            <Field>
-              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Мин. заказ (₽)</FieldLabel>
-              <FieldContent>
-                <Input v-model.number="form.min_order_amount" type="number" min="0" />
-              </FieldContent>
-            </Field>
-            <Field>
-              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Доставка (₽)</FieldLabel>
-              <FieldContent>
-                <Input v-model.number="form.delivery_cost" type="number" min="0" />
-              </FieldContent>
-            </Field>
           </FieldGroup>
-          <p class="text-xs text-muted-foreground">
-            Эти значения применяются, если для зоны не настроены тарифные ступени.
-          </p>
           <div class="flex flex-wrap gap-2">
             <Button variant="secondary" @click="startDrawing">Перерисовать</Button>
             <Button variant="outline" @click="resetPolygon">Сбросить изменения</Button>
@@ -109,21 +98,29 @@
                 Скопировать тарифы
               </Button>
             </div>
+            <Field>
+              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Мин. заказ (₽)</FieldLabel>
+              <FieldContent>
+                <Input v-model.number="form.min_order_amount" type="number" min="0" />
+              </FieldContent>
+            </Field>
+            <Field>
+              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Доставка (₽)</FieldLabel>
+              <FieldContent>
+                <Input v-model.number="form.delivery_cost" type="number" min="0" />
+              </FieldContent>
+            </Field>
+            <p class="text-xs text-muted-foreground">Эти значения применяются, если для зоны не настроены тарифные ступени.</p>
           </template>
         </template>
-        <Button class="w-full" :disabled="!hasCurrentPolygon" @click="savePolygon">
+        <Button class="w-full" :disabled="!hasCurrentPolygon || !hasUnsavedChanges" @click="savePolygon">
           <Save :size="16" />
           Сохранить
         </Button>
       </CardContent>
     </div>
   </div>
-  <DeliveryTariffEditorDialog
-    :open="tariffEditorOpen"
-    :tariffs="tariffs"
-    @close="tariffEditorOpen = false"
-    @save="saveTariffs"
-  />
+  <DeliveryTariffEditorDialog :open="tariffEditorOpen" :tariffs="tariffs" @close="tariffEditorOpen = false" @save="saveTariffs" />
   <DeliveryTariffCopyDialog
     :open="tariffCopyOpen"
     :sources="availableTariffSources"
@@ -161,10 +158,7 @@ const MAP_MUTED = "rgba(148, 163, 184, 0.24)";
 const isValidLatLng = (lat, lng) => Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
 const calcCenter = (coords = []) => {
   if (!coords.length) return null;
-  const sum = coords.reduce(
-    (acc, [lat, lng]) => ({ lat: acc.lat + lat, lng: acc.lng + lng }),
-    { lat: 0, lng: 0 },
-  );
+  const sum = coords.reduce((acc, [lat, lng]) => ({ lat: acc.lat + lat, lng: acc.lng + lng }), { lat: 0, lng: 0 });
   return { lat: sum.lat / coords.length, lng: sum.lng / coords.length };
 };
 const distanceSq = (a, b) => {
@@ -187,12 +181,8 @@ const getReferenceCenter = () => {
 };
 const toLeafletCoords = (coords = [], referenceCenter = null) => {
   const points = coords.filter((coord) => Array.isArray(coord) && coord.length >= 2);
-  const fromGeoJson = points
-    .map((coord) => [Number(coord[1]), Number(coord[0])])
-    .filter(([lat, lng]) => isValidLatLng(lat, lng));
-  const legacyLatLng = points
-    .map((coord) => [Number(coord[0]), Number(coord[1])])
-    .filter(([lat, lng]) => isValidLatLng(lat, lng));
+  const fromGeoJson = points.map((coord) => [Number(coord[1]), Number(coord[0])]).filter(([lat, lng]) => isValidLatLng(lat, lng));
+  const legacyLatLng = points.map((coord) => [Number(coord[0]), Number(coord[1])]).filter(([lat, lng]) => isValidLatLng(lat, lng));
   if (!legacyLatLng.length) return fromGeoJson;
   if (!fromGeoJson.length) return legacyLatLng;
   if (!referenceCenter) return fromGeoJson;
@@ -214,6 +204,30 @@ const ringToStoredCoords = (coords = []) => {
   }
   return normalized;
 };
+
+const normalizeStoredRing = (coords = []) =>
+  coords
+    .filter((coord) => Array.isArray(coord) && coord.length >= 2)
+    .map((coord) => [Number(Number(coord[0]).toFixed(6)), Number(Number(coord[1]).toFixed(6))])
+    .filter((coord) => Number.isFinite(coord[0]) && Number.isFinite(coord[1]));
+
+const storedRingToKey = (coords = []) => JSON.stringify(normalizeStoredRing(coords));
+
+const DEFAULT_FORM = {
+  name: "",
+  delivery_time: 30,
+  min_order_amount: 0,
+  delivery_cost: 0,
+};
+
+const normalizeForm = (value = {}) => ({
+  name: String(value.name || "").trim(),
+  delivery_time: Math.max(0, Number(value.delivery_time) || 0),
+  min_order_amount: Math.max(0, Number(value.min_order_amount) || 0),
+  delivery_cost: Math.max(0, Number(value.delivery_cost) || 0),
+});
+
+const formToKey = (value = {}) => JSON.stringify(normalizeForm(value));
 
 const collectBounds = (coords = []) => {
   if (!Array.isArray(coords) || !coords.length) return null;
@@ -246,12 +260,7 @@ const { showErrorNotification, showSuccessNotification } = useNotifications();
 const branchId = computed(() => parseInt(route.params.branchId, 10));
 const polygonId = computed(() => route.params.polygonId);
 const cityId = computed(() => parseInt(route.query.cityId, 10));
-const form = ref({
-  name: "",
-  delivery_time: 30,
-  min_order_amount: 0,
-  delivery_cost: 0,
-});
+const form = ref({ ...DEFAULT_FORM });
 const branchPolygons = ref([]);
 const pageTitle = computed(() => (polygonId.value === "new" ? "Новый полигон" : "Редактировать полигон"));
 const activeTab = ref("general");
@@ -270,10 +279,26 @@ const visibleTariffs = computed(() => {
   if (!tariffs.value || tariffs.value.length <= 5) return tariffs.value || [];
   return [...tariffs.value.slice(0, 3), { ellipsis: true }, tariffs.value[tariffs.value.length - 1]];
 });
+const polygonGeometryVersion = ref(0);
+const initialFormKey = ref(formToKey(DEFAULT_FORM));
+const initialPolygonKey = ref("");
+const currentPolygonKey = computed(() => {
+  polygonGeometryVersion.value;
+  if (!currentLayer) return "";
+  const ring = currentLayer.geometry?.getCoordinates?.()?.[0] || [];
+  return storedRingToKey(ringToStoredCoords(ring));
+});
 const hasCurrentPolygon = computed(() => {
+  polygonGeometryVersion.value;
   if (!currentLayer) return false;
   const ring = currentLayer.geometry?.getCoordinates?.()?.[0] || [];
   return ringToStoredCoords(ring).length >= 4;
+});
+const hasUnsavedChanges = computed(() => {
+  if (!hasCurrentPolygon.value) return false;
+  const currentFormKey = formToKey(form.value);
+  if (currentFormKey !== initialFormKey.value) return true;
+  return currentPolygonKey.value !== initialPolygonKey.value;
 });
 
 let yandexMaps = null;
@@ -282,16 +307,39 @@ let currentLayer = null;
 let originalPolygon = null;
 const backgroundLayers = [];
 
+const createEditablePolygonLayer = (coords = [[]]) =>
+  new yandexMaps.Polygon(
+    [coords],
+    {},
+    {
+      strokeColor: MAP_ACCENT,
+      strokeWidth: 3,
+      fillColor: MAP_ACCENT_FILL,
+      fillOpacity: 0.8,
+      opacity: 0.9,
+      editorMaxPoints: 2000,
+      draggable: true,
+    },
+  );
+
 const ensureYandexMaps = async () => {
   if (yandexMaps) return yandexMaps;
   yandexMaps = await loadYandexMaps();
   return yandexMaps;
 };
 
+const bindPolygonGeometryEvents = (layer) => {
+  if (!layer?.events?.add) return;
+  layer.events.add("geometrychange", () => {
+    polygonGeometryVersion.value += 1;
+  });
+};
+
 const clearCurrentLayer = () => {
   if (!map || !currentLayer) return;
   map.geoObjects.remove(currentLayer);
   currentLayer = null;
+  polygonGeometryVersion.value += 1;
 };
 
 const clearBackgroundLayers = () => {
@@ -357,19 +405,11 @@ const renderPolygon = (polygon) => {
   const rawCoords = polygon.polygon.coordinates[0];
   const coords = toLeafletCoords(rawCoords, getReferenceCenter());
   if (!coords.length) return;
-  currentLayer = new yandexMaps.Polygon(
-    [coords],
-    {},
-    {
-      strokeColor: MAP_ACCENT,
-      strokeWidth: 3,
-      fillColor: MAP_ACCENT_FILL,
-      fillOpacity: 0.8,
-      opacity: 0.9,
-      editorMaxPoints: 2000,
-    },
-  );
+  currentLayer = createEditablePolygonLayer(coords);
+  bindPolygonGeometryEvents(currentLayer);
   map.geoObjects.add(currentLayer);
+  currentLayer.editor?.startEditing?.();
+  polygonGeometryVersion.value += 1;
   fitMapToCoords(coords);
 };
 
@@ -406,6 +446,10 @@ const loadPolygon = async () => {
   branchPolygons.value = polygons;
   renderBackgroundPolygons(polygonId.value === "new" ? null : parseInt(polygonId.value, 10));
   if (polygonId.value === "new") {
+    originalPolygon = null;
+    form.value = { ...DEFAULT_FORM };
+    initialFormKey.value = formToKey(form.value);
+    initialPolygonKey.value = "";
     return;
   }
   const polygon = polygons.find((item) => item.id === parseInt(polygonId.value, 10));
@@ -417,7 +461,9 @@ const loadPolygon = async () => {
     min_order_amount: Number(polygon.min_order_amount || 0),
     delivery_cost: Number(polygon.delivery_cost || 0),
   };
+  initialFormKey.value = formToKey(form.value);
   renderPolygon(polygon);
+  initialPolygonKey.value = currentPolygonKey.value;
   await loadTariffs();
 };
 const loadTariffs = async () => {
@@ -486,28 +532,33 @@ const confirmTariffCopy = async (value) => {
 
 const startDrawing = () => {
   if (!map || !yandexMaps) return;
+  const existingRing = currentLayer?.geometry?.getCoordinates?.()?.[0] || [];
+  if (ringToStoredCoords(existingRing).length >= 4) {
+    currentLayer.editor?.startEditing?.();
+    return;
+  }
   clearCurrentLayer();
-  currentLayer = new yandexMaps.Polygon(
-    [[]],
-    {},
-    {
-      strokeColor: MAP_ACCENT,
-      strokeWidth: 3,
-      fillColor: MAP_ACCENT_FILL,
-      fillOpacity: 0.8,
-      opacity: 0.9,
-      editorMaxPoints: 2000,
-    },
-  );
+  currentLayer = createEditablePolygonLayer();
+  bindPolygonGeometryEvents(currentLayer);
   map.geoObjects.add(currentLayer);
-  currentLayer.editor.startDrawing();
+  currentLayer.editor?.startDrawing?.();
+  polygonGeometryVersion.value += 1;
 };
 
 const resetPolygon = () => {
   if (polygonId.value === "new") {
+    form.value = { ...DEFAULT_FORM };
+    initialFormKey.value = formToKey(form.value);
+    initialPolygonKey.value = "";
     clearCurrentLayer();
     return;
   }
+  form.value = {
+    name: originalPolygon?.name || "",
+    delivery_time: originalPolygon?.delivery_time || 30,
+    min_order_amount: Number(originalPolygon?.min_order_amount || 0),
+    delivery_cost: Number(originalPolygon?.delivery_cost || 0),
+  };
   renderPolygon(originalPolygon);
   renderBackgroundPolygons(originalPolygon?.id || null);
 };
