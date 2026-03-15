@@ -4,3 +4,4 @@ process.env.DB_PORT = process.env.DB_PORT || "3306";
 process.env.DB_NAME = process.env.DB_NAME || "test_db";
 process.env.DB_USER = process.env.DB_USER || "test_user";
 process.env.DB_PASSWORD = process.env.DB_PASSWORD || "test_password";
+process.env.ADMIN_REFRESH_SESSION_HOURS = process.env.ADMIN_REFRESH_SESSION_HOURS || "12";
