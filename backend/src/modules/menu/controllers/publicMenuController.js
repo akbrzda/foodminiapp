@@ -18,8 +18,8 @@ const buildSourceScope = (integrationSettings) => {
   // В local-режиме не отсекаем сущности по наличию iiko-id:
   // после синка iiko локальные позиции сохраняют внешние идентификаторы и
   // должны оставаться видимыми при отключенной интеграции.
-  const categoryFilter = useIikoSource ? "AND COALESCE(NULLIF(TRIM(mc.iiko_category_id), ''), NULL) IS NOT NULL" : "";
-  const itemFilter = useIikoSource ? "AND COALESCE(NULLIF(TRIM(mi.iiko_item_id), ''), NULL) IS NOT NULL" : "";
+  const categoryFilter = "";
+  const itemFilter = useIikoSource ? "AND (COALESCE(NULLIF(TRIM(mi.iiko_item_id), ''), NULL) IS NOT NULL OR mi.item_type = 'combo')" : "";
 
   return {
     source: useIikoSource ? "iiko" : "local",
@@ -161,6 +161,118 @@ async function attachVariantPricesToModifiers(modifierGroups = [], variants = []
   }
 }
 
+async function resolveComboComponentsWithAvailability(itemId, { cityId = null, branchId = null, fulfillmentType = "delivery" } = {}) {
+  const [components] = await db.query(
+    `SELECT mcc.id,
+            mcc.combo_item_id,
+            mcc.component_item_id,
+            mcc.component_variant_id,
+            mcc.quantity,
+            mcc.sort_order,
+            mi.name AS component_item_name,
+            iv.name AS component_variant_name,
+            iv.image_url AS component_variant_image_url,
+            iv.price AS component_variant_base_price,
+            iv.is_active AS component_variant_is_active,
+            mi.is_active AS component_item_is_active
+     FROM menu_combo_components mcc
+     JOIN menu_items mi ON mi.id = mcc.component_item_id
+     JOIN item_variants iv ON iv.id = mcc.component_variant_id
+     WHERE mcc.combo_item_id = ?
+     ORDER BY mcc.sort_order, mcc.id`,
+    [itemId],
+  );
+
+  if (!Array.isArray(components) || components.length === 0) {
+    return { components: [], isAvailable: false };
+  }
+
+  const result = [];
+  let isAvailable = true;
+
+  for (const component of components) {
+    let componentPrice = Number(component.component_variant_base_price) || 0;
+    let componentInStopList = false;
+    let componentCityAvailable = true;
+    const componentVariantId = Number(component.component_variant_id);
+    const componentItemId = Number(component.component_item_id);
+
+    if (cityId) {
+      const [cityAvailabilityRows] = await db.query(
+        `SELECT is_active
+         FROM menu_item_cities
+         WHERE item_id = ? AND city_id = ?
+         LIMIT 1`,
+        [componentItemId, cityId],
+      );
+      componentCityAvailable = cityAvailabilityRows.length > 0 && Boolean(cityAvailabilityRows[0].is_active);
+
+      const [variantPriceRows] = await db.query(
+        `SELECT price
+         FROM menu_variant_prices
+         WHERE variant_id = ?
+           AND city_id = ?
+           AND fulfillment_type = ?
+         LIMIT 1`,
+        [componentVariantId, cityId, fulfillmentType],
+      );
+      if (variantPriceRows.length > 0) {
+        componentPrice = Number(variantPriceRows[0].price) || 0;
+      }
+    }
+
+    if (branchId) {
+      const [itemStopRows] = await db.query(
+        `SELECT id
+         FROM menu_stop_list
+         WHERE branch_id = ?
+           AND entity_type = 'item'
+           AND entity_id = ?
+           AND (remove_at IS NULL OR remove_at > NOW())
+           AND (fulfillment_types IS NULL OR JSON_CONTAINS(fulfillment_types, JSON_QUOTE(?)))
+         LIMIT 1`,
+        [branchId, componentItemId, fulfillmentType],
+      );
+      const [variantStopRows] = await db.query(
+        `SELECT id
+         FROM menu_stop_list
+         WHERE branch_id = ?
+           AND entity_type = 'variant'
+           AND entity_id = ?
+           AND (remove_at IS NULL OR remove_at > NOW())
+           AND (fulfillment_types IS NULL OR JSON_CONTAINS(fulfillment_types, JSON_QUOTE(?)))
+         LIMIT 1`,
+        [branchId, componentVariantId, fulfillmentType],
+      );
+      componentInStopList = itemStopRows.length > 0 || variantStopRows.length > 0;
+    }
+
+    const componentIsActive = Boolean(component.component_item_is_active) && Boolean(component.component_variant_is_active);
+    const componentHasPrice = Number.isFinite(componentPrice) && componentPrice > 0;
+    const componentIsAvailable = componentIsActive && componentCityAvailable && componentHasPrice && !componentInStopList;
+    if (!componentIsAvailable) {
+      isAvailable = false;
+    }
+
+    result.push({
+      id: component.id,
+      combo_item_id: component.combo_item_id,
+      component_item_id: componentItemId,
+      component_variant_id: componentVariantId,
+      component_item_name: component.component_item_name,
+      component_variant_name: component.component_variant_name,
+      component_variant_image_url: component.component_variant_image_url,
+      quantity: Number(component.quantity) || 1,
+      sort_order: Number(component.sort_order) || 0,
+      price: Number(componentPrice) || 0,
+      in_stop_list: componentInStopList,
+      is_available: componentIsAvailable,
+    });
+  }
+
+  return { components: result, isAvailable };
+}
+
 // GET / - Получение полного меню с фильтрацией по городу и филиалу
 export const getMenu = async (req, res, next) => {
   try {
@@ -209,6 +321,8 @@ export const getMenu = async (req, res, next) => {
                 mi.calories_per_100g, mi.proteins_per_100g, mi.fats_per_100g, mi.carbs_per_100g,
                 mi.calories_per_serving, mi.proteins_per_serving, mi.fats_per_serving, mi.carbs_per_serving,
                 mi.is_new, mi.is_hit, mi.is_spicy, mi.is_vegetarian, mi.is_piquant, mi.is_value,
+                mi.price AS legacy_price,
+                mi.item_type, mi.bonus_spend_allowed, mi.bonus_earn_allowed,
                 mi.created_at, mi.updated_at
          FROM menu_items mi
          JOIN menu_item_categories mic ON mic.item_id = mi.id
@@ -239,6 +353,7 @@ export const getMenu = async (req, res, next) => {
         item.badges = buildItemBadges(item, salesByItemId.get(Number(item.id)) || 0);
 
         // Получение цены товара
+        const fallbackLegacyPrice = hasPositivePrice(item.legacy_price) ? item.legacy_price : null;
         if (fulfillment_type) {
           const [prices] = await db.query(
             `SELECT price FROM menu_item_prices
@@ -248,7 +363,7 @@ export const getMenu = async (req, res, next) => {
              LIMIT 1`,
             [item.id, city_id, fulfillment_type],
           );
-          item.price = prices.length > 0 ? prices[0].price : null;
+          item.price = prices.length > 0 ? prices[0].price : fallbackLegacyPrice;
         } else {
           const [prices] = await db.query(
             `SELECT price FROM menu_item_prices
@@ -258,7 +373,7 @@ export const getMenu = async (req, res, next) => {
              LIMIT 1`,
             [item.id, city_id],
           );
-          item.price = prices.length > 0 ? prices[0].price : null;
+          item.price = prices.length > 0 ? prices[0].price : fallbackLegacyPrice;
         }
 
         // Проверка стоп-листа для товара
@@ -422,9 +537,24 @@ export const getMenu = async (req, res, next) => {
 
         await attachVariantPricesToModifiers(modifierGroups, variants);
         item.modifier_groups = modifierGroups;
+        item.item_type = item.item_type || "item";
 
         if (item.variants.length > 0) {
           item.variants = item.variants.filter((variant) => isVariantVisibleInPublicMenu(variant));
+        }
+
+        if (item.item_type === "combo") {
+          const comboPayload = await resolveComboComponentsWithAvailability(item.id, {
+            cityId,
+            branchId: branch_id ? Number(branch_id) : null,
+            fulfillmentType: fulfillment_type || "delivery",
+          });
+          item.combo_components = comboPayload.components;
+          if (!comboPayload.isAvailable) {
+            item.in_stop_list = true;
+          }
+        } else {
+          item.combo_components = [];
         }
 
         if (!isItemVisibleInPublicMenu(item)) {
@@ -596,6 +726,7 @@ export const getItemById = async (req, res, next) => {
               mi.name, mi.description, mi.price, mi.image_url,
               mi.weight, mi.weight_value, mi.weight_unit, mi.calories, mi.sort_order, mi.is_active,
               mi.is_new, mi.is_hit, mi.is_spicy, mi.is_vegetarian, mi.is_piquant, mi.is_value,
+              mi.item_type, mi.bonus_spend_allowed, mi.bonus_earn_allowed,
               mi.created_at, mi.updated_at
        FROM menu_items mi
        WHERE mi.id = ? AND mi.is_active = TRUE
@@ -635,7 +766,8 @@ export const getItemById = async (req, res, next) => {
          LIMIT 1`,
         [itemId, city_id, fulfillmentType],
       );
-      item.price = prices.length > 0 ? prices[0].price : null;
+      const fallbackLegacyPrice = hasPositivePrice(item.price) ? item.price : null;
+      item.price = prices.length > 0 ? prices[0].price : fallbackLegacyPrice;
     }
 
     if (branch_id) {
@@ -757,11 +889,25 @@ export const getItemById = async (req, res, next) => {
 
     await attachVariantPricesToModifiers(modifierGroups, variants);
 
+    let comboComponents = [];
+    if (item.item_type === "combo") {
+      const comboPayload = await resolveComboComponentsWithAvailability(item.id, {
+        cityId: city_id ? Number(city_id) : null,
+        branchId: branch_id ? Number(branch_id) : null,
+        fulfillmentType,
+      });
+      comboComponents = comboPayload.components;
+      if (!comboPayload.isAvailable) {
+        item.in_stop_list = true;
+      }
+    }
+
     res.json({
       item: {
         ...item,
         variants: item.variants,
         modifier_groups: modifierGroups,
+        combo_components: comboComponents,
       },
     });
   } catch (error) {

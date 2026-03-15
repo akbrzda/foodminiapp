@@ -44,7 +44,7 @@
     </div>
     <Tabs v-else v-model="activeTab">
       <TabsList>
-        <TabsTrigger v-for="(tab, index) in tabLabels" :key="tab" :value="index">{{ tab }}</TabsTrigger>
+        <TabsTrigger v-for="tab in visibleTabs" :key="tab.value" :value="tab.value">{{ tab.label }}</TabsTrigger>
       </TabsList>
       <TabsContent :value="0" class="space-y-3">
         <Card>
@@ -53,6 +53,20 @@
           </CardHeader>
           <CardContent class="space-y-3">
             <FieldGroup class="grid gap-4 md:grid-cols-2">
+              <Field>
+                <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Тип позиции</FieldLabel>
+                <FieldContent>
+                  <Select v-model="form.item_type">
+                    <SelectTrigger class="w-full">
+                      <SelectValue placeholder="Выберите тип" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="item">Блюдо</SelectItem>
+                      <SelectItem value="combo">Комбо</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </FieldContent>
+              </Field>
               <Field>
                 <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Название *</FieldLabel>
                 <FieldContent>
@@ -93,7 +107,7 @@
                   </div>
                 </FieldContent>
               </Field>
-              <FieldGroup v-if="!hasVariants" class="grid gap-4 md:col-span-2 md:grid-cols-3">
+              <FieldGroup class="grid gap-4 md:col-span-2 md:grid-cols-3">
                 <Field>
                   <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Вес *</FieldLabel>
                   <FieldContent>
@@ -125,7 +139,68 @@
                 </Field>
               </FieldGroup>
             </FieldGroup>
-            <Card>
+            <Card v-if="isComboItem">
+              <CardHeader class="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle class="text-base">Состав Комбо</CardTitle>
+                  <CardDescription>Выберите варианты блюд, которые входят в фиксированное Комбо</CardDescription>
+                </div>
+                <Button v-if="canManageProducts" type="button" variant="outline" size="sm" @click="addComboComponent">
+                  <Plus :size="16" />
+                  Добавить
+                </Button>
+              </CardHeader>
+              <CardContent class="space-y-3">
+                <div v-if="form.combo_components.length === 0" class="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                  Состав Комбо пока пуст. Добавьте хотя бы один вариант.
+                </div>
+                <div v-for="(component, componentIndex) in form.combo_components" :key="`combo-component-${componentIndex}`" class="rounded-lg border p-3">
+                  <div class="grid gap-3 md:grid-cols-[1fr_120px_auto] md:items-end">
+                    <Field>
+                      <FieldLabel class="text-xs text-muted-foreground">Вариант блюда</FieldLabel>
+                      <FieldContent>
+                        <div class="relative">
+                          <Input
+                            v-model="component.search_query"
+                            placeholder="Введите название варианта"
+                            @focus="comboListOpenByIndex[componentIndex] = true"
+                            @input="comboListOpenByIndex[componentIndex] = true"
+                            @blur="scheduleCloseComboList(componentIndex)"
+                          />
+                          <div
+                            v-if="comboListOpenByIndex[componentIndex]"
+                            class="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md border border-border bg-card shadow-sm"
+                          >
+                            <button
+                              v-for="variant in getFilteredComboVariantOptions(componentIndex)"
+                              :key="`combo-variant-option-${variant.id}`"
+                              type="button"
+                              class="flex w-full items-center px-3 py-2 text-left text-sm hover:bg-muted"
+                              @mousedown.prevent="selectComboVariant(componentIndex, variant)"
+                            >
+                              {{ variant.name }}
+                            </button>
+                            <div v-if="getFilteredComboVariantOptions(componentIndex).length === 0" class="px-3 py-2 text-sm text-muted-foreground">
+                              Ничего не найдено
+                            </div>
+                          </div>
+                        </div>
+                      </FieldContent>
+                    </Field>
+                    <Field>
+                      <FieldLabel class="text-xs text-muted-foreground">Количество</FieldLabel>
+                      <FieldContent>
+                        <Input v-model.number="component.quantity" type="number" min="1" step="1" />
+                      </FieldContent>
+                    </Field>
+                    <Button v-if="canManageProducts" type="button" variant="ghost" size="icon" @click="removeComboComponent(componentIndex)">
+                      <Trash2 :size="16" class="text-red-600" />
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card v-if="!isComboItem">
               <CardHeader>
                 <CardTitle class="text-base">КБЖУ на 100{{ form.weight_unit === "ml" || form.weight_unit === "l" ? "мл" : "г" }}</CardTitle>
               </CardHeader>
@@ -158,7 +233,7 @@
                 </FieldGroup>
               </CardContent>
             </Card>
-            <Card>
+            <Card v-if="!isComboItem">
               <CardHeader>
                 <CardTitle class="text-base">КБЖУ на порцию</CardTitle>
               </CardHeader>
@@ -236,6 +311,7 @@
         </Card>
       </TabsContent>
       <TabsContent :value="1" class="space-y-4">
+        <template v-if="!isComboItem">
         <Card>
           <CardHeader class="flex flex-row items-center justify-between">
             <div>
@@ -373,8 +449,10 @@
             </Field>
           </CardContent>
         </Card>
+        </template>
       </TabsContent>
       <TabsContent :value="2" class="space-y-4">
+        <template v-if="!isComboItem">
         <Card>
           <CardHeader>
             <CardTitle class="text-base">Модификаторы</CardTitle>
@@ -416,6 +494,7 @@
             </div>
           </CardContent>
         </Card>
+        </template>
       </TabsContent>
       <TabsContent :value="3" class="space-y-4">
         <Card>
@@ -608,12 +687,15 @@ const canManageProducts = computed(() => authStore.hasPermission("menu.products.
 const allCategories = ref([]);
 const modifierGroups = ref([]);
 const tags = ref([]);
+const comboVariantOptions = ref([]);
 const saving = ref(false);
 const isInitialLoading = ref(false);
 const activeTab = ref(0);
 const fileInput = ref(null);
 const uploadState = ref({ loading: false, error: null, preview: null });
 const variantUploadStates = ref({});
+const comboListOpenByIndex = ref({});
+const comboCloseTimersByIndex = ref({});
 const badgeTouched = ref({
   is_new: false,
   is_hit: false,
@@ -621,7 +703,22 @@ const badgeTouched = ref({
 const draggedVariantIndex = ref(null);
 const dragOverVariantIndex = ref(null);
 const menuBadgesEnabled = ref(true);
-const tabLabels = computed(() => ["Основное", "Вариации", "Модификаторы", "Доступность и цены", menuBadgesEnabled.value ? "Теги и бейджи" : "Теги"]);
+const visibleTabs = computed(() => {
+  if (isComboItem.value) {
+    return [
+      { value: 0, label: "Основное" },
+      { value: 3, label: "Доступность и цены" },
+      { value: 4, label: menuBadgesEnabled.value ? "Теги и бейджи" : "Теги" },
+    ];
+  }
+  return [
+    { value: 0, label: "Основное" },
+    { value: 1, label: "Вариации" },
+    { value: 2, label: "Модификаторы" },
+    { value: 3, label: "Доступность и цены" },
+    { value: 4, label: menuBadgesEnabled.value ? "Теги и бейджи" : "Теги" },
+  ];
+});
 const allowedFulfillmentValues = ["pickup", "delivery"];
 const fulfillmentTypes = [
   { value: "pickup", label: "Самовывоз" },
@@ -633,6 +730,7 @@ isInitialLoading.value = isEditing.value;
 const selectedCityId = ref(null);
 const initialDisabledModifierIds = ref([]);
 const form = ref({
+  item_type: "item",
   name: "",
   description: "",
   composition: "",
@@ -662,11 +760,13 @@ const form = ref({
   is_vegetarian: false,
   is_piquant: false,
   is_value: false,
+  combo_components: [],
   prices: [],
 });
 const modalTitle = computed(() => (isEditing.value ? "Редактировать блюдо" : "Новое блюдо"));
 const modalSubtitle = computed(() => (isEditing.value ? "Измените параметры блюда" : "Создайте блюдо меню"));
-const hasVariants = computed(() => form.value.variants.length > 0);
+const isComboItem = computed(() => form.value.item_type === "combo");
+const hasVariants = computed(() => !isComboItem.value && form.value.variants.length > 0);
 const activeCityIds = computed(() => (Array.isArray(form.value.city_ids) ? form.value.city_ids.map((id) => Number(id)).filter(Number.isFinite) : []));
 const activeCities = computed(() => referenceStore.cities.filter((city) => activeCityIds.value.includes(city.id)));
 const formTitle = computed(() => {
@@ -696,6 +796,25 @@ const normalizeIsActive = (value, fallback = true) => {
 const normalizeIdArray = (value) => {
   if (!Array.isArray(value)) return [];
   return value.map((id) => Number(id)).filter(Number.isFinite);
+};
+const normalizeComboComponents = (value) => {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((row, index) => {
+      const componentItemId = Number(row?.component_item_id);
+      const componentVariantId = Number(row?.component_variant_id);
+      const quantity = Math.max(1, Number.parseInt(row?.quantity, 10) || 1);
+      const sortOrder = Number.isFinite(Number(row?.sort_order)) ? Number(row.sort_order) : (index + 1) * 10;
+      if (!Number.isInteger(componentItemId) || !Number.isInteger(componentVariantId)) return null;
+      return {
+        component_item_id: componentItemId,
+        component_variant_id: componentVariantId,
+        quantity,
+        sort_order: sortOrder,
+        search_query: typeof row?.search_query === "string" ? row.search_query : "",
+      };
+    })
+    .filter(Boolean);
 };
 const normalizeImageUrl = (url) => {
   if (!url) return "";
@@ -875,6 +994,21 @@ const loadTags = async () => {
     devError("Failed to load tags:", error);
   }
 };
+const loadVariantOptions = async () => {
+  try {
+    const response = await api.get("/api/menu/admin/variants");
+    comboVariantOptions.value = (response.data?.variants || []).map((variant) => ({
+      id: Number(variant.id),
+      item_id: Number(variant.item_id),
+      item_name: variant.item_name || "",
+      variant_name: variant.variant_name || "",
+      name: variant.name || "",
+    }));
+  } catch (error) {
+    devError("Failed to load variant options:", error);
+    comboVariantOptions.value = [];
+  }
+};
 const loadAppearanceSettings = async () => {
   try {
     const response = await api.get("/api/settings/admin");
@@ -916,6 +1050,7 @@ const loadItem = async () => {
       prices: (variantPricesResponses[index] || []).filter((price) => allowedFulfillmentValues.includes(price.fulfillment_type)),
     }));
     form.value = {
+      item_type: item.item_type || "item",
       name: item.name,
       description: item.description || "",
       composition: item.composition || "",
@@ -939,6 +1074,7 @@ const loadItem = async () => {
       is_vegetarian: normalizeIsActive(item.is_vegetarian, false),
       is_piquant: normalizeIsActive(item.is_piquant, false),
       is_value: normalizeIsActive(item.is_value, false),
+      combo_components: normalizeComboComponents(item.combo_components || []),
       category_ids: normalizeIdArray(categoriesRes.data.category_ids),
       variants: variantsWithPrices,
       modifier_group_ids: normalizeIdArray(modifiersRes.data.modifier_group_ids),
@@ -967,27 +1103,29 @@ const saveItem = async () => {
     }
 
     const payload = {
+      item_type: form.value.item_type,
       name: form.value.name,
       description: form.value.description,
       composition: form.value.composition,
       image_url: form.value.image_url,
-      weight_value: form.value.weight_value,
-      weight_unit: form.value.weight_unit,
+      weight_value: isComboItem.value ? null : form.value.weight_value,
+      weight_unit: isComboItem.value ? null : form.value.weight_unit,
       price: !hasVariants.value ? form.value.price : null,
-      calories_per_100g: form.value.calories_per_100g,
-      proteins_per_100g: form.value.proteins_per_100g,
-      fats_per_100g: form.value.fats_per_100g,
-      carbs_per_100g: form.value.carbs_per_100g,
-      calories_per_serving: form.value.calories_per_serving,
-      proteins_per_serving: form.value.proteins_per_serving,
-      fats_per_serving: form.value.fats_per_serving,
-      carbs_per_serving: form.value.carbs_per_serving,
+      calories_per_100g: isComboItem.value ? null : form.value.calories_per_100g,
+      proteins_per_100g: isComboItem.value ? null : form.value.proteins_per_100g,
+      fats_per_100g: isComboItem.value ? null : form.value.fats_per_100g,
+      carbs_per_100g: isComboItem.value ? null : form.value.carbs_per_100g,
+      calories_per_serving: isComboItem.value ? null : form.value.calories_per_serving,
+      proteins_per_serving: isComboItem.value ? null : form.value.proteins_per_serving,
+      fats_per_serving: isComboItem.value ? null : form.value.fats_per_serving,
+      carbs_per_serving: isComboItem.value ? null : form.value.carbs_per_serving,
       sort_order: form.value.sort_order,
       is_active: form.value.is_active,
       is_spicy: form.value.is_spicy,
       is_vegetarian: form.value.is_vegetarian,
       is_piquant: form.value.is_piquant,
       is_value: form.value.is_value,
+      combo_components: isComboItem.value ? normalizeComboComponents(form.value.combo_components) : [],
       ...(badgeTouched.value.is_new ? { is_new: form.value.is_new } : {}),
       ...(badgeTouched.value.is_hit ? { is_hit: form.value.is_hit } : {}),
     };
@@ -1067,8 +1205,17 @@ const saveAll = async () => {
   try {
     const savedItemId = await saveItem();
     if (!savedItemId) return;
+    if (isComboItem.value) {
+      form.value.variants = [];
+      form.value.modifier_group_ids = [];
+      form.value.disabled_modifier_ids = [];
+    }
     await saveVariants(savedItemId);
-    await Promise.all([saveModifiers(savedItemId), saveCities(savedItemId), savePrices(savedItemId), saveVariantPrices(), saveTags(savedItemId)]);
+    if (isComboItem.value) {
+      await Promise.all([saveCities(savedItemId), savePrices(savedItemId), saveTags(savedItemId)]);
+    } else {
+      await Promise.all([saveModifiers(savedItemId), saveCities(savedItemId), savePrices(savedItemId), saveVariantPrices(), saveTags(savedItemId)]);
+    }
     showSuccessNotification("Блюдо сохранено");
     await router.push({ name: "menu-products" });
   } catch (error) {
@@ -1085,7 +1232,7 @@ const normalizeVariantSortOrder = () => {
   });
 };
 const addVariant = () => {
-  if (!canManageProducts.value) return;
+  if (!canManageProducts.value || isComboItem.value) return;
   const newVariant = {
     __local_key: `new-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
     name: "",
@@ -1107,6 +1254,65 @@ const addVariant = () => {
   form.value.variants.push(newVariant);
   const cityIds = form.value.city_ids || [];
   cityIds.forEach((cityId) => ensureVariantPricesForCity(newVariant, cityId));
+};
+const addComboComponent = () => {
+  if (!canManageProducts.value) return;
+  form.value.combo_components.push({
+    component_item_id: null,
+    component_variant_id: null,
+    quantity: 1,
+    sort_order: (form.value.combo_components.length + 1) * 10,
+  });
+};
+const removeComboComponent = (index) => {
+  if (!canManageProducts.value) return;
+  form.value.combo_components.splice(index, 1);
+  form.value.combo_components.forEach((component, rowIndex) => {
+    component.sort_order = (rowIndex + 1) * 10;
+  });
+};
+const resolveComboVariantOption = (variantId) => {
+  const targetId = Number(variantId);
+  return comboVariantOptions.value.find((option) => Number(option.id) === targetId) || null;
+};
+const updateComboVariant = (index, nextVariantId) => {
+  const option = resolveComboVariantOption(nextVariantId);
+  if (!option || !form.value.combo_components[index]) return;
+  form.value.combo_components[index].component_variant_id = Number(option.id);
+  form.value.combo_components[index].component_item_id = Number(option.item_id);
+  form.value.combo_components[index].search_query = option.name;
+  comboListOpenByIndex.value[index] = false;
+};
+const getFilteredComboVariantOptions = (index) => {
+  const component = form.value.combo_components[index];
+  const query = String(component?.search_query || "")
+    .trim()
+    .toLowerCase();
+  if (!query) return comboVariantOptions.value.slice(0, 100);
+  const tokens = query.split(/\s+/).filter(Boolean);
+  return comboVariantOptions.value
+    .filter((variant) => {
+      const haystack = String(variant.name || "").toLowerCase();
+      return tokens.every((token) => haystack.includes(token));
+    })
+    .slice(0, 100);
+};
+const selectComboVariant = (index, option) => {
+  if (!option) return;
+  form.value.combo_components[index].component_variant_id = Number(option.id);
+  form.value.combo_components[index].component_item_id = Number(option.item_id);
+  form.value.combo_components[index].search_query = option.name;
+  comboListOpenByIndex.value[index] = false;
+};
+const scheduleCloseComboList = (index) => {
+  const existingTimer = comboCloseTimersByIndex.value[index];
+  if (existingTimer) {
+    clearTimeout(existingTimer);
+  }
+  comboCloseTimersByIndex.value[index] = setTimeout(() => {
+    comboListOpenByIndex.value[index] = false;
+    comboCloseTimersByIndex.value[index] = null;
+  }, 150);
 };
 const removeVariant = (index) => {
   if (!canManageProducts.value) return;
@@ -1232,7 +1438,14 @@ const handleVariantFile = async (variant, index, file) => {
 };
 onMounted(async () => {
   try {
-    await Promise.all([referenceStore.fetchCitiesAndBranches(), loadCategories(), loadModifierGroups(), loadTags(), loadAppearanceSettings()]);
+    await Promise.all([
+      referenceStore.fetchCitiesAndBranches(),
+      loadCategories(),
+      loadModifierGroups(),
+      loadTags(),
+      loadAppearanceSettings(),
+      loadVariantOptions(),
+    ]);
     await loadItem();
     updateBreadcrumbs();
   } catch (error) {
@@ -1242,6 +1455,49 @@ onMounted(async () => {
     isInitialLoading.value = false;
   }
 });
+watch(
+  () => isComboItem.value,
+  (isCombo) => {
+    if (!isCombo) return;
+    if (![0, 3, 4].includes(Number(activeTab.value))) {
+      activeTab.value = 0;
+    }
+    form.value.variants = [];
+    form.value.modifier_group_ids = [];
+    form.value.disabled_modifier_ids = [];
+    form.value.calories_per_100g = null;
+    form.value.proteins_per_100g = null;
+    form.value.fats_per_100g = null;
+    form.value.carbs_per_100g = null;
+    form.value.calories_per_serving = null;
+    form.value.proteins_per_serving = null;
+    form.value.fats_per_serving = null;
+    form.value.carbs_per_serving = null;
+  },
+  { immediate: true },
+);
+watch(
+  () => form.value.combo_components,
+  (components) => {
+    components.forEach((component) => {
+      if (component.search_query) return;
+      const option = resolveComboVariantOption(component.component_variant_id);
+      if (option) {
+        component.search_query = option.name;
+      }
+    });
+  },
+  { deep: true, immediate: true },
+);
+watch(
+  () => visibleTabs.value.map((tab) => tab.value),
+  (values) => {
+    if (!values.includes(Number(activeTab.value))) {
+      activeTab.value = values[0] ?? 0;
+    }
+  },
+  { immediate: true },
+);
 watch(
   () => activeCityIds.value,
   (next, prev) => {

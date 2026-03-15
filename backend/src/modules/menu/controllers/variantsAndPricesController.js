@@ -18,7 +18,7 @@ function managerHasCityAccess(user, cityIds) {
 async function invalidateAllMenuCache() {
   try {
     const redis = (await import("../../../config/redis.js")).default;
-    const keys = await redis.keys("menu:city:*");
+    const keys = await redis.keys("menu:*:city:*");
     if (keys.length > 0) {
       await redis.del(keys);
     }
@@ -204,18 +204,26 @@ export const deleteVariant = async (req, res, next) => {
 export const getAdminVariants = async (req, res, next) => {
   try {
     const params = [];
-    let whereClause = "";
+    let whereClause = "WHERE iv.is_active = TRUE AND mi.is_active = TRUE";
 
-    if (req.user.role === "manager" && Array.isArray(req.user.cities) && req.user.cities.length > 0) {
-      whereClause = "WHERE mic.city_id IN (?)";
+    if (req.user.role === "manager") {
+      if (!Array.isArray(req.user.cities) || req.user.cities.length === 0) {
+        return res.json({ variants: [] });
+      }
+      whereClause += ` AND EXISTS (
+        SELECT 1
+        FROM menu_item_cities mic
+        WHERE mic.item_id = mi.id
+          AND mic.city_id IN (?)
+          AND mic.is_active = TRUE
+      )`;
       params.push(req.user.cities);
     }
 
     const [variants] = await db.query(
-      `SELECT iv.id, CONCAT(mi.name, ' - ', iv.name) as name
+      `SELECT DISTINCT iv.id, iv.item_id, iv.name AS variant_name, mi.name AS item_name, CONCAT(mi.name, ' - ', iv.name) as name
        FROM item_variants iv
        JOIN menu_items mi ON iv.item_id = mi.id
-       LEFT JOIN menu_item_cities mic ON mic.item_id = mi.id
        ${whereClause}
        ORDER BY mi.name, iv.name`,
       params,

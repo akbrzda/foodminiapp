@@ -40,6 +40,31 @@
         <p class="item-composition" v-if="item.composition">Состав: {{ item.composition }}</p>
         <p class="item-weight" v-if="displayWeight">{{ displayWeight }}</p>
         <div v-if="item.in_stop_list" class="item-stop">Временно недоступно</div>
+        <section v-if="isComboItem && comboComponents.length > 0" class="combo-composition">
+          <h2 class="combo-composition-title">Блюда в составе</h2>
+          <button
+            v-for="component in comboComponents"
+            :key="`combo-component-${component.id || component.component_variant_id}`"
+            type="button"
+            class="combo-component-card"
+            @click="goToComboComponent(component.component_item_id)"
+          >
+            <div class="combo-component-image-wrap">
+              <img
+                v-if="getComboComponentImage(component)"
+                :src="getComboComponentImage(component)"
+                :alt="component.component_item_name"
+                class="combo-component-image"
+              />
+              <div v-else class="combo-component-image-placeholder"></div>
+            </div>
+            <div class="combo-component-content">
+              <div class="combo-component-name">{{ component.component_item_name }}</div>
+              <div v-if="component.component_variant_name" class="combo-component-variant">{{ component.component_variant_name }}</div>
+            </div>
+            <div v-if="Number(component.quantity) > 1" class="combo-component-qty">x{{ component.quantity }}</div>
+          </button>
+        </section>
       </div>
       <div class="section" v-if="item.variants && item.variants.length > 0">
         <div class="variants">
@@ -229,6 +254,8 @@ const isAdded = ref(false);
 const showKbjuPopup = ref(false);
 const ordersEnabled = computed(() => settingsStore.ordersEnabled);
 const menuBadgesEnabled = computed(() => settingsStore.menuBadgesEnabled);
+const isComboItem = computed(() => item.value?.item_type === "combo");
+const comboComponents = computed(() => (Array.isArray(item.value?.combo_components) ? item.value.combo_components : []));
 const canOrder = computed(() => {
   if (!ordersEnabled.value) return false;
   if (locationStore.isDelivery) return settingsStore.deliveryEnabled;
@@ -368,6 +395,20 @@ onMounted(async () => {
     quantity.value = cartItem.value.quantity;
   }
 });
+watch(
+  () => route.params.id,
+  async () => {
+    selectedVariant.value = null;
+    selectedModifiers.value = {};
+    showKbjuPopup.value = false;
+    await loadItem();
+    if (item.value?.variants && item.value.variants.length > 0) {
+      const firstAvailable = item.value.variants.find((variant) => !isVariantUnavailable(variant)) || item.value.variants[0];
+      selectedVariant.value = firstAvailable;
+    }
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  },
+);
 watch(
   () => [selectedVariant.value, selectedModifiers.value],
   () => {
@@ -559,6 +600,24 @@ function decreaseQuantity() {
 function goToCart() {
   router.push("/cart");
 }
+function goToComboComponent(componentItemId) {
+  const targetId = Number(componentItemId);
+  if (!Number.isInteger(targetId)) return;
+  if (Number(item.value?.id) === targetId) return;
+  router.push(`/item/${targetId}`);
+}
+function getComboComponentImage(component) {
+  if (!component) return "";
+  if (component.component_variant_image_url) {
+    return normalizeImageUrl(component.component_variant_image_url);
+  }
+  const fallbackItem = menuStore.getItemById?.(Number(component.component_item_id));
+  if (!fallbackItem) return "";
+  const fallbackVariant = Array.isArray(fallbackItem.variants)
+    ? fallbackItem.variants.find((variant) => Number(variant.id) === Number(component.component_variant_id))
+    : null;
+  return normalizeImageUrl(fallbackVariant?.image_url || fallbackItem.image_url || "");
+}
 const canAddToCart = computed(() => {
   if (!item.value) return false;
   if (!canOrder.value) return false;
@@ -700,6 +759,70 @@ function closeKbjuPopup() {
 }
 .item-header {
   margin-bottom: 16px;
+}
+.combo-composition {
+  margin-top: 16px;
+}
+.combo-composition-title {
+  font-size: 18px;
+  line-height: 1.25;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  margin: 0 0 10px 0;
+}
+.combo-component-card {
+  width: 100%;
+  border: none;
+  border-radius: 20px;
+  background: var(--color-background-secondary);
+  padding: 8px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+  text-align: left;
+}
+.combo-component-image-wrap {
+  width: 84px;
+  height: 84px;
+  border-radius: 16px;
+  overflow: hidden;
+  flex: 0 0 84px;
+  background: #e8eaef;
+}
+.combo-component-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.combo-component-image-placeholder {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, #eceff3 0%, #dde3ea 100%);
+}
+.combo-component-content {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.combo-component-name {
+  color: var(--color-text-primary);
+  font-size: 20px;
+  line-height: 1.15;
+  font-weight: var(--font-weight-medium);
+}
+.combo-component-variant {
+  margin-top: 4px;
+  font-size: var(--font-size-caption);
+  color: var(--color-text-secondary);
+}
+.combo-component-qty {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-caption);
+  font-weight: var(--font-weight-semibold);
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.06);
 }
 .item-name {
   font-size: var(--font-size-h1);

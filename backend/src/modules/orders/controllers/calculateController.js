@@ -75,6 +75,7 @@ export const calculateOrder = async (req, res, next) => {
 
     // Валидация товаров
     let subtotal = 0;
+    let bonusSpendBaseSubtotal = 0;
     const validatedItems = [];
 
     for (const item of items) {
@@ -85,9 +86,10 @@ export const calculateOrder = async (req, res, next) => {
       }
 
       // Получение товара
-      const [menuItems] = await db.query("SELECT id, name, price, weight, weight_unit, is_active FROM menu_items WHERE id = ? AND is_active = TRUE", [
-        item_id,
-      ]);
+      const [menuItems] = await db.query(
+        "SELECT id, name, price, weight, weight_unit, is_active, bonus_spend_allowed FROM menu_items WHERE id = ? AND is_active = TRUE",
+        [item_id],
+      );
 
       if (menuItems.length === 0) {
         return res.status(400).json({ error: `Menu item ${item_id} not found or inactive` });
@@ -177,28 +179,28 @@ export const calculateOrder = async (req, res, next) => {
               [modifier.id, cityId],
             );
 
-          if (cityModifierPrices.length > 0) {
-            if (!cityModifierPrices[0].is_active) {
-              return res.status(400).json({ error: `Modifier ${modifier.id} is not available in this city` });
+            if (cityModifierPrices.length > 0) {
+              if (!cityModifierPrices[0].is_active) {
+                return res.status(400).json({ error: `Modifier ${modifier.id} is not available in this city` });
+              }
+              modifierPrice = parseFloat(cityModifierPrices[0].price);
             }
-            modifierPrice = parseFloat(cityModifierPrices[0].price);
           }
-        }
 
-        if (variant_id) {
-          const [variantPrices] = await db.query(
-            `SELECT price
-             FROM menu_modifier_variant_prices
-             WHERE modifier_id = ? AND variant_id = ?
-             LIMIT 1`,
-            [modifier.id, variant_id],
-          );
-          if (variantPrices.length > 0) {
-            modifierPrice = parseFloat(variantPrices[0].price);
+          if (variant_id) {
+            const [variantPrices] = await db.query(
+              `SELECT price
+               FROM menu_modifier_variant_prices
+               WHERE modifier_id = ? AND variant_id = ?
+               LIMIT 1`,
+              [modifier.id, variant_id],
+            );
+            if (variantPrices.length > 0) {
+              modifierPrice = parseFloat(variantPrices[0].price);
+            }
           }
-        }
 
-        modifiersTotal += modifierPrice;
+          modifiersTotal += modifierPrice;
           validatedModifiers.push({
             id: modifier.id,
             name: modifier.name,
@@ -215,6 +217,9 @@ export const calculateOrder = async (req, res, next) => {
       const unitPrice = itemBasePrice + modifiersTotal;
       const itemSubtotal = unitPrice * quantity;
       subtotal += itemSubtotal;
+      if (menuItem.bonus_spend_allowed) {
+        bonusSpendBaseSubtotal += itemSubtotal;
+      }
 
       validatedItems.push({
         item_id: menuItem.id,
@@ -225,6 +230,7 @@ export const calculateOrder = async (req, res, next) => {
         quantity,
         modifiers: validatedModifiers,
         subtotal: itemSubtotal,
+        bonus_spend_allowed: Boolean(menuItem.bonus_spend_allowed),
       });
     }
 
@@ -236,7 +242,9 @@ export const calculateOrder = async (req, res, next) => {
     let bonusUsed = 0;
     if (normalizedBonusToUse > 0) {
       if (pbExternalLoyalty) {
-        const pbCalculation = await loyaltyAdapter.calculateMaxSpend(userId, subtotal, 0, { items: validatedItems });
+        const pbCalculation = await loyaltyAdapter.calculateMaxSpend(userId, bonusSpendBaseSubtotal, 0, {
+          items: validatedItems.filter((item) => item.bonus_spend_allowed),
+        });
         const pbMaxUsable = Number(pbCalculation?.max_usable || 0);
         if (normalizedBonusToUse > pbMaxUsable) {
           return res.status(400).json({ error: `Максимально доступно к списанию по PremiumBonus: ${Math.floor(pbMaxUsable)} бонусов` });
@@ -251,7 +259,7 @@ export const calculateOrder = async (req, res, next) => {
         const loyaltyLevelId = userRows[0]?.current_loyalty_level_id || 1;
         const loyaltyLevels = await getLoyaltyLevelsFromDb();
         const maxUsePercent = getRedeemPercentForLevel(loyaltyLevelId, loyaltyLevels);
-        const bonusValidation = await validateBonusUsage(userId, normalizedBonusToUse, subtotal, maxUsePercent);
+        const bonusValidation = await validateBonusUsage(userId, normalizedBonusToUse, bonusSpendBaseSubtotal, maxUsePercent);
         if (!bonusValidation.valid) {
           return res.status(400).json({
             error: bonusValidation.error,
@@ -259,7 +267,7 @@ export const calculateOrder = async (req, res, next) => {
         }
       }
 
-      bonusUsed = normalizedBonusToUse;
+      bonusUsed = Math.min(normalizedBonusToUse, bonusSpendBaseSubtotal);
     }
 
     const total = subtotal - bonusUsed;
@@ -281,6 +289,7 @@ export const calculateOrder = async (req, res, next) => {
 
     res.json({
       subtotal,
+      bonus_spend_base_subtotal: bonusSpendBaseSubtotal,
       bonus_used: bonusUsed,
       total,
       delivery_cost: deliveryCost,

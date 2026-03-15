@@ -429,6 +429,7 @@ CREATE TABLE `menu_items` (
   `image_url` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `iiko_item_id` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `iiko_synced_at` timestamp NULL DEFAULT NULL,
+  `item_type` enum('item','combo') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'item' COMMENT 'Тип позиции: обычное блюдо или комбо',
   `weight` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `weight_value` decimal(10,2) DEFAULT NULL,
   `weight_unit` enum('g','kg','ml','l','pcs') COLLATE utf8mb4_unicode_ci DEFAULT NULL,
@@ -449,6 +450,8 @@ CREATE TABLE `menu_items` (
   `is_vegetarian` tinyint(1) NOT NULL DEFAULT '0' COMMENT 'Бейдж: Вегетарианское',
   `is_piquant` tinyint(1) NOT NULL DEFAULT '0' COMMENT 'Бейдж: Пикантное',
   `is_value` tinyint(1) NOT NULL DEFAULT '0' COMMENT 'Бейдж: Выгодно',
+  `bonus_spend_allowed` tinyint(1) NOT NULL DEFAULT '1' COMMENT 'Разрешено ли списание бонусов на позицию',
+  `bonus_earn_allowed` tinyint(1) NOT NULL DEFAULT '1' COMMENT 'Участвует ли позиция в начислении бонусов',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
@@ -823,6 +826,26 @@ CREATE TABLE `menu_item_tags` (
   CONSTRAINT `menu_item_tags_ibfk_1` FOREIGN KEY (`item_id`) REFERENCES `menu_items` (`id`) ON DELETE CASCADE,
   CONSTRAINT `menu_item_tags_ibfk_2` FOREIGN KEY (`tag_id`) REFERENCES `tags` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Связь блюд с тегами';
+
+
+CREATE TABLE `menu_combo_components` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `combo_item_id` int NOT NULL COMMENT 'ID позиции-комбо в menu_items',
+  `component_item_id` int NOT NULL COMMENT 'ID базового блюда из menu_items',
+  `component_variant_id` int NOT NULL COMMENT 'ID варианта блюда из item_variants',
+  `quantity` int NOT NULL DEFAULT '1',
+  `sort_order` int NOT NULL DEFAULT '0',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_combo_variant` (`combo_item_id`,`component_variant_id`),
+  KEY `idx_combo_item` (`combo_item_id`),
+  KEY `idx_component_item` (`component_item_id`),
+  KEY `idx_component_variant` (`component_variant_id`),
+  CONSTRAINT `fk_menu_combo_components_combo_item` FOREIGN KEY (`combo_item_id`) REFERENCES `menu_items` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_menu_combo_components_component_item` FOREIGN KEY (`component_item_id`) REFERENCES `menu_items` (`id`) ON DELETE RESTRICT,
+  CONSTRAINT `fk_menu_combo_components_component_variant` FOREIGN KEY (`component_variant_id`) REFERENCES `item_variants` (`id`) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Фиксированный состав комбо по вариантам блюд';
 
 
 CREATE TABLE `loyalty_logs` (

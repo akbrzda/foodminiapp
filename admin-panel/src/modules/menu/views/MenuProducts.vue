@@ -45,12 +45,17 @@
                 <div class="text-sm font-medium text-foreground">
                   {{ item.base_price !== null && item.base_price !== undefined ? `от ${formatCurrency(item.base_price)}` : "—" }}
                 </div>
-                <Badge
-                  variant="secondary"
-                  :class="item.is_active ? 'bg-emerald-100 text-emerald-700 border-transparent' : 'bg-muted text-muted-foreground border-transparent'"
-                >
-                  {{ item.is_active ? "Активна" : "Скрыта" }}
-                </Badge>
+                <div class="flex items-center gap-2">
+                  <Badge variant="secondary" class="border-transparent bg-blue-100 text-blue-700">
+                    {{ item.item_type === "combo" ? "Комбо" : "Блюдо" }}
+                  </Badge>
+                  <Badge
+                    variant="secondary"
+                    :class="item.is_active ? 'bg-emerald-100 text-emerald-700 border-transparent' : 'bg-muted text-muted-foreground border-transparent'"
+                  >
+                    {{ item.is_active ? "Активна" : "Скрыта" }}
+                  </Badge>
+                </div>
               </div>
               <div v-if="canManageProducts" class="mt-3 flex justify-end gap-2">
                 <Button variant="ghost" size="icon" @click="editItem(item)">
@@ -69,6 +74,7 @@
             <TableHeader>
               <TableRow>
                 <TableHead>Блюдо</TableHead>
+                <TableHead>Тип</TableHead>
                 <TableHead>Категории</TableHead>
                 <TableHead>Цена</TableHead>
                 <TableHead>Статус</TableHead>
@@ -88,6 +94,7 @@
                     </div>
                   </TableCell>
                   <TableCell><Skeleton class="h-6 w-32" /></TableCell>
+                  <TableCell><Skeleton class="h-6 w-20" /></TableCell>
                   <TableCell><Skeleton class="h-4 w-20" /></TableCell>
                   <TableCell><Skeleton class="h-6 w-20" /></TableCell>
                   <TableCell class="text-right"><Skeleton class="ml-auto h-8 w-20" /></TableCell>
@@ -103,6 +110,11 @@
                         <div class="text-xs text-muted-foreground">{{ item.description || "—" }}</div>
                       </div>
                     </div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="secondary" class="border-transparent bg-blue-100 text-blue-700">
+                      {{ item.item_type === "combo" ? "Комбо" : "Блюдо" }}
+                    </Badge>
                   </TableCell>
                   <TableCell>
                     <div class="flex flex-wrap gap-1">
@@ -133,7 +145,7 @@
                 </TableRow>
               </template>
               <TableRow v-if="!isLoading && filteredItems.length === 0">
-                <TableCell colspan="5" class="py-8 text-center text-sm text-muted-foreground">По заданным фильтрам ничего не найдено</TableCell>
+                <TableCell colspan="6" class="py-8 text-center text-sm text-muted-foreground">По заданным фильтрам ничего не найдено</TableCell>
               </TableRow>
             </TableBody>
           </Table>

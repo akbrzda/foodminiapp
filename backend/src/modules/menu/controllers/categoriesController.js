@@ -19,7 +19,7 @@ function managerHasCityAccess(user, cityIds) {
 async function invalidateAllMenuCache() {
   try {
     const redis = (await import("../../../config/redis.js")).default;
-    const keys = await redis.keys("menu:city:*");
+    const keys = await redis.keys("menu:*:city:*");
     if (keys.length > 0) {
       await redis.del(keys);
     }
@@ -33,7 +33,7 @@ async function invalidateMenuCacheByCity(cityId) {
   if (!cityId) return;
   try {
     const redis = (await import("../../../config/redis.js")).default;
-    const keys = await redis.keys(`menu:city:${cityId}*`);
+    const keys = await redis.keys(`menu:*:city:${cityId}*`);
     if (keys.length > 0) {
       await redis.del(keys);
     }

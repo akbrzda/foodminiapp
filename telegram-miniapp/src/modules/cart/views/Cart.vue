@@ -210,9 +210,21 @@ const bonusToUse = computed({
   get: () => cartStore.bonusUsage.bonusToUse,
   set: (value) => cartStore.setBonusToUse(value),
 });
+const bonusEligibleSubtotal = computed(() => {
+  return cartStore.items.reduce((sum, cartItem) => {
+    const menuItem = menuStore.getItemById?.(cartItem.id);
+    const bonusSpendAllowed = menuItem?.bonus_spend_allowed !== false && menuItem?.bonus_spend_allowed !== 0;
+    if (!bonusSpendAllowed) return sum;
+    return sum + (Number(cartItem.price) || 0) * (Number(cartItem.quantity) || 1);
+  }, 0);
+});
+const maxBonusByEligibleItems = computed(() => {
+  const percent = Number(loyaltyStore.maxRedeemPercent || 0);
+  return Math.max(0, Math.floor(bonusEligibleSubtotal.value * percent));
+});
 const maxBonusToUse = computed(() => {
   if (!bonusesEnabled.value) return 0;
-  return Math.min(bonusBalance.value, Math.floor(maxUsableFromApi.value));
+  return Math.min(bonusBalance.value, Math.floor(maxUsableFromApi.value), maxBonusByEligibleItems.value);
 });
 const appliedBonusToUse = computed(() => {
   if (!bonusesEnabled.value) return 0;

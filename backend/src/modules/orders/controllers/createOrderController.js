@@ -159,6 +159,8 @@ const resolveInternalApiBaseUrl = (req) => {
 
 const calculateOrderCost = async (items, { cityId, fulfillmentType, bonusToUse }) => {
   let subtotal = 0;
+  let bonusSpendBaseSubtotal = 0;
+  let bonusEarnBaseSubtotal = 0;
   const validatedItems = [];
 
   for (const item of items) {
@@ -169,9 +171,10 @@ const calculateOrderCost = async (items, { cityId, fulfillmentType, bonusToUse }
     }
 
     // Получение товара
-    const [menuItems] = await db.query("SELECT id, name, price, weight, weight_unit, is_active FROM menu_items WHERE id = ? AND is_active = TRUE", [
-      item_id,
-    ]);
+    const [menuItems] = await db.query(
+      "SELECT id, name, price, weight, weight_unit, is_active, bonus_spend_allowed, bonus_earn_allowed FROM menu_items WHERE id = ? AND is_active = TRUE",
+      [item_id],
+    );
 
     if (menuItems.length === 0) {
       throw new Error(`Menu item ${item_id} not found or inactive`);
@@ -299,6 +302,14 @@ const calculateOrderCost = async (items, { cityId, fulfillmentType, bonusToUse }
     const unitPrice = itemBasePrice + modifiersTotal;
     const itemSubtotal = unitPrice * quantity;
     subtotal += itemSubtotal;
+    const bonusSpendAllowed = Boolean(menuItem.bonus_spend_allowed);
+    const bonusEarnAllowed = Boolean(menuItem.bonus_earn_allowed);
+    if (bonusSpendAllowed) {
+      bonusSpendBaseSubtotal += itemSubtotal;
+    }
+    if (bonusEarnAllowed) {
+      bonusEarnBaseSubtotal += itemSubtotal;
+    }
 
     validatedItems.push({
       item_id: menuItem.id,
@@ -309,14 +320,18 @@ const calculateOrderCost = async (items, { cityId, fulfillmentType, bonusToUse }
       quantity,
       modifiers: validatedModifiers,
       subtotal: itemSubtotal,
+      bonus_spend_allowed: bonusSpendAllowed,
+      bonus_earn_allowed: bonusEarnAllowed,
     });
   }
 
-  const bonusUsed = Math.min(bonusToUse, subtotal);
+  const bonusUsed = Math.min(bonusToUse, bonusSpendBaseSubtotal);
   const total = subtotal - bonusUsed;
 
   return {
     subtotal,
+    bonusSpendBaseSubtotal,
+    bonusEarnBaseSubtotal,
     bonusUsed,
     total,
     validatedItems,
@@ -549,7 +564,7 @@ export const createOrder = async (req, res, next) => {
     const pbSyncStatus = pbPurchasesExternal ? "pending" : "synced";
 
     // Расчет стоимости заказа
-    let { subtotal, bonusUsed, total, validatedItems } = await calculateOrderCost(items, {
+    let { subtotal, bonusSpendBaseSubtotal, bonusEarnBaseSubtotal, bonusUsed, total, validatedItems } = await calculateOrderCost(items, {
       cityId: city_id,
       fulfillmentType,
       bonusToUse: effectiveBonusToUse,
@@ -557,7 +572,7 @@ export const createOrder = async (req, res, next) => {
 
     // Валидация бонусов
     if (useLocalBonuses && effectiveBonusToUse > 0) {
-      const bonusValidation = await validateBonusUsage(req.user.id, effectiveBonusToUse, subtotal, maxUsePercent);
+      const bonusValidation = await validateBonusUsage(req.user.id, effectiveBonusToUse, bonusSpendBaseSubtotal, maxUsePercent);
       if (!bonusValidation.valid) {
         await connection.rollback();
         return res.status(400).json({ error: bonusValidation.error });
@@ -579,8 +594,8 @@ export const createOrder = async (req, res, next) => {
 
     if (pbPurchasesExternal && effectiveBonusToUse > 0) {
       try {
-        const pbCalculation = await loyaltyAdapter.calculateMaxSpend(req.user.id, subtotal, deliveryCost, {
-          items: validatedItems,
+        const pbCalculation = await loyaltyAdapter.calculateMaxSpend(req.user.id, bonusSpendBaseSubtotal, deliveryCost, {
+          items: validatedItems.filter((item) => item.bonus_spend_allowed),
         });
         const pbMaxUsable = Number(pbCalculation?.max_usable || 0);
         if (effectiveBonusToUse > pbMaxUsable) {
@@ -609,7 +624,7 @@ export const createOrder = async (req, res, next) => {
     // Расчет начисленных бонусов
     let earnedBonuses = 0;
     if (useLocalBonuses) {
-      const baseAmount = subtotal - bonusUsed;
+      const baseAmount = bonusEarnBaseSubtotal - bonusUsed;
       earnedBonuses = calculateEarnedBonuses(Math.max(0, baseAmount), loyaltyLevel, loyaltyLevels);
     }
 

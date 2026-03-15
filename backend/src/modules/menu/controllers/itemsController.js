@@ -5,6 +5,7 @@ import { notifyMenuUpdated } from "../../../websocket/runtime.js";
 
 const NEW_BADGE_DAYS = 14;
 const HIT_BADGE_SALES_THRESHOLD = 50;
+const ALLOWED_ITEM_TYPES = new Set(["item", "combo"]);
 
 // Вспомогательные функции
 const toBool = (value, fallback = false) => {
@@ -52,6 +53,112 @@ function validateBadgesLimit({ isNewEnabled, isHitEnabled, isSpicyEnabled, isVeg
   return null;
 }
 
+function normalizeItemType(value, fallback = "item") {
+  const normalized = String(value || fallback)
+    .trim()
+    .toLowerCase();
+  return ALLOWED_ITEM_TYPES.has(normalized) ? normalized : fallback;
+}
+
+function normalizeComboComponents(input = []) {
+  if (!Array.isArray(input)) return [];
+  return input
+    .map((row, index) => {
+      const componentItemId = Number(row?.component_item_id);
+      const componentVariantId = Number(row?.component_variant_id);
+      const quantity = Math.max(1, Number.parseInt(row?.quantity, 10) || 1);
+      const sortOrder = Number.isFinite(Number(row?.sort_order)) ? Number(row.sort_order) : (index + 1) * 10;
+      if (!Number.isInteger(componentItemId) || !Number.isInteger(componentVariantId)) return null;
+      return {
+        component_item_id: componentItemId,
+        component_variant_id: componentVariantId,
+        quantity,
+        sort_order: sortOrder,
+      };
+    })
+    .filter(Boolean);
+}
+
+async function validateComboComponents(connection, comboComponents = []) {
+  if (!Array.isArray(comboComponents) || comboComponents.length === 0) {
+    return { valid: false, error: "Для комбо необходимо выбрать хотя бы один вариант блюда" };
+  }
+
+  const variantIds = [...new Set(comboComponents.map((component) => Number(component.component_variant_id)).filter(Number.isInteger))];
+  const itemIds = [...new Set(comboComponents.map((component) => Number(component.component_item_id)).filter(Number.isInteger))];
+  if (variantIds.length !== comboComponents.length) {
+    return { valid: false, error: "В составе комбо обнаружены дубли вариантов" };
+  }
+
+  const [variantRows] = await connection.query(
+    `SELECT iv.id, iv.item_id
+     FROM item_variants iv
+     JOIN menu_items mi ON mi.id = iv.item_id
+     WHERE iv.id IN (${variantIds.map(() => "?").join(",")})
+       AND iv.is_active = TRUE
+       AND mi.is_active = TRUE`,
+    variantIds,
+  );
+  if (variantRows.length !== variantIds.length) {
+    return { valid: false, error: "Один или несколько выбранных вариантов недоступны" };
+  }
+
+  const [itemRows] = await connection.query(
+    `SELECT id
+     FROM menu_items
+     WHERE id IN (${itemIds.map(() => "?").join(",")})
+       AND is_active = TRUE`,
+    itemIds,
+  );
+  if (itemRows.length !== itemIds.length) {
+    return { valid: false, error: "Одна или несколько позиций состава недоступны" };
+  }
+
+  const itemByVariantId = new Map(variantRows.map((row) => [Number(row.id), Number(row.item_id)]));
+  for (const component of comboComponents) {
+    const mappedItemId = itemByVariantId.get(Number(component.component_variant_id));
+    if (!mappedItemId || mappedItemId !== Number(component.component_item_id)) {
+      return { valid: false, error: "Вариант должен принадлежать выбранному блюду в составе комбо" };
+    }
+  }
+
+  return { valid: true };
+}
+
+async function replaceComboComponents(connection, comboItemId, comboComponents = []) {
+  await connection.query("DELETE FROM menu_combo_components WHERE combo_item_id = ?", [comboItemId]);
+  if (!Array.isArray(comboComponents) || comboComponents.length === 0) return;
+
+  for (const component of comboComponents) {
+    await connection.query(
+      `INSERT INTO menu_combo_components (combo_item_id, component_item_id, component_variant_id, quantity, sort_order)
+       VALUES (?, ?, ?, ?, ?)`,
+      [comboItemId, component.component_item_id, component.component_variant_id, component.quantity, component.sort_order],
+    );
+  }
+}
+
+async function getComboComponents(itemId, connection = db) {
+  const [rows] = await connection.query(
+    `SELECT mcc.id,
+            mcc.combo_item_id,
+            mcc.component_item_id,
+            mcc.component_variant_id,
+            mcc.quantity,
+            mcc.sort_order,
+            mi.name AS component_item_name,
+            iv.name AS component_variant_name,
+            iv.image_url AS component_variant_image_url
+     FROM menu_combo_components mcc
+     JOIN menu_items mi ON mi.id = mcc.component_item_id
+     JOIN item_variants iv ON iv.id = mcc.component_variant_id
+     WHERE mcc.combo_item_id = ?
+     ORDER BY mcc.sort_order, mcc.id`,
+    [itemId],
+  );
+  return rows;
+}
+
 async function getItemCityIds(itemId) {
   const [rows] = await db.query("SELECT city_id FROM menu_item_cities WHERE item_id = ?", [itemId]);
   return rows.map((row) => row.city_id);
@@ -67,7 +174,7 @@ function managerHasCityAccess(user, cityIds) {
 async function invalidateAllMenuCache() {
   try {
     const redis = (await import("../../../config/redis.js")).default;
-    const keys = await redis.keys("menu:city:*");
+    const keys = await redis.keys("menu:*:city:*");
     if (keys.length > 0) {
       await redis.del(keys);
     }
@@ -81,7 +188,7 @@ async function invalidateMenuCacheByCity(cityId) {
   if (!cityId) return;
   try {
     const redis = (await import("../../../config/redis.js")).default;
-    const keys = await redis.keys(`menu:city:${cityId}*`);
+    const keys = await redis.keys(`menu:*:city:${cityId}*`);
     if (keys.length > 0) {
       await redis.del(keys);
     }
@@ -175,10 +282,14 @@ export const createItem = async (req, res, next) => {
       is_vegetarian,
       is_piquant,
       is_value,
+      item_type,
+      bonus_spend_allowed,
+      bonus_earn_allowed,
       category_ids,
       tag_ids,
       city_ids,
       prices,
+      combo_components,
     } = req.body;
 
     if (!name) {
@@ -193,6 +304,10 @@ export const createItem = async (req, res, next) => {
     const desiredIsVegetarian = toBool(is_vegetarian, false);
     const desiredIsPiquant = toBool(is_piquant, false);
     const desiredIsValue = toBool(is_value, false);
+    const normalizedItemType = normalizeItemType(item_type, "item");
+    const normalizedBonusSpendAllowed = toBool(bonus_spend_allowed, true);
+    const normalizedBonusEarnAllowed = toBool(bonus_earn_allowed, true);
+    const normalizedComboComponents = normalizeComboComponents(combo_components);
 
     const badgeLimitError = validateBadgesLimit({
       isNewEnabled: desiredIsNew || false,
@@ -233,8 +348,9 @@ export const createItem = async (req, res, next) => {
          (name, description, composition, price, image_url, weight_value, weight_unit, 
           calories_per_100g, proteins_per_100g, fats_per_100g, carbs_per_100g,
           calories_per_serving, proteins_per_serving, fats_per_serving, carbs_per_serving,
-          sort_order, is_active, is_new, is_hit, is_spicy, is_vegetarian, is_piquant, is_value)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          sort_order, is_active, is_new, is_hit, is_spicy, is_vegetarian, is_piquant, is_value,
+          item_type, bonus_spend_allowed, bonus_earn_allowed)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           name,
           description || null,
@@ -259,10 +375,23 @@ export const createItem = async (req, res, next) => {
           desiredIsVegetarian ? 1 : 0,
           desiredIsPiquant ? 1 : 0,
           desiredIsValue ? 1 : 0,
+          normalizedItemType,
+          normalizedBonusSpendAllowed ? 1 : 0,
+          normalizedBonusEarnAllowed ? 1 : 0,
         ],
       );
 
       const itemId = result.insertId;
+
+      if (normalizedItemType === "combo") {
+        const comboValidation = await validateComboComponents(connection, normalizedComboComponents);
+        if (!comboValidation.valid) {
+          const validationError = new Error(comboValidation.error);
+          validationError.status = 400;
+          throw validationError;
+        }
+        await replaceComboComponents(connection, itemId, normalizedComboComponents);
+      }
 
       // Привязка к категориям
       if (Array.isArray(category_ids)) {
@@ -310,11 +439,17 @@ export const createItem = async (req, res, next) => {
                 calories_per_100g, proteins_per_100g, fats_per_100g, carbs_per_100g,
                 calories_per_serving, proteins_per_serving, fats_per_serving, carbs_per_serving,
                 sort_order, is_active,
-                is_new, is_hit, is_spicy, is_vegetarian, is_piquant, is_value,
+                is_new, is_hit, is_spicy, is_vegetarian, is_piquant, is_value, item_type, bonus_spend_allowed, bonus_earn_allowed,
                 created_at, updated_at
          FROM menu_items WHERE id = ?`,
         [itemId],
       );
+
+      if (normalizedItemType === "combo") {
+        newItem[0].combo_components = await getComboComponents(itemId, connection);
+      } else {
+        newItem[0].combo_components = [];
+      }
 
       await connection.commit();
       await invalidateAllMenuCache();
@@ -343,7 +478,7 @@ export const getAdminItems = async (req, res, next) => {
     const source = allowedSources.has(requestedSource) ? requestedSource : defaultSource;
     const sourceWhere =
       source === "iiko"
-        ? "WHERE COALESCE(NULLIF(TRIM(mi.iiko_item_id), ''), NULL) IS NOT NULL"
+        ? "WHERE COALESCE(NULLIF(TRIM(mi.iiko_item_id), ''), NULL) IS NOT NULL OR mi.item_type = 'combo'"
         : "WHERE COALESCE(NULLIF(TRIM(mi.iiko_item_id), ''), NULL) IS NULL";
 
     let query = `
@@ -372,6 +507,9 @@ export const getAdminItems = async (req, res, next) => {
         mi.is_vegetarian,
         mi.is_piquant,
         mi.is_value,
+        mi.item_type,
+        mi.bonus_spend_allowed,
+        mi.bonus_earn_allowed,
         mi.created_at, 
         mi.updated_at
       FROM menu_items mi
@@ -485,6 +623,9 @@ export const getAdminItemById = async (req, res, next) => {
         mi.is_vegetarian,
         mi.is_piquant,
         mi.is_value,
+        mi.item_type,
+        mi.bonus_spend_allowed,
+        mi.bonus_earn_allowed,
         mi.created_at, 
         mi.updated_at
       FROM menu_items mi
@@ -508,6 +649,7 @@ export const getAdminItemById = async (req, res, next) => {
         ...item,
         is_new: isNewEnabled,
         is_hit: isHitEnabled,
+        combo_components: await getComboComponents(itemId),
       },
     });
   } catch (error) {
@@ -543,14 +685,18 @@ export const updateItem = async (req, res, next) => {
       is_vegetarian,
       is_piquant,
       is_value,
+      item_type,
+      bonus_spend_allowed,
+      bonus_earn_allowed,
       category_ids,
       tag_ids,
       city_ids,
       prices,
+      combo_components,
     } = req.body;
 
     const [items] = await db.query(
-      `SELECT id, created_at, is_new, is_hit, is_spicy, is_vegetarian, is_piquant, is_value
+      `SELECT id, created_at, is_new, is_hit, is_spicy, is_vegetarian, is_piquant, is_value, item_type, bonus_spend_allowed, bonus_earn_allowed
        FROM menu_items
        WHERE id = ?`,
       [itemId],
@@ -570,6 +716,12 @@ export const updateItem = async (req, res, next) => {
     const desiredIsVegetarian = is_vegetarian !== undefined ? toBool(is_vegetarian) : toBool(existingItem.is_vegetarian);
     const desiredIsPiquant = is_piquant !== undefined ? toBool(is_piquant) : toBool(existingItem.is_piquant);
     const desiredIsValue = is_value !== undefined ? toBool(is_value) : toBool(existingItem.is_value);
+    const desiredItemType = item_type !== undefined ? normalizeItemType(item_type, "item") : normalizeItemType(existingItem.item_type, "item");
+    const desiredBonusSpendAllowed =
+      bonus_spend_allowed !== undefined ? toBool(bonus_spend_allowed, true) : toBool(existingItem.bonus_spend_allowed, true);
+    const desiredBonusEarnAllowed =
+      bonus_earn_allowed !== undefined ? toBool(bonus_earn_allowed, true) : toBool(existingItem.bonus_earn_allowed, true);
+    const normalizedComboComponents = normalizeComboComponents(combo_components);
 
     const badgeLimitError = validateBadgesLimit({
       isNewEnabled: desiredIsNew,
@@ -678,8 +830,21 @@ export const updateItem = async (req, res, next) => {
       updates.push("is_value = ?");
       values.push(desiredIsValue ? 1 : 0);
     }
+    if (item_type !== undefined) {
+      updates.push("item_type = ?");
+      values.push(desiredItemType);
+    }
+    if (bonus_spend_allowed !== undefined) {
+      updates.push("bonus_spend_allowed = ?");
+      values.push(desiredBonusSpendAllowed ? 1 : 0);
+    }
+    if (bonus_earn_allowed !== undefined) {
+      updates.push("bonus_earn_allowed = ?");
+      values.push(desiredBonusEarnAllowed ? 1 : 0);
+    }
 
-    if (updates.length === 0) {
+    const hasComboPayload = combo_components !== undefined;
+    if (updates.length === 0 && !hasComboPayload) {
       return res.status(400).json({ error: "No fields to update" });
     }
 
@@ -687,8 +852,23 @@ export const updateItem = async (req, res, next) => {
     try {
       await connection.beginTransaction();
 
-      values.push(itemId);
-      await connection.query(`UPDATE menu_items SET ${updates.join(", ")} WHERE id = ?`, values);
+      if (updates.length > 0) {
+        values.push(itemId);
+        await connection.query(`UPDATE menu_items SET ${updates.join(", ")} WHERE id = ?`, values);
+      }
+
+      const shouldUpdateComboComponents = combo_components !== undefined || item_type !== undefined;
+      if (desiredItemType === "combo" && shouldUpdateComboComponents) {
+        const comboValidation = await validateComboComponents(connection, normalizedComboComponents);
+        if (!comboValidation.valid) {
+          const validationError = new Error(comboValidation.error);
+          validationError.status = 400;
+          throw validationError;
+        }
+        await replaceComboComponents(connection, itemId, normalizedComboComponents);
+      } else if (desiredItemType !== "combo" && shouldUpdateComboComponents) {
+        await replaceComboComponents(connection, itemId, []);
+      }
 
       // Обновление категорий
       if (Array.isArray(category_ids)) {
@@ -739,11 +919,17 @@ export const updateItem = async (req, res, next) => {
                 calories_per_100g, proteins_per_100g, fats_per_100g, carbs_per_100g,
                 calories_per_serving, proteins_per_serving, fats_per_serving, carbs_per_serving,
                 sort_order, is_active,
-                is_new, is_hit, is_spicy, is_vegetarian, is_piquant, is_value,
+                is_new, is_hit, is_spicy, is_vegetarian, is_piquant, is_value, item_type, bonus_spend_allowed, bonus_earn_allowed,
                 created_at, updated_at
          FROM menu_items WHERE id = ?`,
         [itemId],
       );
+
+      if (desiredItemType === "combo") {
+        updatedItem[0].combo_components = await getComboComponents(itemId, connection);
+      } else {
+        updatedItem[0].combo_components = [];
+      }
 
       await connection.commit();
       await invalidateAllMenuCache();
