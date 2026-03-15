@@ -4,4 +4,6 @@ process.env.DB_PORT = process.env.DB_PORT || "3306";
 process.env.DB_NAME = process.env.DB_NAME || "test_db";
 process.env.DB_USER = process.env.DB_USER || "test_user";
 process.env.DB_PASSWORD = process.env.DB_PASSWORD || "test_password";
+process.env.REDIS_HOST = process.env.REDIS_HOST || "localhost";
+process.env.REDIS_PORT = process.env.REDIS_PORT || "6379";
 process.env.ADMIN_REFRESH_SESSION_HOURS = process.env.ADMIN_REFRESH_SESSION_HOURS || "12";

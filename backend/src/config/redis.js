@@ -3,8 +3,10 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-// Проверка наличия обязательных переменных окружения
-const requiredEnvVars = ["REDIS_HOST", "REDIS_PASSWORD"];
+const isTestEnv = process.env.NODE_ENV === "test";
+
+// Для запуска приложения достаточно указать хост Redis; пароль опционален
+const requiredEnvVars = ["REDIS_HOST"];
 for (const envVar of requiredEnvVars) {
   if (!process.env[envVar]) {
     throw new Error(`Missing required environment variable: ${envVar}`);
@@ -14,11 +16,15 @@ for (const envVar of requiredEnvVars) {
 const redisConfig = {
   host: process.env.REDIS_HOST,
   port: process.env.REDIS_PORT || 6379,
-  password: process.env.REDIS_PASSWORD,
+  ...(process.env.REDIS_PASSWORD ? { password: process.env.REDIS_PASSWORD } : {}),
   retryStrategy: (times) => {
+    if (isTestEnv) {
+      return null;
+    }
     const delay = Math.min(times * 50, 2000);
     return delay;
   },
+  lazyConnect: isTestEnv,
 };
 const redis = new Redis(redisConfig);
 redis.on("connect", () => {});
