@@ -1,0 +1,80 @@
+export const usersRoutes = [
+  {
+    path: "clients",
+    name: "clients",
+    component: () => import("@/modules/clients/views/Clients.vue"),
+    meta: {
+      title: "Клиенты",
+      subtitle: "Контакты и лояльность",
+      permissions: ["clients.view"],
+      isList: true,
+      listName: "clients",
+    },
+  },
+  {
+    path: "clients/:id",
+    name: "client-detail",
+    component: () => import("@/modules/clients/views/ClientDetail.vue"),
+    meta: {
+      title: "Клиент",
+      subtitle: "Данные и история",
+      permissions: ["clients.view"],
+      breadcrumbs: [{ label: "Клиенты", to: "/clients" }, { label: "Клиент" }],
+      isDetail: true,
+      parentList: "clients",
+    },
+  },
+  {
+    path: "admin-users",
+    name: "admin-users",
+    component: () => import("@/modules/admin/views/AdminUsers.vue"),
+    meta: {
+      title: "Администраторы",
+      subtitle: "Управление пользователями админ-панели",
+      permissions: ["system.admin_users.manage"],
+      isList: true,
+      listName: "admin-users",
+    },
+  },
+  {
+    path: "admin-users/access-roles",
+    name: "admin-users-access-roles",
+    component: () => import("@/modules/admin/views/AccessRoles.vue"),
+    meta: {
+      title: "Роли и доступы",
+      subtitle: "Матрица прав и настройки ролей",
+      permissions: ["system.roles.view", "system.access.manage"],
+      breadcrumbs: [{ label: "Администраторы", to: "/admin-users" }, { label: "Роли и доступы" }],
+      isDetail: true,
+      parentList: "admin-users",
+    },
+  },
+  {
+    path: "admin-users/:id/edit",
+    name: "admin-user-edit",
+    component: () => import("@/modules/admin/views/AdminUserEdit.vue"),
+    meta: {
+      title: "Редактирование пользователя",
+      subtitle: "Профиль, роль и индивидуальные доступы",
+      permissions: ["system.admin_users.manage"],
+      breadcrumbs: [
+        { label: "Администраторы", to: "/admin-users" },
+        { label: "Редактирование пользователя" },
+      ],
+      isEdit: true,
+      parentList: "admin-users",
+    },
+  },
+  {
+    path: "logs",
+    name: "admin-logs",
+    component: () => import("@/modules/admin/views/AdminLogs.vue"),
+    meta: {
+      title: "Логи",
+      subtitle: "Журнал действий администраторов",
+      permissions: ["system.logs.view"],
+      isList: true,
+      listName: "admin-logs",
+    },
+  },
+];

@@ -10,8 +10,15 @@
       >
         <X :size="16" />
       </button>
-      <div :class="['flex items-center', isCollapsed ? 'justify-center py-4' : 'min-h-[72px] gap-3 px-4']">
-        <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+      <div
+        :class="[
+          'flex items-center',
+          isCollapsed ? 'justify-center py-4' : 'min-h-[72px] gap-3 px-4',
+        ]"
+      >
+        <div
+          class="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary"
+        >
           <svg
             xmlns="http://www.w3.org/2000/svg"
             width="24"
@@ -94,7 +101,7 @@
               {{ userName || "Профиль" }}
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem @click="authStore.logout()">
+            <DropdownMenuItem @click="handleLogout">
               <LogOut :size="16" />
               Выйти
             </DropdownMenuItem>
@@ -108,6 +115,7 @@
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
 import { useAuthStore } from "@/shared/stores/auth.js";
+import { runLogoutFlow } from "@/shared/services/auth/authUiFlow.js";
 import { useOrdersStore } from "@/modules/orders/stores/orders.js";
 import api from "@/shared/api/client.js";
 import {
@@ -175,8 +183,19 @@ const navSections = computed(() => {
       id: "operations",
       title: "Операции",
       items: [
-        { label: "Дашборд", to: "/dashboard", icon: LayoutDashboard, permissions: ["dashboard.view"] },
-        { label: "Заказы", to: "/orders", icon: ClipboardList, badge: newOrdersCount.value, permissions: ["orders.view"] },
+        {
+          label: "Дашборд",
+          to: "/dashboard",
+          icon: LayoutDashboard,
+          permissions: ["dashboard.view"],
+        },
+        {
+          label: "Заказы",
+          to: "/orders",
+          icon: ClipboardList,
+          badge: newOrdersCount.value,
+          permissions: ["orders.view"],
+        },
         { label: "Клиенты", to: "/clients", icon: Users, permissions: ["clients.view"] },
       ],
     },
@@ -184,28 +203,73 @@ const navSections = computed(() => {
       id: "marketing",
       title: "Маркетинг",
       items: [
-        { label: "Кампании подписки", to: "/campaign", icon: BellRing, permissions: ["marketing.campaigns.manage"] },
-        { label: "Рассылки", to: "/broadcasts", icon: Megaphone, permissions: ["marketing.broadcasts.manage"] },
-        { label: "Уровни лояльности", to: "/loyalty-levels", icon: Award, permissions: ["system.loyalty_levels.manage"] },
+        {
+          label: "Кампании подписки",
+          to: "/campaign",
+          icon: BellRing,
+          permissions: ["marketing.campaigns.manage"],
+        },
+        {
+          label: "Рассылки",
+          to: "/broadcasts",
+          icon: Megaphone,
+          permissions: ["marketing.broadcasts.manage"],
+        },
+        {
+          label: "Уровни лояльности",
+          to: "/loyalty-levels",
+          icon: Award,
+          permissions: ["system.loyalty_levels.manage"],
+        },
       ],
     },
     {
       id: "catalog",
       title: "Каталог",
       items: [
-        { label: "Блюда", to: "/menu/products", icon: UtensilsCrossed, permissions: ["menu.products.manage"] },
-        { label: "Категории", to: "/menu/categories", icon: ListTree, permissions: ["menu.categories.manage"] },
-        { label: "Модификаторы", to: "/menu/modifiers", icon: Layers, permissions: ["menu.modifiers.manage"] },
+        {
+          label: "Блюда",
+          to: "/menu/products",
+          icon: UtensilsCrossed,
+          permissions: ["menu.products.manage"],
+        },
+        {
+          label: "Категории",
+          to: "/menu/categories",
+          icon: ListTree,
+          permissions: ["menu.categories.manage"],
+        },
+        {
+          label: "Модификаторы",
+          to: "/menu/modifiers",
+          icon: Layers,
+          permissions: ["menu.modifiers.manage"],
+        },
         { label: "Теги", to: "/menu/tags", icon: Tag, permissions: ["menu.tags.manage"] },
-        { label: "Стоп-лист", to: "/menu/stop-list", icon: Ban, permissions: ["menu.stop_list.manage"] },
+        {
+          label: "Стоп-лист",
+          to: "/menu/stop-list",
+          icon: Ban,
+          permissions: ["menu.stop_list.manage"],
+        },
       ],
     },
     {
       id: "locations",
       title: "Локации",
       items: [
-        { label: "Города", to: "/cities", icon: MapPinned, permissions: ["locations.cities.manage"] },
-        { label: "Филиалы", to: "/branches", icon: Building2, permissions: ["locations.branches.view", "locations.branches.manage"] },
+        {
+          label: "Города",
+          to: "/cities",
+          icon: MapPinned,
+          permissions: ["locations.cities.manage"],
+        },
+        {
+          label: "Филиалы",
+          to: "/branches",
+          icon: Building2,
+          permissions: ["locations.branches.view", "locations.branches.manage"],
+        },
         {
           label: "Зоны доставки",
           to: "/delivery-zones",
@@ -218,9 +282,24 @@ const navSections = computed(() => {
       id: "system",
       title: "Администрирование",
       items: [
-        { label: "Настройки системы", to: "/system/settings", icon: SlidersHorizontal, permissions: ["system.settings.manage"] },
-        { label: "Интеграции", to: "/integrations", icon: PlugZap, permissions: ["system.integrations.manage"] },
-        { label: "Пользователи", to: "/admin-users", icon: UserCog, permissions: ["system.admin_users.manage"] },
+        {
+          label: "Настройки системы",
+          to: "/system/settings",
+          icon: SlidersHorizontal,
+          permissions: ["system.settings.manage"],
+        },
+        {
+          label: "Интеграции",
+          to: "/integrations",
+          icon: PlugZap,
+          permissions: ["system.integrations.manage"],
+        },
+        {
+          label: "Пользователи",
+          to: "/admin-users",
+          icon: UserCog,
+          permissions: ["system.admin_users.manage"],
+        },
         { label: "Логи", to: "/logs", icon: FileText, permissions: ["system.logs.view"] },
       ],
     },
@@ -235,9 +314,17 @@ const navSections = computed(() => {
     .filter((section) => section.items.length > 0);
 });
 
-const asideClasses = computed(() => ["sidebar", props.isOpen ? "is-open" : "is-closed", props.isCollapsed ? "is-collapsed" : ""]);
+const asideClasses = computed(() => [
+  "sidebar",
+  props.isOpen ? "is-open" : "is-closed",
+  props.isCollapsed ? "is-collapsed" : "",
+]);
 const handleClose = () => {
   emit("close");
+};
+
+const handleLogout = async () => {
+  await runLogoutFlow(authStore);
 };
 </script>
 <style scoped>

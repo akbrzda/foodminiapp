@@ -5,10 +5,27 @@ import "./style.css";
 import "vue-sonner/style.css";
 import App from "./App.vue";
 import { useAuthStore } from "@/shared/stores/auth.js";
+import {
+  clearNavigationAfterLogout,
+  redirectFromLoginToRoot,
+  redirectToLogin,
+} from "@/shared/services/auth/authUiFlow.js";
+
 const app = createApp(App);
 const pinia = createPinia();
+
 app.use(pinia);
+
 const authStore = useAuthStore(pinia);
-authStore.initCrossTabSync();
+authStore.initCrossTabSync({
+  onLogin: () => {
+    redirectFromLoginToRoot();
+  },
+  onLogout: () => {
+    clearNavigationAfterLogout();
+    redirectToLogin();
+  },
+});
+
 app.use(router);
 app.mount("#app");

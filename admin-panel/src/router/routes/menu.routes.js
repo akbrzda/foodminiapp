@@ -1,0 +1,75 @@
+export const menuRoutes = [
+  {
+    path: "menu/categories",
+    name: "menu-categories",
+    component: () => import("@/modules/menu/views/MenuCategories.vue"),
+    meta: {
+      title: "Категории",
+      subtitle: "Структура меню по городам",
+      permissions: ["menu.categories.manage"],
+      isList: true,
+      listName: "menu-categories",
+    },
+  },
+  {
+    path: "menu/products",
+    name: "menu-products",
+    component: () => import("@/modules/menu/views/MenuProducts.vue"),
+    meta: {
+      title: "Блюда",
+      subtitle: "Карточки блюд и варианты",
+      permissions: ["menu.products.manage"],
+      isList: true,
+      listName: "menu-products",
+    },
+  },
+  {
+    path: "menu/products/:id",
+    name: "menu-product-form",
+    component: () => import("@/modules/menu/views/MenuProductForm.vue"),
+    meta: {
+      title: "Блюдо меню",
+      subtitle: "Создание и редактирование",
+      permissions: ["menu.products.manage"],
+      breadcrumbs: [{ label: "Блюда", to: "/menu/products" }, { label: "Блюдо меню" }],
+      isEdit: true,
+      parentList: "menu-products",
+    },
+  },
+  {
+    path: "menu/modifiers",
+    name: "menu-modifiers",
+    component: () => import("@/modules/menu/views/MenuModifiers.vue"),
+    meta: {
+      title: "Модификаторы",
+      subtitle: "Группы и допы",
+      permissions: ["menu.modifiers.manage"],
+      isList: true,
+      listName: "menu-modifiers",
+    },
+  },
+  {
+    path: "menu/tags",
+    name: "menu-tags",
+    component: () => import("@/modules/menu/views/MenuTags.vue"),
+    meta: {
+      title: "Теги",
+      subtitle: "Метки для фильтрации блюд",
+      permissions: ["menu.tags.manage"],
+      isList: true,
+      listName: "menu-tags",
+    },
+  },
+  {
+    path: "menu/stop-list",
+    name: "menu-stop-list",
+    component: () => import("@/modules/menu/views/MenuStopList.vue"),
+    meta: {
+      title: "Стоп-лист",
+      subtitle: "Недоступные блюда",
+      permissions: ["menu.stop_list.manage"],
+      isList: true,
+      listName: "menu-stop-list",
+    },
+  },
+];

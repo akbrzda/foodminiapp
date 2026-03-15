@@ -1,0 +1,35 @@
+{
+  "name": "foodminiapp-monorepo",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Корневые команды качества для сервисов FoodMiniApp",
+  "scripts": {
+    "prepare": "husky",
+    "lint": "npm run lint:backend && npm run lint:admin && npm run lint:miniapp && npm run lint:bot",
+    "typecheck": "npm run typecheck:backend && npm run typecheck:admin && npm run typecheck:miniapp && npm run typecheck:bot",
+    "test": "npm run test:backend && npm run test:admin && npm run test:miniapp && npm run test:bot",
+    "check": "npm run lint && npm run typecheck && npm run test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint:backend": "npm --prefix backend run lint",
+    "lint:admin": "npm --prefix admin-panel run lint",
+    "lint:miniapp": "npm --prefix telegram-miniapp run lint",
+    "lint:bot": "npm --prefix bot run lint",
+    "typecheck:backend": "npm --prefix backend run typecheck",
+    "typecheck:admin": "npm --prefix admin-panel run typecheck",
+    "typecheck:miniapp": "npm --prefix telegram-miniapp run typecheck",
+    "typecheck:bot": "npm --prefix bot run typecheck",
+    "test:backend": "npm --prefix backend run test",
+    "test:admin": "npm --prefix admin-panel run test",
+    "test:miniapp": "npm --prefix telegram-miniapp run test",
+    "test:bot": "npm --prefix bot run test"
+  },
+  "lint-staged": {
+    "*.{js,vue,json,md,yml,yaml}": "prettier --write"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
+    "prettier": "^3.8.1"
+  }
+}

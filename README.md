@@ -1,30 +1,98 @@
-# 🎯 FoodMiniApp
+# FoodMiniApp
 
-> Единая система онлайн‑заказа еды с Telegram Mini App, админ‑панелью и backend API для управления меню, заказами и доставкой.
+Монорепозиторий системы онлайн-заказа еды с четырьмя сервисами:
 
-![Status](https://img.shields.io/badge/status-MVP-yellow) ![Stack](https://img.shields.io/badge/stack-Vue3%20%7C%20Node.js-blue) ![DB](https://img.shields.io/badge/db-MySQL8%20%2B%20Redis-informational) ![License](https://img.shields.io/badge/license-ISC-lightgrey)
+- `backend` — REST API, WebSocket и фоновые worker-процессы
+- `admin-panel` — административная панель (Vue 3 + Vite)
+- `telegram-miniapp` — клиентское Telegram Mini App (Vue 3 + Vite)
+- `bot` — отдельный Telegram bot service
 
-## 🧭 О проекте
+## Текущий стек (по фактическому коду)
 
-FoodMiniApp закрывает полный цикл заказа еды в Telegram: от выбора блюд и оформления доставки до управления операциями кухни в админ‑панели. Система рассчитана на рестораны и сети, которым важно запускаться быстро и работать стабильно в пиковых нагрузках. Ключевое преимущество — связка Telegram Mini App + real‑time админ‑панели с геозонами и модульной архитектурой бэкенда. Проект нацелен на масштабирование по городам и филиалам.
+- Backend/Bot: Node.js, Express, MySQL, Redis, BullMQ
+- Frontend: Vue 3, Vite, Pinia, Vue Router, Tailwind CSS
+- Иконки: `lucide-vue-next`
+- Инфраструктура: Docker Compose (локально), GitHub Actions (деплой/quality)
 
-## ⭐ Key Features
+## Структура репозитория
 
-- **Telegram Mini App** — заказ внутри Telegram без установки отдельного приложения.
-- **Гибкое меню** — категории, позиции, варианты, модификаторы, теги и стоп‑лист.
-- **Доставка по полигонам** — проверка адресов через PostGIS, тарифные ступени и геокодинг.
-- **Корзина и заказы** — расчет, оформление, статусы, повтор заказа и история.
-- **Лояльность** — 3 уровня, начисления/списания, история транзакций и аудит.
-- **Админ‑панель real‑time** — управление заказами, сменой, пользователями и настройками через WebSocket.
-- **Маркетинговые рассылки** — сегменты, кампании, очередь, статистика и конверсии.
-- **Background Workers** — автоматизация через BullMQ: обработка изображений, рассылки, автостатусы заказов, бонусы.
-- **Миграции БД** — версионирование схемы, автоматическая синхронизация с schema.sql.
+```text
+foodminiapp/
+  backend/
+  admin-panel/
+  telegram-miniapp/
+  bot/
+  docs/
+  .github/workflows/
+```
 
-## 🧰 Tech Stack
+## Быстрый старт
 
-- **Frontend:** Vue 3, Vite, Pinia, Vue Router, Tailwind CSS, Shadcn UI, Radix Vue, Lucide.
-- **Admin UI:** Leaflet, Leaflet.draw, Unovis, vue-sonner.
-- **Backend:** Node.js, Express, WebSocket, BullMQ, Axios, Winston.
-- **DB/Cache:** MySQL 8 + PostGIS, Redis.
-- **Инфраструктура:** Docker Compose (локально), Linux, Apache, pm2.
-- **Интеграции:** Telegram Bot API, Telegram Mini App SDK, iiko (меню/стоп-лист/заказы), сервисы геокодинга (Nominatim/Yandex).
+### 1. Установить зависимости
+
+```bash
+npm --prefix backend install
+npm --prefix admin-panel install
+npm --prefix telegram-miniapp install
+npm --prefix bot install
+```
+
+### 2. Подготовить переменные окружения
+
+Заполните `.env` на основе:
+
+- `backend/.env.example`
+- `admin-panel/.env.example`
+- `telegram-miniapp/.env.example`
+- `bot/.env.example`
+
+### 3. Запустить сервисы
+
+```bash
+npm --prefix backend run dev
+npm --prefix admin-panel run dev
+npm --prefix telegram-miniapp run dev
+npm --prefix bot run dev
+```
+
+## Единые команды качества из корня
+
+```bash
+npm run lint
+npm run typecheck
+npm run test
+npm run check
+```
+
+Где:
+
+- `lint` — запускает `lint` каждого сервиса
+- `typecheck` — запускает `typecheck` каждого сервиса
+- `test` — запускает `test` каждого сервиса
+- `check` — полный прогон `lint + typecheck + test`
+
+## Текущие quality gates в CI
+
+В `.github/workflows` для каждого сервиса есть pipeline из шагов:
+
+- установка зависимостей (`npm ci`)
+- `npm run lint`
+- `npm run typecheck`
+- `npm run test`
+- security audit (`npm audit --omit=dev --audit-level=high`)
+
+## Документация
+
+- Общая спецификация: `docs/doc.md`
+- Бонусная система: `docs/bonus.md`
+- Меню: `docs/menu.md`
+- Доставка и тарифы: `docs/delivery_zone.md`
+- Модуль рассылок: `docs/newsletter.md`
+- Интеграции: `docs/integration.md`
+- Инженерные стандарты: `docs/code-standards.md`
+
+## Важно
+
+- Не добавляйте новые зависимости без согласования.
+- Для миграций backend обязательно обновляйте `backend/database/schema.sql`.
+- Для frontend используйте только иконки `lucide-vue-next`.

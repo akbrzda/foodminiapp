@@ -1,6 +1,7 @@
 import axios from "axios";
 import { useAuthStore } from "@/shared/stores/auth.js";
 import { fetchCsrfToken, setCsrfToken, withCsrfHeader } from "@/shared/api/csrf.js";
+import { runLogoutFlow } from "@/shared/services/auth/authUiFlow.js";
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || "http://localhost:3000",
@@ -43,14 +44,18 @@ const isAuthErrorResponse = (error) => {
 const refreshToken = async () => {
   if (refreshPromise) return refreshPromise;
   refreshPromise = axios
-    .post(`${(import.meta.env.VITE_API_URL || "http://localhost:3000").replace(/\/$/, "")}/api/auth/refresh`, null, {
-      headers: await withCsrfHeader({
-        "Content-Type": "application/json; charset=utf-8",
-        Accept: "application/json; charset=utf-8",
-      }),
-      withCredentials: true,
-      timeout: 10000,
-    })
+    .post(
+      `${(import.meta.env.VITE_API_URL || "http://localhost:3000").replace(/\/$/, "")}/api/auth/refresh`,
+      null,
+      {
+        headers: await withCsrfHeader({
+          "Content-Type": "application/json; charset=utf-8",
+          Accept: "application/json; charset=utf-8",
+        }),
+        withCredentials: true,
+        timeout: 10000,
+      }
+    )
     .then((response) => {
       const nextCsrfToken = String(response?.data?.csrfToken || "").trim();
       if (nextCsrfToken) {
@@ -102,13 +107,13 @@ api.interceptors.response.use(
       } catch (refreshError) {
         // Любой 401/403 на refresh означает, что сессию безопасно продолжать нельзя.
         if (isUnauthorizedStatus(refreshError) || isAuthErrorResponse(refreshError)) {
-          authStore.logout({ redirect: true });
+          runLogoutFlow(authStore);
         }
       }
     } else if ((status === 401 || status === 403) && isAuthErrorResponse(error)) {
-      authStore.logout({ redirect: true });
+      runLogoutFlow(authStore);
     }
     return Promise.reject(error);
-  },
+  }
 );
 export default api;

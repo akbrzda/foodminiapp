@@ -1,12 +1,10 @@
 import { defineStore } from "pinia";
 import api from "@/shared/api/client.js";
-import { useNavigationContextStore } from "./navigationContext.js";
 import { clearCsrfToken } from "@/shared/api/csrf.js";
 
 const STORAGE_USER = "admin_user";
 const LEGACY_STORAGE_USER = "admin_user";
 const AUTH_SYNC_KEY = "admin_auth_sync_event";
-const POST_LOGIN_REDIRECT_KEY = "admin_post_login_redirect";
 let crossTabSyncAttached = false;
 const LOGOUT_SERVER_TIMEOUT_MS = 1500;
 
@@ -46,7 +44,8 @@ const getLoginErrorMessage = (error) => {
 };
 
 const readSessionUser = () => {
-  const raw = sessionStorage.getItem(STORAGE_USER) || localStorage.getItem(LEGACY_STORAGE_USER) || "null";
+  const raw =
+    sessionStorage.getItem(STORAGE_USER) || localStorage.getItem(LEGACY_STORAGE_USER) || "null";
   try {
     return JSON.parse(raw);
   } catch {
@@ -118,16 +117,6 @@ export const useAuthStore = defineStore("auth", {
         // Игнорируем ошибки синхронизации между вкладками.
       }
     },
-    rememberPostLoginRedirect() {
-      if (typeof window === "undefined") return;
-      const currentPath = `${window.location.pathname || ""}${window.location.search || ""}${window.location.hash || ""}`;
-      if (!currentPath || currentPath === "/login" || currentPath.startsWith("/login?")) return;
-      try {
-        sessionStorage.setItem(POST_LOGIN_REDIRECT_KEY, currentPath);
-      } catch {
-        // Игнорируем ошибки сохранения redirect.
-      }
-    },
     applySession(user) {
       this.user = user || null;
       if (user) {
@@ -138,7 +127,7 @@ export const useAuthStore = defineStore("auth", {
       localStorage.removeItem(LEGACY_STORAGE_USER);
       this.sessionChecked = true;
     },
-    initCrossTabSync() {
+    initCrossTabSync({ onLogin, onLogout } = {}) {
       if (crossTabSyncAttached || typeof window === "undefined") return;
       const handler = (event) => {
         if (event.key !== AUTH_SYNC_KEY || !event.newValue) return;
@@ -146,13 +135,17 @@ export const useAuthStore = defineStore("auth", {
           const payload = JSON.parse(event.newValue);
           if (payload?.type === "login" && payload.user) {
             this.applySession(payload.user);
-            if (window.location.pathname === "/login") {
-              window.location.assign("/");
+            if (typeof onLogin === "function") {
+              onLogin(payload);
             }
             return;
           }
           if (payload?.type === "logout") {
-            this.logout({ redirect: true, notifyServer: false, sync: false });
+            void this.logout({ notifyServer: false, sync: false }).finally(() => {
+              if (typeof onLogout === "function") {
+                onLogout(payload);
+              }
+            });
           }
         } catch {
           // Игнорируем поврежденные события синхронизации.
@@ -192,18 +185,11 @@ export const useAuthStore = defineStore("auth", {
         this.loading = false;
       }
     },
-    async logout({ redirect = true, notifyServer = true, sync = true } = {}) {
-      this.rememberPostLoginRedirect();
+    async logout({ notifyServer = true, sync = true } = {}) {
       const apiBase = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
 
-      // Критично для безопасности: сначала мгновенно закрываем локальную сессию,
-      // чтобы UI и роутер сразу потеряли доступ к защищенным разделам.
       clearCsrfToken();
       this.applySession(null);
-
-      // Очищаем все сохраненные контексты навигации при logout
-      const navigationStore = useNavigationContextStore();
-      navigationStore.clearAllContexts();
 
       if (sync) {
         this.syncAuthEvent({ type: "logout" });
@@ -214,10 +200,6 @@ export const useAuthStore = defineStore("auth", {
       }
 
       clearCsrfToken();
-
-      if (redirect && window.location.pathname !== "/login") {
-        window.location.assign("/login");
-      }
     },
   },
 });
