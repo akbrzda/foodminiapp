@@ -17,14 +17,25 @@
           <div class="map-info-title">{{ cityName }}</div>
         </div>
         <div class="map-controls">
-          <button class="map-btn map-btn-primary" type="button" aria-label="Определить мою геопозицию" @click="locateUser">
+          <button
+            class="map-btn map-btn-primary"
+            type="button"
+            aria-label="Определить мою геопозицию"
+            @click="locateUser"
+          >
             <LocateFixed :size="18" />
           </button>
         </div>
       </div>
     </div>
 
-    <div class="form-section" data-keep-focus="true" @touchstart.stop @mousedown.stop @pointerdown.stop>
+    <div
+      class="form-section"
+      data-keep-focus="true"
+      @touchstart.stop
+      @mousedown.stop
+      @pointerdown.stop
+    >
       <div class="sheet-handle"></div>
       <div class="input-wrapper" @pointerdown.stop>
         <FloatingField
@@ -66,7 +77,9 @@
           >
             {{ suggestion.label }}
           </button>
-          <div v-if="canShowNoResults" class="suggestion suggestion-meta">Адрес не найден, уточните запрос</div>
+          <div v-if="canShowNoResults" class="suggestion suggestion-meta">
+            Адрес не найден, уточните запрос
+          </div>
         </div>
       </div>
       <div v-if="deliveryZoneError" class="error-message">
@@ -74,12 +87,32 @@
       </div>
 
       <div class="details-grid details-grid-two">
-        <FloatingField v-model="deliveryDetails.entrance" label="Подъезд" placeholder="Подъезд" :control-class="['detail-input', 'mini-field']" />
-        <FloatingField v-model="deliveryDetails.floor" label="Этаж" placeholder="Этаж" :control-class="['detail-input', 'mini-field']" />
+        <FloatingField
+          v-model="deliveryDetails.entrance"
+          label="Подъезд"
+          placeholder="Подъезд"
+          :control-class="['detail-input', 'mini-field']"
+        />
+        <FloatingField
+          v-model="deliveryDetails.floor"
+          label="Этаж"
+          placeholder="Этаж"
+          :control-class="['detail-input', 'mini-field']"
+        />
       </div>
       <div class="details-grid details-grid-two">
-        <FloatingField v-model="deliveryDetails.apartment" label="Квартира" placeholder="Квартира" :control-class="['detail-input', 'mini-field']" />
-        <FloatingField v-model="deliveryDetails.doorCode" label="Домофон" placeholder="Домофон" :control-class="['detail-input', 'mini-field']" />
+        <FloatingField
+          v-model="deliveryDetails.apartment"
+          label="Квартира"
+          placeholder="Квартира"
+          :control-class="['detail-input', 'mini-field']"
+        />
+        <FloatingField
+          v-model="deliveryDetails.doorCode"
+          label="Домофон"
+          placeholder="Домофон"
+          :control-class="['detail-input', 'mini-field']"
+        />
       </div>
 
       <button class="primary-btn" @click="confirmAddress">Сохранить адрес</button>
@@ -93,6 +126,12 @@ import { LocateFixed, X } from "lucide-vue-next";
 import { useRouter } from "vue-router";
 import { useLocationStore } from "@/modules/location/stores/location.js";
 import { addressesAPI } from "@/shared/api/endpoints.js";
+import { LOCAL_STORAGE_KEYS } from "@/shared/constants/storage-keys.js";
+import {
+  readLocalString,
+  removeLocalItem,
+  writeLocalString,
+} from "@/shared/services/storage/web-storage.js";
 import { hapticFeedback } from "@/shared/services/telegram.js";
 import { loadYandexMaps } from "@/shared/services/yandexMaps.js";
 import { devDebug, devError } from "@/shared/utils/logger.js";
@@ -122,7 +161,7 @@ const deliveryDetails = reactive({
 const lastAddress = ref(deliveryStreet.value);
 const deliveryZoneError = ref("");
 
-const GEO_PERMISSION_KEY = "geoPermission";
+const GEO_PERMISSION_KEY = LOCAL_STORAGE_KEYS.GEO_PERMISSION;
 const SEARCH_MIN_LENGTH = 1;
 const SEARCH_DEBOUNCE_MS = 120;
 const REVERSE_DEBOUNCE_MS = 350;
@@ -154,12 +193,18 @@ const lastSearchedQuery = ref("");
 
 const cityName = computed(() => locationStore.selectedCity?.name || "");
 const showSuggestionsPanel = computed(() => {
-  return Boolean(showSuggestions.value && (isSuggestionsLoading.value || addressSuggestions.value.length || canShowNoResults.value));
+  return Boolean(
+    showSuggestions.value &&
+    (isSuggestionsLoading.value || addressSuggestions.value.length || canShowNoResults.value)
+  );
 });
 const canShowNoResults = computed(() => {
   const hasQuery = deliveryStreet.value.trim().length >= SEARCH_MIN_LENGTH;
   return Boolean(
-    hasQuery && !isSuggestionsLoading.value && lastSearchedQuery.value === deliveryStreet.value.trim() && !addressSuggestions.value.length,
+    hasQuery &&
+    !isSuggestionsLoading.value &&
+    lastSearchedQuery.value === deliveryStreet.value.trim() &&
+    !addressSuggestions.value.length
   );
 });
 
@@ -191,13 +236,22 @@ function normalizeCoords(coords) {
 }
 
 async function ensureTariffs() {
-  if (!locationStore.deliveryZone || !locationStore.deliveryCoords || !locationStore.selectedCity?.id) return;
-  if (Array.isArray(locationStore.deliveryZone.tariffs) && locationStore.deliveryZone.tariffs.length > 0) return;
+  if (
+    !locationStore.deliveryZone ||
+    !locationStore.deliveryCoords ||
+    !locationStore.selectedCity?.id
+  )
+    return;
+  if (
+    Array.isArray(locationStore.deliveryZone.tariffs) &&
+    locationStore.deliveryZone.tariffs.length > 0
+  )
+    return;
   try {
     const response = await addressesAPI.checkDeliveryZone(
       locationStore.deliveryCoords.lat,
       locationStore.deliveryCoords.lng,
-      locationStore.selectedCity.id,
+      locationStore.selectedCity.id
     );
     if (!response?.data?.available || !response?.data?.polygon) return;
     const zone = { ...response.data.polygon, tariffs: response.data.tariffs || [] };
@@ -222,7 +276,11 @@ onMounted(async () => {
     const resolved = await geocodeAddress(combinedAddress);
     if (resolved) {
       selectedLocation.value = { lat: resolved.lat, lon: resolved.lon, lng: resolved.lon };
-      setMapCenter(resolved.lat, resolved.lon, { animate: false, resolveAddress: false, zoom: SELECTED_ADDRESS_ZOOM });
+      setMapCenter(resolved.lat, resolved.lon, {
+        animate: false,
+        resolveAddress: false,
+        zoom: SELECTED_ADDRESS_ZOOM,
+      });
       mapAddressHint.value = resolved.label;
     }
   } else if (selectedLocation.value && !combinedAddress) {
@@ -329,23 +387,16 @@ function getAddressInputElement() {
 }
 
 function getStoredGeoPermission() {
-  try {
-    return localStorage.getItem(GEO_PERMISSION_KEY) || "";
-  } catch {
-    return "";
-  }
+  return readLocalString(GEO_PERMISSION_KEY, "");
 }
 
 function setStoredGeoPermission(value) {
-  try {
-    if (value) {
-      localStorage.setItem(GEO_PERMISSION_KEY, value);
-    } else {
-      localStorage.removeItem(GEO_PERMISSION_KEY);
-    }
-  } catch {
-    // ignore
+  if (value) {
+    writeLocalString(GEO_PERMISSION_KEY, value);
+    return;
   }
+
+  removeLocalItem(GEO_PERMISSION_KEY);
 }
 
 async function requestInitialLocation() {
@@ -359,7 +410,10 @@ async function requestInitialLocation() {
     const location = await locationStore.detectUserLocation();
     if (location) {
       setStoredGeoPermission("granted");
-      setMapCenter(location.lat, location.lon, { animate: true, resolveAddress: !buildCombinedAddress() });
+      setMapCenter(location.lat, location.lon, {
+        animate: true,
+        resolveAddress: !buildCombinedAddress(),
+      });
     }
   } catch (error) {
     if (error?.code === 1) {
@@ -374,7 +428,10 @@ async function selectAddress(address) {
   deliveryZoneError.value = "";
   showSuggestions.value = false;
   addressSuggestions.value = [];
-  if (Number.isFinite(Number(address?.lat)) && Number.isFinite(Number(address?.lon ?? address?.lng))) {
+  if (
+    Number.isFinite(Number(address?.lat)) &&
+    Number.isFinite(Number(address?.lon ?? address?.lng))
+  ) {
     const lat = Number(address.lat);
     const lon = Number(address.lon ?? address.lng);
     selectedLocation.value = { lat, lon, lng: lon };
@@ -389,7 +446,11 @@ async function selectAddress(address) {
     if (resolved) {
       selectedLocation.value = { lat: resolved.lat, lon: resolved.lon, lng: resolved.lon };
       mapAddressHint.value = resolved.label || deliveryStreet.value;
-      setMapCenter(resolved.lat, resolved.lon, { animate: true, resolveAddress: false, zoom: SELECTED_ADDRESS_ZOOM });
+      setMapCenter(resolved.lat, resolved.lon, {
+        animate: true,
+        resolveAddress: false,
+        zoom: SELECTED_ADDRESS_ZOOM,
+      });
     } else {
       selectedLocation.value = null;
       deliveryZoneError.value = "Не удалось определить координаты выбранного адреса";
@@ -447,7 +508,11 @@ async function confirmAddress() {
     }
     mapAddressHint.value = resolved.label;
     selectedLocation.value = { lat: resolved.lat, lon: resolved.lon, lng: resolved.lon };
-    setMapCenter(resolved.lat, resolved.lon, { animate: true, resolveAddress: false, zoom: SELECTED_ADDRESS_ZOOM });
+    setMapCenter(resolved.lat, resolved.lon, {
+      animate: true,
+      resolveAddress: false,
+      zoom: SELECTED_ADDRESS_ZOOM,
+    });
   }
 
   if (!locationStore.selectedCity?.id) {
@@ -459,7 +524,11 @@ async function confirmAddress() {
   if (selectedLocation.value) {
     try {
       const lngValue = selectedLocation.value.lng ?? selectedLocation.value.lon;
-      const response = await addressesAPI.checkDeliveryZone(selectedLocation.value.lat, lngValue, locationStore.selectedCity.id);
+      const response = await addressesAPI.checkDeliveryZone(
+        selectedLocation.value.lat,
+        lngValue,
+        locationStore.selectedCity.id
+      );
 
       if (!response.data?.available || !response.data?.polygon) {
         deliveryZoneError.value = response.data?.message || "Адрес не входит в зону доставки";
@@ -512,7 +581,7 @@ async function initMap() {
     },
     {
       suppressMapOpenBlock: true,
-    },
+    }
   );
   mapInstance.options.set("minZoom", MIN_MAP_ZOOM);
   renderCityPolygons();
@@ -536,13 +605,21 @@ async function initMap() {
   });
 
   if (selectedLocation.value) {
-    setMapCenter(selectedLocation.value.lat, selectedLocation.value.lon ?? selectedLocation.value.lng, {
-      animate: false,
-      resolveAddress: false,
-      zoom: SELECTED_ADDRESS_ZOOM,
-    });
+    setMapCenter(
+      selectedLocation.value.lat,
+      selectedLocation.value.lon ?? selectedLocation.value.lng,
+      {
+        animate: false,
+        resolveAddress: false,
+        zoom: SELECTED_ADDRESS_ZOOM,
+      }
+    );
   } else {
-    selectedLocation.value = { lat: initial.lat, lon: initial.lon ?? initial.lng, lng: initial.lon ?? initial.lng };
+    selectedLocation.value = {
+      lat: initial.lat,
+      lon: initial.lon ?? initial.lng,
+      lng: initial.lon ?? initial.lng,
+    };
     scheduleReverseFromCenter(initial.lat, initial.lon ?? initial.lng, true);
   }
 }
@@ -592,7 +669,7 @@ function renderCityPolygons() {
           strokeWidth: isSelected ? 3 : 2,
           strokeOpacity: 1,
           interactivityModel: "default#transparent",
-        },
+        }
       );
       mapInstance.geoObjects.add(shape);
       polygonOverlays.push(shape);
@@ -607,7 +684,9 @@ function getGeometryRings(geometry) {
     return Array.isArray(outerRing) ? [outerRing] : [];
   }
   if (geometry.type === "MultiPolygon") {
-    return geometry.coordinates.map((polygon) => polygon?.[0]).filter((ring) => Array.isArray(ring));
+    return geometry.coordinates
+      .map((polygon) => polygon?.[0])
+      .filter((ring) => Array.isArray(ring));
   }
   return [];
 }
@@ -625,7 +704,9 @@ function setMapCenter(lat, lon, options = {}) {
   const currentZoom = Number.isFinite(currentZoomRaw) ? currentZoomRaw : DEFAULT_MAP_ZOOM;
   const hasExplicitZoom = zoom !== null && zoom !== undefined && zoom !== "";
   const requestedZoom = hasExplicitZoom ? Number(zoom) : NaN;
-  const targetZoom = Number.isFinite(requestedZoom) ? Math.max(MIN_MAP_ZOOM, requestedZoom) : currentZoom;
+  const targetZoom = Number.isFinite(requestedZoom)
+    ? Math.max(MIN_MAP_ZOOM, requestedZoom)
+    : currentZoom;
   mapInstance.setCenter([nextLat, nextLon], targetZoom, { duration: animate ? 250 : 0 });
   selectedLocation.value = { lat: nextLat, lon: nextLon, lng: nextLon };
 
@@ -720,12 +801,17 @@ async function fetchAddressSuggestions(query) {
       isSuggestionsLoading.value = false;
       return;
     }
-    const response = await addressesAPI.searchStreetDirectory(locationStore.selectedCity.id, normalizedQuery, 10, {
-      signal: suggestionsController.signal,
-      params: {
-        sessiontoken: suggestSessionToken,
-      },
-    });
+    const response = await addressesAPI.searchStreetDirectory(
+      locationStore.selectedCity.id,
+      normalizedQuery,
+      10,
+      {
+        signal: suggestionsController.signal,
+        params: {
+          sessiontoken: suggestSessionToken,
+        },
+      }
+    );
     if (searchId !== lastSearchId) return;
 
     const suggestions = normalizeStreetDirectoryItems(response?.data);
@@ -782,7 +868,9 @@ async function reverseGeocode(lat, lon) {
 
   try {
     const start = performance.now();
-    const response = await addressesAPI.reverseGeocode(lat, lon, { signal: reverseController.signal });
+    const response = await addressesAPI.reverseGeocode(lat, lon, {
+      signal: reverseController.signal,
+    });
     const suggestion = normalizeReverseResult(response?.data);
     reverseCache.set(key, suggestion);
 
@@ -862,7 +950,7 @@ watch(
   () => locationStore.deliveryZone?.id,
   () => {
     renderCityPolygons();
-  },
+  }
 );
 
 watch(
@@ -872,7 +960,7 @@ watch(
     addressSuggestions.value = [];
     lastSearchedQuery.value = "";
     await loadCityPolygons();
-  },
+  }
 );
 </script>
 
@@ -949,7 +1037,12 @@ watch(
   width: 56px;
   height: 56px;
   border-radius: 96px;
-  background: conic-gradient(from 0deg, #ffd200 0deg, #ffd200 90deg, rgba(255, 210, 0, 0.15) 360deg);
+  background: conic-gradient(
+    from 0deg,
+    #ffd200 0deg,
+    #ffd200 90deg,
+    rgba(255, 210, 0, 0.15) 360deg
+  );
   animation: marker-spin 0.9s linear infinite;
   z-index: 2;
   -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 0);

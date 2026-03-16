@@ -1,9 +1,12 @@
-import { getIntegrationSettings, getPremiumBonusClientOrNull } from "../services/integrationConfigService.js";
+import {
+  getIntegrationSettings,
+  getPremiumBonusClientOrNull,
+} from "../services/integrationConfigService.js";
 import * as localLoyaltyService from "../../loyalty/services/loyaltyService.js";
 import db from "../../../config/database.js";
 import redis from "../../../config/redis.js";
 
-const DEFAULT_MAX_SPEND_PERCENT = 0.20;
+const DEFAULT_MAX_SPEND_PERCENT = 0.2;
 const DEFAULT_LEVEL_THRESHOLDS = [0, 10000, 20000];
 const PB_CACHE_TTL_SECONDS = 60 * 60 * 24 * 7;
 
@@ -33,13 +36,46 @@ function parsePbActiveBalance(info = {}) {
   const action = Number(info?.balance_bonus_action);
   if (Number.isFinite(accumulated) || Number.isFinite(present) || Number.isFinite(action)) {
     const bucketsTotal =
-      (Number.isFinite(accumulated) ? accumulated : 0) + (Number.isFinite(present) ? present : 0) + (Number.isFinite(action) ? action : 0);
+      (Number.isFinite(accumulated) ? accumulated : 0) +
+      (Number.isFinite(present) ? present : 0) +
+      (Number.isFinite(action) ? action : 0);
     return normalizeBonusAmount(Math.max(0, bucketsTotal - inactive));
   }
 
   const rawBalance = toNumber(info?.balance, NaN);
   if (!Number.isFinite(rawBalance)) return 0;
   return normalizeBonusAmount(Math.max(0, rawBalance - inactive));
+}
+
+function assertPremiumBonusSuccess(payload, fallbackMessage) {
+  if (payload?.success === false) {
+    const message = String(payload?.error_description || payload?.error || "").trim();
+    throw new Error(message || fallbackMessage);
+  }
+}
+
+async function loadBuyerInfoWithFallback(client, identifiers = []) {
+  const uniqueIdentifiers = Array.from(
+    new Set(
+      (Array.isArray(identifiers) ? identifiers : [])
+        .map((value) => String(value || "").trim())
+        .filter(Boolean)
+    )
+  );
+
+  let lastResponse = null;
+  for (const identificator of uniqueIdentifiers) {
+    const response = await client.buyerInfo({
+      identificator,
+      extra_fields: ["payments_amount"],
+    });
+    lastResponse = response;
+    if (response?.success !== false) {
+      return response;
+    }
+  }
+
+  return lastResponse;
 }
 
 function firstFinite(...values) {
@@ -109,7 +145,7 @@ async function resolveLocalLevelIdByPremiumBonusGroup({ groupId = "", groupName 
          AND pb_group_id = ?
        ORDER BY sort_order ASC, threshold_amount ASC, id ASC
        LIMIT 1`,
-      [normalizedGroupId],
+      [normalizedGroupId]
     );
     if (rows[0]?.id) return rows[0].id;
   }
@@ -125,7 +161,7 @@ async function resolveLocalLevelIdByPremiumBonusGroup({ groupId = "", groupName 
          )
        ORDER BY sort_order ASC, threshold_amount ASC, id ASC
        LIMIT 1`,
-      [normalizedGroupName, normalizedGroupName],
+      [normalizedGroupName, normalizedGroupName]
     );
     if (rows[0]?.id) return rows[0].id;
   }
@@ -139,7 +175,7 @@ async function resolveLocalLevelIdByPremiumBonusGroup({ groupId = "", groupName 
        AND earn_percentage = ?
      ORDER BY id ASC
      LIMIT 1`,
-    [percent],
+    [percent]
   );
   return rows[0]?.id || null;
 }
@@ -149,7 +185,7 @@ async function getLocalLoyaltyLevelsForDisplay(options = {}) {
     `SELECT id, name, threshold_amount, earn_percentage, max_spend_percentage, is_enabled, sort_order, pb_group_id, pb_group_name
      FROM loyalty_levels
      WHERE is_enabled = 1
-     ORDER BY sort_order ASC, threshold_amount ASC, id ASC`,
+     ORDER BY sort_order ASC, threshold_amount ASC, id ASC`
   );
 
   const forcedMaxSpendPercent = normalizePercent(options?.forcedMaxSpendPercent);
@@ -167,7 +203,9 @@ async function getLocalLoyaltyLevelsForDisplay(options = {}) {
 
 function resolveCurrentLocalLevelByPbGroup(levels = [], groupId = "", groupName = "") {
   const normalizedGroupId = String(groupId || "").trim();
-  const normalizedGroupName = String(groupName || "").trim().toLowerCase();
+  const normalizedGroupName = String(groupName || "")
+    .trim()
+    .toLowerCase();
   if (!levels.length) return null;
 
   if (normalizedGroupId) {
@@ -176,15 +214,27 @@ function resolveCurrentLocalLevelByPbGroup(levels = [], groupId = "", groupName 
   }
 
   if (normalizedGroupName) {
-    const byPbName = levels.find((level) => String(level.pbGroupName || "").trim().toLowerCase() === normalizedGroupName);
+    const byPbName = levels.find(
+      (level) =>
+        String(level.pbGroupName || "")
+          .trim()
+          .toLowerCase() === normalizedGroupName
+    );
     if (byPbName) return byPbName;
-    const byLocalName = levels.find((level) => String(level.name || "").trim().toLowerCase() === normalizedGroupName);
+    const byLocalName = levels.find(
+      (level) =>
+        String(level.name || "")
+          .trim()
+          .toLowerCase() === normalizedGroupName
+    );
     if (byLocalName) return byLocalName;
   }
 
   const groupPercent = parseGroupPercent(groupName);
   if (Number.isFinite(groupPercent)) {
-    const byPercent = levels.find((level) => Math.round(Number(level.earnRate || 0) * 100) === Math.round(groupPercent));
+    const byPercent = levels.find(
+      (level) => Math.round(Number(level.earnRate || 0) * 100) === Math.round(groupPercent)
+    );
     if (byPercent) return byPercent;
   }
 
@@ -201,7 +251,12 @@ function resolveCurrentLevel(totalSpent, levels, groupId = null, groupName = "")
     if (byId) return byId;
   }
   if (normalizedGroupName) {
-    const byName = levels.find((level) => String(level.name || "").trim().toLowerCase() === normalizedGroupName);
+    const byName = levels.find(
+      (level) =>
+        String(level.name || "")
+          .trim()
+          .toLowerCase() === normalizedGroupName
+    );
     if (byName) return byName;
   }
 
@@ -229,7 +284,7 @@ function extractAmountToNextLevel(transitionState) {
       toNumber(item?.left_amount, NaN),
       toNumber(item?.leftover_amount, NaN),
       toNumber(item?.amount_left, NaN),
-      toNumber(item?.sum_left, NaN),
+      toNumber(item?.sum_left, NaN)
     );
     if (Number.isFinite(value) && value >= 0) return value;
   }
@@ -243,7 +298,7 @@ function parseTransitionThreshold(transition = {}) {
     toNumber(transition?.payment_amount, NaN),
     toNumber(transition?.threshold_amount, NaN),
     toNumber(transition?.min_amount, NaN),
-    toNumber(transition?.amount_from, NaN),
+    toNumber(transition?.amount_from, NaN)
   );
 }
 
@@ -258,7 +313,9 @@ function extractTransitionField(transition = {}, candidates = []) {
 }
 
 function buildLevelsFromTransitionInfo(transitionState, options = {}) {
-  const transitions = Array.isArray(transitionState?.client_group_transitions_list) ? transitionState.client_group_transitions_list : [];
+  const transitions = Array.isArray(transitionState?.client_group_transitions_list)
+    ? transitionState.client_group_transitions_list
+    : [];
   const maxSpendPercent = normalizePercent(options?.maxSpendPercent) ?? DEFAULT_MAX_SPEND_PERCENT;
   const info = options?.info || {};
 
@@ -273,12 +330,15 @@ function buildLevelsFromTransitionInfo(transitionState, options = {}) {
       id: normalizedId || key,
       name: normalizedName || `Уровень ${levelsByKey.size + 1}`,
       threshold: Number.isFinite(threshold) ? threshold : NaN,
-      earnRate: Number.isFinite(parseGroupPercent(normalizedName)) ? parseGroupPercent(normalizedName) / 100 : 0,
+      earnRate: Number.isFinite(parseGroupPercent(normalizedName))
+        ? parseGroupPercent(normalizedName) / 100
+        : 0,
       maxSpendPercent,
     };
 
     if (!current.id && normalizedId) current.id = normalizedId;
-    if ((!current.name || /^уровень /i.test(current.name)) && normalizedName) current.name = normalizedName;
+    if ((!current.name || /^уровень /i.test(current.name)) && normalizedName)
+      current.name = normalizedName;
     if (!Number.isFinite(current.earnRate) || current.earnRate <= 0) {
       const parsedPercent = parseGroupPercent(normalizedName);
       if (Number.isFinite(parsedPercent)) {
@@ -297,10 +357,32 @@ function buildLevelsFromTransitionInfo(transitionState, options = {}) {
   for (const transition of transitions) {
     const threshold = parseTransitionThreshold(transition);
 
-    const fromId = extractTransitionField(transition, ["client_group_from_id", "from_group_id", "old_group_id", "group_from_id"]);
-    const fromName = extractTransitionField(transition, ["client_group_transition_from_name", "from_group_name", "old_group_name", "group_from_name"]);
-    const toId = extractTransitionField(transition, ["client_group_id", "buyer_group_id", "group_id", "to_group_id", "target_group_id", "new_group_id"]);
-    const toName = extractTransitionField(transition, ["client_group_transition_to_name", "to_group_name", "new_group_name", "group_to_name"]);
+    const fromId = extractTransitionField(transition, [
+      "client_group_from_id",
+      "from_group_id",
+      "old_group_id",
+      "group_from_id",
+    ]);
+    const fromName = extractTransitionField(transition, [
+      "client_group_transition_from_name",
+      "from_group_name",
+      "old_group_name",
+      "group_from_name",
+    ]);
+    const toId = extractTransitionField(transition, [
+      "client_group_id",
+      "buyer_group_id",
+      "group_id",
+      "to_group_id",
+      "target_group_id",
+      "new_group_id",
+    ]);
+    const toName = extractTransitionField(transition, [
+      "client_group_transition_to_name",
+      "to_group_name",
+      "new_group_name",
+      "group_to_name",
+    ]);
 
     upsert({ id: fromId, name: fromName, threshold: 0 });
     upsert({ id: toId, name: toName, threshold });
@@ -346,7 +428,9 @@ function buildLevelsFromTransitionInfo(transitionState, options = {}) {
 
   return levels.map((level, index) => ({
     ...level,
-    threshold: Number.isFinite(level.threshold) ? level.threshold : DEFAULT_LEVEL_THRESHOLDS[index] ?? 0,
+    threshold: Number.isFinite(level.threshold)
+      ? level.threshold
+      : (DEFAULT_LEVEL_THRESHOLDS[index] ?? 0),
   }));
 }
 
@@ -367,7 +451,9 @@ function buildLevelsFromPremiumBonus(groupsResponse, transitionState, options = 
           id: currentGroupId || 1,
           name: currentGroupName || "Текущий уровень",
           threshold: 0,
-          earnRate: Number.isFinite(parseGroupPercent(currentGroupName)) ? parseGroupPercent(currentGroupName) / 100 : 0,
+          earnRate: Number.isFinite(parseGroupPercent(currentGroupName))
+            ? parseGroupPercent(currentGroupName) / 100
+            : 0,
           maxSpendPercent,
         },
       ];
@@ -376,7 +462,9 @@ function buildLevelsFromPremiumBonus(groupsResponse, transitionState, options = 
     return [{ id: 1, name: "Текущий уровень", threshold: 0, earnRate: 0, maxSpendPercent }];
   }
 
-  const transitions = Array.isArray(transitionState?.client_group_transitions_list) ? transitionState.client_group_transitions_list : [];
+  const transitions = Array.isArray(transitionState?.client_group_transitions_list)
+    ? transitionState.client_group_transitions_list
+    : [];
   const transitionThresholdByGroupId = new Map();
   for (const transition of transitions) {
     const groupId =
@@ -392,7 +480,7 @@ function buildLevelsFromPremiumBonus(groupsResponse, transitionState, options = 
       toNumber(transition?.payment_amount, NaN),
       toNumber(transition?.threshold_amount, NaN),
       toNumber(transition?.min_amount, NaN),
-      toNumber(transition?.amount_from, NaN),
+      toNumber(transition?.amount_from, NaN)
     );
     if (groupId == null || !Number.isFinite(threshold)) continue;
 
@@ -406,7 +494,10 @@ function buildLevelsFromPremiumBonus(groupsResponse, transitionState, options = 
   const mapped = groups.map((group, index) => {
     const percent = parseGroupPercent(group?.name);
     const transitionThreshold = transitionThresholdByGroupId.get(String(group?.id));
-    const fallbackThreshold = DEFAULT_LEVEL_THRESHOLDS[index] ?? DEFAULT_LEVEL_THRESHOLDS[DEFAULT_LEVEL_THRESHOLDS.length - 1] ?? 0;
+    const fallbackThreshold =
+      DEFAULT_LEVEL_THRESHOLDS[index] ??
+      DEFAULT_LEVEL_THRESHOLDS[DEFAULT_LEVEL_THRESHOLDS.length - 1] ??
+      0;
 
     return {
       id: group?.id ?? index + 1,
@@ -417,13 +508,18 @@ function buildLevelsFromPremiumBonus(groupsResponse, transitionState, options = 
     };
   });
 
-  const hasThresholdData = mapped.some((level, index) => Number(level.threshold) !== Number(DEFAULT_LEVEL_THRESHOLDS[index] ?? 0));
+  const hasThresholdData = mapped.some(
+    (level, index) => Number(level.threshold) !== Number(DEFAULT_LEVEL_THRESHOLDS[index] ?? 0)
+  );
   const sorted = mapped.sort((a, b) => Number(a.threshold || 0) - Number(b.threshold || 0));
   if (hasThresholdData) return sorted;
 
   return sorted.map((level, index) => ({
     ...level,
-    threshold: DEFAULT_LEVEL_THRESHOLDS[index] ?? DEFAULT_LEVEL_THRESHOLDS[DEFAULT_LEVEL_THRESHOLDS.length - 1] ?? 0,
+    threshold:
+      DEFAULT_LEVEL_THRESHOLDS[index] ??
+      DEFAULT_LEVEL_THRESHOLDS[DEFAULT_LEVEL_THRESHOLDS.length - 1] ??
+      0,
   }));
 }
 
@@ -438,7 +534,8 @@ function mapOrderItemsToPremiumBonus(items = []) {
 
       return {
         name: String(item?.item_name || item?.name || "").trim() || "Позиция",
-        external_item_id: String(item?.iiko_item_id || item?.item_id || item?.id || "").trim() || undefined,
+        external_item_id:
+          String(item?.iiko_item_id || item?.item_id || item?.id || "").trim() || undefined,
         amount: Number(resolvedAmount.toFixed(2)),
         quantity: Number(quantity.toFixed(3)),
         type: "product",
@@ -453,9 +550,13 @@ function mapPbPurchasesToTransactions(list = []) {
     const createdAt = purchase?.date || null;
     const orderRef = purchase?.external_id || purchase?.id || null;
     const writeOff =
-      toNumber(purchase?.bonus_accumulated_write_off) + toNumber(purchase?.bonus_present_write_off) + toNumber(purchase?.bonus_action_write_off);
+      toNumber(purchase?.bonus_accumulated_write_off) +
+      toNumber(purchase?.bonus_present_write_off) +
+      toNumber(purchase?.bonus_action_write_off);
     const writeOn =
-      toNumber(purchase?.bonus_accumulated_write_on) + toNumber(purchase?.bonus_present_write_on) + toNumber(purchase?.bonus_action_write_on);
+      toNumber(purchase?.bonus_accumulated_write_on) +
+      toNumber(purchase?.bonus_present_write_on) +
+      toNumber(purchase?.bonus_action_write_on);
     const activationAtRaw =
       purchase?.bonus_activation_at ||
       purchase?.bonus_activate_at ||
@@ -499,12 +600,15 @@ function mapPbPurchasesToTransactions(list = []) {
   transactions.sort((a, b) => {
     const diff = new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
     if (diff !== 0) return diff;
-    const sameOrder = String(a.order_id || "") && String(a.order_id || "") === String(b.order_id || "");
+    const sameOrder =
+      String(a.order_id || "") && String(a.order_id || "") === String(b.order_id || "");
     if (sameOrder && a.type !== b.type) {
       if (a.type === "earn") return -1;
       if (b.type === "earn") return 1;
     }
-    const idDiff = Number(String(b.id || "").replace(/[^\d]/g, "")) - Number(String(a.id || "").replace(/[^\d]/g, ""));
+    const idDiff =
+      Number(String(b.id || "").replace(/[^\d]/g, "")) -
+      Number(String(a.id || "").replace(/[^\d]/g, ""));
     if (Number.isFinite(idDiff) && idDiff !== 0) return idDiff;
     if (a.type === b.type) return 0;
     if (a.type === "earn") return -1;
@@ -525,7 +629,7 @@ async function buildLocalOrderReferenceSet(userId) {
     `SELECT id, order_number, pb_purchase_id
      FROM orders
      WHERE user_id = ?`,
-    [userId],
+    [userId]
   );
 
   const references = new Set();
@@ -564,7 +668,12 @@ function getPbCacheKey(type, userId) {
 
 async function savePbCache(type, userId, payload) {
   try {
-    await redis.set(getPbCacheKey(type, userId), JSON.stringify(payload), "EX", PB_CACHE_TTL_SECONDS);
+    await redis.set(
+      getPbCacheKey(type, userId),
+      JSON.stringify(payload),
+      "EX",
+      PB_CACHE_TTL_SECONDS
+    );
   } catch (error) {
     // Кеш не критичен, не прерываем основной поток.
   }
@@ -592,7 +701,10 @@ async function syncLocalLoyaltyMirror(userId, payload = {}) {
     values.push(normalizedBalance);
   }
 
-  if (Object.prototype.hasOwnProperty.call(payload, "groupName") || Object.prototype.hasOwnProperty.call(payload, "groupId")) {
+  if (
+    Object.prototype.hasOwnProperty.call(payload, "groupName") ||
+    Object.prototype.hasOwnProperty.call(payload, "groupId")
+  ) {
     const localLevelId = await resolveLocalLevelIdByPremiumBonusGroup({
       groupId: payload.groupId,
       groupName: payload.groupName,
@@ -610,46 +722,60 @@ async function syncLocalLoyaltyMirror(userId, payload = {}) {
 
 export class LoyaltyAdapter {
   async resolvePremiumBonusContext(userId) {
-    const [users] = await db.query("SELECT pb_client_id, loyalty_balance FROM users WHERE id = ?", [userId]);
+    const [users] = await db.query(
+      "SELECT pb_client_id, loyalty_balance, phone FROM users WHERE id = ?",
+      [userId]
+    );
     if (users.length === 0) throw new Error("Пользователь не найден");
 
     const pbClientId = String(users[0].pb_client_id || "").trim();
-    if (!pbClientId) {
-      throw new Error("У пользователя отсутствует безопасная привязка PremiumBonus (pb_client_id)");
-    }
+    const normalizedPhone = normalizePhoneForPremiumBonus(users[0].phone);
+    const identifiers = [normalizedPhone, pbClientId].filter(Boolean);
+    if (identifiers.length === 0)
+      throw new Error("У пользователя отсутствует идентификатор PremiumBonus (phone/pb_client_id)");
 
     const client = await getPremiumBonusClientOrNull();
     if (!client) throw new Error("Клиент PremiumBonus недоступен");
 
     return {
       user: users[0],
-      identificator: pbClientId,
+      identifiers,
+      identificator: identifiers[0],
       client,
     };
   }
 
   async getPremiumBonusLevelsSummary(userId) {
-    const { client, identificator } = await this.resolvePremiumBonusContext(userId);
+    const { client, identifiers } = await this.resolvePremiumBonusContext(userId);
 
     try {
-      const info = await client.buyerInfo({
-        identificator,
-        extra_fields: ["payments_amount"],
-      });
+      const info = await loadBuyerInfoWithFallback(client, identifiers);
+      assertPremiumBonusSuccess(
+        info,
+        "PremiumBonus вернул ошибку при получении профиля покупателя"
+      );
+      const identificator = String(info?.phone || identifiers[0] || "").trim();
       const premiumBonusPhone = normalizePhoneForPremiumBonus(info?.phone);
 
       const [groupsResult, transitionsResult] = await Promise.allSettled([
         client.buyerGroups({}),
-        premiumBonusPhone ? client.statusTransitionInfo({ phone: premiumBonusPhone }) : Promise.resolve(null),
+        premiumBonusPhone
+          ? client.statusTransitionInfo({ phone: premiumBonusPhone })
+          : Promise.resolve(null),
       ]);
 
       const groupsResponse = groupsResult.status === "fulfilled" ? groupsResult.value : null;
-      const transitionsResponse = transitionsResult.status === "fulfilled" ? transitionsResult.value : null;
+      const transitionsResponse =
+        transitionsResult.status === "fulfilled" ? transitionsResult.value : null;
       const transitionState = transitionsResponse?.client_group_transition_leftover || {};
 
       let maxSpendPercent = null;
       try {
-        maxSpendPercent = await resolvePremiumBonusWriteOffPercent(client, identificator, info?.balance);
+        maxSpendPercent = await resolvePremiumBonusWriteOffPercent(
+          client,
+          identificator,
+          info?.balance
+        );
       } catch (error) {
         maxSpendPercent = null;
       }
@@ -662,9 +788,15 @@ export class LoyaltyAdapter {
       const localLevels = await getLocalLoyaltyLevelsForDisplay({
         forcedMaxSpendPercent: maxSpendPercent,
       });
-      const mappedCurrentLocalLevel = resolveCurrentLocalLevelByPbGroup(localLevels, info?.group_id, info?.group_name);
+      const mappedCurrentLocalLevel = resolveCurrentLocalLevelByPbGroup(
+        localLevels,
+        info?.group_id,
+        info?.group_name
+      );
       const uiLevels = localLevels.length > 0 ? localLevels : levels;
-      const currentLevel = mappedCurrentLocalLevel || resolveCurrentLevel(totalSpent, uiLevels, info?.group_id, info?.group_name);
+      const currentLevel =
+        mappedCurrentLocalLevel ||
+        resolveCurrentLevel(totalSpent, uiLevels, info?.group_id, info?.group_name);
       const nextLevel = resolveNextLevel(currentLevel, uiLevels);
 
       let amountToNext = 0;
@@ -677,7 +809,10 @@ export class LoyaltyAdapter {
 
         const span = Number(nextLevel.threshold || 0) - Number(currentLevel.threshold || 0);
         if (span > 0) {
-          progress = Math.min(1, Math.max(0, (totalSpent - Number(currentLevel.threshold || 0)) / span));
+          progress = Math.min(
+            1,
+            Math.max(0, (totalSpent - Number(currentLevel.threshold || 0)) / span)
+          );
         } else {
           progress = amountToNext > 0 ? 0 : 1;
         }
@@ -742,18 +877,25 @@ export class LoyaltyAdapter {
     if (mode === "local") {
       return localLoyaltyService.getBalanceSummary(userId);
     }
-    const { client, identificator, user } = await this.resolvePremiumBonusContext(userId);
+    const { client, identifiers, user } = await this.resolvePremiumBonusContext(userId);
     try {
-      const info = await client.buyerInfo({
-        identificator,
-        extra_fields: ["payments_amount"],
-      });
+      const info = await loadBuyerInfoWithFallback(client, identifiers);
+      assertPremiumBonusSuccess(
+        info,
+        "PremiumBonus вернул ошибку при получении баланса покупателя"
+      );
 
       const result = {
         balance: parsePbActiveBalance(info),
         current_level: info?.group_name || null,
-        total_spent_60_days: toNumber(info?.payments_amount, toNumber(info?.init_payment_amount, 0)),
-        total_spent_all_time: toNumber(info?.payments_amount, toNumber(info?.init_payment_amount, 0)),
+        total_spent_60_days: toNumber(
+          info?.payments_amount,
+          toNumber(info?.init_payment_amount, 0)
+        ),
+        total_spent_all_time: toNumber(
+          info?.payments_amount,
+          toNumber(info?.init_payment_amount, 0)
+        ),
         period_days: null,
         bonus_inactive: normalizeBonusAmount(toNumber(info?.bonus_inactive, 0)),
         bonus_next_activation_text: String(info?.bonus_next_activation_text || "").trim() || null,
@@ -796,22 +938,30 @@ export class LoyaltyAdapter {
       return localLoyaltyService.getHistory(userId, 1, 50);
     }
 
-    const [users] = await db.query("SELECT pb_client_id FROM users WHERE id = ?", [userId]);
+    const [users] = await db.query("SELECT pb_client_id, phone FROM users WHERE id = ?", [userId]);
     if (users.length === 0) throw new Error("Пользователь не найден");
     const pbClientId = String(users[0].pb_client_id || "").trim();
-    if (!pbClientId) {
-      throw new Error("У пользователя отсутствует безопасная привязка PremiumBonus (pb_client_id)");
-    }
+    const normalizedPhone = normalizePhoneForPremiumBonus(users[0].phone);
+    const identificator = normalizedPhone || pbClientId;
+    if (!identificator)
+      throw new Error("У пользователя отсутствует идентификатор PremiumBonus (phone/pb_client_id)");
 
     const client = await getPremiumBonusClientOrNull();
     if (!client) throw new Error("Клиент PremiumBonus недоступен");
 
     try {
       const response = await client.transactionHistory({
-        identificator: pbClientId,
+        identificator,
       });
+      assertPremiumBonusSuccess(
+        response,
+        "PremiumBonus вернул ошибку при получении истории транзакций"
+      );
       const localOrderReferences = await buildLocalOrderReferenceSet(userId);
-      const filteredPurchases = filterPbPurchasesByLocalOrders(response?.list || [], localOrderReferences);
+      const filteredPurchases = filterPbPurchasesByLocalOrders(
+        response?.list || [],
+        localOrderReferences
+      );
 
       const result = {
         transactions: mapPbPurchasesToTransactions(filteredPurchases),
@@ -848,18 +998,22 @@ export class LoyaltyAdapter {
       return localLoyaltyService.calculateMaxSpend(userId, orderTotal, deliveryCost);
     }
 
-    const [users] = await db.query("SELECT pb_client_id, loyalty_balance FROM users WHERE id = ?", [userId]);
+    const [users] = await db.query(
+      "SELECT pb_client_id, loyalty_balance, phone FROM users WHERE id = ?",
+      [userId]
+    );
     if (users.length === 0) throw new Error("Пользователь не найден");
     const pbClientId = String(users[0].pb_client_id || "").trim();
-    if (!pbClientId) {
-      throw new Error("У пользователя отсутствует безопасная привязка PremiumBonus (pb_client_id)");
-    }
+    const normalizedPhone = normalizePhoneForPremiumBonus(users[0].phone);
+    const identificator = normalizedPhone || pbClientId;
+    if (!identificator)
+      throw new Error("У пользователя отсутствует идентификатор PremiumBonus (phone/pb_client_id)");
 
     const client = await getPremiumBonusClientOrNull();
     if (!client) throw new Error("Клиент PremiumBonus недоступен");
 
     const payload = {
-      identificator: pbClientId,
+      identificator,
       items: mapOrderItemsToPremiumBonus(options?.items),
       discount: Number(options?.discount) || 0,
       promocode: String(options?.promocode || "").trim() || undefined,
@@ -877,6 +1031,7 @@ export class LoyaltyAdapter {
 
     try {
       const data = await client.purchaseRequest(payload);
+      assertPremiumBonusSuccess(data, "PremiumBonus вернул ошибку при расчете списания");
       const baseAmount = Math.max(0, Number(orderTotal || 0) - Number(deliveryCost || 0));
       const result = {
         max_usable: normalizeBonusAmount(data?.write_off_available),

@@ -1,14 +1,33 @@
 import api from "./index.js";
 
+const unwrapResponsePayload = (payload) => {
+  if (!payload || typeof payload !== "object") {
+    return payload;
+  }
+
+  if (payload.success === true && payload.data && typeof payload.data === "object") {
+    return payload.data;
+  }
+
+  return payload;
+};
+
+const normalizeResponse = (response) => ({
+  ...response,
+  data: unwrapResponsePayload(response?.data),
+});
+
+const withNormalizedResponse = (requestPromise) => requestPromise.then(normalizeResponse);
+
 export const authAPI = {
   loginWithTelegram(initData) {
-    return api.post("/auth/telegram", { initData });
+    return withNormalizedResponse(api.post("/auth/telegram", { initData }));
   },
   getProfile() {
-    return api.get("/users/profile");
+    return withNormalizedResponse(api.get("/users/profile"));
   },
   updateProfile(data) {
-    return api.put("/users/profile", data);
+    return withNormalizedResponse(api.put("/users/profile", data));
   },
   deleteAccount() {
     return api.delete("/users/me");
@@ -78,18 +97,20 @@ export const ordersAPI = {
 
 export const bonusesAPI = {
   getBalance() {
-    return api.get("/client/loyalty/balance");
+    return withNormalizedResponse(api.get("/client/loyalty/balance"));
   },
   getHistory(params = {}) {
-    return api.get("/client/loyalty/history", { params });
+    return withNormalizedResponse(api.get("/client/loyalty/history", { params }));
   },
   calculateMaxSpend(orderTotal, deliveryCost = 0) {
-    return api.get("/client/loyalty/calculate-max-spend", {
-      params: { orderTotal, deliveryCost },
-    });
+    return withNormalizedResponse(
+      api.get("/client/loyalty/calculate-max-spend", {
+        params: { orderTotal, deliveryCost },
+      })
+    );
   },
   getLevels() {
-    return api.get("/client/loyalty/levels");
+    return withNormalizedResponse(api.get("/client/loyalty/levels"));
   },
 };
 

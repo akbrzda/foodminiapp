@@ -1,9 +1,14 @@
 import { defineStore } from "pinia";
+import { LOCAL_STORAGE_KEYS } from "@/shared/constants/storage-keys.js";
+import { readLocalJson, writeLocalJson } from "@/shared/services/storage/web-storage.js";
 import { devError } from "@/shared/utils/logger.js";
+
+const DEFAULT_BONUS_USAGE = { useBonuses: false, bonusToUse: 0 };
+
 export const useCartStore = defineStore("cart", {
   state: () => ({
-    items: JSON.parse(localStorage.getItem("cart") || "[]"),
-    bonusUsage: JSON.parse(localStorage.getItem("cart_bonus_usage") || '{"useBonuses":false,"bonusToUse":0}'),
+    items: readLocalJson(LOCAL_STORAGE_KEYS.CART, []),
+    bonusUsage: readLocalJson(LOCAL_STORAGE_KEYS.CART_BONUS_USAGE, DEFAULT_BONUS_USAGE),
   }),
   getters: {
     itemsCount: (state) => state.items.reduce((sum, item) => sum + item.quantity, 0),
@@ -20,7 +25,9 @@ export const useCartStore = defineStore("cart", {
       this.items = this.items.map((cartItem) => {
         const menuItem = itemsById.get(cartItem.id);
         if (!menuItem) return cartItem;
-        const variant = cartItem.variant_id ? menuItem.variants?.find((v) => v.id === cartItem.variant_id) : null;
+        const variant = cartItem.variant_id
+          ? menuItem.variants?.find((v) => v.id === cartItem.variant_id)
+          : null;
         let basePrice = variant ? parseFloat(variant.price) : parseFloat(menuItem.price);
         if (!Number.isFinite(basePrice)) {
           basePrice = parseFloat(cartItem.price) || 0;
@@ -31,12 +38,20 @@ export const useCartStore = defineStore("cart", {
           ? cartItem.modifiers.map((mod) => {
               const modifierId = typeof mod === "number" ? mod : mod?.id;
               if (!modifierId) return mod;
-              const group = menuItem.modifier_groups?.find((g) => g.modifiers?.some((m) => m.id === modifierId));
+              const group = menuItem.modifier_groups?.find((g) =>
+                g.modifiers?.some((m) => m.id === modifierId)
+              );
               const modifier = group?.modifiers?.find((m) => m.id === modifierId);
               if (!modifier) return mod;
               let price = parseFloat(modifier.price) || 0;
-              if (selectedVariantId && Array.isArray(modifier.variant_prices) && modifier.variant_prices.length > 0) {
-                const matched = modifier.variant_prices.find((row) => Number(row.variant_id) === Number(selectedVariantId));
+              if (
+                selectedVariantId &&
+                Array.isArray(modifier.variant_prices) &&
+                modifier.variant_prices.length > 0
+              ) {
+                const matched = modifier.variant_prices.find(
+                  (row) => Number(row.variant_id) === Number(selectedVariantId)
+                );
                 if (matched && matched.price !== null && matched.price !== undefined) {
                   const parsed = parseFloat(matched.price);
                   if (Number.isFinite(parsed)) {
@@ -67,7 +82,8 @@ export const useCartStore = defineStore("cart", {
       const existingIndex = this.items.findIndex((i) => {
         const sameId = i.id === item.id;
         const sameVariant = (i.variant_id || null) === (item.variant_id || null);
-        const sameModifiers = JSON.stringify(i.modifiers || []) === JSON.stringify(item.modifiers || []);
+        const sameModifiers =
+          JSON.stringify(i.modifiers || []) === JSON.stringify(item.modifiers || []);
         return sameId && sameVariant && sameModifiers;
       });
       const price = parseFloat(item.price) || 0;
@@ -105,7 +121,7 @@ export const useCartStore = defineStore("cart", {
       this.resetBonusUsage();
     },
     saveToLocalStorage() {
-      localStorage.setItem("cart", JSON.stringify(this.items));
+      writeLocalJson(LOCAL_STORAGE_KEYS.CART, this.items);
     },
     setUseBonuses(value) {
       this.bonusUsage.useBonuses = Boolean(value);
@@ -116,15 +132,17 @@ export const useCartStore = defineStore("cart", {
     },
     setBonusToUse(value) {
       const parsedValue = Number(value);
-      this.bonusUsage.bonusToUse = Number.isFinite(parsedValue) ? Math.max(0, Math.floor(parsedValue)) : 0;
+      this.bonusUsage.bonusToUse = Number.isFinite(parsedValue)
+        ? Math.max(0, Math.floor(parsedValue))
+        : 0;
       this.saveBonusUsage();
     },
     resetBonusUsage() {
-      this.bonusUsage = { useBonuses: false, bonusToUse: 0 };
+      this.bonusUsage = { ...DEFAULT_BONUS_USAGE };
       this.saveBonusUsage();
     },
     saveBonusUsage() {
-      localStorage.setItem("cart_bonus_usage", JSON.stringify(this.bonusUsage));
+      writeLocalJson(LOCAL_STORAGE_KEYS.CART_BONUS_USAGE, this.bonusUsage);
     },
   },
 });

@@ -1,3 +1,7 @@
+import { LOCAL_STORAGE_KEYS } from "@/shared/constants/storage-keys.js";
+import { readLocalJson } from "@/shared/services/storage/web-storage.js";
+import { devWarn } from "@/shared/utils/logger.js";
+
 const APP_LOCALE = "ru-KZ";
 const FALLBACK_TIME_ZONE = "UTC";
 
@@ -9,22 +13,16 @@ function getDeviceTimeZone() {
   try {
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
     return typeof tz === "string" && tz.trim() ? tz.trim() : "";
-  } catch {
+  } catch (error) {
+    devWarn("Не удалось определить timezone устройства:", error);
     return "";
   }
 }
 
 function getSelectedCityTimeZone() {
-  try {
-    if (typeof localStorage === "undefined") return "";
-    const raw = localStorage.getItem("selectedCity");
-    if (!raw) return "";
-    const city = JSON.parse(raw);
-    const tz = String(city?.timezone || "").trim();
-    return tz || "";
-  } catch {
-    return "";
-  }
+  const city = readLocalJson(LOCAL_STORAGE_KEYS.SELECTED_CITY, null);
+  const tz = String(city?.timezone || "").trim();
+  return tz || "";
 }
 
 function normalizeTimeZone(candidate) {
@@ -33,7 +31,8 @@ function normalizeTimeZone(candidate) {
   try {
     new Intl.DateTimeFormat("en-US", { timeZone: value }).format(new Date());
     return value;
-  } catch {
+  } catch (error) {
+    devWarn("Некорректный timezone, используем fallback:", { candidate: value, error });
     return "";
   }
 }
@@ -92,11 +91,7 @@ export function formatDateOnly(date) {
 
 export function formatCalendarDateTime(
   date,
-  {
-    todayPrefix = "Сегодня",
-    yesterdayPrefix = "Вчера",
-    separator = " в ",
-  } = {},
+  { todayPrefix = "Сегодня", yesterdayPrefix = "Вчера", separator = " в " } = {}
 ) {
   const d = typeof date === "string" ? new Date(date) : date;
   if (!(d instanceof Date) || Number.isNaN(d.getTime())) return "";
