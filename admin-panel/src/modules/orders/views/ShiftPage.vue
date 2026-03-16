@@ -812,7 +812,9 @@ const playNewOrderSound = () => {
   if (document.visibilityState !== "visible") return;
   const audio = new Audio("/sounds/new-order.mp3");
   audio.volume = 0.6;
-  audio.play().catch(() => null);
+  audio.play().catch((error) => {
+    console.warn("Не удалось воспроизвести звук нового заказа", error);
+  });
 };
 
 const scheduleWsOrdersReload = () => {

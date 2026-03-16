@@ -148,11 +148,18 @@ router.post("/telegram/callback", async (req, res) => {
     }
     const buttonUrl = null;
     await recordClick({ campaignId, messageId, userId, buttonIndex, buttonUrl });
-    await answerCallbackQueryViaBot({
-      callbackQueryId: callback.id,
-      text: "Спасибо!",
-      showAlert: false,
-    }).catch(() => null);
+    try {
+      await answerCallbackQueryViaBot({
+        callbackQueryId: callback.id,
+        text: "Спасибо!",
+        showAlert: false,
+      });
+    } catch (callbackError) {
+      logger.system.warn("Не удалось отправить answerCallbackQuery в bot-service", {
+        callbackQueryId: callback?.id || null,
+        error: callbackError?.message || String(callbackError),
+      });
+    }
     res.json({ ok: true });
   } catch (error) {
     logger.system.dbError(`Broadcast callback error: ${error.message}`);

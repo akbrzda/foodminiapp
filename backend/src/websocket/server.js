@@ -186,7 +186,7 @@ class WSServer {
       return;
     }
 
-    console.log(`WebSocket connected: userId=${userId}, role=${role}`);
+    console.info(`WebSocket connected: userId=${userId}, role=${role}`);
     this.connectionMeta.set(ws, {
       userId,
       role,
@@ -255,7 +255,7 @@ class WSServer {
   handleDisconnect(ws) {
     const meta = this.connectionMeta.get(ws);
     if (meta) {
-      console.log(`WebSocket disconnected: userId=${meta.userId}`);
+      console.info(`WebSocket disconnected: userId=${meta.userId}`);
       const userConns = this.userConnections.get(meta.userId);
       if (userConns) {
         userConns.delete(ws);
@@ -277,7 +277,7 @@ class WSServer {
     }
     this.rooms.get(roomId).add(ws);
     const meta = this.connectionMeta.get(ws);
-    console.log(`User ${meta?.userId} joined room: ${roomId}`);
+    console.info(`User ${meta?.userId} joined room: ${roomId}`);
   }
   leaveRoom(ws, roomId) {
     const room = this.rooms.get(roomId);

@@ -39,7 +39,10 @@ export const fetchCsrfToken = async ({ force = false } = {}) => {
       const payload = await response.json();
       return setCsrfToken(payload?.csrfToken || "");
     })
-    .catch(() => "")
+    .catch((error) => {
+      console.warn("Не удалось получить CSRF токен", error);
+      return "";
+    })
     .finally(() => {
       csrfTokenPromise = null;
     });

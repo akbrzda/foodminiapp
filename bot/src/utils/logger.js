@@ -34,7 +34,7 @@ const writeLine = (level, line) => {
     console.warn(line);
     return;
   }
-  console.log(line);
+  console.info(line);
 };
 
 const log = (level, message, meta = null) => {

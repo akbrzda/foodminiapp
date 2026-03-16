@@ -8,12 +8,12 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 async function initDatabase() {
   try {
-    console.log("🚀 Инициализация базы данных...\n");
+    console.info("🚀 Инициализация базы данных...\n");
     const schemaPath = path.join(__dirname, "../../database/schema.sql");
     if (!fs.existsSync(schemaPath)) {
       throw new Error(`Файл schema.sql не найден: ${schemaPath}`);
     }
-    console.log("📄 Выполнение schema.sql...");
+    console.info("📄 Выполнение schema.sql...");
     let schemaSQL = fs.readFileSync(schemaPath, "utf8");
     schemaSQL = schemaSQL.replace(/--.*$/gm, "");
     schemaSQL = schemaSQL.replace(/\/\*[\s\S]*?\*\//g, "");
@@ -21,7 +21,7 @@ async function initDatabase() {
       .split(";")
       .map((stmt) => stmt.trim())
       .filter((stmt) => stmt.length > 0);
-    console.log(`  Найдено SQL statements: ${statements.length}`);
+    console.info(`  Найдено SQL statements: ${statements.length}`);
     let executedCount = 0;
     for (const statement of statements) {
       if (statement.trim()) {
@@ -36,8 +36,8 @@ async function initDatabase() {
         }
       }
     }
-    console.log(`  Выполнено statements: ${executedCount}`);
-    console.log("✅ Schema.sql выполнен\n");
+    console.info(`  Выполнено statements: ${executedCount}`);
+    console.info("✅ Schema.sql выполнен\n");
     const initDir = path.join(__dirname, "../../database/init");
     if (fs.existsSync(initDir)) {
       const seedFiles = fs
@@ -45,11 +45,11 @@ async function initDatabase() {
         .filter((file) => file.endsWith(".sql"))
         .sort();
       if (seedFiles.length > 0) {
-        console.log("🌱 Выполнение seed файлов...");
+        console.info("🌱 Выполнение seed файлов...");
         for (const file of seedFiles) {
           const seedPath = path.join(initDir, file);
           const seedSQL = fs.readFileSync(seedPath, "utf8");
-          console.log(`  - ${file}...`);
+          console.info(`  - ${file}...`);
           let cleanSeedSQL = seedSQL.replace(/--.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
           const seedStatements = cleanSeedSQL
             .split(";")
@@ -67,12 +67,12 @@ async function initDatabase() {
               }
             }
           }
-          console.log(`  ✅ ${file} выполнен`);
+          console.info(`  ✅ ${file} выполнен`);
         }
-        console.log("");
+        console.info("");
       }
     }
-    console.log("✅ База данных успешно инициализирована");
+    console.info("✅ База данных успешно инициализирована");
     return true;
   } catch (error) {
     console.error("❌ Ошибка при инициализации базы данных:", error);

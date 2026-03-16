@@ -197,9 +197,23 @@ const handleFailedMessage = async (payload, error) => {
     retry_count: nextRetry,
   });
   await deleteQueueItem(payload.queue_id);
-  await incrementCampaignStat(payload.campaign_id, "failed_count", 1).catch(() => null);
+  try {
+    await incrementCampaignStat(payload.campaign_id, "failed_count", 1);
+  } catch (statError) {
+    logger.system.warn("Не удалось обновить failed_count для кампании", {
+      campaignId: payload.campaign_id,
+      error: statError?.message || String(statError),
+    });
+  }
   await maybeEmitStatsUpdate(payload.campaign_id, { failed: 1 });
-  await checkCampaignCompletion(payload.campaign_id).catch(() => null);
+  try {
+    await checkCampaignCompletion(payload.campaign_id);
+  } catch (completionError) {
+    logger.system.warn("Не удалось проверить завершение кампании после failed", {
+      campaignId: payload.campaign_id,
+      error: completionError?.message || String(completionError),
+    });
+  }
 };
 
 const processQueueItem = async (queueItem) => {
@@ -232,9 +246,23 @@ const processQueueItem = async (queueItem) => {
       error_message: null,
     });
     await deleteQueueItem(payload.queue_id);
-    await incrementCampaignStat(payload.campaign_id, "sent_count", 1).catch(() => null);
+    try {
+      await incrementCampaignStat(payload.campaign_id, "sent_count", 1);
+    } catch (statError) {
+      logger.system.warn("Не удалось обновить sent_count для кампании", {
+        campaignId: payload.campaign_id,
+        error: statError?.message || String(statError),
+      });
+    }
     await maybeEmitStatsUpdate(payload.campaign_id, { sent: 1 });
-    await checkCampaignCompletion(payload.campaign_id).catch(() => null);
+    try {
+      await checkCampaignCompletion(payload.campaign_id);
+    } catch (completionError) {
+      logger.system.warn("Не удалось проверить завершение кампании после sent", {
+        campaignId: payload.campaign_id,
+        error: completionError?.message || String(completionError),
+      });
+    }
   } catch (error) {
     await handleFailedMessage(payload, error);
   }

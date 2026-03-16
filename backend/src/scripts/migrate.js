@@ -36,7 +36,7 @@ async function runMigration() {
   try {
     const migrationsDir = path.join(__dirname, "../../database/migrations");
     if (!fs.existsSync(migrationsDir)) {
-      console.log("⚠️  Папка migrations не найдена");
+      console.info("⚠️  Папка migrations не найдена");
       process.exit(0);
     }
     const migrationFiles = fs
@@ -44,10 +44,10 @@ async function runMigration() {
       .filter((file) => file.endsWith(".sql"))
       .sort();
     if (migrationFiles.length === 0) {
-      console.log("✅ Нет файлов миграций для выполнения");
+      console.info("✅ Нет файлов миграций для выполнения");
       process.exit(0);
     }
-    console.log(`📋 Найдено миграций: ${migrationFiles.length}\n`);
+    console.info(`📋 Найдено миграций: ${migrationFiles.length}\n`);
     await migrationConnection.query(`
       CREATE TABLE IF NOT EXISTS migrations (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -60,11 +60,11 @@ async function runMigration() {
     let executedCount = 0;
     for (const file of migrationFiles) {
       if (executedMigrations.includes(file)) {
-        console.log(`⏭️  Пропущена (уже выполнена): ${file}`);
+        console.info(`⏭️  Пропущена (уже выполнена): ${file}`);
         continue;
       }
       const migrationPath = path.join(migrationsDir, file);
-      console.log(`🔄 Выполнение миграции: ${file}...`);
+      console.info(`🔄 Выполнение миграции: ${file}...`);
       const migrationSQL = fs.readFileSync(migrationPath, "utf8");
       const connection = await migrationConnection.getConnection();
       try {
@@ -72,7 +72,7 @@ async function runMigration() {
         await connection.query(migrationSQL);
         await connection.query("INSERT INTO migrations (name) VALUES (?)", [file]);
         await connection.commit();
-        console.log("  ✅ Миграция выполнена\n");
+        console.info("  ✅ Миграция выполнена\n");
         executedCount++;
       } catch (migrationError) {
         try {
@@ -86,9 +86,9 @@ async function runMigration() {
       }
     }
     if (executedCount === 0) {
-      console.log("✅ Все миграции уже выполнены");
+      console.info("✅ Все миграции уже выполнены");
     } else {
-      console.log(`\n✅ Выполнено миграций: ${executedCount}`);
+      console.info(`\n✅ Выполнено миграций: ${executedCount}`);
     }
     return true;
   } catch (error) {

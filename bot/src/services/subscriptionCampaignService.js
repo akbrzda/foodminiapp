@@ -267,6 +267,17 @@ export const handleStartWithSubscriptionTag = async ({ chatId, telegramUser, tag
 };
 
 export const handleCheckSubscriptionCallback = async ({ callbackQuery }) => {
+  const safeAnswerCallback = async (payload, context) => {
+    try {
+      await answerCallbackQuery(payload);
+    } catch (error) {
+      logger.warn("Не удалось отправить answerCallbackQuery", {
+        context,
+        error: error?.message || String(error),
+      });
+    }
+  };
+
   const callbackData = String(callbackQuery?.data || "");
   if (!callbackData.startsWith("check_sub:")) return { handled: false };
 
@@ -275,11 +286,14 @@ export const handleCheckSubscriptionCallback = async ({ callbackQuery }) => {
   const chatId = Number(callbackQuery?.message?.chat?.id || telegramId);
   if (!Number.isFinite(campaignId) || campaignId <= 0 || !Number.isFinite(telegramId) || telegramId <= 0) {
     if (callbackQuery?.id) {
-      await answerCallbackQuery({
-        callbackQueryId: callbackQuery.id,
-        text: "Некорректные данные кампании",
-        showAlert: true,
-      }).catch(() => null);
+      await safeAnswerCallback(
+        {
+          callbackQueryId: callbackQuery.id,
+          text: "Некорректные данные кампании",
+          showAlert: true,
+        },
+        "invalid_campaign_or_telegram_id",
+      );
     }
     return { handled: true };
   }
@@ -287,11 +301,14 @@ export const handleCheckSubscriptionCallback = async ({ callbackQuery }) => {
   const campaign = await resolveCampaignById(campaignId);
   if (!campaign) {
     if (callbackQuery?.id) {
-      await answerCallbackQuery({
-        callbackQueryId: callbackQuery.id,
-        text: "Кампания завершена или недоступна",
-        showAlert: true,
-      }).catch(() => null);
+      await safeAnswerCallback(
+        {
+          callbackQueryId: callbackQuery.id,
+          text: "Кампания завершена или недоступна",
+          showAlert: true,
+        },
+        "campaign_not_found",
+      );
     }
     return { handled: true };
   }
@@ -306,11 +323,14 @@ export const handleCheckSubscriptionCallback = async ({ callbackQuery }) => {
   const canCheck = await canCheckSubscriptionNow({ campaignId, userId: attempt.user_id });
   if (!canCheck) {
     if (callbackQuery?.id) {
-      await answerCallbackQuery({
-        callbackQueryId: callbackQuery.id,
-        text: "Подождите 10 секунд перед повторной проверкой",
-        showAlert: true,
-      }).catch(() => null);
+      await safeAnswerCallback(
+        {
+          callbackQueryId: callbackQuery.id,
+          text: "Подождите 10 секунд перед повторной проверкой",
+          showAlert: true,
+        },
+        "rate_limit",
+      );
     }
     return { handled: true };
   }
@@ -324,11 +344,14 @@ export const handleCheckSubscriptionCallback = async ({ callbackQuery }) => {
   if (!subscribed) {
     await markNotSubscribed({ attemptId: attempt.id });
     if (callbackQuery?.id) {
-      await answerCallbackQuery({
-        callbackQueryId: callbackQuery.id,
-        text: "Вы еще не подписались на канал",
-        showAlert: true,
-      }).catch(() => null);
+      await safeAnswerCallback(
+        {
+          callbackQueryId: callbackQuery.id,
+          text: "Вы еще не подписались на канал",
+          showAlert: true,
+        },
+        "not_subscribed",
+      );
     }
     await sendTextMessage({
       chatId,
@@ -343,11 +366,14 @@ export const handleCheckSubscriptionCallback = async ({ callbackQuery }) => {
   const updatedAttempt = await getAttempt({ campaignId, userId });
   await processReward({ campaign, attempt: updatedAttempt, chatId });
   if (callbackQuery?.id) {
-    await answerCallbackQuery({
-      callbackQueryId: callbackQuery.id,
-      text: "Подписка подтверждена",
-      showAlert: false,
-    }).catch(() => null);
+    await safeAnswerCallback(
+      {
+        callbackQueryId: callbackQuery.id,
+        text: "Подписка подтверждена",
+        showAlert: false,
+      },
+      "subscription_confirmed",
+    );
   }
   return { handled: true };
 };

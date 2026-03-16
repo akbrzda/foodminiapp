@@ -3,7 +3,7 @@
 ## Language and Documentation
 
 - **All code, comments, commits, and documentation are written in Russian**
-- Always read existing documentation before starting a task (`README.md`, `docs/`, `TASKS.md`)
+- Always read existing documentation before starting a task (`code-standard.md`, `design-system.md`, `docs/`, `TASKS.md`)
 - Comment only important code blocks, not every line
 - Using third-party libraries without user approval is prohibited
 - Tailwind CSS Documentation: https://tailwindcss.com/docs
@@ -469,7 +469,10 @@ const page = parseInt(req.query.page) || 1;
 const limit = parseInt(req.query.limit) || 20;
 const offset = (page - 1) * limit;
 
-const orders = await query("SELECT * FROM orders ORDER BY created_at DESC LIMIT ? OFFSET ?", [limit, offset]);
+const orders = await query("SELECT * FROM orders ORDER BY created_at DESC LIMIT ? OFFSET ?", [
+  limit,
+  offset,
+]);
 
 // Don't forget total count for pagination
 const [{ total }] = await query("SELECT COUNT(*) as total FROM orders");
@@ -730,3 +733,4 @@ Use these links when working with specific technologies:
 ✅ Check responsive design on mobile devices  
 ✅ Document complex business logic in comments  
 ✅ Use uniform API response format (`{success, data/error}`)
+✅ При запросе написать коммит, коммит пишется в чат, а не сразу отправляется в git.

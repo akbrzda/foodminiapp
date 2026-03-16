@@ -154,8 +154,8 @@ export function createImageWorker(connection) {
     ...BULLMQ_WORKER_OPTIONS,
   });
   worker.on("completed", (job, result) => {
-    console.log(`   Original: ${(result.optimization.originalSize / 1024).toFixed(2)} KB`);
-    console.log(`   Optimized: ${(result.optimization.optimizedSize / 1024).toFixed(2)} KB`);
+    console.info(`   Original: ${(result.optimization.originalSize / 1024).toFixed(2)} KB`);
+    console.info(`   Optimized: ${(result.optimization.optimizedSize / 1024).toFixed(2)} KB`);
   });
   worker.on("failed", (job, err) => {
     console.error(`❌ Image processing failed: Job ${job?.id}`, err.message);

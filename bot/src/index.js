@@ -2,6 +2,7 @@ import dotenv from "dotenv";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { logger } from "./utils/logger.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -17,11 +18,10 @@ for (const fileName of envFiles) {
 }
 
 const start = async () => {
-  const [{ createServer }, { createBotApiServer }, { logger }, { testConnection }, { testRedisConnection }, { createTelegramWorker }, { createTelegramCommandBot }] =
+  const [{ createServer }, { createBotApiServer }, { testConnection }, { testRedisConnection }, { createTelegramWorker }, { createTelegramCommandBot }] =
     await Promise.all([
       import("http"),
       import("./server.js"),
-      import("./utils/logger.js"),
       import("./config/database.js"),
       import("./config/redis.js"),
       import("./workers/telegram.worker.js"),
@@ -82,6 +82,6 @@ const start = async () => {
 };
 
 start().catch((error) => {
-  console.error("[bot-service] fatal startup error:", error);
+  logger.error("[bot-service] fatal startup error", { error: error?.message || String(error) });
   process.exit(1);
 });
