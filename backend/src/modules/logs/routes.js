@@ -8,6 +8,7 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const router = express.Router();
+
 router.get("/admin", authenticateToken, requireRole("admin", "ceo"), async (req, res, next) => {
   try {
     const { admin_id, action_type, object_type, date_from, date_to, page = 1, limit = 50 } = req.query;

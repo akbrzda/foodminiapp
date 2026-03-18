@@ -4,6 +4,7 @@ import { logger } from "../utils/logger.js";
 import { JWT_ISSUER, JWT_ACCESS_AUDIENCES, extractBearerToken, getJwtSecret } from "../config/auth.js";
 import { canPermission, getDefaultRolePermissions } from "../modules/access/index.js";
 import db from "../config/database.js";
+import { getAccessTokenCandidates } from "../modules/auth/auth.cookies.js";
 
 const normalizeCityIds = (value) => {
   if (Array.isArray(value)) {
@@ -40,31 +41,44 @@ const normalizePermissions = (value, role) => {
 
 export const authenticateToken = async (req, res, next) => {
   try {
-    // Пытаемся получить токен из cookie (приоритет) или header
-    const token = req.cookies?.access_token || extractBearerToken(req.headers["authorization"]);
+    const cookieTokens = getAccessTokenCandidates(req);
+    const bearerToken = extractBearerToken(req.headers["authorization"]);
+    const tokenCandidates = [...cookieTokens, ...(bearerToken ? [bearerToken] : [])].filter(Boolean);
 
-    if (!token) {
+    if (tokenCandidates.length === 0) {
       await logger.auth.unauthorized(req.path, req.ip);
       return res.status(401).json({
         error: "Authentication required",
       });
     }
 
-    // Проверяем blacklist
-    const blacklisted = await isBlacklisted(token);
-    if (blacklisted) {
+    let user = null;
+    let hadRevokedToken = false;
+    for (const token of tokenCandidates) {
+      const blacklisted = await isBlacklisted(token);
+      if (blacklisted) {
+        hadRevokedToken = true;
+        continue;
+      }
+      try {
+        user = jwt.verify(token, getJwtSecret(), {
+          algorithms: ["HS256"],
+          issuer: JWT_ISSUER,
+          audience: JWT_ACCESS_AUDIENCES,
+        });
+        break;
+      } catch (error) {
+        // Пробуем следующий токен-кандидат.
+      }
+    }
+
+    if (!user) {
       await logger.auth.unauthorized(req.path, req.ip);
       return res.status(401).json({
-        error: "Token has been revoked",
+        error: hadRevokedToken ? "Token has been revoked" : "Invalid or expired token",
       });
     }
 
-    // Верифицируем токен
-    const user = jwt.verify(token, getJwtSecret(), {
-      algorithms: ["HS256"],
-      issuer: JWT_ISSUER,
-      audience: JWT_ACCESS_AUDIENCES,
-    });
     req.user = {
       ...user,
       cities: normalizeCityIds(user?.cities),

@@ -1,48 +1,28 @@
-import crypto from "crypto";
 import { TELEGRAM_START_MESSAGE_DEFAULT } from "./settings.js";
 import { sendNotificationMessage, sendStartMessage } from "./botService.js";
+import { parseMiniAppUser, validateMiniAppInitData } from "./miniapp.js";
 
 export const validateTelegramData = (telegramInitData, botToken) => {
-  try {
-    const params = new URLSearchParams(telegramInitData);
-    const hash = params.get("hash");
-    params.delete("hash");
-    const dataCheckString = Array.from(params.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([key, value]) => `${key}=${value}`)
-      .join("\n");
-    const secretKey = crypto.createHmac("sha256", "WebAppData").update(botToken).digest();
-    const calculatedHash = crypto.createHmac("sha256", secretKey).update(dataCheckString).digest("hex");
-    return calculatedHash === hash;
-  } catch (error) {
-    console.error("Telegram validation error:", error);
-    return false;
-  }
+  return validateMiniAppInitData(telegramInitData, botToken);
 };
 
 export const parseTelegramUser = (telegramInitData) => {
-  try {
-    const params = new URLSearchParams(telegramInitData);
-    const userParam = params.get("user");
-    if (!userParam) {
-      return null;
-    }
-    const user = JSON.parse(userParam);
-    return {
-      telegram_id: user.id,
-      first_name: user.first_name,
-      last_name: user.last_name,
-      username: user.username,
-      language_code: user.language_code,
-    };
-  } catch (error) {
-    console.error("Parse Telegram user error:", error);
+  const user = parseMiniAppUser(telegramInitData);
+  if (!user?.id) {
     return null;
   }
+
+  return {
+    telegram_id: user.id,
+    first_name: user.firstName,
+    last_name: user.lastName,
+    username: user.username,
+    language_code: user.languageCode,
+  };
 };
 
 const resolveMiniAppBaseUrl = () => {
-  const raw = process.env.TELEGRAM_MINIAPP_URL || process.env.MINIAPP_URL || "";
+  const raw = process.env.TELEGRAM_MINIAPP_URL || "";
   const normalized = String(raw).trim();
   if (!normalized) return "";
   return normalized.replace(/\/$/, "");

@@ -1,4 +1,4 @@
-import { devError, devLog } from "@/shared/utils/logger.js";
+import { devError } from "@/shared/utils/logger.js";
 import {
   getWebApp,
   isDesktop,
@@ -32,6 +32,10 @@ export const showBackButton = (handler) => {
 
 export const hideBackButton = () => {
   const webApp = getWebApp();
+  if (!webApp || !isVersionAtLeast(webApp, "6.1")) {
+    return;
+  }
+
   if (webApp?.BackButton?.hide) {
     webApp.BackButton.hide();
   }
@@ -39,7 +43,7 @@ export const hideBackButton = () => {
 
 export const setMainButton = ({ text, isVisible = true, color, textColor, onClick }) => {
   const webApp = getWebApp();
-  if (!webApp?.MainButton) {
+  if (!webApp || !isVersionAtLeast(webApp, "6.1") || !webApp?.MainButton) {
     return () => {};
   }
 
@@ -69,6 +73,10 @@ export const setMainButton = ({ text, isVisible = true, color, textColor, onClic
 
 export const hideMainButton = () => {
   const webApp = getWebApp();
+  if (!webApp || !isVersionAtLeast(webApp, "6.1")) {
+    return;
+  }
+
   if (webApp?.MainButton?.hide) {
     webApp.MainButton.hide();
   }
@@ -76,6 +84,10 @@ export const hideMainButton = () => {
 
 export const showMainButtonProgress = () => {
   const webApp = getWebApp();
+  if (!webApp || !isVersionAtLeast(webApp, "6.1")) {
+    return;
+  }
+
   if (webApp?.MainButton?.showProgress) {
     webApp.MainButton.showProgress(true);
   }
@@ -83,6 +95,10 @@ export const showMainButtonProgress = () => {
 
 export const hideMainButtonProgress = () => {
   const webApp = getWebApp();
+  if (!webApp || !isVersionAtLeast(webApp, "6.1")) {
+    return;
+  }
+
   if (webApp?.MainButton?.hideProgress) {
     webApp.MainButton.hideProgress();
   }
@@ -150,7 +166,6 @@ export const requestContact = ({ timeoutMs = 10000 } = {}) => {
     let resolved = false;
     let handler;
     let customHandler;
-    let debugHandler;
     let timer;
 
     const finish = (phone) => {
@@ -171,10 +186,6 @@ export const requestContact = ({ timeoutMs = 10000 } = {}) => {
         webApp.offEvent?.("custom_method_invoked", customHandler);
       }
 
-      if (debugHandler) {
-        webApp.offEvent?.("custom_method_invoked", debugHandler);
-      }
-
       resolve(phone || null);
     };
 
@@ -182,10 +193,6 @@ export const requestContact = ({ timeoutMs = 10000 } = {}) => {
       const phone =
         payload?.responseUnsafe?.contact?.phone_number || payload?.contact?.phone_number || null;
       finish(phone);
-    };
-
-    debugHandler = (event) => {
-      devLog("[requestContact] DEBUG custom_method_invoked:", JSON.stringify(event, null, 2));
     };
 
     customHandler = (payload) => {

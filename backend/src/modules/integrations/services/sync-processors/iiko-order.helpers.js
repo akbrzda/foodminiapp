@@ -290,7 +290,24 @@ async function isOrderPresentInIiko(client, organizationId, iikoOrderId) {
     orderIds: [iikoOrderId],
   });
   const orders = Array.isArray(response?.orders) ? response.orders : [];
-  return orders.some((row) => String(row?.id || "").trim() === String(iikoOrderId).trim());
+  const matchedOrder = orders.find(
+    (row) => String(row?.id || "").trim() === String(iikoOrderId).trim()
+  );
+  if (!matchedOrder) {
+    return false;
+  }
+
+  const creationStatus = String(matchedOrder?.creationStatus || "")
+    .trim()
+    .toLowerCase();
+
+  // В iiko order id может присутствовать даже при ошибке создания.
+  // Успехом считаем только non-error статус.
+  if (creationStatus === "error") {
+    return false;
+  }
+
+  return true;
 }
 
 async function waitForCommandCompletion(client, organizationId, correlationId) {

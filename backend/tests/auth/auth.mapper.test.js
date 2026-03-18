@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   buildAdminAuthPayload,
+  buildClientAuthPayload,
   buildAdminSessionUser,
   sanitizeAdminUser,
 } from "../../src/modules/auth/auth.mapper.js";
@@ -46,4 +47,11 @@ test("auth.mapper: buildAdminSessionUser формирует user для сесс
 test("auth.mapper: sanitizeAdminUser удаляет password_hash", () => {
   const user = sanitizeAdminUser(fixture.user);
   assert.equal(user.password_hash, undefined);
+});
+
+test("auth.mapper: buildClientAuthPayload не требует telegram_id", () => {
+  const payload = buildClientAuthPayload({ userId: 42 });
+  assert.equal(payload.id, 42);
+  assert.equal(payload.type, "client");
+  assert.equal(payload.telegram_id, undefined);
 });

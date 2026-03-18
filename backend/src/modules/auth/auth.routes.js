@@ -10,8 +10,7 @@ import { authController } from "./auth.controller.js";
 
 const router = express.Router();
 
-router.post("/telegram", telegramAuthLimiter, authController.telegram);
-router.post("/eruda", authController.eruda);
+router.post("/miniapp", telegramAuthLimiter, authController.miniapp);
 router.post("/admin/login", authLimiter, authController.adminLogin);
 router.post("/ws-ticket", authenticateToken, createLimiter, authController.wsTicket);
 router.post("/refresh", refreshLimiter, authController.refresh);

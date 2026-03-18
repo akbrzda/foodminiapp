@@ -20,8 +20,14 @@ const normalizeResponse = (response) => ({
 const withNormalizedResponse = (requestPromise) => requestPromise.then(normalizeResponse);
 
 export const authAPI = {
-  loginWithTelegram(initData) {
-    return withNormalizedResponse(api.post("/auth/telegram", { initData }));
+  loginWithMiniApp({ platform, initData, phone }) {
+    return withNormalizedResponse(
+      api.post("/auth/miniapp", {
+        platform,
+        initData,
+        ...(phone ? { phone } : {}),
+      })
+    );
   },
   getProfile() {
     return withNormalizedResponse(api.get("/users/profile"));

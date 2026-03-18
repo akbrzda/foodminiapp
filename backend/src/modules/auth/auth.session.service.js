@@ -106,21 +106,35 @@ export const issueWsTicket = async ({ user, ipAddress }) => {
   };
 };
 
-export const refreshSession = async ({ refreshToken, ipAddress }) => {
-  if (!refreshToken) {
+const decodeFirstValidRefreshToken = async (refreshTokens) => {
+  const candidates = Array.isArray(refreshTokens) ? refreshTokens.filter(Boolean) : [];
+  if (candidates.length === 0) {
     throw authError.refreshTokenRequired();
   }
 
-  if (await isBlacklisted(refreshToken)) {
-    throw authError.refreshTokenRevoked();
+  let hadRevoked = false;
+  for (const token of candidates) {
+    if (await isBlacklisted(token)) {
+      hadRevoked = true;
+      continue;
+    }
+
+    try {
+      const decoded = verifyRefreshToken(token);
+      return { refreshToken: token, decoded };
+    } catch (error) {
+      // Пробуем следующий кандидат.
+    }
   }
 
-  let decoded;
-  try {
-    decoded = verifyRefreshToken(refreshToken);
-  } catch (error) {
-    throw authError.invalidRefreshToken();
+  if (hadRevoked) {
+    throw authError.refreshTokenRevoked();
   }
+  throw authError.invalidRefreshToken();
+};
+
+export const refreshSession = async ({ refreshTokens, ipAddress }) => {
+  const { refreshToken, decoded } = await decodeFirstValidRefreshToken(refreshTokens);
 
   let tokens;
 
@@ -134,9 +148,6 @@ export const refreshSession = async ({ refreshToken, ipAddress }) => {
       userId: user.id,
       telegramId: user.telegram_id,
     });
-    if (!payload.telegram_id) {
-      throw new AuthError("User telegram_id is required", 401, "AUTH_CLIENT_TELEGRAM_ID_MISSING");
-    }
 
     tokens = buildTokensForClient(payload);
     await logger.auth.refreshSuccess(user.id, "client", ipAddress);
@@ -174,15 +185,12 @@ export const refreshSession = async ({ refreshToken, ipAddress }) => {
 
   return {
     csrfToken: createCsrfToken(),
+    sessionType: decoded.type,
     tokens,
   };
 };
 
 export const getCsrf = ({ hasAuthCookies, currentCsrfToken }) => {
-  if (!hasAuthCookies) {
-    throw authError.authRequired();
-  }
-
   const csrfToken = String(currentCsrfToken || "").trim();
   if (csrfToken) {
     return {

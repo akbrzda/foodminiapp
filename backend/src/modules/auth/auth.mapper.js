@@ -22,9 +22,9 @@ export const buildAdminSessionUser = ({ user, roleContext, cities, branches, per
   branches,
 });
 
-export const buildClientAuthPayload = ({ userId, telegramId }) => ({
+export const buildClientAuthPayload = ({ userId, telegramId = null }) => ({
   id: userId,
-  telegram_id: telegramId,
+  ...(telegramId ? { telegram_id: telegramId } : {}),
   type: "client",
 });
 

@@ -1,7 +1,9 @@
 import { defineStore } from "pinia";
-import { getInitData } from "@/shared/services/telegram.js";
-import { clearCsrfToken, setCsrfToken, withCsrfHeader } from "@/shared/api/csrf.js";
+import { clearCsrfToken, setCsrfToken } from "@/shared/api/csrf.js";
 import { LOCAL_STORAGE_KEYS, SESSION_STORAGE_KEYS } from "@/shared/constants/storage-keys.js";
+import { getPlatformBridge, resolvePlatform } from "@/shared/platform/index.js";
+import { telegramBridge } from "@/shared/platform/telegramBridge.js";
+import { maxBridge } from "@/shared/platform/maxBridge.js";
 import {
   readLocalString,
   readSessionJson,
@@ -54,10 +56,10 @@ const fetchUserProfile = async () => {
 };
 
 const tryRefreshSession = async () => {
-  const headers = await withCsrfHeader({
+  const headers = {
     "Content-Type": "application/json; charset=utf-8",
     Accept: "application/json; charset=utf-8",
-  });
+  };
 
   const response = await fetch(`${getApiBase()}/api/auth/refresh`, {
     method: "POST",
@@ -134,8 +136,8 @@ export const useAuthStore = defineStore("auth", {
           }
 
           if (!user && this.hasSessionHint()) {
-            const reauthed = await this.loginWithTelegramInitData();
-            if (reauthed) {
+            const reauthed = await this.loginWithMiniAppInitData();
+            if (reauthed?.ok) {
               user = this.user || (await fetchUserProfile());
             }
           }
@@ -161,26 +163,63 @@ export const useAuthStore = defineStore("auth", {
 
       return this.verifySessionPromise;
     },
-    async loginWithTelegramInitData() {
-      const initData = getInitData();
+    async loginWithMiniAppInitData({ phone } = {}) {
+      const bridge = getPlatformBridge();
+      bridge.init?.();
+      let initData = String(bridge.getInitData() || "").trim();
+      let platform = resolvePlatform();
+
       if (!initData) {
-        return false;
+        telegramBridge.init?.();
+        const telegramInitData = String(telegramBridge.getInitData() || "").trim();
+        if (telegramInitData) {
+          initData = telegramInitData;
+          platform = "telegram";
+        }
       }
 
-      const headers = await withCsrfHeader({
+      if (!initData) {
+        maxBridge.init?.();
+        const maxInitData = String(maxBridge.getInitData() || "").trim();
+        if (maxInitData) {
+          initData = maxInitData;
+          platform = "max";
+        }
+      }
+
+      if (!initData) {
+        return {
+          ok: false,
+          phoneRequired: false,
+          errorCode: "INIT_DATA_MISSING",
+          errorMessage: "Не удалось получить данные Mini App",
+        };
+      }
+
+      const headers = {
         "Content-Type": "application/json; charset=utf-8",
         Accept: "application/json; charset=utf-8",
-      });
+      };
 
-      const response = await fetch(`${getApiBase()}/api/auth/telegram`, {
+      const response = await fetch(`${getApiBase()}/api/auth/miniapp`, {
         method: "POST",
         headers,
         credentials: "include",
-        body: JSON.stringify({ initData }),
+        body: JSON.stringify({
+          platform,
+          initData,
+          ...(phone ? { phone } : {}),
+        }),
       });
 
       if (!response.ok) {
-        return false;
+        const payload = await response.json().catch(() => null);
+        return {
+          ok: false,
+          phoneRequired: payload?.code === "AUTH_PHONE_REQUIRED",
+          errorCode: payload?.code || "AUTH_REQUEST_FAILED",
+          errorMessage: String(payload?.error || "").trim(),
+        };
       }
 
       const payload = await response.json();
@@ -190,15 +229,20 @@ export const useAuthStore = defineStore("auth", {
       }
 
       this.setUser(payload?.user || null);
-      return Boolean(payload?.user);
+      return {
+        ok: Boolean(payload?.user),
+        phoneRequired: false,
+        errorCode: null,
+        errorMessage: "",
+      };
     },
     async logout({ notifyServer = true, clearAppState = true } = {}) {
       if (notifyServer) {
         try {
-          const headers = await withCsrfHeader({
+          const headers = {
             "Content-Type": "application/json; charset=utf-8",
             Accept: "application/json; charset=utf-8",
-          });
+          };
 
           await fetch(`${getApiBase()}/api/auth/logout`, {
             method: "POST",

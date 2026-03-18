@@ -23,10 +23,10 @@ const refreshToken = async () => {
   if (refreshPromise) return refreshPromise;
   refreshPromise = axios
     .post(`${apiBase}/api/auth/refresh`, null, {
-      headers: await withCsrfHeader({
+      headers: {
         "Content-Type": "application/json; charset=utf-8",
         Accept: "application/json; charset=utf-8",
-      }),
+      },
       withCredentials: true,
       timeout: 10000,
     })
@@ -72,8 +72,9 @@ api.interceptors.response.use(
       const originalRequest = error.config;
       const errorMessage = String(error?.response?.data?.error || "").trim();
       const isRefreshRequest = originalRequest?.url?.includes("/auth/refresh");
-      const isAuthRequest = originalRequest?.url?.includes("/auth/telegram");
+      const isAuthRequest = originalRequest?.url?.includes("/auth/miniapp");
       const isCsrfError = status === 403 && errorMessage.startsWith("CSRF validation failed");
+
       if (isCsrfError && !originalRequest?._csrfRetry) {
         originalRequest._csrfRetry = true;
         await fetchCsrfToken({ force: true });

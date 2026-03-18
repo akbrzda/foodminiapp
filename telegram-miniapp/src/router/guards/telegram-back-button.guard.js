@@ -1,4 +1,4 @@
-import { hideBackButton, isDesktop, showBackButton } from "@/shared/services/telegram.js";
+import { getPlatformBridge, PLATFORM_IDS } from "@/shared/platform/index.js";
 
 const resolveBackFallback = (route) => {
   if (route?.name === "OrderDetail") {
@@ -30,17 +30,20 @@ export const registerTelegramBackButtonGuard = (router) => {
   });
 
   router.afterEach((to) => {
-    if (!isDesktop()) {
-      if (to.meta.showBackButton) {
-        backButtonCleanup = showBackButton(() => {
-          navigateBackWithFallback(router, to);
-        });
-      } else {
-        hideBackButton();
-      }
+    const bridge = getPlatformBridge();
+
+    if (bridge.platform === PLATFORM_IDS.WEB) {
+      bridge.hideBackButton();
       return;
     }
 
-    hideBackButton();
+    if (to.meta.showBackButton) {
+      backButtonCleanup = bridge.showBackButton(() => {
+        navigateBackWithFallback(router, to);
+      });
+      return;
+    }
+
+    bridge.hideBackButton();
   });
 };

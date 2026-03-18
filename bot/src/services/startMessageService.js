@@ -6,7 +6,7 @@ const TELEGRAM_BUTTON_TYPES = new Set(["url", "web_app"]);
 const TELEGRAM_START_IMAGE_WEIGHT_DEFAULT = 1;
 
 const resolveMiniAppBaseUrl = () => {
-  const raw = process.env.TELEGRAM_MINIAPP_URL || process.env.MINIAPP_URL || "";
+  const raw = process.env.TELEGRAM_MINIAPP_URL || "";
   const normalized = String(raw).trim();
   if (!normalized) return "";
   return normalized.replace(/\/$/, "");

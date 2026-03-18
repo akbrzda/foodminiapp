@@ -1,9 +1,10 @@
-import { parseTelegramUser, validateTelegramData } from "../../utils/telegram.js";
+import { getMiniAppAuthDate, parseMiniAppUser, validateMiniAppInitData } from "../../utils/miniapp.js";
 import { normalizePhone } from "../../utils/phone.js";
 import { decryptPhone } from "../../utils/encryption.js";
 import { logger } from "../../utils/logger.js";
 import { authRepository } from "./auth.repository.js";
 import { buildClientAuthPayload } from "./auth.mapper.js";
+import { MINIAPP_PLATFORMS } from "./auth.schemas.js";
 import {
   TOKEN_AUDIENCES,
   TOKEN_CONFIG,
@@ -12,15 +13,16 @@ import {
   signRefreshToken,
 } from "./auth.tokens.js";
 import { DomainError } from "../../shared/errors/domain-error.js";
-import { AuthError, authError } from "../../shared/errors/auth-errors.js";
+import { AuthError } from "../../shared/errors/auth-errors.js";
 import { ValidationError } from "../../shared/errors/validation-errors.js";
 
-const getRequiredBotToken = () => {
-  const botToken = process.env.TELEGRAM_BOT_TOKEN;
+const getRequiredBotTokenByPlatform = (platform) => {
+  const envKey = platform === MINIAPP_PLATFORMS.MAX ? "MAX_BOT_TOKEN" : "TELEGRAM_BOT_TOKEN";
+  const botToken = process.env[envKey];
   return typeof botToken === "string" && botToken.trim().length > 0 ? botToken.trim() : null;
 };
 
-const updateTelegramUserProfile = async ({ user, firstName, lastName }) => {
+const updateMiniAppUserProfile = async ({ user, firstName, lastName }) => {
   const updates = {};
 
   if (firstName && user.first_name !== firstName) {
@@ -36,6 +38,18 @@ const updateTelegramUserProfile = async ({ user, firstName, lastName }) => {
   }
 
   await authRepository.updateUserById(user.id, updates);
+};
+
+const normalizeAuthDateSeconds = (rawAuthDate) => {
+  if (!Number.isFinite(rawAuthDate)) {
+    return null;
+  }
+
+  if (rawAuthDate > 10 ** 12) {
+    return Math.floor(rawAuthDate / 1000);
+  }
+
+  return Math.floor(rawAuthDate);
 };
 
 const normalizeStoredPhone = async (user) => {
@@ -79,61 +93,126 @@ const buildTokensForClient = (payload) => {
   };
 };
 
-export const loginTelegram = async ({ initData, ipAddress }) => {
-  const params = new URLSearchParams(initData);
-  const parsedUser = parseTelegramUser(initData);
-  if (!parsedUser) {
-    throw new ValidationError("Telegram data is required");
+const resolveExistingUserByPhoneFirst = async ({ platform, externalId, normalizedPhone }) => {
+  let user = await authRepository.findUserByExternalAccount({ platform, externalId });
+  if (user) {
+    return user;
   }
 
-  const telegramId = parsedUser.telegram_id;
-  const firstName = parsedUser.first_name;
-  const lastName = parsedUser.last_name;
-  const authDate = Number(params.get("auth_date"));
-  const hash = params.get("hash");
-
-  if (!telegramId || !hash) {
-    throw new ValidationError("Telegram data is required");
+  if (platform === MINIAPP_PLATFORMS.TELEGRAM) {
+    user = await authRepository.findUserByTelegramId(externalId);
+    if (user) {
+      return user;
+    }
   }
 
-  const botToken = getRequiredBotToken();
+  if (normalizedPhone) {
+    user = await authRepository.findUserByPhone(normalizedPhone);
+    if (user) {
+      return user;
+    }
+  }
+
+  return null;
+};
+
+const ensureExternalAccountBinding = async ({ userId, platform, externalId }) => {
+  const existing = await authRepository.findExternalAccount({ platform, externalId });
+  if (existing && Number(existing.user_id) !== Number(userId)) {
+    throw new AuthError("External account already linked", 409, "AUTH_EXTERNAL_ACCOUNT_CONFLICT");
+  }
+
+  if (existing) {
+    return;
+  }
+
+  try {
+    await authRepository.insertExternalAccount({ userId, platform, externalId });
+  } catch (error) {
+    if (error?.code !== "ER_DUP_ENTRY") {
+      throw error;
+    }
+
+    const linkedAccount = await authRepository.findExternalAccount({ platform, externalId });
+    if (!linkedAccount || Number(linkedAccount.user_id) !== Number(userId)) {
+      throw new AuthError("External account already linked", 409, "AUTH_EXTERNAL_ACCOUNT_CONFLICT");
+    }
+  }
+};
+
+export const loginMiniApp = async ({ platform, initData, phone, ipAddress }) => {
+  const parsedUser = parseMiniAppUser(initData);
+  if (!parsedUser?.id) {
+    throw new ValidationError("MiniApp data is required");
+  }
+
+  const externalId = String(parsedUser.id);
+  const firstName = parsedUser.firstName;
+  const lastName = parsedUser.lastName;
+
+  const botToken = getRequiredBotTokenByPlatform(platform);
   if (!botToken) {
+    const envKey = platform === MINIAPP_PLATFORMS.MAX ? "MAX_BOT_TOKEN" : "TELEGRAM_BOT_TOKEN";
     throw new DomainError({
       status: 500,
       code: "AUTH_CONFIG_ERROR",
-      message: "Server misconfiguration: TELEGRAM_BOT_TOKEN is required",
+      message: `Server misconfiguration: ${envKey} is required`,
     });
   }
 
-  const isValid = validateTelegramData(initData, botToken);
+  const isValid = validateMiniAppInitData(initData, botToken);
   if (!isValid) {
-    throw authError.invalidTelegramData();
+    throw new AuthError("Invalid MiniApp initData", 401, "AUTH_MINIAPP_DATA_INVALID");
   }
 
-  const authAge = Date.now() / 1000 - Number(authDate);
+  const authDate = normalizeAuthDateSeconds(getMiniAppAuthDate(initData));
+  const authAge = Number.isFinite(authDate) ? Date.now() / 1000 - authDate : Number.NaN;
   if (!Number.isFinite(authAge)) {
-    throw new ValidationError("Telegram data is required");
+    throw new ValidationError("MiniApp data is required");
   }
 
   if (authAge > TOKEN_CONFIG.telegramAuthMaxAgeSeconds) {
-    throw authError.telegramDataTooOld();
+    throw new AuthError("MiniApp data is too old", 401, "AUTH_MINIAPP_DATA_TOO_OLD");
   }
 
-  let user = await authRepository.findUserByTelegramId(telegramId);
+  const normalizedPhone = normalizePhone(phone);
+  if (phone && !normalizedPhone) {
+    throw new ValidationError("Invalid phone format");
+  }
+
+  let user = await resolveExistingUserByPhoneFirst({
+    platform,
+    externalId,
+    normalizedPhone,
+  });
   let userId;
 
   if (user) {
     userId = user.id;
-    await updateTelegramUserProfile({ user, firstName, lastName });
+    await updateMiniAppUserProfile({ user, firstName, lastName });
+    await ensureExternalAccountBinding({ userId, platform, externalId });
     user = await authRepository.findUserById(userId);
     user = await normalizeStoredPhone(user);
   } else {
-    userId = await authRepository.insertTelegramUser({ telegramId, firstName, lastName });
+    if (!normalizedPhone) {
+      throw new DomainError({
+        status: 428,
+        code: "AUTH_PHONE_REQUIRED",
+        message: "Phone confirmation is required",
+      });
+    }
+
+    userId = await authRepository.insertMiniAppUser({ firstName, lastName });
+    await authRepository.updateUserById(userId, { phone: normalizedPhone });
+    await ensureExternalAccountBinding({ userId, platform, externalId });
     await authRepository.setInitialLoyaltyForUser(userId);
     user = await authRepository.findUserById(userId);
   }
 
-  const authPayload = buildClientAuthPayload({ userId, telegramId });
+  const authPayload = buildClientAuthPayload({
+    userId,
+    telegramId: platform === MINIAPP_PLATFORMS.TELEGRAM ? externalId : user.telegram_id,
+  });
   const tokens = buildTokensForClient(authPayload);
   const csrfToken = createCsrfToken();
 
@@ -143,39 +222,5 @@ export const loginTelegram = async ({ initData, ipAddress }) => {
     user,
     csrfToken,
     tokens,
-  };
-};
-
-export const getErudaStatus = async ({ initData }) => {
-  if (!initData) {
-    throw new ValidationError("Telegram initData is required");
-  }
-
-  const parsedUser = parseTelegramUser(initData);
-  if (!parsedUser?.telegram_id) {
-    throw new ValidationError("Telegram data is required");
-  }
-
-  const botToken = getRequiredBotToken();
-  if (!botToken) {
-    throw new DomainError({
-      status: 500,
-      code: "AUTH_CONFIG_ERROR",
-      message: "Server misconfiguration: TELEGRAM_BOT_TOKEN is required",
-    });
-  }
-
-  const isValid = validateTelegramData(initData, botToken);
-  if (!isValid) {
-    throw authError.invalidTelegramData();
-  }
-
-  const admin = await authRepository.findAdminByTelegramId(parsedUser.telegram_id);
-  if (!admin || !admin.is_active) {
-    throw new AuthError("Admin account not found or inactive", 401, "AUTH_ADMIN_NOT_FOUND");
-  }
-
-  return {
-    enabled: Boolean(admin.eruda_enabled),
   };
 };

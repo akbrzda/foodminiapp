@@ -8,7 +8,7 @@
       <div class="login-footer">
         <p>Нажмите кнопку ниже, чтобы войти</p>
         <button class="login-btn" @click="handleLogin" :disabled="loading">
-          {{ loading ? "Вход..." : "Войти через Telegram" }}
+          {{ loading ? "Вход..." : "Войти" }}
         </button>
         <div v-if="error" class="error">{{ error }}</div>
       </div>
@@ -19,10 +19,8 @@
 import { ref, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { useAuthStore } from "@/modules/auth/stores/auth.js";
-import PageHeader from "@/shared/components/PageHeader.vue";
-import { authAPI } from "@/shared/api/endpoints.js";
-import { getInitData, getTelegramUser, hapticFeedback, requestContact } from "@/shared/services/telegram.js";
-import { devError, devLog } from "@/shared/utils/logger.js";
+import { getPlatformBridge } from "@/shared/platform/index.js";
+import { devError } from "@/shared/utils/logger.js";
 const router = useRouter();
 const authStore = useAuthStore();
 const loading = ref(false);
@@ -37,42 +35,39 @@ async function handleLogin() {
   try {
     loading.value = true;
     error.value = "";
-    hapticFeedback("light");
-    const initData = getInitData();
-    const telegramUser = getTelegramUser();
-    if (!initData || !telegramUser) {
-      error.value = "Не удалось получить данные Telegram";
-      hapticFeedback("error");
-      return;
-    }
-    const isLoggedIn = await authStore.loginWithTelegramInitData();
-    if (!isLoggedIn) {
-      error.value = "Ошибка авторизации";
-      hapticFeedback("error");
-      return;
-    }
-    if (!authStore.user?.phone) {
-      devLog("[Login] User has no phone, requesting contact...");
-      const phoneNumber = await requestContact();
-      devLog("[Login] Received phone number:", phoneNumber);
+    const bridge = getPlatformBridge();
+    bridge.hapticFeedback("light");
+    const isMaxPlatform = bridge.platform === "max";
+
+    // Для MAX запрос контакта должен стартовать сразу по пользовательскому клику.
+    // Иначе после await-цепочки backend может отклонить вызов (loss of user gesture).
+    const earlyContactPromise = isMaxPlatform
+      ? bridge.requestContact({ timeoutMs: 20000 }).catch(() => null)
+      : Promise.resolve(null);
+
+    let loginResult = await authStore.loginWithMiniAppInitData();
+    if (loginResult?.phoneRequired) {
+      const phoneNumber = await earlyContactPromise;
+
       if (phoneNumber) {
-        try {
-          devLog("[Login] Updating profile with phone:", phoneNumber);
-          const updated = await authAPI.updateProfile({ phone: phoneNumber });
-          devLog("[Login] Profile updated:", updated.data);
-          authStore.setUser(updated.data.user);
-        } catch (updateError) {
-          devError("[Login] Не удалось обновить телефон:", updateError);
-        }
-      } else {
-        devLog("[Login] Номер телефона не получен из requestContact");
+        loginResult = await authStore.loginWithMiniAppInitData({ phone: phoneNumber });
       }
     }
-    hapticFeedback("success");
+
+    if (!loginResult?.ok) {
+      error.value = loginResult?.errorMessage || "Ошибка авторизации";
+      if (loginResult?.errorCode === "AUTH_PHONE_REQUIRED") {
+        error.value = "Для регистрации нужен номер телефона. Разрешите доступ к контактам в MAX и повторите вход.";
+      }
+      bridge.hapticFeedback("error");
+      return;
+    }
+
+    bridge.hapticFeedback("success");
     router.push("/");
   } catch (err) {
     error.value = err.message || "Ошибка авторизации";
-    hapticFeedback("error");
+    getPlatformBridge().hapticFeedback("error");
     devError("Ошибка входа:", err);
   } finally {
     loading.value = false;

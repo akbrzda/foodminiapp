@@ -26,6 +26,7 @@ test("auth endpoint: POST /auth/refresh возвращает csrf и выста�
   const originalRefreshSession = authService.refreshSession;
   authService.refreshSession = async () => ({
     csrfToken: "csrf-test-token",
+    sessionType: "client",
     tokens: {
       accessToken: "access-test-token",
       refreshToken: "refresh-test-token",
@@ -38,7 +39,7 @@ test("auth endpoint: POST /auth/refresh возвращает csrf и выста�
 
   const response = await request(app)
     .post("/auth/refresh")
-    .set("Cookie", ["refresh_token=old-refresh-token"]);
+    .set("Cookie", ["refresh_token_client=old-refresh-token"]);
 
   authService.refreshSession = originalRefreshSession;
 
@@ -46,8 +47,10 @@ test("auth endpoint: POST /auth/refresh возвращает csrf и выста�
   assert.equal(response.body.ok, true);
   assert.equal(response.body.csrfToken, "csrf-test-token");
   assert.ok(Array.isArray(response.headers["set-cookie"]));
-  assert.ok(response.headers["set-cookie"].some((cookie) => cookie.startsWith("access_token=")));
-  assert.ok(response.headers["set-cookie"].some((cookie) => cookie.startsWith("refresh_token=")));
+  assert.ok(response.headers["set-cookie"].some((cookie) => cookie.startsWith("access_token_client=")));
+  assert.ok(
+    response.headers["set-cookie"].some((cookie) => cookie.startsWith("refresh_token_client="))
+  );
   assert.ok(response.headers["set-cookie"].some((cookie) => cookie.startsWith("csrf_token=")));
 });
 
@@ -93,8 +96,8 @@ test("auth endpoint: POST /auth/logout очищает cookies и возвращ�
   const response = await request(app)
     .post("/auth/logout")
     .set("Cookie", [
-      "access_token=old-access-token",
-      "refresh_token=old-refresh-token",
+      "access_token_client=old-access-token",
+      "refresh_token_client=old-refresh-token",
       "csrf_token=old-csrf-token",
     ]);
 
@@ -103,8 +106,12 @@ test("auth endpoint: POST /auth/logout очищает cookies и возвращ�
   assert.equal(response.status, 200);
   assert.equal(response.body.message, "Logout successful");
   assert.ok(Array.isArray(response.headers["set-cookie"]));
-  assert.ok(response.headers["set-cookie"].some((cookie) => cookie.startsWith("access_token=;")));
-  assert.ok(response.headers["set-cookie"].some((cookie) => cookie.startsWith("refresh_token=;")));
+  assert.ok(
+    response.headers["set-cookie"].some((cookie) => cookie.startsWith("access_token_client=;"))
+  );
+  assert.ok(
+    response.headers["set-cookie"].some((cookie) => cookie.startsWith("refresh_token_client=;"))
+  );
   assert.ok(response.headers["set-cookie"].some((cookie) => cookie.startsWith("csrf_token=;")));
 });
 

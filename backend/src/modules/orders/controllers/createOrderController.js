@@ -147,7 +147,7 @@ const generateOrderNumber = async (connection) => {
 };
 
 const resolveInternalApiBaseUrl = (req) => {
-  const fromEnv = (process.env.INTERNAL_API_URL || process.env.API_INTERNAL_URL || "").trim();
+  const fromEnv = String(process.env.INTERNAL_API_URL || "").trim();
   if (fromEnv) {
     return fromEnv.replace(/\/$/, "");
   }

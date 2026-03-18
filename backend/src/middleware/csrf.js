@@ -1,16 +1,16 @@
 import crypto from "crypto";
 import { getCsrfCookieOptions } from "../config/auth.js";
+import { hasAnyAuthCookies } from "../modules/auth/auth.cookies.js";
 
 const CSRF_COOKIE_NAME = "csrf_token";
 const CSRF_HEADER_NAME = "x-csrf-token";
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 const CSRF_COOKIE_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
 const CSRF_TOKEN_OPTIONAL_PATHS = new Set([
-  "/api/auth/telegram",
+  "/api/auth/miniapp",
   "/api/auth/admin/login",
   "/api/auth/refresh",
   "/api/auth/logout",
-  "/api/auth/eruda",
 ]);
 
 const normalizeOriginValue = (value) => {
@@ -42,7 +42,7 @@ export const createCsrfProtection = ({ isOriginAllowed }) => {
   return (req, res, next) => {
     const method = String(req.method || "GET").toUpperCase();
     const isSafeMethod = SAFE_METHODS.has(method);
-    const hasAuthCookies = Boolean(req.cookies?.access_token || req.cookies?.refresh_token);
+    const hasAuthCookies = hasAnyAuthCookies(req);
 
     if (hasAuthCookies && !req.cookies?.[CSRF_COOKIE_NAME]) {
       const csrfToken = generateCsrfToken();

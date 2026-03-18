@@ -1,6 +1,7 @@
 import redis from "../config/redis.js";
 import crypto from "crypto";
 import { extractBearerToken } from "../config/auth.js";
+import { getAccessTokenCandidates } from "../modules/auth/auth.cookies.js";
 
 const buildBlacklistKey = (token) => {
   const hash = crypto.createHash("sha256").update(String(token)).digest("hex");
@@ -44,22 +45,24 @@ export async function isBlacklisted(token) {
  */
 export const checkBlacklist = async (req, res, next) => {
   try {
-    // Получаем токен из cookie или header
     const authorizationHeader = req.headers.authorization;
     const bearerToken = extractBearerToken(authorizationHeader);
-    const token = req.cookies?.access_token || bearerToken;
+    const tokenCandidates = [
+      ...getAccessTokenCandidates(req),
+      ...(bearerToken ? [bearerToken] : []),
+    ].filter(Boolean);
 
-    if (!token) {
+    if (tokenCandidates.length === 0) {
       return next();
     }
 
-    // Проверяем blacklist
-    const blacklisted = await isBlacklisted(token);
-
-    if (blacklisted) {
-      return res.status(401).json({
-        error: "Token has been revoked",
-      });
+    for (const token of tokenCandidates) {
+      const blacklisted = await isBlacklisted(token);
+      if (blacklisted) {
+        return res.status(401).json({
+          error: "Token has been revoked",
+        });
+      }
     }
 
     next();

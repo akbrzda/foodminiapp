@@ -1,11 +1,12 @@
 import express from "express";
 import db from "../../config/database.js";
-import { extractBearerToken, getClearAuthCookieOptions, getClearCsrfCookieOptions } from "../../config/auth.js";
+import { extractBearerToken } from "../../config/auth.js";
 import { authenticateToken } from "../../middleware/auth.js";
 import { normalizePhone } from "../../utils/phone.js";
 import { getSystemSettings } from "../../utils/settings.js";
 import { grantRegistrationBonus } from "../loyalty/services/loyaltyService.js";
 import { addToBlacklist } from "../../middleware/tokenBlacklist.js";
+import { clearAuthCookies, getAccessTokenCandidates } from "../auth/auth.cookies.js";
 import { logger } from "../../utils/logger.js";
 import { processPremiumBonusClientSync } from "../integrations/services/syncProcessors.js";
 import {
@@ -399,15 +400,13 @@ router.delete("/me", authenticateToken, async (req, res, next) => {
     if (users.length === 0) {
       return res.status(404).json({ error: "User not found" });
     }
-    const token = req.cookies?.access_token || extractBearerToken(req.headers["authorization"]);
+    const token =
+      getAccessTokenCandidates(req)[0] || extractBearerToken(req.headers["authorization"]);
     if (token) {
       await addToBlacklist(token);
     }
     await db.query("DELETE FROM users WHERE id = ?", [userId]);
-    const clearOptions = getClearAuthCookieOptions();
-    res.clearCookie("access_token", clearOptions);
-    res.clearCookie("refresh_token", clearOptions);
-    res.clearCookie("csrf_token", getClearCsrfCookieOptions());
+    clearAuthCookies(res);
     res.json({ message: "Account deleted successfully" });
   } catch (error) {
     next(error);

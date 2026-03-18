@@ -25,7 +25,7 @@ export const registerAuthGuard = (router, navigationContext) => {
       return next();
     }
 
-    if (to.meta.requiresAuth && !authStore.isAuthenticated) {
+    if (to.meta.requiresAuth && (!authStore.sessionChecked || !authStore.isAuthenticated)) {
       await authStore.verifySession();
     }
 
