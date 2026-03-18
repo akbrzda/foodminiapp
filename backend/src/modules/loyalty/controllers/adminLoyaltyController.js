@@ -6,6 +6,8 @@ import loyaltyAdapter from "../../integrations/adapters/loyaltyAdapter.js";
 import db from "../../../config/database.js";
 import { getIntegrationSettings, getPremiumBonusClientOrNull } from "../../integrations/services/integrationConfigService.js";
 
+const DEFAULT_PB_EARN_TRIGGER_AMOUNTS = new Set([1, 5, 10, 50, 100]);
+
 export function createAdminLoyaltyController({ loyaltyService }) {
   const normalizePhoneForPremiumBonus = (value) => {
     const digits = String(value || "").replace(/[^\d]/g, "");
@@ -30,6 +32,85 @@ export function createAdminLoyaltyController({ loyaltyService }) {
     const parsed = Number(value);
     if (!Number.isFinite(parsed)) return fallback;
     return Math.floor(parsed);
+  };
+  const normalizeTriggerAmount = (value) => {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return null;
+    const normalized = Math.floor(parsed);
+    if (normalized <= 0) return null;
+    return normalized;
+  };
+  const decomposeAmountByChunks = (amount, chunks = []) => {
+    let remaining = amount;
+    const plan = [];
+    for (const chunk of chunks) {
+      if (!Number.isInteger(chunk) || chunk <= 0) continue;
+      while (remaining >= chunk) {
+        plan.push(chunk);
+        remaining -= chunk;
+      }
+    }
+    if (remaining !== 0) return null;
+    return plan;
+  };
+  const buildEarnTriggerPlan = (configuredValue, amount) => {
+    const normalizedAmount = normalizeTriggerAmount(amount);
+    if (!normalizedAmount) return null;
+
+    const source = String(configuredValue || "").trim();
+    if (!source) {
+      const chunks = Array.from(DEFAULT_PB_EARN_TRIGGER_AMOUNTS).sort((a, b) => b - a);
+      const decomposed = decomposeAmountByChunks(normalizedAmount, chunks);
+      if (!decomposed) return null;
+      return decomposed.map((chunk) => ({
+        amount: chunk,
+        event_name: `starterRefill${chunk}`,
+      }));
+    }
+
+    if (source.includes("{{amount}}")) {
+      const chunks = Array.from(DEFAULT_PB_EARN_TRIGGER_AMOUNTS).sort((a, b) => b - a);
+      const decomposed = decomposeAmountByChunks(normalizedAmount, chunks);
+      if (!decomposed) return null;
+      return decomposed.map((chunk) => ({
+        amount: chunk,
+        event_name: source.replaceAll("{{amount}}", String(chunk)),
+      }));
+    }
+
+    if (source.startsWith("{")) {
+      try {
+        const parsed = JSON.parse(source);
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+        const entries = Object.entries(parsed)
+          .map(([rawAmount, rawEventName]) => ({
+            amount: normalizeTriggerAmount(rawAmount),
+            event_name: String(rawEventName || "").trim(),
+          }))
+          .filter((item) => Number.isInteger(item.amount) && item.amount > 0 && item.event_name)
+          .sort((a, b) => b.amount - a.amount);
+        if (!entries.length) return null;
+        const decomposed = decomposeAmountByChunks(
+          normalizedAmount,
+          entries.map((entry) => entry.amount)
+        );
+        if (!decomposed) return null;
+
+        return decomposed.map((chunk) => ({
+          amount: chunk,
+          event_name: entries.find((entry) => entry.amount === chunk)?.event_name || "",
+        }));
+      } catch (error) {
+        return null;
+      }
+    }
+
+    return [
+      {
+        amount: normalizedAmount,
+        event_name: source,
+      },
+    ];
   };
 
   const mapDbLevel = (row) => ({
@@ -91,24 +172,39 @@ export function createAdminLoyaltyController({ loyaltyService }) {
             .toLowerCase() === "external";
 
         if (usePremiumBonus) {
-          const triggerEventName =
-            value.type === "spend"
-              ? integrationSettings.premiumbonusTriggerAdjustSpendEventName
-              : integrationSettings.premiumbonusTriggerAdjustEarnEventName;
-          if (!triggerEventName) {
+          if (value.type === "spend") {
             return res.status(400).json({
               error:
-                "Для корректировки в режиме PremiumBonus настройте событие триггера (premiumbonus_trigger_adjust_earn_event_name / premiumbonus_trigger_adjust_spend_event_name).",
+                "В режиме PremiumBonus ручное списание через admin adjust отключено. Доступно только ручное начисление через trigger.",
             });
           }
 
-          const [users] = await db.query("SELECT id, phone FROM users WHERE id = ? LIMIT 1", [value.userId]);
+          const normalizedTriggerAmount = normalizeTriggerAmount(value.amount);
+          if (!normalizedTriggerAmount) {
+            return res.status(400).json({
+              error: "Для начисления через PremiumBonus amount должен быть положительным целым числом",
+            });
+          }
+
+          const triggerPlan = buildEarnTriggerPlan(
+            integrationSettings.premiumbonusTriggerAdjustEarnEventName,
+            normalizedTriggerAmount
+          );
+          if (!triggerPlan || triggerPlan.length === 0 || triggerPlan.some((item) => !item.event_name)) {
+            return res.status(400).json({
+              error:
+                "Не найден trigger-план для указанной суммы. По умолчанию поддерживаются комбинации 1/5/10/50/100, либо задайте premiumbonus_trigger_adjust_earn_event_name (шаблон {{amount}} или JSON-маппинг).",
+            });
+          }
+
+          const [users] = await db.query("SELECT id, phone, email FROM users WHERE id = ? LIMIT 1", [value.userId]);
           if (!users.length) {
             return res.status(404).json({ error: "Пользователь не найден" });
           }
           const phone = normalizePhoneForPremiumBonus(users[0].phone);
-          if (!phone) {
-            return res.status(400).json({ error: "У пользователя отсутствует корректный телефон для PremiumBonus" });
+          const email = String(users[0].email || "").trim();
+          if (!phone && !email) {
+            return res.status(400).json({ error: "У пользователя отсутствуют корректные phone/email для PremiumBonus" });
           }
 
           const client = await getPremiumBonusClientOrNull();
@@ -116,13 +212,30 @@ export function createAdminLoyaltyController({ loyaltyService }) {
             return res.status(503).json({ error: "Клиент PremiumBonus недоступен" });
           }
 
-          const triggerResponse = await client.trigger({
-            phone,
-            event_name: triggerEventName,
-          });
-          if (triggerResponse?.success === false) {
-            return res.status(400).json({
-              error: String(triggerResponse?.error_description || triggerResponse?.error || "PremiumBonus вернул ошибку запуска триггера"),
+          const executedTriggers = [];
+          for (const step of triggerPlan) {
+            const triggerPayload = {
+              event_name: step.event_name,
+              ...(phone ? { phone } : { email }),
+            };
+
+            const triggerResponse = await client.trigger(triggerPayload);
+            if (triggerResponse?.success === false) {
+              return res.status(400).json({
+                error: String(
+                  triggerResponse?.error_description ||
+                    triggerResponse?.error ||
+                    "PremiumBonus вернул ошибку запуска триггера"
+                ),
+                failed_trigger: step.event_name,
+                executed_triggers: executedTriggers,
+              });
+            }
+
+            executedTriggers.push({
+              event_name: step.event_name,
+              amount: step.amount,
+              logger: triggerResponse?.logger || null,
             });
           }
 
@@ -133,10 +246,12 @@ export function createAdminLoyaltyController({ loyaltyService }) {
             "users",
             value.userId,
             JSON.stringify({
-              event_name: triggerEventName,
+              trigger_plan: triggerPlan,
+              executed_triggers: executedTriggers,
               reason: value.reason,
               type: value.type,
               requested_amount: value.amount,
+              normalized_amount: normalizedTriggerAmount,
             }),
             req,
           );
@@ -144,9 +259,11 @@ export function createAdminLoyaltyController({ loyaltyService }) {
           return res.json({
             balance: freshBalance?.balance ?? 0,
             mode: "premiumbonus",
-            trigger_event: triggerEventName,
+            trigger_event: executedTriggers[0]?.event_name || null,
+            trigger_events: executedTriggers,
+            normalized_amount: normalizedTriggerAmount,
             warning:
-              "Сумма корректировки определяется сценарием PremiumBonus. Поле amount используется как служебный параметр запроса и не управляет начислением напрямую.",
+              "Сумма разложена на набор trigger-событий PremiumBonus; итог начисления и срок активации задаются сценариями PB.",
           });
         }
 

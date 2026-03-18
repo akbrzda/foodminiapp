@@ -5,7 +5,7 @@ import cookieParser from "cookie-parser";
 import request from "supertest";
 import { authController } from "../../src/modules/auth/auth.controller.js";
 import { authService } from "../../src/modules/auth/auth.service.js";
-import { authError } from "../../src/shared/errors/auth-errors.js";
+import { AuthError, authError } from "../../src/shared/errors/auth-errors.js";
 import db from "../../src/config/database.js";
 import redis from "../../src/config/redis.js";
 
@@ -131,4 +131,85 @@ test("auth endpoint: POST /auth/logout возвращает 401 без токе�
 
   assert.equal(response.status, 401);
   assert.equal(response.body.error, "Authentication required");
+});
+
+test("auth endpoint: POST /auth/miniapp успешный вход для telegram и max", async () => {
+  const scenarios = [
+    { platform: "telegram", initData: "tg_init_data" },
+    { platform: "max", initData: "max_init_data" },
+  ];
+
+  for (const scenario of scenarios) {
+    const app = createApp();
+    let capturedPayload = null;
+
+    const originalLoginMiniApp = authService.loginMiniApp;
+    authService.loginMiniApp = async (payload) => {
+      capturedPayload = payload;
+      return {
+        user: { id: 101, first_name: "Test" },
+        csrfToken: "csrf-miniapp",
+        tokens: {
+          accessToken: "access-miniapp",
+          refreshToken: "refresh-miniapp",
+          accessMaxAge: 15 * 60 * 1000,
+          refreshMaxAge: 7 * 24 * 60 * 60 * 1000,
+        },
+      };
+    };
+
+    app.post("/auth/miniapp", authController.miniapp);
+
+    const response = await request(app).post("/auth/miniapp").send({
+      platform: scenario.platform,
+      initData: scenario.initData,
+    });
+
+    authService.loginMiniApp = originalLoginMiniApp;
+
+    assert.equal(response.status, 200);
+    assert.equal(response.body.user.id, 101);
+    assert.equal(response.body.csrfToken, "csrf-miniapp");
+    assert.equal(capturedPayload?.platform, scenario.platform);
+    assert.equal(capturedPayload?.initData, scenario.initData);
+    assert.ok(Array.isArray(response.headers["set-cookie"]));
+    assert.ok(response.headers["set-cookie"].some((cookie) => cookie.startsWith("access_token_client=")));
+    assert.ok(response.headers["set-cookie"].some((cookie) => cookie.startsWith("refresh_token_client=")));
+    assert.ok(response.headers["set-cookie"].some((cookie) => cookie.startsWith("csrf_token=")));
+  }
+});
+
+test("auth endpoint: POST /auth/miniapp возвращает 401 при невалидной подписи", async () => {
+  const app = createApp();
+  const originalLoginMiniApp = authService.loginMiniApp;
+  authService.loginMiniApp = async () => {
+    throw new AuthError("Invalid MiniApp initData", 401, "AUTH_MINIAPP_DATA_INVALID");
+  };
+
+  app.post("/auth/miniapp", authController.miniapp);
+
+  const response = await request(app).post("/auth/miniapp").send({
+    platform: "telegram",
+    initData: "invalid_init_data",
+  });
+
+  authService.loginMiniApp = originalLoginMiniApp;
+
+  assert.equal(response.status, 401);
+  assert.equal(response.body.error, "Invalid MiniApp initData");
+  assert.equal(response.body.code, "AUTH_MINIAPP_DATA_INVALID");
+});
+
+test("auth endpoint: POST /auth/miniapp возвращает 400 при неизвестной платформе", async () => {
+  const app = createApp();
+  app.post("/auth/miniapp", authController.miniapp);
+
+  const response = await request(app).post("/auth/miniapp").send({
+    platform: "unknown_platform",
+    initData: "init_data_value",
+  });
+
+  assert.equal(response.status, 400);
+  assert.equal(response.body.code, "VALIDATION_ERROR");
+  assert.match(String(response.body.error || ""), /platform/i);
 });

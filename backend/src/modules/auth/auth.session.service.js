@@ -146,7 +146,6 @@ export const refreshSession = async ({ refreshTokens, ipAddress }) => {
 
     const payload = buildClientAuthPayload({
       userId: user.id,
-      telegramId: user.telegram_id,
     });
 
     tokens = buildTokensForClient(payload);

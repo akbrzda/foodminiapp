@@ -1,5 +1,6 @@
-import { TELEGRAM_NEW_ORDER_NOTIFICATION_DEFAULT, getSystemSettings } from "../utils/settings.js";
+import { MAX_NEW_ORDER_NOTIFICATION_DEFAULT, TELEGRAM_NEW_ORDER_NOTIFICATION_DEFAULT, getSystemSettings } from "../utils/settings.js";
 import { sendTextMessage } from "./telegramApi.js";
+import maxApi from "./maxApi.js";
 
 const escapeHtml = (value) =>
   String(value ?? "")
@@ -9,7 +10,7 @@ const escapeHtml = (value) =>
 
 const escapeRegExp = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-const normalizeNewOrderConfig = (value) => {
+const normalizeTelegramConfig = (value) => {
   const source = value && typeof value === "object" && !Array.isArray(value) ? value : {};
   const cityThreadIdsSource =
     source.city_thread_ids && typeof source.city_thread_ids === "object" && !Array.isArray(source.city_thread_ids)
@@ -32,6 +33,18 @@ const normalizeNewOrderConfig = (value) => {
     use_city_threads: source.use_city_threads === true,
     city_thread_ids: cityThreadIds,
     message_template: String(source.message_template || TELEGRAM_NEW_ORDER_NOTIFICATION_DEFAULT.message_template).trim(),
+  };
+};
+
+const normalizeMaxConfig = (value) => {
+  const source = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  return {
+    enabled: source.enabled === true,
+    notify_on_new_order: source.notify_on_new_order !== false,
+    notify_on_completed: source.notify_on_completed === true,
+    notify_on_cancelled: source.notify_on_cancelled === true,
+    group_id: String(source.group_id || "").trim(),
+    message_template: String(source.message_template || MAX_NEW_ORDER_NOTIFICATION_DEFAULT.message_template).trim(),
   };
 };
 
@@ -196,73 +209,104 @@ const formatStatusChangeMessage = (orderData) => {
   return `${statusEmoji[new_status]} <b>Заказ #${order_number}</b>\n\nСтатус изменен: ${statusText[old_status]} → ${statusText[new_status]}`;
 };
 
+const resolveMaxRecipient = (rawId) => {
+  const parsed = Number(rawId);
+  if (!Number.isInteger(parsed) || parsed === 0) {
+    throw new Error("MAX group_id не настроен");
+  }
+  if (parsed < 0) {
+    return { chatId: parsed };
+  }
+  return { userId: parsed };
+};
+
 export const processTelegramNotificationJob = async (jobData) => {
   const { type, data } = jobData;
   const defaultChatId = String(process.env.TELEGRAM_CHAT_ID || "").trim();
   const isTest = data?.is_test === true;
 
-  let message = "";
-  let chatId = data?.chat_id || defaultChatId;
-  let messageThreadId = null;
-  let config = null;
+  const settings = await getSystemSettings();
+  const forcedPlatform = String(jobData?.platform || "")
+    .trim()
+    .toLowerCase();
+  const telegramConfig = normalizeTelegramConfig(settings?.telegram_new_order_notification);
+  const maxConfig = normalizeMaxConfig(settings?.max_new_order_notification);
 
-  if (type === "new_order" || type === "status_change") {
-    const settings = await getSystemSettings();
-    config = normalizeNewOrderConfig(settings?.telegram_new_order_notification);
-
-    if (!config.enabled && !isTest) {
-      return { skipped: true, reason: "disabled" };
+  const shouldSendForType = (config) => {
+    if (type === "custom") return true;
+    if (!config.enabled && !isTest) return false;
+    if (type === "new_order") return isTest || config.notify_on_new_order;
+    if (type === "status_change") {
+      const newStatus = String(data?.new_status || "").trim();
+      if (newStatus === "completed") return isTest || config.notify_on_completed;
+      if (newStatus === "cancelled") return isTest || config.notify_on_cancelled;
+      return false;
     }
+    return false;
+  };
 
-    chatId = config.group_id || chatId;
-    if (config.use_city_threads) {
+  const formatMessage = (config) => {
+    if (type === "new_order") {
+      return formatNewOrderMessageFromTemplate(data, config);
+    }
+    if (type === "status_change") {
+      return formatStatusChangeMessage(data);
+    }
+    if (type === "custom") {
+      return String(data?.message || "").trim();
+    }
+    throw new Error(`Unknown notification type: ${type}`);
+  };
+
+  const sendTelegram = async () => {
+    if (!shouldSendForType(telegramConfig)) return { skipped: true, reason: "disabled" };
+    const chatId = String(telegramConfig.group_id || data?.chat_id || defaultChatId).trim();
+    if (!chatId) return { skipped: true, reason: "no_chat_id" };
+
+    let messageThreadId = null;
+    if (telegramConfig.use_city_threads) {
       const cityKey = String(Number(data?.city_id));
       if (cityKey && cityKey !== "NaN") {
-        messageThreadId = config.city_thread_ids[cityKey] || null;
+        messageThreadId = telegramConfig.city_thread_ids[cityKey] || null;
       }
     }
+
+    return sendTextMessage({
+      chatId,
+      text: formatMessage(telegramConfig),
+      parseMode: "HTML",
+      messageThreadId,
+    });
+  };
+
+  const sendMax = async () => {
+    if (!shouldSendForType(maxConfig)) return { skipped: true, reason: "disabled" };
+    const targetId = String(maxConfig.group_id || data?.chat_id || "").trim();
+    if (!targetId) return { skipped: true, reason: "no_chat_id" };
+    const recipient = resolveMaxRecipient(targetId);
+    return maxApi.sendMessage({
+      ...recipient,
+      text: formatMessage(maxConfig),
+      format: "html",
+    });
+  };
+
+  if (forcedPlatform === "telegram") {
+    return sendTelegram();
+  }
+  if (forcedPlatform === "max") {
+    return sendMax();
   }
 
-  switch (type) {
-    case "new_order": {
-      if (!config?.notify_on_new_order && !isTest) {
-        return { skipped: true, reason: "disabled" };
-      }
-      message = formatNewOrderMessageFromTemplate(data, config);
-      break;
-    }
-    case "status_change": {
-      const newStatus = String(data?.new_status || "").trim();
-      if (newStatus === "completed" && !config?.notify_on_completed && !isTest) {
-        return { skipped: true, reason: "disabled" };
-      }
-      if (newStatus === "cancelled" && !config?.notify_on_cancelled && !isTest) {
-        return { skipped: true, reason: "disabled" };
-      }
-      if (newStatus !== "completed" && newStatus !== "cancelled") {
-        return { skipped: true, reason: "unsupported_status" };
-      }
-      message = formatStatusChangeMessage(data);
-      break;
-    }
-    case "custom": {
-      message = String(data?.message || "").trim();
-      break;
-    }
-    default:
-      throw new Error(`Unknown notification type: ${type}`);
+  const [telegramResult, maxResult] = await Promise.all([sendTelegram(), sendMax()]);
+  if (telegramResult?.skipped && maxResult?.skipped) {
+    return { skipped: true, reason: "disabled" };
   }
-
-  if (!chatId) {
-    throw new Error("Chat ID не настроен");
-  }
-
-  return sendTextMessage({
-    chatId,
-    text: message,
-    parseMode: "HTML",
-    messageThreadId,
-  });
+  return {
+    success: true,
+    telegram: telegramResult,
+    max: maxResult,
+  };
 };
 
 export default {

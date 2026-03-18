@@ -78,7 +78,7 @@ usersRouter.get("/users", requireRole("admin", "ceo"), async (req, res, next) =>
     const { role, is_active } = req.query;
     let query = `
       SELECT au.id, au.email, au.first_name, au.last_name, au.role,
-             au.is_active, au.telegram_id, au.eruda_enabled, au.branch_id, au.created_at, au.updated_at
+             au.is_active, au.branch_id, au.created_at, au.updated_at
       FROM admin_users au
       WHERE 1=1
     `;
@@ -129,7 +129,7 @@ usersRouter.get("/users/:id", requireRole("admin", "ceo"), async (req, res, next
     const userId = req.params.id;
     const [users] = await db.query(
       `SELECT id, email, first_name, last_name, role, is_active,
-              telegram_id, eruda_enabled, branch_id, created_at, updated_at
+              branch_id, created_at, updated_at
        FROM admin_users WHERE id = ?`,
       [userId]
     );
@@ -301,7 +301,7 @@ usersRouter.post("/users/:id/security/reset", requireRole("admin"), async (req, 
 
 usersRouter.post("/users", requireRole("admin", "ceo"), async (req, res, next) => {
   try {
-    const { email, password, first_name, last_name, role, telegram_id, eruda_enabled, cities, branch_ids } = req.body;
+    const { email, password, first_name, last_name, role, cities, branch_ids } = req.body;
 
     if (!email || !password || !first_name || !last_name || !role) {
       return res.status(400).json({
@@ -343,17 +343,10 @@ usersRouter.post("/users", requireRole("admin", "ceo"), async (req, res, next) =
 
     const passwordHash = await bcrypt.hash(password, 12);
 
-    if (req.user.role === "ceo" && eruda_enabled !== undefined) {
-      return res.status(403).json({ error: "CEO не может включать Eruda" });
-    }
-    if (eruda_enabled === true && !telegram_id) {
-      return res.status(400).json({ error: "Для включения Eruda нужен Telegram ID" });
-    }
-
     const [result] = await db.query(
-      `INSERT INTO admin_users (email, password_hash, first_name, last_name, role, telegram_id, eruda_enabled, branch_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [email, passwordHash, first_name, last_name, role, telegram_id || null, eruda_enabled === true, null]
+      `INSERT INTO admin_users (email, password_hash, first_name, last_name, role, branch_id)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [email, passwordHash, first_name, last_name, role, null]
     );
 
     const newUserId = result.insertId;
@@ -372,7 +365,7 @@ usersRouter.post("/users", requireRole("admin", "ceo"), async (req, res, next) =
 
     const [newUser] = await db.query(
       `SELECT id, email, first_name, last_name, role, is_active,
-              telegram_id, eruda_enabled, branch_id, created_at, updated_at
+              branch_id, created_at, updated_at
        FROM admin_users WHERE id = ?`,
       [newUserId]
     );
@@ -386,8 +379,8 @@ usersRouter.post("/users", requireRole("admin", "ceo"), async (req, res, next) =
 usersRouter.put("/users/:id", requireRole("admin", "ceo"), async (req, res, next) => {
   try {
     const userId = req.params.id;
-    const { email, password, first_name, last_name, role, telegram_id, eruda_enabled, is_active, cities, branch_ids } = req.body;
-    const [existingUsers] = await db.query("SELECT id, role, branch_id, telegram_id FROM admin_users WHERE id = ?", [userId]);
+    const { email, password, first_name, last_name, role, is_active, cities, branch_ids } = req.body;
+    const [existingUsers] = await db.query("SELECT id, role, branch_id FROM admin_users WHERE id = ?", [userId]);
 
     if (existingUsers.length === 0) {
       return res.status(404).json({ error: "User not found" });
@@ -437,25 +430,6 @@ usersRouter.put("/users/:id", requireRole("admin", "ceo"), async (req, res, next
       }
       updates.push("role = ?");
       values.push(role);
-    }
-
-    if (telegram_id !== undefined) {
-      const normalizedTelegramId = telegram_id === "" ? null : telegram_id;
-      updates.push("telegram_id = ?");
-      values.push(normalizedTelegramId);
-    }
-
-    if (eruda_enabled !== undefined) {
-      if (req.user.role === "ceo") {
-        return res.status(403).json({ error: "CEO не может включать Eruda" });
-      }
-      const normalizedTelegramId = telegram_id === "" ? null : telegram_id;
-      const effectiveTelegramId = telegram_id !== undefined ? normalizedTelegramId : existingUsers[0].telegram_id;
-      if (eruda_enabled === true && !effectiveTelegramId) {
-        return res.status(400).json({ error: "Для включения Eruda нужен Telegram ID" });
-      }
-      updates.push("eruda_enabled = ?");
-      values.push(eruda_enabled === true);
     }
 
     if (is_active !== undefined) {
@@ -516,7 +490,7 @@ usersRouter.put("/users/:id", requireRole("admin", "ceo"), async (req, res, next
 
     const [updatedUser] = await db.query(
       `SELECT id, email, first_name, last_name, role, is_active,
-              telegram_id, branch_id, created_at, updated_at
+              branch_id, created_at, updated_at
        FROM admin_users WHERE id = ?`,
       [userId]
     );

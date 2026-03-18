@@ -323,13 +323,29 @@
       <CardContent class="space-y-4">
         <FieldGroup class="grid gap-4 md:grid-cols-2">
           <Field>
-            <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Telegram ID для теста</FieldLabel>
+            <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Платформа доставки</FieldLabel>
             <FieldContent>
-              <Input v-model="test.telegram_id" type="number" placeholder="123456789" />
+              <Select v-model="test.platform">
+                <SelectTrigger class="w-full">
+                  <SelectValue placeholder="Выберите платформу" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="telegram">Telegram</SelectItem>
+                  <SelectItem value="max">MAX</SelectItem>
+                </SelectContent>
+              </Select>
             </FieldContent>
           </Field>
           <Field>
-            <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">ID пользователя для предпросмотра</FieldLabel>
+            <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">External ID для теста</FieldLabel>
+            <FieldContent>
+              <Input v-model="test.external_id" placeholder="7233641072 / max-user-123" />
+            </FieldContent>
+          </Field>
+        </FieldGroup>
+        <FieldGroup class="grid gap-4 md:grid-cols-2">
+          <Field>
+            <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">ID пользователя для предпросмотра (опционально)</FieldLabel>
             <FieldContent>
               <Input v-model="test.user_id" type="number" placeholder="456" />
             </FieldContent>
@@ -437,7 +453,8 @@ const clearScheduledDate = () => {
   scheduledDateTo.value = "";
 };
 const test = ref({
-  telegram_id: "",
+  platform: "telegram",
+  external_id: "",
   user_id: "",
 });
 
@@ -642,14 +659,19 @@ const sendTest = async () => {
     showWarningNotification("Сначала сохраните рассылку");
     return;
   }
-  if (!test.value.telegram_id) {
-    showWarningNotification("Укажите Telegram ID");
+  if (!test.value.external_id || !test.value.platform) {
+    showWarningNotification("Укажите platform + external_id");
     return;
   }
   try {
+    const payload = {
+      platform: String(test.value.platform || "").trim().toLowerCase(),
+      external_id: String(test.value.external_id || "").trim(),
+      user_id: test.value.user_id ? Number(test.value.user_id) : null,
+    };
+
     await api.post(`/api/broadcasts/${campaignId.value}/test`, {
-      telegram_id: Number(test.value.telegram_id),
-      test_user_id: test.value.user_id ? Number(test.value.user_id) : null,
+      ...payload,
     });
     showSuccessNotification("Тест отправлен");
   } catch (error) {

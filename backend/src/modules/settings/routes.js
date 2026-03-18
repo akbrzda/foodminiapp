@@ -5,8 +5,63 @@ import { getSystemSettings, getSettingsList, updateSystemSettings } from "../../
 import { logger } from "../../utils/logger.js";
 import { sendTelegramStartMessage } from "../../utils/telegram.js";
 import { addTelegramNotification } from "../../queues/config.js";
+import { sendMaxNotificationMessageViaBot } from "../../utils/botService.js";
 
 const router = express.Router();
+const SUPPORTED_NOTIFICATION_PLATFORMS = new Set(["telegram", "max"]);
+
+const resolvePlatform = (value, fallback = "telegram") => {
+  const normalized = String(value || fallback)
+    .trim()
+    .toLowerCase();
+  return SUPPORTED_NOTIFICATION_PLATFORMS.has(normalized) ? normalized : null;
+};
+
+const buildStartReplyMarkup = (platform, config) => {
+  const buttonText = String(config?.button_text || "").trim();
+  const buttonUrl = String(config?.button_url || "").trim();
+  if (!buttonText || !buttonUrl) return null;
+
+  if (platform === "max") {
+    const buttonType = String(config?.button_type || "open_app")
+      .trim()
+      .toLowerCase();
+    if (buttonType === "open_app") {
+      return {
+        inline_keyboard: [
+          [
+            {
+              text: buttonText,
+              web_app: {
+                url: buttonUrl,
+              },
+            },
+          ],
+        ],
+      };
+    }
+  }
+
+  return {
+    inline_keyboard: [
+      [
+        {
+          text: buttonText,
+          url: buttonUrl,
+        },
+      ],
+    ],
+  };
+};
+
+const buildStartMessageText = (config) => {
+  const text = String(config?.text || "").trim();
+  const images = Array.isArray(config?.images) ? config.images : [];
+  const activeImage = images.find((image) => image?.is_active !== false && image?.url)?.url || String(config?.image_url || "").trim();
+  if (!activeImage) return text;
+  if (!text) return `Изображение: ${activeImage}`;
+  return `${text}\n\nИзображение: ${activeImage}`;
+};
 
 const PUBLIC_SETTINGS_ALLOWLIST = new Set([
   "bonuses_enabled",
@@ -172,27 +227,47 @@ router.put("/admin", authenticateToken, requirePermission("system.settings.manag
   }
 });
 
-router.post("/admin/telegram-start/test", authenticateToken, requirePermission("system.settings.manage"), async (req, res, next) => {
+router.post("/admin/start-message/test", authenticateToken, requirePermission("system.settings.manage"), async (req, res, next) => {
   try {
-    const telegramIdRaw = req.body?.telegram_id;
-    const telegramId = Number(telegramIdRaw);
-    if (!Number.isFinite(telegramId) || telegramId <= 0) {
-      return res.status(400).json({ error: "Укажите корректный telegram_id" });
+    const platform = resolvePlatform(req.body?.platform, "telegram");
+    if (!platform) {
+      return res.status(400).json({ error: "Платформа должна быть telegram или max" });
+    }
+
+    const externalIdRaw = req.body?.external_id;
+    const externalId = Number(externalIdRaw);
+    if (!Number.isInteger(externalId) || externalId === 0) {
+      const fieldName = platform === "max" ? "max_id" : "telegram_id";
+      return res.status(400).json({ error: `Укажите корректный ${fieldName}` });
     }
 
     const settings = await getSystemSettings();
-    const sent = await sendTelegramStartMessage(telegramId, settings);
-    if (!sent) {
-      return res.status(400).json({ error: "Не удалось отправить тестовое сообщение" });
+    if (platform === "telegram") {
+      const sent = await sendTelegramStartMessage(externalId, settings);
+      if (!sent) {
+        return res.status(400).json({ error: "Не удалось отправить тестовое сообщение" });
+      }
+      return res.json({ success: true });
     }
 
-    res.json({ success: true });
+    const config = settings?.max_start_message || {};
+    const messageText = buildStartMessageText(config);
+    if (!messageText) {
+      return res.status(400).json({ error: "Для MAX не задан текст приветственного сообщения" });
+    }
+
+    await sendMaxNotificationMessageViaBot({
+      maxId: externalId,
+      message: messageText,
+      replyMarkup: buildStartReplyMarkup("max", config),
+    });
+    return res.json({ success: true });
   } catch (error) {
     next(error);
   }
 });
 
-router.post("/admin/telegram-orders/test", authenticateToken, requirePermission("system.settings.manage"), async (req, res, next) => {
+router.post("/admin/orders-notification/test", authenticateToken, requirePermission("system.settings.manage"), async (req, res, next) => {
   try {
     const eventTypeRaw = String(req.body?.event_type || "new_order").trim().toLowerCase();
     const allowedEventTypes = new Set(["new_order", "completed", "cancelled"]);
@@ -211,14 +286,31 @@ router.post("/admin/telegram-orders/test", authenticateToken, requirePermission(
     }
 
     const settings = await getSystemSettings();
-    const orderSettings = settings?.telegram_new_order_notification || {};
-    const groupId = String(orderSettings.group_id || "").trim();
-    if (!groupId) {
-      return res.status(400).json({ error: "Укажите group_id в настройках Telegram-уведомлений по заказам" });
+    const requestedPlatform = req.body?.platform ? resolvePlatform(req.body?.platform, null) : null;
+    if (req.body?.platform && !requestedPlatform) {
+      return res.status(400).json({ error: "Платформа должна быть telegram или max" });
     }
+
+    const telegramGroupId = String(settings?.telegram_new_order_notification?.group_id || "").trim();
+    const maxGroupId = String(settings?.max_new_order_notification?.group_id || "").trim();
+    const hasTelegramTarget = Boolean(telegramGroupId);
+    const hasMaxTarget = Boolean(maxGroupId);
+
+    if (requestedPlatform === "telegram" && !hasTelegramTarget) {
+      return res.status(400).json({ error: "Укажите group_id в настройках Telegram-уведомлений" });
+    }
+    if (requestedPlatform === "max" && !hasMaxTarget) {
+      return res.status(400).json({ error: "Укажите group_id в настройках MAX-уведомлений" });
+    }
+    if (!requestedPlatform && !hasTelegramTarget && !hasMaxTarget) {
+      return res.status(400).json({ error: "Укажите group_id минимум для одной платформы (Telegram или MAX)" });
+    }
+
+    const queuePayload = requestedPlatform ? { platform: requestedPlatform } : {};
 
     if (eventTypeRaw === "new_order") {
       await addTelegramNotification({
+        ...queuePayload,
         type: "new_order",
         priority: 1,
         data: {
@@ -248,6 +340,7 @@ router.post("/admin/telegram-orders/test", authenticateToken, requirePermission(
       });
     } else {
       await addTelegramNotification({
+        ...queuePayload,
         type: "status_change",
         priority: 1,
         data: {

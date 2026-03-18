@@ -296,7 +296,7 @@
           </TableHeader>
           <TableBody>
             <TableRow v-for="bonus in bonuses" :key="bonus.id">
-              <TableCell>{{ formatBonusStatus(bonus.type) }}</TableCell>
+              <TableCell>{{ formatBonusStatus(bonus) }}</TableCell>
               <TableCell class="text-muted-foreground">{{ formatDateTime(bonus.created_at) }}</TableCell>
               <TableCell>{{ bonus.order_number ? `#${bonus.order_number}` : "—" }}</TableCell>
               <TableCell>{{ formatBonusTransactionStatus(bonus.status) }}</TableCell>
@@ -450,7 +450,10 @@ const form = reactive({
   phone: "",
   email: "",
 });
-const formatBonusStatus = (type) => {
+const formatBonusStatus = (transactionOrType) => {
+  const transaction =
+    transactionOrType && typeof transactionOrType === "object" ? transactionOrType : null;
+  const type = transaction ? transaction.type : transactionOrType;
   if (type === "earn" || type === "earned") return "Начислено";
   if (type === "spend" || type === "used") return "Списано";
   if (type === "expire") return "Сгорело";

@@ -9,6 +9,7 @@ import redis from "../../../config/redis.js";
 const DEFAULT_MAX_SPEND_PERCENT = 0.2;
 const DEFAULT_LEVEL_THRESHOLDS = [0, 10000, 20000];
 const PB_CACHE_TTL_SECONDS = 60 * 60 * 24 * 7;
+const PB_CACHE_VERSION = 4;
 
 function normalizePhoneForPremiumBonus(value) {
   const digits = String(value || "").replace(/[^\d]/g, "");
@@ -27,6 +28,13 @@ function normalizeBonusAmount(value) {
   if (!Number.isFinite(parsed)) return 0;
   if (parsed < 0) return Math.ceil(parsed);
   return Math.floor(parsed);
+}
+
+function parseIsoDateOrNull(value) {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toISOString();
 }
 
 function parsePbActiveBalance(info = {}) {
@@ -111,26 +119,6 @@ function parseWriteOffPercentFromQuote(quote = {}, amount = 0) {
   if (!Number.isFinite(writeOffAvailable) || writeOffAvailable < 0) return null;
 
   return normalizePercent(writeOffAvailable / grossAmount);
-}
-
-async function resolvePremiumBonusWriteOffPercent(client, identificator, activeBalance) {
-  const balance = toNumber(activeBalance, 0);
-  if (balance <= 0) return null;
-
-  const probeAmount = Number(Math.max(1, balance).toFixed(2));
-  const quote = await client.purchaseRequest({
-    identificator,
-    items: [
-      {
-        name: "Проверка списания",
-        amount: probeAmount,
-        quantity: 1,
-        type: "product",
-      },
-    ],
-  });
-
-  return parseWriteOffPercentFromQuote(quote, probeAmount);
 }
 
 async function resolveLocalLevelIdByPremiumBonusGroup({ groupId = "", groupName = "" } = {}) {
@@ -546,17 +534,31 @@ function mapOrderItemsToPremiumBonus(items = []) {
 
 function mapPbPurchasesToTransactions(list = []) {
   const transactions = [];
+
   for (const purchase of Array.isArray(list) ? list : []) {
     const createdAt = purchase?.date || null;
     const orderRef = purchase?.external_id || purchase?.id || null;
-    const writeOff =
-      toNumber(purchase?.bonus_accumulated_write_off) +
-      toNumber(purchase?.bonus_present_write_off) +
-      toNumber(purchase?.bonus_action_write_off);
-    const writeOn =
-      toNumber(purchase?.bonus_accumulated_write_on) +
-      toNumber(purchase?.bonus_present_write_on) +
-      toNumber(purchase?.bonus_action_write_on);
+    const writeOffAccumulated = toNumber(purchase?.bonus_accumulated_write_off);
+    const writeOffPresent = toNumber(purchase?.bonus_present_write_off);
+    const writeOffAction = toNumber(purchase?.bonus_action_write_off);
+    const writeOnAccumulated = toNumber(purchase?.bonus_accumulated_write_on);
+    const writeOnPresent = toNumber(purchase?.bonus_present_write_on);
+    const writeOnAction = toNumber(purchase?.bonus_action_write_on);
+
+    const writeOnTotal = writeOnAccumulated + writeOnPresent + writeOnAction;
+    const writeOffTotal = writeOffAccumulated + writeOffPresent + writeOffAction;
+    if (writeOnTotal <= 0 && writeOffTotal <= 0) continue;
+
+    const explicitOperationName = String(
+      purchase?.operation_name || purchase?.operation || purchase?.operation_type || ""
+    ).trim();
+    const isExpireEvent =
+      (writeOffAction > 0 &&
+        writeOffAccumulated === 0 &&
+        writeOffPresent === 0 &&
+        writeOnTotal === 0) ||
+      /сгора/i.test(explicitOperationName);
+
     const activationAtRaw =
       purchase?.bonus_activation_at ||
       purchase?.bonus_activate_at ||
@@ -564,35 +566,49 @@ function mapPbPurchasesToTransactions(list = []) {
       purchase?.bonus_write_on_activation_at ||
       purchase?.write_on_activation_at ||
       null;
-    let activationAt = null;
-    if (activationAtRaw) {
-      const parsedActivation = new Date(activationAtRaw);
-      if (!Number.isNaN(parsedActivation.getTime())) {
-        activationAt = parsedActivation.toISOString();
-      }
-    }
+    const activationAt = parseIsoDateOrNull(activationAtRaw);
     const isPendingEarn = activationAt ? new Date(activationAt).getTime() > Date.now() : false;
 
-    if (writeOff > 0) {
-      transactions.push({
-        id: `${purchase?.id || orderRef || createdAt || Math.random()}-spend`,
-        type: "spend",
-        amount: normalizeBonusAmount(writeOff),
-        created_at: createdAt,
-        order_id: orderRef,
-        order_number: orderRef,
-      });
-    }
-    if (writeOn > 0) {
+    if (writeOnTotal > 0) {
       transactions.push({
         id: `${purchase?.id || orderRef || createdAt || Math.random()}-earn`,
         type: "earn",
-        amount: normalizeBonusAmount(writeOn),
+        amount: normalizeBonusAmount(writeOnTotal),
         created_at: createdAt,
         order_id: orderRef,
         order_number: orderRef,
         status: isPendingEarn ? "pending" : "completed",
         activate_at: activationAt,
+        raw_status: purchase?.status || null,
+      });
+    }
+
+    if (isExpireEvent) {
+      if (writeOffAction > 0) {
+        transactions.push({
+          id: `${purchase?.id || orderRef || createdAt || Math.random()}-expire`,
+          type: "expire",
+          amount: normalizeBonusAmount(writeOffAction),
+          created_at: createdAt,
+          order_id: orderRef,
+          order_number: orderRef,
+          status: "completed",
+          raw_status: purchase?.status || null,
+        });
+      }
+      continue;
+    }
+
+    if (writeOffTotal > 0) {
+      transactions.push({
+        id: `${purchase?.id || orderRef || createdAt || Math.random()}-spend`,
+        type: "spend",
+        amount: normalizeBonusAmount(writeOffTotal),
+        created_at: createdAt,
+        order_id: orderRef,
+        order_number: orderRef,
+        status: "completed",
+        raw_status: purchase?.status || null,
       });
     }
   }
@@ -618,52 +634,8 @@ function mapPbPurchasesToTransactions(list = []) {
   return transactions;
 }
 
-function normalizeOrderReference(value) {
-  if (value === null || value === undefined) return "";
-  const normalized = String(value).trim();
-  return normalized;
-}
-
-async function buildLocalOrderReferenceSet(userId) {
-  const [rows] = await db.query(
-    `SELECT id, order_number, pb_purchase_id
-     FROM orders
-     WHERE user_id = ?`,
-    [userId]
-  );
-
-  const references = new Set();
-  for (const row of rows) {
-    const idRef = normalizeOrderReference(row?.id);
-    const orderNumberRef = normalizeOrderReference(row?.order_number);
-    const pbPurchaseRef = normalizeOrderReference(row?.pb_purchase_id);
-    if (idRef) references.add(idRef);
-    if (orderNumberRef) references.add(orderNumberRef);
-    if (pbPurchaseRef) references.add(pbPurchaseRef);
-  }
-
-  return references;
-}
-
-function filterPbPurchasesByLocalOrders(list = [], orderReferences = new Set()) {
-  if (!orderReferences || orderReferences.size === 0) return [];
-
-  return (Array.isArray(list) ? list : []).filter((purchase) => {
-    const candidates = [
-      purchase?.external_id,
-      purchase?.external_purchase_id,
-      purchase?.id,
-      purchase?.purchase_id,
-    ]
-      .map((value) => normalizeOrderReference(value))
-      .filter(Boolean);
-
-    return candidates.some((candidate) => orderReferences.has(candidate));
-  });
-}
-
 function getPbCacheKey(type, userId) {
-  return `pb:loyalty:${type}:user:${userId}`;
+  return `pb:loyalty:v${PB_CACHE_VERSION}:${type}:user:${userId}`;
 }
 
 async function savePbCache(type, userId, payload) {
@@ -754,7 +726,6 @@ export class LoyaltyAdapter {
         info,
         "PremiumBonus вернул ошибку при получении профиля покупателя"
       );
-      const identificator = String(info?.phone || identifiers[0] || "").trim();
       const premiumBonusPhone = normalizePhoneForPremiumBonus(info?.phone);
 
       const [groupsResult, transitionsResult] = await Promise.allSettled([
@@ -769,16 +740,7 @@ export class LoyaltyAdapter {
         transitionsResult.status === "fulfilled" ? transitionsResult.value : null;
       const transitionState = transitionsResponse?.client_group_transition_leftover || {};
 
-      let maxSpendPercent = null;
-      try {
-        maxSpendPercent = await resolvePremiumBonusWriteOffPercent(
-          client,
-          identificator,
-          info?.balance
-        );
-      } catch (error) {
-        maxSpendPercent = null;
-      }
+      const maxSpendPercent = null;
 
       const levels = buildLevelsFromPremiumBonus(groupsResponse, transitionState, {
         maxSpendPercent,
@@ -828,7 +790,8 @@ export class LoyaltyAdapter {
         amount_to_next_level: amountToNext,
         levels: uiLevels,
         period_days: null,
-        max_spend_percent: normalizePercent(maxSpendPercent) ?? null,
+        max_spend_percent:
+          normalizePercent(currentLevel?.maxSpendPercent) ?? normalizePercent(maxSpendPercent) ?? null,
         bonus_inactive: normalizeBonusAmount(toNumber(info?.bonus_inactive, 0)),
         bonus_next_activation_text: String(info?.bonus_next_activation_text || "").trim() || null,
         raw: {
@@ -957,18 +920,14 @@ export class LoyaltyAdapter {
         response,
         "PremiumBonus вернул ошибку при получении истории транзакций"
       );
-      const localOrderReferences = await buildLocalOrderReferenceSet(userId);
-      const filteredPurchases = filterPbPurchasesByLocalOrders(
-        response?.list || [],
-        localOrderReferences
-      );
+      const purchases = Array.isArray(response?.list) ? response.list : [];
 
       const result = {
-        transactions: mapPbPurchasesToTransactions(filteredPurchases),
+        transactions: mapPbPurchasesToTransactions(purchases),
         has_more: false,
         raw: {
           ...response,
-          list: filteredPurchases,
+          list: purchases,
         },
       };
       await savePbCache("history", userId, result);

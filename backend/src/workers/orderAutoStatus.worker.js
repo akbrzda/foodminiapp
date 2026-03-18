@@ -4,6 +4,7 @@ import { getSystemSettings } from "../utils/settings.js";
 import { logger } from "../utils/logger.js";
 import { addTelegramNotification } from "../queues/config.js";
 import ordersAdapter from "../modules/integrations/adapters/ordersAdapter.js";
+import { sendOrderStatusNotification } from "../modules/notifications/services/userNotificationService.js";
 
 const AUTO_STATUS_INTERVAL_MS = 60 * 1000;
 const PROCESS_WINDOW_MINUTES = 5;
@@ -40,14 +41,15 @@ async function notifyStatusChange(orderId, userId, oldStatus, newStatus, orderTy
     // WebSocket errors are non-critical, skip logging
   }
   try {
-    const { sendTelegramNotification, formatOrderStatusMessage } = await import("../utils/telegram.js");
-    const [users] = await db.query("SELECT telegram_id FROM users WHERE id = ?", [userId]);
-    if (users.length > 0 && users[0].telegram_id) {
-      const message = formatOrderStatusMessage(orderNumber, newStatus, orderType);
-      await sendTelegramNotification(users[0].telegram_id, message);
-    }
-  } catch (telegramError) {
-    // Telegram errors are non-critical, skip logging
+    await sendOrderStatusNotification({
+      userId,
+      orderId,
+      orderNumber,
+      status: newStatus,
+      orderType,
+    });
+  } catch (notificationError) {
+    // Ошибки пользовательских уведомлений не критичны, skip logging
   }
   try {
     if (oldStatus !== newStatus && (newStatus === "completed" || newStatus === "cancelled")) {

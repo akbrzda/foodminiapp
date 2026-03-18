@@ -11,6 +11,7 @@ import { getSystemSettings } from "../../../utils/settings.js";
 import { notifyOrderStatusUpdate } from "../../../websocket/runtime.js";
 import { addTelegramNotification } from "../../../queues/config.js";
 import ordersAdapter from "../../integrations/adapters/ordersAdapter.js";
+import { sendOrderStatusNotification } from "../../notifications/services/userNotificationService.js";
 
 // Вспомогательные функции для работы с временными зонами
 const getTimeZoneOffset = (date, timeZone) => {
@@ -613,20 +614,19 @@ export const updateOrderStatus = async (req, res, next, forcedStatus = null) => 
       logger.error("Failed to queue Telegram status change notification", { error: queueError });
     }
 
-    // Telegram уведомление
+    // Пользовательское уведомление о смене статуса заказа
     try {
-      const { sendTelegramNotification, formatOrderStatusMessage, buildOrderDetailsReplyMarkup } = await import("../../../utils/telegram.js");
-      const [users] = await db.query("SELECT telegram_id FROM users WHERE id = ?", [userId]);
-
-      if (users.length > 0 && users[0].telegram_id) {
-        const orderNumber = updatedOrders[0].order_number;
-        const orderType = updatedOrders[0].order_type;
-        const message = formatOrderStatusMessage(orderNumber, status, orderType);
-        const replyMarkup = buildOrderDetailsReplyMarkup(orderId);
-        await sendTelegramNotification(users[0].telegram_id, message, { replyMarkup });
-      }
-    } catch (telegramError) {
-      // Telegram errors are non-critical
+      const orderNumber = updatedOrders[0].order_number;
+      const orderType = updatedOrders[0].order_type;
+      await sendOrderStatusNotification({
+        userId,
+        orderId,
+        orderNumber,
+        status,
+        orderType,
+      });
+    } catch (notificationError) {
+      // Ошибки пользовательских уведомлений не критичны
     }
 
     // Трекинг конверсий

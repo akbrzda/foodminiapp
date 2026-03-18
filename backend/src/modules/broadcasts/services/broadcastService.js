@@ -5,6 +5,7 @@ import { getCampaignById, updateCampaign } from "../models/broadcastCampaigns.js
 import { insertMessages, countPendingMessages } from "../models/broadcastMessages.js";
 import { insertQueueItems } from "../models/broadcastQueue.js";
 import { upsertCampaignStats, incrementTotalRecipients } from "../models/broadcastStats.js";
+import { buildNotificationChannelCondition } from "../../notifications/services/externalAccountService.js";
 
 const DEFAULT_BATCH_SIZE = 1000;
 
@@ -135,7 +136,8 @@ export async function enqueueCampaignMessages(campaignId, { batchSize = DEFAULT_
   if (!campaign.segment_config) {
     throw new Error("Для рассылки не задана конфигурация сегментации");
   }
-  const { sql, params } = buildSegmentQuery(campaign.segment_config, { select: "u.id, u.telegram_id" });
+  const { sql, params } = buildSegmentQuery(campaign.segment_config, { select: "u.id" });
+  const channelCondition = buildNotificationChannelCondition({ userAlias: "segment" });
   const now = new Date();
   let offset = 0;
   let totalInserted = 0;
@@ -143,11 +145,11 @@ export async function enqueueCampaignMessages(campaignId, { batchSize = DEFAULT_
 
   while (true) {
     const [rows] = await db.query(
-      `SELECT segment.id, segment.telegram_id
+      `SELECT segment.id
        FROM (${sql}) as segment
-       WHERE segment.telegram_id IS NOT NULL
+       WHERE ${channelCondition.sql}
        LIMIT ? OFFSET ?`,
-      [...params, batchSize, offset],
+      [...params, ...channelCondition.params, batchSize, offset],
     );
     if (!rows.length) break;
     const userIds = rows.map((row) => row.id);

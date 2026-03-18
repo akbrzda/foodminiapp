@@ -151,7 +151,9 @@ export function createPremiumBonusClient({ apiUrl, apiToken, salePointId }) {
 
     async trigger(payload) {
       try {
-        const { data } = await requestWithRetry(() => client.post("/trigger", withSalePoint(payload)), { retries: 1 });
+        // По спецификации /trigger принимает поля события и идентификатора покупателя
+        // (phone или email). sale_point_id для этого метода не используется.
+        const { data } = await requestWithRetry(() => client.post("/trigger", payload), { retries: 1 });
         return data;
       } catch (error) {
         throw normalizeIntegrationError(error, "Ошибка запуска триггера PremiumBonus");

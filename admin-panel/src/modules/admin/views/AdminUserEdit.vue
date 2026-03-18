@@ -74,30 +74,6 @@
                 </Select>
               </FieldContent>
             </Field>
-            <Field>
-              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Telegram ID (опционально)</FieldLabel>
-              <FieldContent>
-                <Input v-model="form.telegram_id" type="number" />
-              </FieldContent>
-            </Field>
-          </FieldGroup>
-          <FieldGroup class="grid gap-4 md:grid-cols-2">
-            <Field>
-              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Eruda</FieldLabel>
-              <FieldContent>
-                <Select v-model="form.eruda_enabled" :disabled="!hasTelegramId || authStore.scopeRole === 'ceo'">
-                  <SelectTrigger class="w-full">
-                    <SelectValue placeholder="Выберите статус" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem :value="true">Включено</SelectItem>
-                    <SelectItem :value="false">Выключено</SelectItem>
-                  </SelectContent>
-                </Select>
-                <p v-if="authStore.scopeRole === 'ceo'" class="text-xs text-muted-foreground">CEO не может включать Eruda.</p>
-                <p v-else-if="!hasTelegramId" class="text-xs text-muted-foreground">Для включения нужен Telegram ID.</p>
-              </FieldContent>
-            </Field>
           </FieldGroup>
         </CardContent>
       </Card>
@@ -285,8 +261,6 @@ const form = ref({
   password: "",
   role: "manager",
   is_active: true,
-  telegram_id: "",
-  eruda_enabled: false,
   city_ids: [],
   branch_ids: [],
 });
@@ -310,7 +284,6 @@ const moduleLabels = {
   system: "Система",
 };
 
-const hasTelegramId = computed(() => Boolean(String(form.value.telegram_id || "").trim()));
 const rolePermissionSet = computed(() => new Set(rolePermissionCodes.value));
 const resolveScopeRole = (scopeRole, fallbackRole) => {
   const role = String(scopeRole || fallbackRole || "")
@@ -500,8 +473,6 @@ const loadUser = async () => {
     password: "",
     role: user.role || "manager",
     is_active: user.is_active === undefined ? true : Boolean(user.is_active),
-    telegram_id: user.telegram_id || "",
-    eruda_enabled: Boolean(user.eruda_enabled),
     city_ids: (user.cities || []).map((city) => Number(city.id)).filter(Number.isFinite),
     branch_ids: (user.branches || []).map((branch) => Number(branch.id)).filter(Number.isFinite),
   };
@@ -556,8 +527,6 @@ const submitForm = async () => {
       email: form.value.email,
       role: form.value.role,
       is_active: form.value.is_active,
-      telegram_id: form.value.telegram_id ? Number(form.value.telegram_id) : null,
-      eruda_enabled: Boolean(form.value.eruda_enabled),
       cities: form.value.city_ids,
       branch_ids: form.value.branch_ids || [],
     };
@@ -638,12 +607,4 @@ watch(
   },
 );
 
-watch(
-  () => form.value.telegram_id,
-  (telegramId) => {
-    if (!telegramId) {
-      form.value.eruda_enabled = false;
-    }
-  },
-);
 </script>

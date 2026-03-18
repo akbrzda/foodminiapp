@@ -4,7 +4,8 @@ import { deleteQueueItem, updateQueueSchedule } from "../modules/broadcasts/mode
 import { updateMessageStatus } from "../modules/broadcasts/models/broadcastMessages.js";
 import { incrementCampaignStat } from "../modules/broadcasts/models/broadcastStats.js";
 import { checkCampaignCompletion } from "../modules/broadcasts/services/broadcastService.js";
-import { sendBroadcastMessageViaBot } from "../utils/botService.js";
+import { getChannelAdapter } from "../modules/notifications/services/channelAdapters.js";
+import { resolvePreferredNotificationChannelForUser } from "../modules/notifications/services/externalAccountService.js";
 
 const WORKER_ENABLED = String(process.env.BROADCAST_WORKER_ENABLED || "true").toLowerCase() !== "false";
 const BATCH_SIZE = Number(process.env.BROADCAST_WORKER_BATCH_SIZE || 50);
@@ -77,16 +78,20 @@ const buildInlineKeyboard = (buttons, campaignId, messageId) => {
   return { inline_keyboard: rows };
 };
 
-const sendBroadcastMessage = async ({ telegramId, text, imageUrl, buttons, campaignId, messageId }) => {
+const sendBroadcastMessage = async ({ platform, externalId, text, imageUrl, buttons, campaignId, messageId }) => {
+  const adapter = getChannelAdapter(platform);
+  if (!adapter?.sendBroadcast) {
+    throw new Error(`Адаптер платформы ${platform} не поддерживает рассылки`);
+  }
   const keyboard = buildInlineKeyboard(buttons, campaignId, messageId);
-  const response = await sendBroadcastMessageViaBot({
-    telegramId,
+  const response = await adapter.sendBroadcast({
+    externalId,
     text,
     imageUrl: imageUrl || null,
     parseMode: "Markdown",
     replyMarkup: keyboard || undefined,
   });
-  return { message_id: response?.data?.message_id || null };
+  return { message_id: response?.providerMessageId || null };
 };
 
 const fetchQueueBatch = async (workerId) => {
@@ -129,16 +134,16 @@ const loadMessagePayload = async (queueId) => {
             c.id as campaign_id,
             c.content_image_url,
             c.content_buttons,
-            u.telegram_id
+            m.user_id
      FROM broadcast_queue q
      JOIN broadcast_messages m ON m.id = q.message_id
      JOIN broadcast_campaigns c ON c.id = m.campaign_id
-     JOIN users u ON u.id = m.user_id
      WHERE q.id = ?`,
     [queueId],
   );
   if (!rows.length) return null;
   const row = rows[0];
+  const channel = await resolvePreferredNotificationChannelForUser(row.user_id);
   return {
     queue_id: row.queue_id,
     message_id: row.message_id,
@@ -148,7 +153,8 @@ const loadMessagePayload = async (queueId) => {
     campaign_id: row.campaign_id,
     image_url: row.content_image_url,
     buttons: row.content_buttons && typeof row.content_buttons === "string" ? JSON.parse(row.content_buttons) : row.content_buttons,
-    telegram_id: row.telegram_id,
+    channel_platform: channel?.platform || null,
+    channel_external_id: channel?.externalId || null,
   };
 };
 
@@ -222,8 +228,8 @@ const processQueueItem = async (queueItem) => {
     await deleteQueueItem(queueItem.id);
     return;
   }
-  if (!payload.telegram_id) {
-    await handleFailedMessage(payload, new Error("Telegram ID отсутствует"));
+  if (!payload.channel_platform || !payload.channel_external_id) {
+    await handleFailedMessage(payload, new Error("Канал доставки отсутствует"));
     return;
   }
   if (payload.message_status === "sent") {
@@ -233,7 +239,8 @@ const processQueueItem = async (queueItem) => {
   await updateMessageStatus(payload.message_id, "sending");
   try {
     const result = await sendBroadcastMessage({
-      telegramId: payload.telegram_id,
+      platform: payload.channel_platform,
+      externalId: payload.channel_external_id,
       text: payload.text,
       imageUrl: payload.image_url,
       buttons: payload.buttons,

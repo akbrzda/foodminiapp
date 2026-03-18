@@ -1,5 +1,6 @@
 import db from "../../../config/database.js";
 import { getCachedActiveTriggers, setCachedActiveTriggers } from "../utils/cache.js";
+import { buildNotificationChannelCondition } from "../../notifications/services/externalAccountService.js";
 
 const ORDER_STATUSES = ["completed", "delivered"];
 
@@ -60,33 +61,34 @@ export async function selectTriggerUsers(trigger, windowStart = null, windowEnd 
   const campaignId = trigger.id;
   const triggerType = trigger.trigger_type;
   const config = trigger.trigger_config || {};
+  const channelCondition = buildNotificationChannelCondition({ userAlias: "u" });
   if (triggerType === "inactive_users") {
     const days = Number(config.days || 0);
     if (!days) return [];
     const [rows] = await db.query(
-      `SELECT u.id, u.telegram_id
+      `SELECT u.id
        FROM users u
        LEFT JOIN orders o ON o.user_id = u.id AND o.status IN (${ORDER_STATUSES.map(() => "?").join(", ")})
        LEFT JOIN broadcast_trigger_log btl ON btl.campaign_id = ? AND btl.user_id = u.id AND btl.trigger_date = CURDATE()
        WHERE btl.id IS NULL
        GROUP BY u.id
        HAVING DATEDIFF(CURDATE(), COALESCE(MAX(o.created_at), MAX(u.created_at))) >= ?
-          AND MAX(u.telegram_id) IS NOT NULL`,
-      [...ORDER_STATUSES, campaignId, days],
+          AND ${channelCondition.sql}`,
+      [...ORDER_STATUSES, campaignId, days, ...channelCondition.params],
     );
     return rows;
   }
   if (triggerType === "birthday") {
     const daysBefore = Number(config.days_before || 0);
     const [rows] = await db.query(
-      `SELECT u.id, u.telegram_id
+      `SELECT u.id
        FROM users u
        LEFT JOIN broadcast_trigger_log btl ON btl.campaign_id = ? AND btl.user_id = u.id AND btl.trigger_date = CURDATE()
        WHERE btl.id IS NULL
-         AND u.telegram_id IS NOT NULL
+         AND ${channelCondition.sql}
          AND u.date_of_birth IS NOT NULL
          AND DATE_FORMAT(u.date_of_birth, '%m-%d') = DATE_FORMAT(DATE_ADD(CURDATE(), INTERVAL ? DAY), '%m-%d')`,
-      [campaignId, daysBefore],
+      [campaignId, ...channelCondition.params, daysBefore],
     );
     return rows;
   }
@@ -96,13 +98,13 @@ export async function selectTriggerUsers(trigger, windowStart = null, windowEnd 
     const start = windowStart || new Date(Date.now() - (hoursAfter + 1) * 60 * 60 * 1000);
     const end = windowEnd || new Date(Date.now() - hoursAfter * 60 * 60 * 1000);
     const [rows] = await db.query(
-      `SELECT u.id, u.telegram_id
+      `SELECT u.id
        FROM users u
        LEFT JOIN broadcast_trigger_log btl ON btl.campaign_id = ? AND btl.user_id = u.id AND btl.trigger_date = CURDATE()
        WHERE btl.id IS NULL
-         AND u.telegram_id IS NOT NULL
+         AND ${channelCondition.sql}
          AND u.created_at BETWEEN ? AND ?`,
-      [campaignId, start, end],
+      [campaignId, ...channelCondition.params, start, end],
     );
     return rows;
   }

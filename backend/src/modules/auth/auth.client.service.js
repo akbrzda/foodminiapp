@@ -2,6 +2,8 @@ import { getMiniAppAuthDate, parseMiniAppUser, validateMiniAppInitData } from ".
 import { normalizePhone } from "../../utils/phone.js";
 import { decryptPhone } from "../../utils/encryption.js";
 import { logger } from "../../utils/logger.js";
+import { getSystemSettings } from "../../utils/settings.js";
+import { sendMaxNotificationMessageViaBot, sendStartMessage } from "../../utils/botService.js";
 import { authRepository } from "./auth.repository.js";
 import { buildClientAuthPayload } from "./auth.mapper.js";
 import { MINIAPP_PLATFORMS } from "./auth.schemas.js";
@@ -99,13 +101,6 @@ const resolveExistingUserByPhoneFirst = async ({ platform, externalId, normalize
     return user;
   }
 
-  if (platform === MINIAPP_PLATFORMS.TELEGRAM) {
-    user = await authRepository.findUserByTelegramId(externalId);
-    if (user) {
-      return user;
-    }
-  }
-
   if (normalizedPhone) {
     user = await authRepository.findUserByPhone(normalizedPhone);
     if (user) {
@@ -137,6 +132,95 @@ const ensureExternalAccountBinding = async ({ userId, platform, externalId }) =>
     if (!linkedAccount || Number(linkedAccount.user_id) !== Number(userId)) {
       throw new AuthError("External account already linked", 409, "AUTH_EXTERNAL_ACCOUNT_CONFLICT");
     }
+  }
+};
+
+const buildMaxStartReplyMarkup = (config) => {
+  const buttonText = String(config?.button_text || "").trim();
+  const buttonUrl = String(config?.button_url || "").trim();
+  if (!buttonText || !buttonUrl) return null;
+
+  const buttonType = String(config?.button_type || "open_app")
+    .trim()
+    .toLowerCase();
+
+  if (buttonType === "open_app") {
+    return {
+      inline_keyboard: [
+        [
+          {
+            text: buttonText,
+            web_app: {
+              url: buttonUrl,
+            },
+          },
+        ],
+      ],
+    };
+  }
+
+  return {
+    inline_keyboard: [
+      [
+        {
+          text: buttonText,
+          url: buttonUrl,
+        },
+      ],
+    ],
+  };
+};
+
+const buildMaxStartMessageText = (config) => {
+  const text = String(config?.text || "").trim();
+  const images = Array.isArray(config?.images) ? config.images : [];
+  const activeImage = images.find((image) => image?.is_active !== false && image?.url)?.url || String(config?.image_url || "").trim();
+  if (!activeImage) return text;
+  if (!text) return `Изображение: ${activeImage}`;
+  return `${text}\n\nИзображение: ${activeImage}`;
+};
+
+const sendStartMessagesForNewUser = async ({ userId, isNewUser }) => {
+  if (!isNewUser) return;
+
+  try {
+    const settings = await getSystemSettings();
+    const accounts = await authRepository.listExternalAccountsByUserId(userId);
+
+    const telegramConfig = settings?.telegram_start_message || {};
+    const telegramEnabled = telegramConfig?.enabled !== false;
+    const maxConfig = settings?.max_start_message || {};
+    const maxEnabled = maxConfig?.enabled !== false;
+
+    for (const account of accounts) {
+      const platform = String(account?.platform || "")
+        .trim()
+        .toLowerCase();
+      const externalId = Number(account?.external_id);
+
+      if (platform === MINIAPP_PLATFORMS.TELEGRAM && telegramEnabled && Number.isInteger(externalId) && externalId > 0) {
+        await sendStartMessage({
+          telegramId: externalId,
+          settings,
+        });
+        continue;
+      }
+
+      if (platform === MINIAPP_PLATFORMS.MAX && maxEnabled && Number.isInteger(externalId) && externalId > 0) {
+        const message = buildMaxStartMessageText(maxConfig);
+        if (!message) continue;
+        await sendMaxNotificationMessageViaBot({
+          maxId: externalId,
+          message,
+          replyMarkup: buildMaxStartReplyMarkup(maxConfig),
+        });
+      }
+    }
+  } catch (error) {
+    logger.warn("Не удалось отправить welcome-сообщения после регистрации", {
+      user_id: userId,
+      error: error?.message || String(error),
+    });
   }
 };
 
@@ -186,6 +270,7 @@ export const loginMiniApp = async ({ platform, initData, phone, ipAddress }) => 
     normalizedPhone,
   });
   let userId;
+  let isNewUser = false;
 
   if (user) {
     userId = user.id;
@@ -203,6 +288,7 @@ export const loginMiniApp = async ({ platform, initData, phone, ipAddress }) => 
     }
 
     userId = await authRepository.insertMiniAppUser({ firstName, lastName });
+    isNewUser = true;
     await authRepository.updateUserById(userId, { phone: normalizedPhone });
     await ensureExternalAccountBinding({ userId, platform, externalId });
     await authRepository.setInitialLoyaltyForUser(userId);
@@ -211,12 +297,12 @@ export const loginMiniApp = async ({ platform, initData, phone, ipAddress }) => 
 
   const authPayload = buildClientAuthPayload({
     userId,
-    telegramId: platform === MINIAPP_PLATFORMS.TELEGRAM ? externalId : user.telegram_id,
   });
   const tokens = buildTokensForClient(authPayload);
   const csrfToken = createCsrfToken();
 
-  await logger.auth.login(userId, "client", ipAddress);
+  await logger.auth.login(userId, "client", ipAddress, { source_platform: platform });
+  await sendStartMessagesForNewUser({ userId, isNewUser });
 
   return {
     user,

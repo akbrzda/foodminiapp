@@ -118,7 +118,8 @@ export const logger = {
     error: (orderId, error) => logSystem("error", "order", `Order ${orderId} error: ${error}`, { orderId, error }),
   },
   auth: {
-    login: (userId, role, ip) => logSystem("info", "auth", `User logged in`, { userId, role, ip }),
+    login: (userId, role, ip, extra = null) =>
+      logSystem("info", "auth", `User logged in`, { userId, role, ip, ...(extra && typeof extra === "object" ? extra : {}) }),
     logout: (userId, role, ip) => logSystem("info", "auth", `User logged out`, { userId, role, ip }),
     loginFailed: (identifier, reason, ip) => logSystem("warn", "auth", `Login failed: ${reason}`, { identifier, reason, ip }),
     tokenExpired: (userId) => logSystem("info", "auth", `Token expired for user ${userId}`, { userId }),

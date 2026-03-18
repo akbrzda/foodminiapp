@@ -375,6 +375,15 @@ function markPendingEarnTransactions(list = [], inactiveAmount = 0) {
   const base = Array.isArray(list) ? [...list] : [];
   if (!base.length) return [];
 
+  // Для PremiumBonus fallback по inactive может неверно "подсвечивать" старые начисления,
+  // если API истории не возвращает отдельные pending-операции.
+  const hasPremiumBonusMarkers = base.some((tx) =>
+    Object.prototype.hasOwnProperty.call(tx || {}, "raw_status"),
+  );
+  if (hasPremiumBonusMarkers) {
+    return base;
+  }
+
   if (base.some((tx) => isExplicitPendingTransaction(tx))) {
     return base;
   }

@@ -844,9 +844,17 @@ export const createOrder = async (req, res, next) => {
         branchMeta = branchRows?.[0] || null;
       }
       const [userRows] = await db.query(
-        `SELECT id, first_name, last_name, phone, telegram_id
-         FROM users
-         WHERE id = ?
+        `SELECT u.id, u.first_name, u.last_name, u.phone,
+                (
+                  SELECT uea.external_id
+                  FROM user_external_accounts uea
+                  WHERE uea.user_id = u.id
+                    AND uea.platform = 'telegram'
+                  ORDER BY uea.id ASC
+                  LIMIT 1
+                ) as telegram_id
+         FROM users u
+         WHERE u.id = ?
          LIMIT 1`,
         [req.user.id],
       );

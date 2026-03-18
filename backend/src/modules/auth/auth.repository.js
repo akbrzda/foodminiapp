@@ -4,16 +4,6 @@ const USER_FIELDS = `u.id, u.telegram_id, u.phone, u.first_name, u.last_name, u.
   u.loyalty_balance, u.current_loyalty_level_id, u.loyalty_joined_at, u.registration_type, u.bot_registered_at`;
 
 export const authRepository = {
-  findUserByTelegramId: async (telegramId) => {
-    const [rows] = await db.query(
-      `SELECT ${USER_FIELDS}
-       FROM users u
-       WHERE u.telegram_id = ?`,
-      [telegramId]
-    );
-    return rows[0] || null;
-  },
-
   findUserById: async (userId) => {
     const [rows] = await db.query(
       `SELECT ${USER_FIELDS}
@@ -46,14 +36,6 @@ export const authRepository = {
     await db.query(`UPDATE users SET ${setSql} WHERE id = ?`, values);
   },
 
-  insertTelegramUser: async ({ telegramId, firstName, lastName }) => {
-    const [result] = await db.query(
-      "INSERT INTO users (telegram_id, registration_type, bot_registered_at, phone, first_name, last_name) VALUES (?, 'miniapp', NULL, ?, ?, ?)",
-      [telegramId, null, firstName || null, lastName || null]
-    );
-    return result.insertId;
-  },
-
   insertMiniAppUser: async ({ firstName, lastName }) => {
     const [result] = await db.query(
       "INSERT INTO users (registration_type, bot_registered_at, phone, first_name, last_name) VALUES ('miniapp', NULL, ?, ?, ?)",
@@ -71,6 +53,16 @@ export const authRepository = {
       [platform, externalId]
     );
     return rows[0] || null;
+  },
+
+  listExternalAccountsByUserId: async (userId) => {
+    const [rows] = await db.query(
+      `SELECT platform, external_id
+       FROM user_external_accounts
+       WHERE user_id = ?`,
+      [userId]
+    );
+    return rows || [];
   },
 
   findUserByExternalAccount: async ({ platform, externalId }) => {
@@ -102,7 +94,7 @@ export const authRepository = {
 
   findAdminByEmailWithPassword: async (email) => {
     const [rows] = await db.query(
-      `SELECT id, email, password_hash, first_name, last_name, role, is_active, branch_id, telegram_id, eruda_enabled, permission_version
+      `SELECT id, email, password_hash, first_name, last_name, role, is_active, branch_id, permission_version
        FROM admin_users WHERE email = ?`,
       [email]
     );
@@ -122,7 +114,7 @@ export const authRepository = {
 
   findAdminByIdForSession: async (adminId) => {
     const [rows] = await db.query(
-      `SELECT id, email, first_name, last_name, role, is_active, branch_id, telegram_id, eruda_enabled, permission_version
+      `SELECT id, email, first_name, last_name, role, is_active, branch_id, permission_version
        FROM admin_users
        WHERE id = ?
        LIMIT 1`,
@@ -133,7 +125,7 @@ export const authRepository = {
 
   findClientByIdForRefresh: async (userId) => {
     const [rows] = await db.query(
-      `SELECT id, telegram_id
+      `SELECT id
        FROM users
        WHERE id = ?
        LIMIT 1`,

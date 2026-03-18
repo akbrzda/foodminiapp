@@ -19,7 +19,7 @@ import { validateEmail, validatePhone, validateName, validateBirthdate, validate
 const router = express.Router();
 router.post("/register", async (req, res, next) => {
   try {
-    const { phone, telegram_id, first_name, last_name } = req.body;
+    const { phone, first_name, last_name } = req.body;
 
     if (!phone) {
       return res.status(400).json({ error: "Phone number is required" });
@@ -47,9 +47,6 @@ router.post("/register", async (req, res, next) => {
       const user = existingUsers[0];
       const updates = [];
       const values = [];
-      if (telegram_id && user.telegram_id && String(user.telegram_id) !== String(telegram_id)) {
-        return res.status(409).json({ error: "Telegram account rebind is not allowed on this endpoint" });
-      }
       if (first_name && user.first_name !== first_name) {
         updates.push("first_name = ?");
         values.push(first_name);

@@ -3,7 +3,8 @@ import crypto from "crypto";
 import db from "../../config/database.js";
 import { authenticateToken, requirePermission } from "../../middleware/auth.js";
 import { logger } from "../../utils/logger.js";
-import { answerCallbackQueryViaBot, sendBroadcastMessageViaBot } from "../../utils/botService.js";
+import { answerCallbackQueryViaBot } from "../../utils/botService.js";
+import { getChannelAdapter } from "../notifications/services/channelAdapters.js";
 import {
   createCampaign,
   updateCampaign,
@@ -83,22 +84,20 @@ const buildInlineKeyboard = (buttons, campaignId, messageId) => {
   return { inline_keyboard: rows };
 };
 
-const sendTestMessage = async ({ telegramId, text, imageUrl, buttons, campaignId }) => {
+const sendTestMessage = async ({ platform, externalId, text, imageUrl, buttons, campaignId }) => {
+  const adapter = getChannelAdapter(platform);
+  if (!adapter?.sendBroadcast) {
+    throw new Error(`Платформа ${platform} не поддерживается для отправки теста`);
+  }
   const keyboard = buildInlineKeyboard(buttons, campaignId, `test-${Date.now()}`);
-  const response = await sendBroadcastMessageViaBot({
-    telegramId,
+  const response = await adapter.sendBroadcast({
+    externalId,
     text,
     imageUrl: imageUrl || null,
     parseMode: "Markdown",
     replyMarkup: keyboard || undefined,
   });
-  return { message_id: response?.data?.message_id || null };
-};
-
-const resolveUserIdByTelegram = async (telegramId) => {
-  if (!telegramId) return null;
-  const [rows] = await db.query("SELECT id FROM users WHERE telegram_id = ? LIMIT 1", [telegramId]);
-  return rows[0]?.id || null;
+  return { message_id: response?.providerMessageId || null };
 };
 
 router.post("/telegram/callback", async (req, res) => {
@@ -127,16 +126,18 @@ router.post("/telegram/callback", async (req, res) => {
       return res.json({ ok: true });
     }
     const [messages] = await db.query(
-      `SELECT bm.user_id, bm.campaign_id, u.telegram_id
+      `SELECT bm.user_id, bm.campaign_id, uea.external_id as telegram_external_id
        FROM broadcast_messages bm
-       LEFT JOIN users u ON u.id = bm.user_id
+       LEFT JOIN user_external_accounts uea
+         ON uea.user_id = bm.user_id
+        AND uea.platform = 'telegram'
        WHERE bm.id = ?
        LIMIT 1`,
       [messageId],
     );
     const userId = messages[0]?.user_id;
     const expectedCampaignId = Number(messages[0]?.campaign_id || 0);
-    const expectedTelegramId = Number(messages[0]?.telegram_id || 0);
+    const expectedTelegramId = Number(messages[0]?.telegram_external_id || 0);
     if (!userId) {
       return res.json({ ok: true });
     }
@@ -475,21 +476,25 @@ router.post("/:id/preview", ensureAdmin, async (req, res, next) => {
 router.post("/:id/test", ensureAdmin, async (req, res, next) => {
   try {
     const campaignId = Number(req.params.id);
-    const { telegram_id, test_user_id } = req.body;
+    const { platform, external_id, user_id } = req.body;
     const campaign = await getCampaignById(campaignId);
     if (!campaign) return res.status(404).json({ error: "Рассылка не найдена" });
-    const resolvedUserId = test_user_id || (telegram_id ? await resolveUserIdByTelegram(telegram_id) : null);
+    const normalizedPlatform = String(platform || "").trim().toLowerCase();
+    const normalizedExternalId = String(external_id || "").trim();
+    if (!normalizedPlatform || !normalizedExternalId) {
+      return res.status(400).json({
+        success: false,
+        error: "Обязательные поля: platform, external_id",
+      });
+    }
+
+    const resolvedUserId = Number(user_id) > 0 ? Number(user_id) : null;
     const preview = resolvedUserId ? await previewCampaignForUser(campaignId, resolvedUserId) : null;
-    const text = preview ? preview.text : campaign.content_text;
-    const targetTelegramId = telegram_id || preview?.user?.telegram_id;
-    if (!targetTelegramId) {
-      return res.status(400).json({ error: "telegram_id обязателен" });
-    }
-    if (!preview) {
-      return res.status(400).json({ error: "Не удалось найти пользователя для подстановки. Укажите ID пользователя." });
-    }
+    const text = preview?.text || campaign.content_text;
+
     await sendTestMessage({
-      telegramId: targetTelegramId,
+      platform: normalizedPlatform,
+      externalId: normalizedExternalId,
       text,
       imageUrl: campaign.content_image_url,
       buttons: campaign.content_buttons,

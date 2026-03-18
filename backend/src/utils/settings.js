@@ -13,6 +13,15 @@ export const TELEGRAM_START_MESSAGE_DEFAULT = {
   button_text: "Открыть приложение",
   button_url: "",
 };
+export const MAX_START_MESSAGE_DEFAULT = {
+  enabled: true,
+  text: "Привет! Добро пожаловать в Панда Пиццу.",
+  image_url: "",
+  images: [],
+  button_type: "open_app",
+  button_text: "Открыть приложение",
+  button_url: "",
+};
 export const TELEGRAM_NEW_ORDER_NOTIFICATION_DEFAULT = {
   enabled: false,
   notify_on_new_order: true,
@@ -24,8 +33,19 @@ export const TELEGRAM_NEW_ORDER_NOTIFICATION_DEFAULT = {
   message_template:
     "🔔 <b>Новый заказ #{{order_number}}</b>\n\n📍 <b>Тип:</b> {{order_type_label}}\n🏙️ <b>Город:</b> {{city_name}}\n🏪 <b>Филиал:</b> {{branch_name}}\n📫 <b>Адрес:</b> {{delivery_address}}\n💳 <b>Оплата:</b> {{payment_method_label}}\n💰 <b>Сумма:</b> {{total}}₽\n\n📦 <b>Состав заказа:</b>\n{{items_list}}\n\n💬 <b>Комментарий:</b> {{comment}}",
 };
+export const MAX_NEW_ORDER_NOTIFICATION_DEFAULT = {
+  enabled: false,
+  notify_on_new_order: true,
+  notify_on_completed: false,
+  notify_on_cancelled: false,
+  group_id: "",
+  message_template:
+    "🔔 <b>Новый заказ #{{order_number}}</b>\n\n📍 <b>Тип:</b> {{order_type_label}}\n🏙️ <b>Город:</b> {{city_name}}\n🏪 <b>Филиал:</b> {{branch_name}}\n📫 <b>Адрес:</b> {{delivery_address}}\n💳 <b>Оплата:</b> {{payment_method_label}}\n💰 <b>Сумма:</b> {{total}}₽\n\n📦 <b>Состав заказа:</b>\n{{items_list}}\n\n💬 <b>Комментарий:</b> {{comment}}",
+};
 
 const TELEGRAM_START_BUTTON_TYPES = new Set(["url", "web_app"]);
+const MAX_START_BUTTON_TYPES = new Set(["link", "open_app"]);
+const ORDER_NOTIFICATION_PLATFORMS = new Set(["telegram", "max"]);
 const MAPS_API_KEY_MAX_LENGTH = 512;
 const MAPS_LANGUAGE_REGEX = /^[a-z]{2}_[A-Z]{2}$/;
 const MAPS_COUNTRY_REGEX = /^[A-Z]{2}$/;
@@ -47,6 +67,13 @@ export const SETTINGS_SCHEMA = {
     description: "Начисление и списание бонусов",
     group: "Лояльность",
     type: "boolean",
+  },
+  default_bonus_expires_days: {
+    default: 60,
+    label: "Срок сгорания бонусов (дни)",
+    description: "Количество дней до сгорания начисленных бонусов",
+    group: "Лояльность",
+    type: "number",
   },
   orders_enabled: {
     default: true,
@@ -90,12 +117,33 @@ export const SETTINGS_SCHEMA = {
     group: "Telegram",
     type: "json",
   },
+  max_start_message: {
+    default: MAX_START_MESSAGE_DEFAULT,
+    label: "Приветственное сообщение MAX",
+    description: "Текст, изображения и кнопка для welcome-сообщения в MAX",
+    group: "MAX",
+    type: "json",
+  },
   telegram_new_order_notification: {
     default: TELEGRAM_NEW_ORDER_NOTIFICATION_DEFAULT,
     label: "Telegram-уведомления по заказам",
     description: "События уведомлений (новый/завершен/отменен), группа, thread по городам и шаблон нового заказа",
     group: "Telegram",
     type: "json",
+  },
+  max_new_order_notification: {
+    default: MAX_NEW_ORDER_NOTIFICATION_DEFAULT,
+    label: "MAX-уведомления по заказам",
+    description: "События уведомлений (новый/завершен/отменен), чат и шаблон нового заказа",
+    group: "MAX",
+    type: "json",
+  },
+  order_notifications_platform: {
+    default: "telegram",
+    label: "Платформа уведомлений по заказам",
+    description: "Канал, через который отправляются уведомления сотрудникам",
+    group: "Интеграции",
+    type: "string",
   },
   integration_mode: {
     default: { menu: "local", orders: "local", loyalty: "local" },
@@ -380,6 +428,24 @@ const validateAppearanceSetting = (key, value) => {
   }
   return null;
 };
+const validateOrderNotificationPlatformSetting = (key, value) => {
+  if (key !== "order_notifications_platform") return null;
+  if (typeof value !== "string") {
+    return "order_notifications_platform должен быть строкой";
+  }
+  const normalized = value.trim().toLowerCase();
+  if (!ORDER_NOTIFICATION_PLATFORMS.has(normalized)) {
+    return "order_notifications_platform должен быть telegram или max";
+  }
+  return null;
+};
+const validateLoyaltyNumberSetting = (key, value) => {
+  if (key !== "default_bonus_expires_days") return null;
+  if (!Number.isInteger(value) || value < 1) {
+    return "default_bonus_expires_days должен быть целым числом не меньше 1";
+  }
+  return null;
+};
 const TELEGRAM_START_MAX_IMAGES = 20;
 const TELEGRAM_START_MAX_IMAGE_WEIGHT = 1000;
 
@@ -505,6 +571,116 @@ const validateTelegramStartMessage = (value) => {
   };
 };
 
+const validateMaxStartMessage = (value) => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return { normalized: null, error: "Ожидался JSON-объект для max_start_message" };
+  }
+
+  const enabled = value.enabled === undefined ? true : normalizeBoolean(value.enabled);
+  if (enabled === null) {
+    return { normalized: null, error: "Поле enabled должно быть булевым" };
+  }
+
+  const text = String(value.text || "").trim();
+  if (!text && enabled) {
+    return { normalized: null, error: "Текст приветствия обязателен" };
+  }
+  if (text && text.length > 4000) {
+    return { normalized: null, error: "Текст приветствия не должен превышать 4000 символов" };
+  }
+
+  const legacyImageUrl = String(value.image_url || "").trim();
+  if (legacyImageUrl && !isValidAbsoluteUrl(legacyImageUrl)) {
+    return { normalized: null, error: "Поле image_url должно содержать корректный URL" };
+  }
+  const imagesSource = Array.isArray(value.images) ? value.images : [];
+  if (imagesSource.length > TELEGRAM_START_MAX_IMAGES) {
+    return { normalized: null, error: `Количество изображений не должно превышать ${TELEGRAM_START_MAX_IMAGES}` };
+  }
+  const normalizedImages = [];
+  const imageUrls = new Set();
+  for (let index = 0; index < imagesSource.length; index += 1) {
+    const image = imagesSource[index];
+    if (!image || typeof image !== "object" || Array.isArray(image)) {
+      return { normalized: null, error: `Изображение #${index + 1} имеет некорректный формат` };
+    }
+    const url = String(image.url || "").trim();
+    if (!url) {
+      return { normalized: null, error: `Изображение #${index + 1}: поле url обязательно` };
+    }
+    if (!isValidAbsoluteUrl(url)) {
+      return { normalized: null, error: `Изображение #${index + 1}: поле url должно быть корректным URL` };
+    }
+    if (imageUrls.has(url)) {
+      return { normalized: null, error: `Изображение #${index + 1}: дубликат URL` };
+    }
+    imageUrls.add(url);
+
+    const weightRaw = image.weight === undefined ? 1 : Number(image.weight);
+    if (!Number.isFinite(weightRaw) || weightRaw <= 0) {
+      return { normalized: null, error: `Изображение #${index + 1}: weight должен быть числом больше 0` };
+    }
+    const weight = Math.round(weightRaw);
+    if (weight > TELEGRAM_START_MAX_IMAGE_WEIGHT) {
+      return { normalized: null, error: `Изображение #${index + 1}: weight не должен превышать ${TELEGRAM_START_MAX_IMAGE_WEIGHT}` };
+    }
+
+    const isActive = image.is_active === undefined ? true : normalizeBoolean(image.is_active);
+    if (isActive === null) {
+      return { normalized: null, error: `Изображение #${index + 1}: is_active должен быть булевым` };
+    }
+
+    normalizedImages.push({
+      url,
+      weight,
+      is_active: isActive,
+    });
+  }
+
+  if (legacyImageUrl && normalizedImages.length === 0) {
+    normalizedImages.push({
+      url: legacyImageUrl,
+      weight: 1,
+      is_active: true,
+    });
+  }
+
+  const primaryImageUrl = normalizedImages.find((image) => image.is_active)?.url || normalizedImages[0]?.url || "";
+
+  const buttonTypeRaw = String(value.button_type || "open_app")
+    .trim()
+    .toLowerCase();
+  const buttonType = MAX_START_BUTTON_TYPES.has(buttonTypeRaw) ? buttonTypeRaw : null;
+  if (!buttonType) {
+    return { normalized: null, error: "button_type должен быть link или open_app" };
+  }
+
+  const buttonText = String(value.button_text || "").trim();
+  const buttonUrl = String(value.button_url || "").trim();
+  if ((buttonText && !buttonUrl) || (!buttonText && buttonUrl)) {
+    return { normalized: null, error: "Для кнопки заполните одновременно button_text и button_url" };
+  }
+  if (buttonUrl && !isValidAbsoluteUrl(buttonUrl)) {
+    return { normalized: null, error: "Поле button_url должно содержать корректный URL" };
+  }
+  if (buttonType === "open_app" && buttonUrl && !buttonUrl.startsWith("https://")) {
+    return { normalized: null, error: "Для кнопки open_app требуется HTTPS-ссылка" };
+  }
+
+  return {
+    normalized: {
+      enabled,
+      text: text || MAX_START_MESSAGE_DEFAULT.text,
+      image_url: primaryImageUrl,
+      images: normalizedImages,
+      button_type: buttonType,
+      button_text: buttonText,
+      button_url: buttonUrl,
+    },
+    error: null,
+  };
+};
+
 const validateTelegramNewOrderNotification = (value) => {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return { normalized: null, error: "Ожидался JSON-объект для telegram_new_order_notification" };
@@ -587,6 +763,68 @@ const validateTelegramNewOrderNotification = (value) => {
       use_city_threads: useCityThreads,
       city_thread_ids: normalizedThreadMap,
       message_template: messageTemplate || TELEGRAM_NEW_ORDER_NOTIFICATION_DEFAULT.message_template,
+    },
+    error: null,
+  };
+};
+
+const validateMaxNewOrderNotification = (value) => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return { normalized: null, error: "Ожидался JSON-объект для max_new_order_notification" };
+  }
+
+  const enabled = value.enabled === undefined ? MAX_NEW_ORDER_NOTIFICATION_DEFAULT.enabled : normalizeBoolean(value.enabled);
+  if (enabled === null) {
+    return { normalized: null, error: "Поле enabled должно быть булевым" };
+  }
+
+  const notifyOnNewOrder =
+    value.notify_on_new_order === undefined
+      ? MAX_NEW_ORDER_NOTIFICATION_DEFAULT.notify_on_new_order
+      : normalizeBoolean(value.notify_on_new_order);
+  if (notifyOnNewOrder === null) {
+    return { normalized: null, error: "Поле notify_on_new_order должно быть булевым" };
+  }
+  const notifyOnCompleted =
+    value.notify_on_completed === undefined
+      ? MAX_NEW_ORDER_NOTIFICATION_DEFAULT.notify_on_completed
+      : normalizeBoolean(value.notify_on_completed);
+  if (notifyOnCompleted === null) {
+    return { normalized: null, error: "Поле notify_on_completed должно быть булевым" };
+  }
+  const notifyOnCancelled =
+    value.notify_on_cancelled === undefined
+      ? MAX_NEW_ORDER_NOTIFICATION_DEFAULT.notify_on_cancelled
+      : normalizeBoolean(value.notify_on_cancelled);
+  if (notifyOnCancelled === null) {
+    return { normalized: null, error: "Поле notify_on_cancelled должно быть булевым" };
+  }
+  const hasEnabledEvent = notifyOnNewOrder || notifyOnCompleted || notifyOnCancelled;
+
+  const groupIdRaw = String(value.group_id || "").trim();
+  if (enabled && hasEnabledEvent && !groupIdRaw) {
+    return { normalized: null, error: "Укажите group_id для уведомлений по заказам" };
+  }
+  if (groupIdRaw && !/^-?\d+$/.test(groupIdRaw)) {
+    return { normalized: null, error: "Поле group_id должно содержать числовой chat_id MAX" };
+  }
+
+  const messageTemplate = String(value.message_template || "").trim();
+  if (enabled && notifyOnNewOrder && !messageTemplate) {
+    return { normalized: null, error: "Поле message_template обязательно" };
+  }
+  if (messageTemplate.length > 4000) {
+    return { normalized: null, error: "Шаблон сообщения не должен превышать 4000 символов" };
+  }
+
+  return {
+    normalized: {
+      enabled,
+      notify_on_new_order: notifyOnNewOrder,
+      notify_on_completed: notifyOnCompleted,
+      notify_on_cancelled: notifyOnCancelled,
+      group_id: groupIdRaw,
+      message_template: messageTemplate || MAX_NEW_ORDER_NOTIFICATION_DEFAULT.message_template,
     },
     error: null,
   };
@@ -701,6 +939,11 @@ export const updateSystemSettings = async (patch) => {
         errors[key] = "Ожидалось числовое значение";
         continue;
       }
+      const loyaltyNumberValidationError = validateLoyaltyNumberSetting(key, normalized);
+      if (loyaltyNumberValidationError) {
+        errors[key] = loyaltyNumberValidationError;
+        continue;
+      }
       updates[key] = normalized;
     } else if (meta.type === "string") {
       if (value === "") {
@@ -723,6 +966,11 @@ export const updateSystemSettings = async (patch) => {
         errors[key] = appearanceValidationError;
         continue;
       }
+      const orderPlatformValidationError = validateOrderNotificationPlatformSetting(key, updates[key]);
+      if (orderPlatformValidationError) {
+        errors[key] = orderPlatformValidationError;
+        continue;
+      }
     } else if (meta.type === "json") {
       if (!value || typeof value !== "object" || Array.isArray(value)) {
         errors[key] = "Ожидался JSON-объект";
@@ -739,6 +987,24 @@ export const updateSystemSettings = async (patch) => {
       }
       if (key === "telegram_new_order_notification") {
         const { normalized, error } = validateTelegramNewOrderNotification(value);
+        if (error) {
+          errors[key] = error;
+          continue;
+        }
+        updates[key] = normalized;
+        continue;
+      }
+      if (key === "max_start_message") {
+        const { normalized, error } = validateMaxStartMessage(value);
+        if (error) {
+          errors[key] = error;
+          continue;
+        }
+        updates[key] = normalized;
+        continue;
+      }
+      if (key === "max_new_order_notification") {
+        const { normalized, error } = validateMaxNewOrderNotification(value);
         if (error) {
           errors[key] = error;
           continue;

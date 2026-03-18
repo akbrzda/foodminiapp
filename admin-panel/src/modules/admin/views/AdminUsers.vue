@@ -41,7 +41,6 @@
             <div v-for="user in paginatedUsers" :key="`mobile-${user.id}`" class="rounded-xl border border-border bg-background p-3">
               <div class="font-medium text-foreground">{{ user.first_name }} {{ user.last_name }}</div>
               <div class="text-xs text-muted-foreground">{{ user.email }}</div>
-              <div v-if="user.telegram_id" class="text-xs text-muted-foreground mt-1">Telegram ID: {{ user.telegram_id }}</div>
               <div class="mt-3 flex flex-wrap items-center gap-2">
                 <Badge :variant="roleVariant(user)" :class="roleClass(user)">{{ getRoleLabel(user) }}</Badge>
                 <Badge
@@ -49,14 +48,6 @@
                   :class="user.is_active ? 'bg-emerald-100 text-emerald-700 border-transparent' : 'bg-muted text-muted-foreground border-transparent'"
                 >
                   {{ user.is_active ? "Активен" : "Неактивен" }}
-                </Badge>
-                <Badge
-                  variant="secondary"
-                  :class="
-                    user.eruda_enabled ? 'bg-emerald-100 text-emerald-700 border-transparent' : 'bg-muted text-muted-foreground border-transparent'
-                  "
-                >
-                  Eruda: {{ user.eruda_enabled ? "Вкл" : "Выкл" }}
                 </Badge>
               </div>
               <div class="mt-3">
@@ -100,7 +91,6 @@
                 <TableHead>Пользователь</TableHead>
                 <TableHead>Роль</TableHead>
                 <TableHead>Статус</TableHead>
-                <TableHead>Eruda</TableHead>
                 <TableHead>Доступ</TableHead>
                 <TableHead class="text-right">Действия</TableHead>
               </TableRow>
@@ -111,7 +101,6 @@
                   <TableCell><Skeleton class="h-4 w-48" /></TableCell>
                   <TableCell><Skeleton class="h-6 w-28" /></TableCell>
                   <TableCell><Skeleton class="h-6 w-24" /></TableCell>
-                  <TableCell><Skeleton class="h-6 w-24" /></TableCell>
                   <TableCell><Skeleton class="h-6 w-40" /></TableCell>
                   <TableCell class="text-right"><Skeleton class="ml-auto h-8 w-20" /></TableCell>
                 </TableRow>
@@ -121,7 +110,6 @@
                   <TableCell>
                     <div class="font-medium text-foreground">{{ user.first_name }} {{ user.last_name }}</div>
                     <div class="text-xs text-muted-foreground">{{ user.email }}</div>
-                    <div v-if="user.telegram_id" class="text-xs text-muted-foreground">Telegram ID: {{ user.telegram_id }}</div>
                   </TableCell>
                   <TableCell>
                     <Badge :variant="roleVariant(user)" :class="roleClass(user)">{{ getRoleLabel(user) }}</Badge>
@@ -134,18 +122,6 @@
                       "
                     >
                       {{ user.is_active ? "Активен" : "Неактивен" }}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge
-                      variant="secondary"
-                      :class="
-                        user.eruda_enabled
-                          ? 'bg-emerald-100 text-emerald-700 border-transparent'
-                          : 'bg-muted text-muted-foreground border-transparent'
-                      "
-                    >
-                      {{ user.eruda_enabled ? "Включено" : "Выключено" }}
                     </Badge>
                   </TableCell>
                   <TableCell>
@@ -180,7 +156,7 @@
                   </TableCell>
                 </TableRow>
                 <TableRow v-if="users.length === 0">
-                  <TableCell colspan="6" class="py-8 text-center text-sm text-muted-foreground">Пользователи не найдены</TableCell>
+                  <TableCell colspan="5" class="py-8 text-center text-sm text-muted-foreground">Пользователи не найдены</TableCell>
                 </TableRow>
               </template>
             </TableBody>
@@ -255,29 +231,6 @@
                 </FieldContent>
               </Field>
             </FieldGroup>
-            <Field>
-              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Telegram ID (опционально)</FieldLabel>
-              <FieldContent>
-                <Input v-model="form.telegram_id" type="number" />
-                <p class="text-xs text-muted-foreground">Используется для доступа к Eruda в mini app.</p>
-              </FieldContent>
-            </Field>
-            <Field>
-              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Eruda</FieldLabel>
-              <FieldContent>
-                <Select v-model="form.eruda_enabled" :disabled="!hasTelegramId || authStore.scopeRole === 'ceo'">
-                  <SelectTrigger class="w-full">
-                    <SelectValue placeholder="Выберите статус" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem :value="true">Включено</SelectItem>
-                    <SelectItem :value="false">Выключено</SelectItem>
-                  </SelectContent>
-                </Select>
-                <p v-if="authStore.scopeRole === 'ceo'" class="text-xs text-muted-foreground">CEO не может включать Eruda.</p>
-                <p v-else-if="!hasTelegramId" class="text-xs text-muted-foreground">Для включения нужен Telegram ID.</p>
-              </FieldContent>
-            </Field>
             <Field v-if="isFormManagerRole">
               <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Города доступа</FieldLabel>
               <FieldContent>
@@ -470,8 +423,6 @@ const form = ref({
   password: "",
   role: "manager",
   is_active: true,
-  telegram_id: "",
-  eruda_enabled: false,
   city_ids: [],
   branch_ids: [],
 });
@@ -564,8 +515,6 @@ const openModal = () => {
     password: "",
     role: firstRole,
     is_active: true,
-    telegram_id: "",
-    eruda_enabled: false,
     city_ids: [],
     branch_ids: [],
   };
@@ -625,8 +574,6 @@ const submitUser = async () => {
       password: form.value.password,
       role: form.value.role,
       is_active: form.value.is_active,
-      telegram_id: form.value.telegram_id ? Number(form.value.telegram_id) : null,
-      eruda_enabled: Boolean(form.value.eruda_enabled),
       cities: form.value.city_ids,
       branch_ids: form.value.branch_ids || [],
     };
@@ -638,7 +585,6 @@ const submitUser = async () => {
     showErrorNotification(error.response?.data?.error || "Ошибка сохранения пользователя");
   }
 };
-const hasTelegramId = computed(() => Boolean(String(form.value.telegram_id || "").trim()));
 const canManageAuthLimits = computed(
   () => authStore.hasPermission("system.auth_limits.manage") || authStore.hasPermission("system.admin_users.manage"),
 );
@@ -698,14 +644,6 @@ watch(
     if (!isFormManagerRole.value) {
       form.value.city_ids = [];
       form.value.branch_ids = [];
-    }
-  },
-);
-watch(
-  () => form.value.telegram_id,
-  (telegramId) => {
-    if (!telegramId) {
-      form.value.eruda_enabled = false;
     }
   },
 );
