@@ -111,6 +111,14 @@ const buildYandexRequestHeaders = (req) => {
   return headers;
 };
 
+const parseBotServiceErrorDetails = (error) => {
+  const message = String(error?.message || "").trim();
+  if (!message) return "";
+  const marker = "Bot service request failed:";
+  if (!message.includes(marker)) return message;
+  return message.replace(marker, "").trim();
+};
+
 router.get("/", async (req, res, next) => {
   try {
     const settings = await getSystemSettings();
@@ -263,6 +271,14 @@ router.post("/admin/start-message/test", authenticateToken, requirePermission("s
     });
     return res.json({ success: true });
   } catch (error) {
+    const details = parseBotServiceErrorDetails(error);
+    if (details) {
+      return res.status(502).json({
+        success: false,
+        error: "Ошибка отправки тестового сообщения через bot-service",
+        details,
+      });
+    }
     next(error);
   }
 });

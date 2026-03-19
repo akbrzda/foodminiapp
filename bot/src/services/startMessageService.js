@@ -1,4 +1,3 @@
-import db from "../config/database.js";
 import { TELEGRAM_START_MESSAGE_DEFAULT, getSystemSettings } from "../utils/settings.js";
 import { sendPhotoMessage, sendTextMessage } from "./telegramApi.js";
 
@@ -91,21 +90,6 @@ const getTelegramStartMessageConfig = (systemSettings = null) => {
   };
 };
 
-const getLastTelegramStartImageUrl = async (telegramId) => {
-  const [rows] = await db.query("SELECT last_image_url FROM telegram_start_message_history WHERE telegram_id = ? LIMIT 1", [telegramId]);
-  if (!rows.length) return "";
-  return String(rows[0]?.last_image_url || "").trim();
-};
-
-const saveLastTelegramStartImageUrl = async (telegramId, imageUrl) => {
-  await db.query(
-    `INSERT INTO telegram_start_message_history (telegram_id, last_image_url)
-     VALUES (?, ?)
-     ON DUPLICATE KEY UPDATE last_image_url = VALUES(last_image_url), updated_at = CURRENT_TIMESTAMP`,
-    [telegramId, imageUrl],
-  );
-};
-
 const pickWeightedImage = (images) => {
   if (!Array.isArray(images) || images.length === 0) return null;
   let totalWeight = 0;
@@ -123,39 +107,10 @@ const pickWeightedImage = (images) => {
   return images[images.length - 1];
 };
 
-const resolveTelegramStartImage = async (telegramId, images) => {
+const resolveTelegramStartImage = (images) => {
   const activeImages = (Array.isArray(images) ? images : []).filter((image) => image?.is_active !== false && image?.url);
   if (activeImages.length === 0) return null;
-  if (!Number.isFinite(Number(telegramId)) || Number(telegramId) <= 0) {
-    return pickWeightedImage(activeImages);
-  }
-
-  const normalizedTelegramId = Number(telegramId);
-  let lastImageUrl = "";
-  try {
-    lastImageUrl = await getLastTelegramStartImageUrl(normalizedTelegramId);
-  } catch (error) {
-    // Игнорируем ошибки истории выбора изображений
-  }
-
-  let candidatePool = activeImages;
-  if (lastImageUrl && activeImages.length > 1) {
-    const withoutLast = activeImages.filter((image) => image.url !== lastImageUrl);
-    if (withoutLast.length > 0) {
-      candidatePool = withoutLast;
-    }
-  }
-
-  const selected = pickWeightedImage(candidatePool);
-  if (!selected?.url) return null;
-
-  try {
-    await saveLastTelegramStartImageUrl(normalizedTelegramId, selected.url);
-  } catch (error) {
-    // Ошибки записи истории не должны ломать отправку
-  }
-
-  return selected;
+  return pickWeightedImage(activeImages);
 };
 
 const buildStartReplyMarkup = ({ buttonType, buttonText, buttonUrl }) => {
@@ -190,7 +145,7 @@ export const sendTelegramStartMessage = async (telegramId, providedSettings = nu
   const settings = providedSettings || (await getSystemSettings());
   const config = getTelegramStartMessageConfig(settings);
   const replyMarkup = buildStartReplyMarkup(config);
-  const selectedImage = await resolveTelegramStartImage(telegramId, config.images);
+  const selectedImage = resolveTelegramStartImage(config.images);
 
   if (selectedImage?.url) {
     const caption = trimTextByLimit(config.text, 1024);
