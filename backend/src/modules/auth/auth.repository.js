@@ -1,7 +1,14 @@
 import db from "../../config/database.js";
 
-const USER_FIELDS = `u.id, u.telegram_id, u.phone, u.first_name, u.last_name, u.email, u.date_of_birth,
+const USER_FIELDS = `u.id, u.telegram_id, u.max_id, u.phone, u.first_name, u.last_name, u.email, u.date_of_birth,
   u.loyalty_balance, u.current_loyalty_level_id, u.loyalty_joined_at, u.registration_type, u.bot_registered_at`;
+
+const PLATFORM_ID_COLUMN = {
+  telegram: "telegram_id",
+  max: "max_id",
+};
+
+const resolvePlatformIdColumn = (platform) => PLATFORM_ID_COLUMN[String(platform || "").trim().toLowerCase()] || null;
 
 export const authRepository = {
   findUserById: async (userId) => {
@@ -45,10 +52,15 @@ export const authRepository = {
   },
 
   findExternalAccount: async ({ platform, externalId }) => {
+    const platformIdColumn = resolvePlatformIdColumn(platform);
+    if (!platformIdColumn) return null;
+
     const [rows] = await db.query(
-      `SELECT id, user_id, platform, external_id
-       FROM user_external_accounts
-       WHERE platform = ? AND external_id = ?
+      `SELECT u.id as user_id,
+              ? as platform,
+              CAST(u.${platformIdColumn} AS CHAR) as external_id
+       FROM users u
+       WHERE u.${platformIdColumn} = ?
        LIMIT 1`,
       [platform, externalId]
     );
@@ -57,32 +69,50 @@ export const authRepository = {
 
   listExternalAccountsByUserId: async (userId) => {
     const [rows] = await db.query(
-      `SELECT platform, external_id
-       FROM user_external_accounts
-       WHERE user_id = ?`,
+      `SELECT telegram_id, max_id
+       FROM users
+       WHERE id = ?
+       LIMIT 1`,
       [userId]
     );
-    return rows || [];
+    const user = rows[0];
+    if (!user) return [];
+
+    const accounts = [];
+    if (user.telegram_id !== null && user.telegram_id !== undefined) {
+      accounts.push({
+        platform: "telegram",
+        external_id: String(user.telegram_id),
+      });
+    }
+    if (user.max_id !== null && user.max_id !== undefined) {
+      accounts.push({
+        platform: "max",
+        external_id: String(user.max_id),
+      });
+    }
+
+    return accounts;
   },
 
   findUserByExternalAccount: async ({ platform, externalId }) => {
+    const platformIdColumn = resolvePlatformIdColumn(platform);
+    if (!platformIdColumn) return null;
+
     const [rows] = await db.query(
       `SELECT ${USER_FIELDS}
-       FROM user_external_accounts uea
-       JOIN users u ON u.id = uea.user_id
-       WHERE uea.platform = ? AND uea.external_id = ?
+       FROM users u
+       WHERE u.${platformIdColumn} = ?
        LIMIT 1`,
-      [platform, externalId]
+      [externalId]
     );
     return rows[0] || null;
   },
 
   insertExternalAccount: async ({ userId, platform, externalId }) => {
-    await db.query(
-      `INSERT INTO user_external_accounts (user_id, platform, external_id)
-       VALUES (?, ?, ?)`,
-      [userId, platform, externalId]
-    );
+    const platformIdColumn = resolvePlatformIdColumn(platform);
+    if (!platformIdColumn) return;
+    await db.query(`UPDATE users SET ${platformIdColumn} = ? WHERE id = ?`, [externalId, userId]);
   },
 
   setInitialLoyaltyForUser: async (userId) => {

@@ -124,6 +124,7 @@ CREATE TABLE `tags` (
 CREATE TABLE `users` (
   `id` int NOT NULL AUTO_INCREMENT,
   `telegram_id` bigint DEFAULT NULL,
+  `max_id` bigint DEFAULT NULL,
   `registration_type` enum('bot_only','miniapp') NOT NULL DEFAULT 'bot_only',
   `bot_registered_at` timestamp NULL DEFAULT NULL,
   `phone` varchar(20) DEFAULT NULL,
@@ -146,9 +147,11 @@ CREATE TABLE `users` (
   `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `telegram_id` (`telegram_id`),
+  UNIQUE KEY `uq_users_max_id` (`max_id`),
   UNIQUE KEY `phone` (`phone`),
   KEY `idx_phone` (`phone`),
   KEY `idx_telegram_id` (`telegram_id`),
+  KEY `idx_users_max_id` (`max_id`),
   KEY `idx_birth_date` (`date_of_birth`),
   KEY `idx_pb_client_id` (`pb_client_id`),
   KEY `idx_pb_sync_status` (`pb_sync_status`),
@@ -159,20 +162,6 @@ CREATE TABLE `users` (
   KEY `idx_loyalty_joined_at` (`loyalty_joined_at`),
   CONSTRAINT `chk_loyalty_balance` CHECK (`loyalty_balance` >= 0)
 ) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb3;
-
-
-CREATE TABLE `user_external_accounts` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `user_id` int NOT NULL,
-  `platform` enum('telegram','max') COLLATE utf8mb4_unicode_ci NOT NULL,
-  `external_id` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_user_external_accounts_platform_external_id` (`platform`,`external_id`),
-  KEY `idx_user_external_accounts_user_id` (`user_id`),
-  CONSTRAINT `fk_user_external_accounts_user_id` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 
 CREATE TABLE `branches` (

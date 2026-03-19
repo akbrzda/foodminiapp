@@ -126,11 +126,9 @@ router.post("/telegram/callback", async (req, res) => {
       return res.json({ ok: true });
     }
     const [messages] = await db.query(
-      `SELECT bm.user_id, bm.campaign_id, uea.external_id as telegram_external_id
+      `SELECT bm.user_id, bm.campaign_id, u.telegram_id as telegram_external_id
        FROM broadcast_messages bm
-       LEFT JOIN user_external_accounts uea
-         ON uea.user_id = bm.user_id
-        AND uea.platform = 'telegram'
+       LEFT JOIN users u ON u.id = bm.user_id
        WHERE bm.id = ?
        LIMIT 1`,
       [messageId],

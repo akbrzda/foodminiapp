@@ -53,14 +53,7 @@ export async function getUsersBroadcastData(userIds) {
 
   const [rows] = await db.query(
     `SELECT u.id as user_id,
-            (
-              SELECT uea.external_id
-              FROM user_external_accounts uea
-              WHERE uea.user_id = u.id
-                AND uea.platform = 'telegram'
-              ORDER BY uea.id ASC
-              LIMIT 1
-            ) as telegram_id,
+            u.telegram_id as telegram_id,
             u.first_name,
             u.last_name,
             u.phone,
