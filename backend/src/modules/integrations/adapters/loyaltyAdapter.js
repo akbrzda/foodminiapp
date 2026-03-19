@@ -5,11 +5,15 @@ import {
 import * as localLoyaltyService from "../../loyalty/services/loyaltyService.js";
 import db from "../../../config/database.js";
 import redis from "../../../config/redis.js";
+import { getSystemSettings } from "../../../utils/settings.js";
 
 const DEFAULT_MAX_SPEND_PERCENT = 0.2;
 const DEFAULT_LEVEL_THRESHOLDS = [0, 10000, 20000];
 const PB_CACHE_TTL_SECONDS = 60 * 60 * 24 * 7;
-const PB_CACHE_VERSION = 4;
+const PB_CACHE_VERSION = 5;
+const PB_EXPIRE_PACKAGES_CACHE_TTL_SECONDS = 60 * 60 * 24 * 45;
+const PB_EXPIRING_WINDOW_DAYS = 14;
+const PB_HISTORY_EXTERNAL_SOURCES = ["pb_purchase_list", "pb_buyer_bonus"];
 
 function normalizePhoneForPremiumBonus(value) {
   const digits = String(value || "").replace(/[^\d]/g, "");
@@ -35,6 +39,89 @@ function parseIsoDateOrNull(value) {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return null;
   return parsed.toISOString();
+}
+
+function formatDateForSqlTimestamp(value) {
+  const iso = parseIsoDateOrNull(value);
+  if (!iso) return null;
+  return iso.slice(0, 19).replace("T", " ");
+}
+
+function parseBonusPackageAmount(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return 0;
+  return Number(parsed.toFixed(2));
+}
+
+function resolveLastApprovedPurchaseDate(purchases = []) {
+  const list = Array.isArray(purchases) ? purchases : [];
+  const approvedDates = list
+    .filter((item) => String(item?.status || "").trim().toLowerCase() === "approved")
+    .map((item) => parseIsoDateOrNull(item?.date))
+    .filter(Boolean)
+    .sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
+  if (approvedDates.length > 0) return approvedDates[0];
+
+  const fallbackDates = list
+    .map((item) => parseIsoDateOrNull(item?.date))
+    .filter(Boolean)
+    .sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
+  return fallbackDates[0] || null;
+}
+
+function getProjectedAccumulatedExpireAt(lastPurchaseAt, defaultBonusExpireDays) {
+  const lastPurchaseIso = parseIsoDateOrNull(lastPurchaseAt);
+  const days = Number(defaultBonusExpireDays);
+  if (!lastPurchaseIso || !Number.isInteger(days) || days < 1) return null;
+  const baseTs = new Date(lastPurchaseIso).getTime();
+  if (!Number.isFinite(baseTs)) return null;
+  return new Date(baseTs + days * 24 * 60 * 60 * 1000).toISOString();
+}
+
+function buildPremiumBonusExpiringBonuses({
+  buyerBonusPackages = [],
+  projectedAccumulatedExpireAt = null,
+  windowDays = PB_EXPIRING_WINDOW_DAYS,
+  now = new Date(),
+} = {}) {
+  const nowTs = now.getTime();
+  const windowEndTs = nowTs + Math.max(1, Number(windowDays) || PB_EXPIRING_WINDOW_DAYS) * 24 * 60 * 60 * 1000;
+  const items = [];
+
+  for (const pkg of Array.isArray(buyerBonusPackages) ? buyerBonusPackages : []) {
+    const amountRaw = parseBonusPackageAmount(pkg?.bonus);
+    const amount = normalizeBonusAmount(amountRaw);
+    if (amount <= 0) continue;
+
+    const activationAt = parseIsoDateOrNull(pkg?.activation_at);
+    const explicitExpireAt = parseIsoDateOrNull(pkg?.expire_at);
+    const expireAt = explicitExpireAt || projectedAccumulatedExpireAt;
+    if (!expireAt) continue;
+
+    const expireTs = new Date(expireAt).getTime();
+    if (!Number.isFinite(expireTs)) continue;
+    if (expireTs < nowTs || expireTs > windowEndTs) continue;
+
+    const daysLeft = Math.max(0, Math.ceil((expireTs - nowTs) / (24 * 60 * 60 * 1000)));
+    const id = [
+      String(activationAt || ""),
+      String(expireAt),
+      String(amount),
+      explicitExpireAt ? "explicit" : "projected",
+    ].join("|");
+
+    items.push({
+      id,
+      amount,
+      expires_at: expireAt,
+      days_left: daysLeft,
+      projected: !explicitExpireAt,
+    });
+  }
+
+  items.sort((a, b) => new Date(a.expires_at).getTime() - new Date(b.expires_at).getTime());
+  const total = items.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+  return { items, total: Math.floor(total) };
 }
 
 function parsePbActiveBalance(info = {}) {
@@ -574,6 +661,7 @@ function mapPbPurchasesToTransactions(list = []) {
         id: `${purchase?.id || orderRef || createdAt || Math.random()}-earn`,
         type: "earn",
         amount: normalizeBonusAmount(writeOnTotal),
+        promo_amount: normalizeBonusAmount(writeOnAction),
         created_at: createdAt,
         order_id: orderRef,
         order_number: orderRef,
@@ -589,6 +677,7 @@ function mapPbPurchasesToTransactions(list = []) {
           id: `${purchase?.id || orderRef || createdAt || Math.random()}-expire`,
           type: "expire",
           amount: normalizeBonusAmount(writeOffAction),
+          promo_amount: normalizeBonusAmount(writeOffAction),
           created_at: createdAt,
           order_id: orderRef,
           order_number: orderRef,
@@ -604,6 +693,7 @@ function mapPbPurchasesToTransactions(list = []) {
         id: `${purchase?.id || orderRef || createdAt || Math.random()}-spend`,
         type: "spend",
         amount: normalizeBonusAmount(writeOffTotal),
+        promo_amount: normalizeBonusAmount(writeOffAction),
         created_at: createdAt,
         order_id: orderRef,
         order_number: orderRef,
@@ -638,6 +728,10 @@ function getPbCacheKey(type, userId) {
   return `pb:loyalty:v${PB_CACHE_VERSION}:${type}:user:${userId}`;
 }
 
+function getPbExpirePackagesCacheKey(userId) {
+  return `pb:loyalty:v${PB_CACHE_VERSION}:expire_packages:user:${userId}`;
+}
+
 async function savePbCache(type, userId, payload) {
   try {
     await redis.set(
@@ -661,6 +755,359 @@ async function loadPbCache(type, userId) {
   } catch (error) {
     return null;
   }
+}
+
+async function loadObservedExpirePackages(userId) {
+  try {
+    const raw = await redis.get(getPbExpirePackagesCacheKey(userId));
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed;
+  } catch (error) {
+    return [];
+  }
+}
+
+async function saveObservedExpirePackages(userId, packages = []) {
+  try {
+    await redis.set(
+      getPbExpirePackagesCacheKey(userId),
+      JSON.stringify(packages),
+      "EX",
+      PB_EXPIRE_PACKAGES_CACHE_TTL_SECONDS
+    );
+  } catch (error) {
+    // Кеш вспомогательный, не прерываем основной поток.
+  }
+}
+
+function buildObservedPackageFingerprint(pkg = {}) {
+  return [
+    String(pkg.activation_at || "").trim(),
+    String(pkg.expire_at || "").trim(),
+    String(parseBonusPackageAmount(pkg.bonus) || ""),
+  ].join("|");
+}
+
+function mapObservedPackagesFromBuyerBonus(data = []) {
+  const nowIso = new Date().toISOString();
+  const normalized = (Array.isArray(data) ? data : [])
+    .map((pkg) => {
+      const expireAt = parseIsoDateOrNull(pkg?.expire_at);
+      const activationAt = parseIsoDateOrNull(pkg?.activation_at) || nowIso;
+      const amount = parseBonusPackageAmount(pkg?.bonus);
+      if (amount <= 0) return null;
+      return {
+        fingerprint: buildObservedPackageFingerprint({
+          activation_at: activationAt,
+          expire_at: expireAt,
+          bonus: amount,
+        }),
+        bonus: amount,
+        activation_at: activationAt,
+        expire_at: expireAt,
+      };
+    })
+    .filter(Boolean);
+
+  const fingerprintCounters = new Map();
+  return normalized.map((pkg) => {
+    const ordinal = (fingerprintCounters.get(pkg.fingerprint) || 0) + 1;
+    fingerprintCounters.set(pkg.fingerprint, ordinal);
+    return {
+      key: `${pkg.fingerprint}|${ordinal}`,
+      bonus: pkg.bonus,
+      activation_at: pkg.activation_at,
+      expire_at: pkg.expire_at,
+      first_seen_at: nowIso,
+      is_purchase_covered: false,
+      emitted_expire_at: null,
+    };
+  });
+}
+
+function isObservedPackageCoveredByPurchaseEarn(pkg = {}, purchaseTransactions = []) {
+  const pkgAmount = parseBonusPackageAmount(pkg?.bonus);
+  const normalizedPkgAmount = normalizeBonusAmount(pkgAmount);
+  const pkgActivationAt = parseIsoDateOrNull(pkg?.activation_at);
+  if (pkgAmount <= 0) return false;
+
+  return (Array.isArray(purchaseTransactions) ? purchaseTransactions : []).some((tx) => {
+    if (tx?.type !== "earn") return false;
+    const txActivationAt = parseIsoDateOrNull(tx?.activate_at);
+    const hasActivationMatch =
+      Boolean(pkgActivationAt) && Boolean(txActivationAt) && txActivationAt === pkgActivationAt;
+    const txAmount = normalizeBonusAmount(tx?.amount);
+    const txPromoAmount = normalizeBonusAmount(tx?.promo_amount);
+    const txAccumulatedPart = Math.max(0, txAmount - Math.max(0, txPromoAmount));
+    const hasAmountMatch =
+      Math.abs(txAmount - normalizedPkgAmount) <= 1 ||
+      Math.abs(txPromoAmount - normalizedPkgAmount) <= 1 ||
+      Math.abs(txAccumulatedPart - normalizedPkgAmount) <= 1;
+    if (!hasAmountMatch) return false;
+    if (hasActivationMatch) return true;
+
+    // В некоторых purchase-list нет activate_at. Тогда матчим с покупкой
+    // только в узком временном окне после created_at заказа.
+    if (tx?.order_id && pkgActivationAt) {
+      const txCreatedAt = parseIsoDateOrNull(tx?.created_at);
+      if (!txCreatedAt) return false;
+      const createdTs = new Date(txCreatedAt).getTime();
+      const activationTs = new Date(pkgActivationAt).getTime();
+      if (!Number.isFinite(createdTs) || !Number.isFinite(activationTs)) return false;
+      const diffHours = (activationTs - createdTs) / (1000 * 60 * 60);
+      return diffHours >= 0 && diffHours <= 24;
+    }
+
+    return (
+      Math.abs(txAmount - normalizedPkgAmount) <= 1 ||
+      Math.abs(txPromoAmount - normalizedPkgAmount) <= 1
+    );
+  });
+}
+
+function mergeObservedPackages(existing = [], fresh = [], purchaseTransactions = []) {
+  const normalizeObservedPackage = (pkg = {}) => {
+    const bonus = parseBonusPackageAmount(pkg?.bonus);
+    const activation_at = parseIsoDateOrNull(pkg?.activation_at);
+    const expire_at = parseIsoDateOrNull(pkg?.expire_at);
+    if (bonus <= 0 || !activation_at) return null;
+    return {
+      bonus,
+      activation_at,
+      expire_at,
+      first_seen_at: parseIsoDateOrNull(pkg?.first_seen_at) || new Date().toISOString(),
+      is_purchase_covered:
+        Object.prototype.hasOwnProperty.call(pkg || {}, "is_purchase_covered")
+          ? Boolean(pkg?.is_purchase_covered)
+          : true,
+      emitted_expire_at: parseIsoDateOrNull(pkg?.emitted_expire_at || pkg?.emitted_at),
+    };
+  };
+
+  const normalizedExisting = (Array.isArray(existing) ? existing : [])
+    .map(normalizeObservedPackage)
+    .filter(Boolean);
+  const normalizedFresh = (Array.isArray(fresh) ? fresh : [])
+    .map(normalizeObservedPackage)
+    .filter(Boolean);
+
+  const existingByFingerprintCount = new Map();
+  for (const pkg of normalizedExisting) {
+    const fingerprint = buildObservedPackageFingerprint(pkg);
+    existingByFingerprintCount.set(
+      fingerprint,
+      (existingByFingerprintCount.get(fingerprint) || 0) + 1
+    );
+  }
+
+  const map = new Map();
+  const existingCounters = new Map();
+  for (const pkg of normalizedExisting) {
+    const fingerprint = buildObservedPackageFingerprint(pkg);
+    const ordinal = (existingCounters.get(fingerprint) || 0) + 1;
+    existingCounters.set(fingerprint, ordinal);
+    const key = `${fingerprint}|${ordinal}`;
+    map.set(key, {
+      key,
+      ...pkg,
+    });
+  }
+
+  const freshCounters = new Map();
+  for (const pkg of normalizedFresh) {
+    const fingerprint = buildObservedPackageFingerprint(pkg);
+    const ordinal = (freshCounters.get(fingerprint) || 0) + 1;
+    freshCounters.set(fingerprint, ordinal);
+    const existingCount = existingByFingerprintCount.get(fingerprint) || 0;
+    if (ordinal <= existingCount) continue;
+
+    const key = `${fingerprint}|${ordinal}`;
+    map.set(key, {
+      ...pkg,
+      key,
+      is_purchase_covered: isObservedPackageCoveredByPurchaseEarn(pkg, purchaseTransactions),
+      emitted_expire_at: null,
+    });
+  }
+  return [...map.values()];
+}
+
+function buildSyntheticTransactionsFromObserved(packages = [], now = new Date()) {
+  const nowTs = now.getTime();
+  const transactions = [];
+  const nextState = [];
+
+  for (const pkg of Array.isArray(packages) ? packages : []) {
+    const activationAt = parseIsoDateOrNull(pkg?.activation_at);
+    const expireAt = parseIsoDateOrNull(pkg?.expire_at);
+    const amount = parseBonusPackageAmount(pkg?.bonus);
+    const emittedExpireAt = parseIsoDateOrNull(pkg?.emitted_expire_at || pkg?.emitted_at);
+    if (amount <= 0 || !activationAt) continue;
+
+    const activationTs = new Date(activationAt).getTime();
+    const isPending = Number.isFinite(activationTs) && activationTs > nowTs;
+    const nextPackage = {
+      ...pkg,
+      bonus: amount,
+      activation_at: activationAt,
+      expire_at: expireAt,
+      emitted_expire_at: emittedExpireAt,
+    };
+
+    if (!nextPackage.is_purchase_covered) {
+      transactions.push({
+        id: `${pkg.key}-earn`,
+        type: "earn",
+        amount: normalizeBonusAmount(amount),
+        created_at: activationAt,
+        order_id: null,
+        order_number: null,
+        status: isPending ? "pending" : "completed",
+        activate_at: activationAt,
+      });
+    }
+
+    const expireTs = expireAt ? new Date(expireAt).getTime() : null;
+    const isExpired = Number.isFinite(expireTs) && expireTs <= nowTs;
+    if (expireAt && isExpired && !emittedExpireAt) {
+      transactions.push({
+        id: `${pkg.key}-expire`,
+        type: "expire",
+        amount: normalizeBonusAmount(amount),
+        promo_amount: normalizeBonusAmount(amount),
+        created_at: expireAt,
+        order_id: null,
+        order_number: null,
+        status: "completed",
+      });
+      nextPackage.emitted_expire_at = now.toISOString();
+    }
+    nextState.push(nextPackage);
+  }
+
+  return { transactions, nextState };
+}
+
+function resolveExternalSourceByTransaction(transaction = {}) {
+  const hasOrderRef = String(transaction?.order_id || "").trim().length > 0;
+  return hasOrderRef ? "pb_purchase_list" : "pb_buyer_bonus";
+}
+
+function buildExternalPayloadByTransaction(transaction = {}) {
+  const payload = {
+    promo_amount: Number.isFinite(Number(transaction?.promo_amount))
+      ? normalizeBonusAmount(transaction.promo_amount)
+      : null,
+    activate_at: parseIsoDateOrNull(transaction?.activate_at),
+    raw_status: String(transaction?.raw_status || "").trim() || null,
+    order_number: String(transaction?.order_number || "").trim() || null,
+    projected: Boolean(transaction?.projected),
+  };
+  return payload;
+}
+
+async function persistPremiumBonusTransactions(userId, transactions = []) {
+  const list = Array.isArray(transactions) ? transactions : [];
+  if (!list.length) return;
+  const allowedTypes = new Set(["earn", "spend", "expire", "adjustment", "registration", "birthday"]);
+  await Promise.all(
+    list.map(async (tx) => {
+      const externalRef = String(tx?.id || "").trim();
+      const createdAt = formatDateForSqlTimestamp(tx?.created_at) || formatDateForSqlTimestamp(Date.now());
+      const externalSource = resolveExternalSourceByTransaction(tx);
+      const amount = normalizeBonusAmount(tx?.amount);
+      if (!externalRef || amount === 0) return;
+
+      const type = String(tx?.type || "").trim().toLowerCase();
+      if (!allowedTypes.has(type)) return;
+
+      const status = String(tx?.status || "completed").trim().toLowerCase();
+      const normalizedStatus = ["pending", "completed", "cancelled"].includes(status)
+        ? status
+        : "completed";
+      const orderId = null;
+      const expiresAt = formatDateForSqlTimestamp(tx?.expires_at);
+      const payload = buildExternalPayloadByTransaction(tx);
+
+      await db.query(
+        `INSERT INTO loyalty_transactions
+        (user_id, type, status, amount, order_id, description, external_source, external_ref, external_payload, expires_at, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+          type = VALUES(type),
+          status = VALUES(status),
+          amount = VALUES(amount),
+          order_id = COALESCE(VALUES(order_id), order_id),
+          description = VALUES(description),
+          external_payload = VALUES(external_payload),
+          expires_at = COALESCE(VALUES(expires_at), expires_at),
+          updated_at = CURRENT_TIMESTAMP`,
+        [
+          userId,
+          type,
+          normalizedStatus,
+          amount,
+          orderId,
+          "Операция PremiumBonus",
+          externalSource,
+          externalRef,
+          JSON.stringify(payload),
+          expiresAt,
+          createdAt,
+        ]
+      );
+    })
+  );
+}
+
+function mapPersistedPremiumBonusRows(rows = []) {
+  return (Array.isArray(rows) ? rows : []).map((row) => {
+    let payload = {};
+    if (row?.external_payload) {
+      try {
+        payload =
+          typeof row.external_payload === "string"
+            ? JSON.parse(row.external_payload)
+            : row.external_payload;
+      } catch (error) {
+        payload = {};
+      }
+    }
+
+    return {
+      id: String(row.external_ref || row.id),
+      type: row.type,
+      amount: normalizeBonusAmount(row.amount),
+      promo_amount:
+        payload?.promo_amount !== null &&
+        payload?.promo_amount !== undefined &&
+        Number.isFinite(Number(payload?.promo_amount))
+        ? normalizeBonusAmount(payload.promo_amount)
+        : null,
+      created_at: parseIsoDateOrNull(row.created_at) || row.created_at,
+      order_id: row.order_id ?? null,
+      order_number: payload?.order_number || (row.order_id ? String(row.order_id) : null),
+      status: row.status || "completed",
+      activate_at: payload?.activate_at || null,
+      raw_status: payload?.raw_status || null,
+      expires_at: parseIsoDateOrNull(row.expires_at) || null,
+      projected: Boolean(payload?.projected),
+    };
+  });
+}
+
+async function loadPersistedPremiumBonusTransactions(userId) {
+  const [rows] = await db.query(
+    `SELECT id, type, status, amount, order_id, expires_at, created_at, external_ref, external_payload
+     FROM loyalty_transactions
+     WHERE user_id = ? AND external_source IN (?, ?)
+     ORDER BY created_at DESC, id DESC
+     LIMIT 500`,
+    [userId, PB_HISTORY_EXTERNAL_SOURCES[0], PB_HISTORY_EXTERNAL_SOURCES[1]]
+  );
+  return mapPersistedPremiumBonusRows(rows);
 }
 
 async function syncLocalLoyaltyMirror(userId, payload = {}) {
@@ -847,6 +1294,36 @@ export class LoyaltyAdapter {
         info,
         "PremiumBonus вернул ошибку при получении баланса покупателя"
       );
+      const buyerBonusPhone = normalizePhoneForPremiumBonus(info?.phone || identifiers[0]);
+      let buyerBonusPackages = [];
+      let lastPurchaseAt = null;
+      if (buyerBonusPhone) {
+        const [buyerBonusResponse, historyResponse] = await Promise.all([
+          client.buyerBonus({ phone: buyerBonusPhone }),
+          client.transactionHistory({ phone: buyerBonusPhone }),
+        ]);
+        assertPremiumBonusSuccess(
+          buyerBonusResponse,
+          "PremiumBonus вернул ошибку при получении бонусных пакетов"
+        );
+        assertPremiumBonusSuccess(
+          historyResponse,
+          "PremiumBonus вернул ошибку при получении истории транзакций"
+        );
+        buyerBonusPackages = Array.isArray(buyerBonusResponse?.data) ? buyerBonusResponse.data : [];
+        const purchases = Array.isArray(historyResponse?.list) ? historyResponse.list : [];
+        lastPurchaseAt = resolveLastApprovedPurchaseDate(purchases);
+      }
+
+      const systemSettings = await getSystemSettings();
+      const projectedAccumulatedExpireAt = getProjectedAccumulatedExpireAt(
+        lastPurchaseAt,
+        systemSettings?.default_bonus_expires_days
+      );
+      const { items: expiringBonuses, total: totalExpiring } = buildPremiumBonusExpiringBonuses({
+        buyerBonusPackages,
+        projectedAccumulatedExpireAt,
+      });
 
       const result = {
         balance: parsePbActiveBalance(info),
@@ -862,6 +1339,8 @@ export class LoyaltyAdapter {
         period_days: null,
         bonus_inactive: normalizeBonusAmount(toNumber(info?.bonus_inactive, 0)),
         bonus_next_activation_text: String(info?.bonus_next_activation_text || "").trim() || null,
+        expiring_bonuses: expiringBonuses,
+        total_expiring: totalExpiring,
         raw: info,
       };
       await syncLocalLoyaltyMirror(userId, {
@@ -889,6 +1368,8 @@ export class LoyaltyAdapter {
         period_days: null,
         bonus_inactive: 0,
         bonus_next_activation_text: null,
+        expiring_bonuses: [],
+        total_expiring: 0,
         stale: true,
         stale_reason: "premiumbonus_unavailable",
       };
@@ -913,17 +1394,73 @@ export class LoyaltyAdapter {
     if (!client) throw new Error("Клиент PremiumBonus недоступен");
 
     try {
-      const response = await client.transactionHistory({
-        identificator,
-      });
+      const [response, buyerInfo] = await Promise.all([
+        client.transactionHistory({
+          identificator,
+        }),
+        loadBuyerInfoWithFallback(client, [normalizedPhone, pbClientId].filter(Boolean)),
+      ]);
+      assertPremiumBonusSuccess(
+        buyerInfo,
+        "PremiumBonus вернул ошибку при получении профиля покупателя"
+      );
+      const buyerBonusPhone = normalizePhoneForPremiumBonus(buyerInfo?.phone || identificator);
+      let buyerBonusData = [];
+      if (buyerBonusPhone) {
+        const buyerBonusResponse = await client.buyerBonus({ phone: buyerBonusPhone });
+        assertPremiumBonusSuccess(
+          buyerBonusResponse,
+          "PremiumBonus вернул ошибку при получении бонусных пакетов"
+        );
+        buyerBonusData = Array.isArray(buyerBonusResponse?.data) ? buyerBonusResponse.data : [];
+      }
+
       assertPremiumBonusSuccess(
         response,
         "PremiumBonus вернул ошибку при получении истории транзакций"
       );
       const purchases = Array.isArray(response?.list) ? response.list : [];
+      const purchaseTransactions = mapPbPurchasesToTransactions(purchases);
+
+      // Синтетика по buyer-bonus:
+      // - показываем начисления пакетов, которые не покрыты операциями purchase-list
+      // - показываем сгорание пакета по expire_at один раз
+      const observedPackages = await loadObservedExpirePackages(userId);
+      const freshObservedPackages = mapObservedPackagesFromBuyerBonus(buyerBonusData);
+      const mergedObservedPackages = mergeObservedPackages(
+        observedPackages,
+        freshObservedPackages,
+        purchaseTransactions
+      );
+      const { transactions: observedTransactions, nextState: nextObservedPackages } =
+        buildSyntheticTransactionsFromObserved(mergedObservedPackages);
+      await saveObservedExpirePackages(userId, nextObservedPackages);
+
+      const mergedTransactions = [...purchaseTransactions, ...observedTransactions];
+      mergedTransactions.sort((a, b) => {
+        const diff = new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+        if (diff !== 0) return diff;
+        const sameOrder =
+          String(a.order_id || "") && String(a.order_id || "") === String(b.order_id || "");
+        if (sameOrder && a.type !== b.type) {
+          if (a.type === "earn") return -1;
+          if (b.type === "earn") return 1;
+        }
+        const idDiff =
+          Number(String(b.id || "").replace(/[^\d]/g, "")) -
+          Number(String(a.id || "").replace(/[^\d]/g, ""));
+        if (Number.isFinite(idDiff) && idDiff !== 0) return idDiff;
+        if (a.type === b.type) return 0;
+        if (a.type === "earn") return -1;
+        if (b.type === "earn") return 1;
+        return 0;
+      });
+
+      await persistPremiumBonusTransactions(userId, mergedTransactions);
+      const persistedTransactions = await loadPersistedPremiumBonusTransactions(userId);
 
       const result = {
-        transactions: mapPbPurchasesToTransactions(purchases),
+        transactions: persistedTransactions,
         has_more: false,
         raw: {
           ...response,
@@ -933,6 +1470,16 @@ export class LoyaltyAdapter {
       await savePbCache("history", userId, result);
       return result;
     } catch (error) {
+      const persistedTransactions = await loadPersistedPremiumBonusTransactions(userId);
+      if (persistedTransactions.length > 0) {
+        return {
+          transactions: persistedTransactions,
+          has_more: false,
+          stale: true,
+          stale_reason: "premiumbonus_unavailable",
+        };
+      }
+
       const cached = await loadPbCache("history", userId);
       if (cached) {
         return {

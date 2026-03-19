@@ -141,6 +141,16 @@
                   <div class="transaction-date" :class="{ 'transaction-text--muted': isPendingEarn(transaction) }">
                     {{ formatCalendarDateTime(transaction.created_at) }}
                   </div>
+                  <div
+                    v-if="getPromoAmount(transaction) > 0"
+                    class="transaction-breakdown"
+                    :class="[
+                      `transaction-breakdown--${getPromoClass(transaction.type)}`,
+                      { 'transaction-text--muted': isPendingEarn(transaction) },
+                    ]"
+                  >
+                    Акционные: {{ getPromoSign(transaction.type) }}{{ formatPrice(getPromoAmount(transaction)) }} ₽
+                  </div>
                   <div v-if="isPendingEarn(transaction)" class="transaction-pending">
                     Активация через {{ getActivationCountdown(transaction) }}
                   </div>
@@ -328,6 +338,24 @@ function getTransactionSign(type) {
   return "";
 }
 
+function getPromoAmount(transaction) {
+  const amount = Number(transaction?.promo_amount);
+  if (!Number.isFinite(amount) || amount <= 0) return 0;
+  return amount;
+}
+
+function getPromoSign(type) {
+  if (isEarnType(type)) return "+";
+  if (type === "spend" || type === "expire") return "−";
+  return "";
+}
+
+function getPromoClass(type) {
+  if (isEarnType(type)) return "earn";
+  if (type === "spend" || type === "expire") return "spend";
+  return "other";
+}
+
 function getTransactionTitle(transaction) {
   const typeLabels = {
     earn: "Начислено за заказ",
@@ -340,6 +368,10 @@ function getTransactionTitle(transaction) {
 
   const label = typeLabels[transaction.type] || "Операция";
   const orderRef = transaction.order_number ? `#${transaction.order_number}` : transaction.order_id ? `#${transaction.order_id}` : "";
+
+  if (transaction.type === "earn" && !orderRef) {
+    return "Начисление бонусов";
+  }
 
   if (["earn", "spend"].includes(transaction.type) && orderRef) {
     return `${label} ${orderRef}`;
@@ -874,8 +906,39 @@ function markPendingEarnTransactions(list = [], inactiveAmount = 0) {
   font-size: var(--font-size-caption);
   color: var(--color-text-secondary);
 }
+.transaction-breakdown {
+  margin-top: 6px;
+  width: fit-content;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 11px;
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.25;
+  letter-spacing: 0.01em;
+  font-variant-numeric: tabular-nums;
+}
+.transaction-breakdown--earn {
+  color: #2e7d32;
+  background: rgba(76, 175, 80, 0.12);
+  border-color: rgba(76, 175, 80, 0.28);
+}
+.transaction-breakdown--spend {
+  color: #c62828;
+  background: rgba(244, 67, 54, 0.12);
+  border-color: rgba(244, 67, 54, 0.28);
+}
+.transaction-breakdown--other {
+  color: var(--color-text-secondary);
+  background: var(--color-background-secondary);
+  border-color: var(--color-border);
+}
 .transaction-text--muted {
   color: var(--color-text-muted);
+}
+.transaction-text--muted.transaction-breakdown {
+  background: var(--color-background-secondary);
+  border-color: var(--color-border);
 }
 .transaction-pending {
   margin-top: 4px;

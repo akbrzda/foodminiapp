@@ -64,6 +64,29 @@ const resolveRecipient = (maxId) => {
   return { userId: numeric };
 };
 
+const extractMaxApiErrorDetails = (error) => {
+  const status = Number(error?.response?.status);
+  const responseData = error?.response?.data;
+  let providerMessage = "";
+
+  if (typeof responseData === "string") {
+    providerMessage = responseData.trim();
+  } else if (responseData && typeof responseData === "object") {
+    providerMessage = String(responseData?.error_description || responseData?.error || responseData?.message || "").trim();
+    if (!providerMessage) {
+      try {
+        providerMessage = JSON.stringify(responseData);
+      } catch (jsonError) {
+        providerMessage = "";
+      }
+    }
+  }
+
+  const fallback = String(error?.message || "").trim() || "Неизвестная ошибка";
+  const details = providerMessage || fallback;
+  return Number.isFinite(status) && status > 0 ? `MAX API ${status}: ${details}` : details;
+};
+
 export const createInternalMaxController = ({ maxApi }) => {
   return {
     sendNotification: async (req, res) => {
@@ -79,8 +102,9 @@ export const createInternalMaxController = ({ maxApi }) => {
 
         return sendSuccess(res, { message_id: sentMessage?.mid || sentMessage?.id || null });
       } catch (error) {
-        logger.error("Ошибка отправки max notification", { error: error?.message || String(error) });
-        return sendError(res, 500, "Не удалось отправить сообщение");
+        const details = extractMaxApiErrorDetails(error);
+        logger.error("Ошибка отправки max notification", { error: details });
+        return sendError(res, 502, `Не удалось отправить сообщение: ${details}`);
       }
     },
 
@@ -97,8 +121,9 @@ export const createInternalMaxController = ({ maxApi }) => {
 
         return sendSuccess(res, { message_id: sentMessage?.mid || sentMessage?.id || null });
       } catch (error) {
-        logger.error("Ошибка отправки max broadcast", { error: error?.message || String(error) });
-        return sendError(res, 500, "Не удалось отправить broadcast");
+        const details = extractMaxApiErrorDetails(error);
+        logger.error("Ошибка отправки max broadcast", { error: details });
+        return sendError(res, 502, `Не удалось отправить broadcast: ${details}`);
       }
     },
   };
