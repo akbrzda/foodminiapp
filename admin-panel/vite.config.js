@@ -13,6 +13,13 @@ export default defineConfig(({ mode }) => {
     },
     server: {
       port: devPort,
+      host: "0.0.0.0",
+      allowedHosts: ["admin.dev.akbrzda.ru", "panda.akbrzda.ru"],
+      hmr: {
+        protocol: "wss",
+        host: "admin.dev.akbrzda.ru",
+        clientPort: 443,
+      },
     },
   };
 });

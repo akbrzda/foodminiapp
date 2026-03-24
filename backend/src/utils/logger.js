@@ -6,40 +6,122 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Функция для маскировки чувствительных данных
-function maskSensitiveData(data) {
-  if (!data) return data;
+const TOKEN_KEY_MARKERS = ["token", "authorization", "csrf"];
+const PASSWORD_KEY_MARKERS = ["password", "passhash", "passwordhash"];
+const PHONE_KEY_MARKERS = ["phone", "tel"];
+const EMAIL_KEY_MARKERS = ["email"];
+const ADDRESS_KEY_MARKERS = [
+  "address",
+  "street",
+  "house",
+  "apartment",
+  "entrance",
+  "intercom",
+  "comment",
+  "delivery",
+];
 
-  const masked = { ...data };
+const normalizeMaskKey = (key) =>
+  String(key || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
 
-  // Маскируем токены
-  if (masked.token) {
-    masked.token = `${masked.token.substring(0, 10)}...`;
+const includesAnyMarker = (normalizedKey, markers) =>
+  markers.some((marker) => normalizedKey.includes(marker));
+
+const maskToken = (value) => {
+  const token = String(value || "");
+  if (!token) return token;
+  return token.length <= 10 ? "***" : `${token.substring(0, 10)}...`;
+};
+
+const maskPhone = (value) => {
+  const phone = String(value || "");
+  return phone.length > 4 ? `***${phone.slice(-4)}` : "***";
+};
+
+const maskEmail = (value) => {
+  const email = String(value || "");
+  const [name, domain] = email.split("@");
+  if (name && domain) {
+    return `${name.substring(0, 2)}***@${domain}`;
+  }
+  return "***";
+};
+
+const maskIdentifier = (value) => {
+  const identifier = String(value || "").trim();
+  if (!identifier) return identifier;
+  if (identifier.includes("@")) {
+    return maskEmail(identifier);
+  }
+  const digits = identifier.replace(/[^\d]/g, "");
+  if (digits.length >= 10) {
+    return maskPhone(identifier);
+  }
+  if (identifier.length >= 8) {
+    return `${identifier.slice(0, 2)}***`;
+  }
+  return "***";
+};
+
+const sanitizeSensitiveValue = (key, value) => {
+  const normalizedKey = normalizeMaskKey(key);
+  if (!normalizedKey) return value;
+
+  if (includesAnyMarker(normalizedKey, PASSWORD_KEY_MARKERS)) {
+    return "***";
   }
 
-  // Маскируем пароли
-  if (masked.password || masked.password_hash) {
-    masked.password = "***";
-    masked.password_hash = "***";
+  if (includesAnyMarker(normalizedKey, TOKEN_KEY_MARKERS)) {
+    return maskToken(value);
   }
 
-  // Маскируем номера телефонов (показываем только последние 4 цифры)
-  if (masked.phone) {
-    const phone = String(masked.phone);
-    masked.phone = phone.length > 4 ? `***${phone.slice(-4)}` : "***";
+  if (normalizedKey === "identifier") {
+    return maskIdentifier(value);
   }
 
-  // Частично маскируем email
-  if (masked.email) {
-    const email = String(masked.email);
-    const [name, domain] = email.split("@");
-    if (name && domain) {
-      masked.email = `${name.substring(0, 2)}***@${domain}`;
+  if (includesAnyMarker(normalizedKey, EMAIL_KEY_MARKERS)) {
+    return maskEmail(value);
+  }
+
+  if (includesAnyMarker(normalizedKey, PHONE_KEY_MARKERS)) {
+    return maskPhone(value);
+  }
+
+  if (includesAnyMarker(normalizedKey, ADDRESS_KEY_MARKERS)) {
+    return "***";
+  }
+
+  return value;
+};
+
+const maskSensitiveData = (data, parentKey = "", depth = 0) => {
+  if (data === null || data === undefined) return data;
+  if (depth > 5) return "[depth-limited]";
+
+  if (typeof data === "string") {
+    return sanitizeSensitiveValue(parentKey, data);
+  }
+
+  if (typeof data !== "object") {
+    return sanitizeSensitiveValue(parentKey, data);
+  }
+
+  if (Array.isArray(data)) {
+    return data.map((item) => maskSensitiveData(item, parentKey, depth + 1));
+  }
+
+  const masked = {};
+  for (const [key, value] of Object.entries(data)) {
+    if (typeof value === "object" && value !== null) {
+      masked[key] = maskSensitiveData(value, key, depth + 1);
+      continue;
     }
+    masked[key] = sanitizeSensitiveValue(key, value);
   }
-
   return masked;
-}
+};
 
 // Форматтер с маскировкой
 const maskingFormat = winston.format((info) => {

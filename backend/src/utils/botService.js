@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const BOT_SERVICE_URL = String(process.env.BOT_SERVICE_URL || "http://localhost:3001")
+const BOT_SERVICE_URL = String(process.env.BOT_SERVICE_URL || "http://localhost:3002")
   .trim()
   .replace(/\/+$/, "");
 const BOT_SERVICE_TOKEN = String(process.env.BOT_SERVICE_TOKEN || "").trim();

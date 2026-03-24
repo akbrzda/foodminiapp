@@ -901,6 +901,41 @@ const resolveLogStatusClass = (status) => {
   return "text-red-600";
 };
 
+const buildIntegrationSettingsPayload = () => ({
+  iiko_enabled: Boolean(form.value.iiko_enabled),
+  iiko_auto_sync_enabled: form.value.iiko_auto_sync_enabled !== false,
+  iiko_api_url: String(form.value.iiko_api_url || "").trim(),
+  iiko_api_key: String(form.value.iiko_api_key || "").trim(),
+  iiko_webhook_secret: String(form.value.iiko_webhook_secret || "").trim(),
+  iiko_sync_category_ids: Array.isArray(form.value.iiko_sync_category_ids)
+    ? form.value.iiko_sync_category_ids.map((value) => String(value || "").trim()).filter(Boolean)
+    : [],
+  iiko_external_menu_id: String(form.value.iiko_external_menu_id || "").trim(),
+  iiko_price_category_id: String(form.value.iiko_price_category_id || "").trim(),
+  iiko_delivery_product_id: String(form.value.iiko_delivery_product_id || "").trim(),
+  iiko_preserve_local_names: form.value.iiko_preserve_local_names !== false,
+  iiko_order_type_mapping:
+    form.value.iiko_order_type_mapping && typeof form.value.iiko_order_type_mapping === "object"
+      ? form.value.iiko_order_type_mapping
+      : {},
+  iiko_payment_type_mapping:
+    form.value.iiko_payment_type_mapping && typeof form.value.iiko_payment_type_mapping === "object"
+      ? form.value.iiko_payment_type_mapping
+      : {},
+  iiko_bonus_discount_type_id: String(form.value.iiko_bonus_discount_type_id || "").trim(),
+  premiumbonus_enabled: Boolean(form.value.premiumbonus_enabled),
+  premiumbonus_auto_sync_enabled: form.value.premiumbonus_auto_sync_enabled !== false,
+  premiumbonus_api_url: String(form.value.premiumbonus_api_url || "").trim(),
+  premiumbonus_api_token: String(form.value.premiumbonus_api_token || "").trim(),
+  premiumbonus_sale_point_id: String(form.value.premiumbonus_sale_point_id || "").trim(),
+  premiumbonus_trigger_adjust_earn_event_name: String(form.value.premiumbonus_trigger_adjust_earn_event_name || "").trim(),
+  premiumbonus_trigger_adjust_spend_event_name: String(form.value.premiumbonus_trigger_adjust_spend_event_name || "").trim(),
+  integration_mode:
+    form.value.integration_mode && typeof form.value.integration_mode === "object"
+      ? form.value.integration_mode
+      : { menu: "local", orders: "local", loyalty: "local" },
+});
+
 const applyForm = (settings = {}) => {
   const categories = Array.isArray(settings.iiko_sync_category_ids)
     ? settings.iiko_sync_category_ids.map((value) => String(value || "").trim()).filter(Boolean)
@@ -941,7 +976,6 @@ const applyForm = (settings = {}) => {
 
   form.value = {
     ...form.value,
-    ...settings,
     iiko_enabled: Boolean(settings.iiko_enabled),
     iiko_auto_sync_enabled: settings.iiko_auto_sync_enabled !== false,
     premiumbonus_enabled: Boolean(settings.premiumbonus_enabled),
@@ -1317,7 +1351,7 @@ const saveSettings = async () => {
   const wasIikoEnabled = currentIikoEnabled.value;
   saving.value = true;
   try {
-    await api.put("/api/admin/integrations/settings", { settings: form.value });
+    await api.put("/api/admin/integrations/settings", { settings: buildIntegrationSettingsPayload() });
     showSuccessNotification("Настройки интеграций сохранены");
     await loadAll();
 

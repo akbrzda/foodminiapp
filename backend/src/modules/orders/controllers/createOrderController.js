@@ -15,6 +15,7 @@ import { checkBranchIsOpen } from "../../../utils/workingHours.js";
 import { notifyNewOrder } from "../../../websocket/runtime.js";
 import ordersAdapter from "../../integrations/adapters/ordersAdapter.js";
 import loyaltyAdapter from "../../integrations/adapters/loyaltyAdapter.js";
+import { encryptAddress } from "../../../utils/encryption.js";
 
 // Вспомогательные функции
 const getTariffsByPolygonId = async (polygonId) => {
@@ -670,6 +671,9 @@ export const createOrder = async (req, res, next) => {
     // Создание/обновление адреса доставки
     let resolvedDeliveryAddressId = delivery_address_id || null;
     if (order_type === "delivery" && !resolvedDeliveryAddressId && deliveryLatitude && deliveryLongitude) {
+      const encryptedStreet = encryptAddress(delivery_street || "");
+      const encryptedHouse = encryptAddress(delivery_house || "");
+      const encryptedComment = normalizedComment ? encryptAddress(normalizedComment) : null;
       const [addressResult] = await connection.query(
         `INSERT INTO delivery_addresses
          (user_id, city_id, street, house, entrance, apartment, intercom, comment, latitude, longitude, is_default)
@@ -677,12 +681,12 @@ export const createOrder = async (req, res, next) => {
         [
           req.user.id,
           city_id,
-          delivery_street || "",
-          delivery_house || "",
+          encryptedStreet,
+          encryptedHouse,
           delivery_entrance || null,
           delivery_apartment || null,
           delivery_intercom || null,
-          normalizedComment,
+          encryptedComment,
           deliveryLatitude,
           deliveryLongitude,
           0,

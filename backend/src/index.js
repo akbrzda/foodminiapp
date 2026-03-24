@@ -7,7 +7,11 @@ import cookieParser from "cookie-parser";
 import { testConnection } from "./config/database.js";
 import { testRedisConnection } from "./config/redis.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
-import { apiLimiter, sensitiveRouteLimiter, unauthorizedBanShield } from "./middleware/rateLimiter.js";
+import {
+  apiLimiter,
+  sensitiveRouteLimiter,
+  unauthorizedBanShield,
+} from "./middleware/rateLimiter.js";
 import { hppMiddleware } from "./middleware/hpp.js";
 import { createCsrfProtection } from "./middleware/csrf.js";
 import { router as authRoutes } from "./modules/auth/index.js";
@@ -17,14 +21,20 @@ import { router as menuRoutes } from "./modules/menu/index.js";
 import { router as ordersRoutes } from "./modules/orders/index.js";
 import { router as adminRoutes } from "./modules/admin/index.js";
 import { router as polygonsRoutes } from "./modules/polygons/index.js";
-import { clientRouter as loyaltyClientRoutes, adminRouter as loyaltyAdminRoutes } from "./modules/loyalty/index.js";
+import {
+  clientRouter as loyaltyClientRoutes,
+  adminRouter as loyaltyAdminRoutes,
+} from "./modules/loyalty/index.js";
 import { router as logsRoutes } from "./modules/logs/index.js";
 import { router as analyticsRoutes } from "./modules/analytics/index.js";
 import { router as uploadsRoutes } from "./modules/uploads/index.js";
 import { router as settingsRoutes } from "./modules/settings/index.js";
 import { router as broadcastsRoutes } from "./modules/broadcasts/index.js";
 import { router as subscriptionCampaignsRoutes } from "./modules/subscription-campaigns/index.js";
-import { adminRouter as integrationsAdminRoutes, webhooksRouter as integrationsWebhooksRoutes } from "./modules/integrations/index.js";
+import {
+  adminRouter as integrationsAdminRoutes,
+  webhooksRouter as integrationsWebhooksRoutes,
+} from "./modules/integrations/index.js";
 import WSServer from "./websocket/server.js";
 import { registerWsServer } from "./websocket/runtime.js";
 import { startWorkers, stopWorkers } from "./workers/index.js";
@@ -32,7 +42,9 @@ import { logger } from "./utils/logger.js";
 
 dotenv.config();
 const app = express();
-const workersMode = String(process.env.WORKERS_MODE || (process.env.NODE_ENV === "production" ? "external" : "inline"))
+const workersMode = String(
+  process.env.WORKERS_MODE || (process.env.NODE_ENV === "production" ? "external" : "inline")
+)
   .trim()
   .toLowerCase();
 const runWorkersInline = workersMode === "inline";
@@ -80,7 +92,13 @@ app.set("trust proxy", resolveTrustProxySetting());
 const PORT = process.env.PORT || 3000;
 const rawCorsOrigins = process.env.CORS_ORIGINS || "";
 const defaultProductionOrigins = ["https://app.panda.akbrzda.ru", "https://panda.akbrzda.ru"];
-const defaultDevelopmentOrigins = ["http://localhost:5173", "http://localhost:5174", "http://localhost:4173"];
+const defaultDevelopmentOrigins = [
+  "http://localhost:5174",
+  "http://localhost:5173",
+  "https://admin.dev.akbrzda.ru",
+  "https://app.dev.akbrzda.ru",
+  "http://localhost:4173",
+];
 const corsOrigins = [
   ...rawCorsOrigins
     .split(",")
@@ -161,7 +179,7 @@ app.use(
       includeSubDomains: true,
       preload: true,
     },
-  }),
+  })
 );
 
 // HTTPS redirect в production
@@ -194,7 +212,7 @@ app.use(
     verify: (req, _res, buffer) => {
       req.rawBody = buffer?.length ? buffer.toString("utf8") : "";
     },
-  }),
+  })
 );
 app.use(express.urlencoded({ extended: true, charset: "utf-8", limit: "2mb" }));
 
@@ -203,7 +221,7 @@ app.use("/api/", apiLimiter);
 app.use(
   ["/api/admin", "/api/analytics", "/api/orders/admin", "/api/auth/session", "/api/auth/ws-ticket"],
   sensitiveRouteLimiter,
-  unauthorizedBanShield(),
+  unauthorizedBanShield()
 );
 app.use((req, res, next) => {
   res.setHeader("Content-Type", "application/json; charset=utf-8");
@@ -211,7 +229,11 @@ app.use((req, res, next) => {
 });
 
 const buildReadinessPayload = () => {
-  const isReady = runtimeReadiness.startup && runtimeReadiness.db && runtimeReadiness.redis && runtimeReadiness.workers;
+  const isReady =
+    runtimeReadiness.startup &&
+    runtimeReadiness.db &&
+    runtimeReadiness.redis &&
+    runtimeReadiness.workers;
   return {
     status: isReady ? "ok" : "fail",
     timestamp: new Date().toISOString(),
@@ -306,7 +328,9 @@ const bootstrap = async () => {
     try {
       await stopWorkers();
     } catch (stopError) {
-      await logger.system.dbError(`Failed to stop workers after startup error: ${stopError.message}`);
+      await logger.system.dbError(
+        `Failed to stop workers after startup error: ${stopError.message}`
+      );
     }
     process.exit(1);
   }

@@ -5,6 +5,7 @@ import { getOrdersByUserAndCities } from "../repositories/loyaltyRepository.js";
 import loyaltyAdapter from "../../integrations/adapters/loyaltyAdapter.js";
 import db from "../../../config/database.js";
 import { getIntegrationSettings, getPremiumBonusClientOrNull } from "../../integrations/services/integrationConfigService.js";
+import { decryptEmail } from "../../../utils/encryption.js";
 
 const DEFAULT_PB_EARN_TRIGGER_AMOUNTS = new Set([1, 5, 10, 50, 100]);
 
@@ -202,7 +203,12 @@ export function createAdminLoyaltyController({ loyaltyService }) {
             return res.status(404).json({ error: "Пользователь не найден" });
           }
           const phone = normalizePhoneForPremiumBonus(users[0].phone);
-          const email = String(users[0].email || "").trim();
+          let email = "";
+          try {
+            email = String(users[0].email ? decryptEmail(users[0].email) : "").trim();
+          } catch (decryptError) {
+            email = "";
+          }
           if (!phone && !email) {
             return res.status(400).json({ error: "У пользователя отсутствуют корректные phone/email для PremiumBonus" });
           }

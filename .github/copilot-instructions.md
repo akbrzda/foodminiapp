@@ -145,8 +145,8 @@ const username = telegramUser.username || "";
 1. **Check Active Terminals**: Read output of all open terminals
 2. **Determine Service Status**:
    - Backend: Is `http://localhost:3000` accessible?
-   - Admin Panel: Is `http://localhost:5173` accessible?
-   - Telegram MiniApp: Is `http://localhost:5174` accessible?
+   - Admin Panel: Is `http://localhost:5174` accessible?
+   - Telegram MiniApp: Is `http://localhost:5173` accessible?
    - MySQL: Is port 3306 listening?
    - Redis: Is port 6379 listening?
 3. **Don't Duplicate Launches**: If service is running — don't start again

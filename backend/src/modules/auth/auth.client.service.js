@@ -1,6 +1,6 @@
 import { getMiniAppAuthDate, parseMiniAppUser, validateMiniAppInitData } from "../../utils/miniapp.js";
 import { normalizePhone } from "../../utils/phone.js";
-import { decryptPhone } from "../../utils/encryption.js";
+import { decryptPhone, decryptUserData } from "../../utils/encryption.js";
 import { logger } from "../../utils/logger.js";
 import { getSystemSettings } from "../../utils/settings.js";
 import { sendMaxNotificationMessageViaBot, sendStartMessage } from "../../utils/botService.js";
@@ -305,7 +305,7 @@ export const loginMiniApp = async ({ platform, initData, phone, ipAddress }) => 
   await sendStartMessagesForNewUser({ userId, isNewUser });
 
   return {
-    user,
+    user: decryptUserData(user),
     csrfToken,
     tokens,
   };

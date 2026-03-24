@@ -13,6 +13,8 @@ export default defineConfig(({ mode }) => {
     },
     server: {
       port: devPort,
+      host: true,
+      allowedHosts: ["app.dev.akbrzda.ru", "app.panda.akbrzda.ru"],
     },
   };
 });

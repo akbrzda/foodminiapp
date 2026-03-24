@@ -2,6 +2,11 @@ import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import redis from "../config/redis.js";
 import { logger } from "../utils/logger.js";
 
+const resolveClientIpKey = (req) => {
+  const ip = String(req?.ip || req?.socket?.remoteAddress || "").trim();
+  return ip ? ipKeyGenerator(ip) : "unknown";
+};
+
 // Базовый rate limiter для общих API запросов
 export const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 минут
@@ -59,7 +64,7 @@ export const orderLimiter = rateLimit({
   legacyHeaders: false,
   keyGenerator: (req) => {
     // Используем user ID если доступен, иначе IP с правильной обработкой IPv6
-    return req.user?.id ? `user:${req.user.id}` : ipKeyGenerator(req);
+    return req.user?.id ? `user:${req.user.id}` : resolveClientIpKey(req);
   },
 });
 
@@ -73,14 +78,18 @@ export const redisRateLimiter = (options = {}) => {
     failOpen = false,
     fallbackStatus = 503,
     fallbackMessage = "Сервис временно недоступен",
-    keyGenerator = (req) => req.user?.id || ipKeyGenerator(req),
+    keyGenerator = (req) => req.user?.id || resolveClientIpKey(req),
     skipSuccessfulRequests = false,
     shouldCountRequest = (_req, res) => res.statusCode >= 400,
   } = options;
 
   return async (req, res, next) => {
     try {
-      const identifier = keyGenerator(req);
+      const rawIdentifier = keyGenerator(req);
+      const identifier =
+        typeof rawIdentifier === "string" || typeof rawIdentifier === "number"
+          ? String(rawIdentifier)
+          : resolveClientIpKey(req);
       const key = `${prefix}:${identifier}`;
       const rawCurrent = await redis.get(key);
       const current = Number.parseInt(rawCurrent || "0", 10) || 0;
@@ -143,7 +152,7 @@ export const strictAuthLimiter = redisRateLimiter({
     const email = String(req.body?.email || "")
       .trim()
       .toLowerCase();
-    const ip = ipKeyGenerator(req);
+    const ip = resolveClientIpKey(req);
     return email ? `${email}:${ip}` : ip;
   },
 });
@@ -155,7 +164,7 @@ export const sensitiveRouteLimiter = redisRateLimiter({
   max: 60, // 60 запросов на IP в минуту к защищенным маршрутам
   message: "Слишком много запросов к защищенным маршрутам. Попробуйте позже",
   failOpen: true,
-  keyGenerator: (req) => ipKeyGenerator(req),
+  keyGenerator: (req) => resolveClientIpKey(req),
 });
 
 // Временная блокировка IP при массовых 401/403 на защищенных маршрутах
@@ -167,7 +176,7 @@ export const unauthorizedBanShield = (options = {}) => {
   } = options;
 
   return async (req, res, next) => {
-    const ip = ipKeyGenerator(req);
+    const ip = resolveClientIpKey(req);
     const banKey = `auth_shield:ban:${ip}`;
 
     try {

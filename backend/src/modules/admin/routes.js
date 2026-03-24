@@ -16,6 +16,10 @@ import usersRouter from "./users.routes.js";
 const router = express.Router();
 
 router.use(authenticateToken);
+// Совместимость маршрутов:
+// - актуальный префикс: /api/admin/access/*
+// - legacy префикс: /api/admin/*
+router.use("/access", accessRouter);
 router.use(accessRouter);
 router.use(clientsRouter);
 router.use(usersRouter);
