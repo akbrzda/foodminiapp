@@ -83,6 +83,7 @@ const emit = defineEmits(["update:modelValue", "slide-view", "cta-click", "compl
 const currentSlideIndex = ref(0);
 const progressPercent = ref(0);
 let intervalId = null;
+let lockedScrollY = 0;
 
 const hasSlides = computed(() => Array.isArray(props.story?.slides) && props.story.slides.length > 0);
 
@@ -92,6 +93,41 @@ const currentSlide = computed(() => {
 });
 
 const currentSlideMedia = computed(() => normalizeImageUrl(currentSlide.value?.media_url || ""));
+
+const lockBackgroundScroll = () => {
+  if (typeof window === "undefined") return;
+  const body = document.body;
+  if (body.dataset.storyViewerScrollLock === "1") return;
+
+  lockedScrollY = Number(window.scrollY || window.pageYOffset || 0);
+  body.dataset.storyViewerScrollLock = "1";
+  body.style.position = "fixed";
+  body.style.top = `-${lockedScrollY}px`;
+  body.style.left = "0";
+  body.style.right = "0";
+  body.style.width = "100%";
+  body.style.overflow = "hidden";
+};
+
+const unlockBackgroundScroll = () => {
+  if (typeof window === "undefined") return;
+  const body = document.body;
+  if (body.dataset.storyViewerScrollLock !== "1") return;
+
+  body.style.removeProperty("position");
+  body.style.removeProperty("top");
+  body.style.removeProperty("left");
+  body.style.removeProperty("right");
+  body.style.removeProperty("width");
+  body.style.removeProperty("overflow");
+  delete body.dataset.storyViewerScrollLock;
+
+  window.scrollTo({
+    top: lockedScrollY,
+    left: 0,
+    behavior: "auto",
+  });
+};
 
 const stopTimer = () => {
   if (intervalId) {
@@ -191,15 +227,18 @@ watch(
   () => props.modelValue,
   (isOpen) => {
     if (isOpen) {
+      lockBackgroundScroll();
       openViewer();
       return;
     }
     stopTimer();
+    unlockBackgroundScroll();
   }
 );
 
 onBeforeUnmount(() => {
   stopTimer();
+  unlockBackgroundScroll();
 });
 </script>
 

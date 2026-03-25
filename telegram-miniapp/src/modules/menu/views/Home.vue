@@ -478,11 +478,12 @@ async function loadMenuInternal({ force = false } = {}) {
     menuStore.setLoading(false);
   }
 }
-function applyCategoryFromStoryQuery() {
+async function applyCategoryFromStoryQuery() {
   const rawCategoryId = Number(route.query.category_id);
   if (!Number.isInteger(rawCategoryId) || rawCategoryId <= 0) return;
   const exists = menuStore.categories.some((category) => Number(category.id) === rawCategoryId);
   if (!exists) return;
+  await nextTick();
   scrollToCategory(rawCategoryId);
 }
 function setupMenuRealtimeSync() {
@@ -619,19 +620,24 @@ function scrollToCategory(categoryId) {
   isScrolling.value = true;
   activeCategory.value = categoryId;
   const element = document.getElementById(`category-${categoryId}`);
-  if (element) {
-    const categoriesSticky = document.querySelector(".categories-sticky");
-    const offset = categoriesSticky ? categoriesSticky.offsetHeight : 0;
-    const elementPosition = element.getBoundingClientRect().top + window.pageYOffset;
-    const offsetPosition = elementPosition - offset - 20;
-    window.scrollTo({
-      top: offsetPosition,
-      behavior: "smooth",
-    });
-    setTimeout(() => {
-      isScrolling.value = false;
-    }, 1000);
+  if (!element) {
+    isScrolling.value = false;
+    return;
   }
+
+  const categoriesSticky = document.querySelector(".categories-sticky");
+  const offset = categoriesSticky ? categoriesSticky.offsetHeight : 0;
+  const elementPosition = element.getBoundingClientRect().top + window.pageYOffset;
+  const offsetPosition = Math.max(0, elementPosition - offset - 20);
+
+  window.scrollTo({
+    top: offsetPosition,
+    behavior: "smooth",
+  });
+
+  setTimeout(() => {
+    isScrolling.value = false;
+  }, 1000);
 }
 function getItemPrice(item) {
   if (item.variants && item.variants.length > 0) {

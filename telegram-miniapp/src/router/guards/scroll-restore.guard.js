@@ -8,6 +8,13 @@ import {
 const HOME_ROUTE_NAME = "Home";
 const ITEM_DETAIL_ROUTE_NAME = "ItemDetail";
 
+const hasQueryValue = (value) => {
+  if (Array.isArray(value)) {
+    return value.some((item) => String(item || "").trim().length > 0);
+  }
+  return String(value || "").trim().length > 0;
+};
+
 const getCurrentScrollY = () => {
   if (typeof window === "undefined") {
     return 0;
@@ -50,6 +57,12 @@ const consumeHomeScrollY = () => {
 
 export const createScrollBehavior = () => {
   return (to, from, savedPosition) => {
+    if (to.name === HOME_ROUTE_NAME && from.name === HOME_ROUTE_NAME && hasQueryValue(to.query?.category_id)) {
+      // Для CTA из сторис скролл к категории выполняется вручную в Home.vue.
+      // Возвращаем false, чтобы роутер не перетирал его своим top=0.
+      return false;
+    }
+
     if (to.name === ITEM_DETAIL_ROUTE_NAME) {
       return { top: 0, left: 0 };
     }
