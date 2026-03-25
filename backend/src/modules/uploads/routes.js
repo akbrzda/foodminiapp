@@ -13,11 +13,22 @@ const createBadRequestError = (message) => {
   return error;
 };
 
+const TEMP_ENTITY_ID_PATTERN = /^temp-[a-z0-9]+(?:-[a-z0-9]+)*$/i;
+
 const parseEntityId = (rawId, allowTemp = true) => {
-  if (allowTemp && (rawId === "temp" || rawId === "new")) {
+  const normalizedId = String(rawId || "").trim();
+
+  if (allowTemp && (normalizedId === "temp" || normalizedId === "new")) {
     return `temp-${Date.now()}`;
   }
-  const parsedId = Number.parseInt(rawId, 10);
+
+  // Разрешаем стабильный временный id (например, temp-1716297600000-ab12cd),
+  // чтобы серия загрузок в форме использовала один и тот же каталог до сохранения сущности.
+  if (allowTemp && TEMP_ENTITY_ID_PATTERN.test(normalizedId)) {
+    return normalizedId.toLowerCase();
+  }
+
+  const parsedId = Number.parseInt(normalizedId, 10);
   if (!Number.isInteger(parsedId) || parsedId <= 0) {
     throw createBadRequestError("Некорректный идентификатор сущности");
   }
