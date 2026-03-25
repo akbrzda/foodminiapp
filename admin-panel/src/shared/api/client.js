@@ -116,4 +116,29 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+export const storiesAPI = {
+  dashboard() {
+    return api.get("/api/stories/dashboard");
+  },
+  referencesMenu() {
+    return api.get("/api/stories/references/menu");
+  },
+  list(params = {}) {
+    return api.get("/api/stories", { params });
+  },
+  getById(id) {
+    return api.get(`/api/stories/${id}`);
+  },
+  create(payload) {
+    return api.post("/api/stories", payload);
+  },
+  update(id, payload) {
+    return api.put(`/api/stories/${id}`, payload);
+  },
+  toggle(id, isActive) {
+    return api.put(`/api/stories/${id}/toggle`, { is_active: isActive });
+  },
+};
+
 export default api;

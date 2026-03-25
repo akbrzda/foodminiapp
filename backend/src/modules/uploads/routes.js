@@ -48,6 +48,7 @@ router.use(
     "menu.modifiers.manage",
     "menu.tags.manage",
     "marketing.broadcasts.manage",
+    "marketing.stories.manage",
     "marketing.campaigns.manage",
     "system.settings.manage",
   ),
@@ -71,6 +72,7 @@ router.post("/modifiers/:id", upload.single("image"), uploadImage(IMAGE_CATEGORI
 router.post("/modifier-groups/:id", upload.single("image"), uploadImage(IMAGE_CATEGORIES.MODIFIER_GROUPS, { allowTemp: false }));
 router.post("/tags/:id", upload.single("image"), uploadImage(IMAGE_CATEGORIES.TAGS, { allowTemp: false }));
 router.post("/broadcasts/:id", upload.single("image"), uploadImage(IMAGE_CATEGORIES.BROADCASTS));
+router.post("/stories/:id", upload.single("image"), uploadImage(IMAGE_CATEGORIES.STORIES));
 router.post("/campaign/:id", upload.single("image"), uploadImage(IMAGE_CATEGORIES.SUBSCRIPTION_CAMPAIGNS));
 router.post("/telegram-start/:id", upload.single("image"), uploadImage(IMAGE_CATEGORIES.TELEGRAM_START, { allowTemp: false }));
 

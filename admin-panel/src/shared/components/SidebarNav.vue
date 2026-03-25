@@ -130,6 +130,7 @@ import {
   Map,
   MapPinned,
   Megaphone,
+  Images,
   BellRing,
   Award,
   PlugZap,
@@ -203,6 +204,12 @@ const navSections = computed(() => {
       id: "marketing",
       title: "Маркетинг",
       items: [
+        {
+          label: "Stories",
+          to: "/stories",
+          icon: Images,
+          permissions: ["marketing.stories.manage"],
+        },
         {
           label: "Кампании подписки",
           to: "/campaign",

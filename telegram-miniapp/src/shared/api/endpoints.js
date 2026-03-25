@@ -1,4 +1,5 @@
 import api from "./index.js";
+import { getPlatformBridge } from "@/shared/platform/index.js";
 
 const unwrapResponsePayload = (payload) => {
   if (!payload || typeof payload !== "object") {
@@ -18,6 +19,11 @@ const normalizeResponse = (response) => ({
 });
 
 const withNormalizedResponse = (requestPromise) => requestPromise.then(normalizeResponse);
+const getStoriesRequestConfig = () => ({
+  headers: {
+    "X-Miniapp-Platform": getPlatformBridge().platform,
+  },
+});
 
 export const authAPI = {
   loginWithMiniApp({ platform, initData, phone }) {
@@ -165,5 +171,48 @@ export const settingsAPI = {
   },
   getMapsPublic() {
     return api.get("/settings/maps-public");
+  },
+};
+
+export const storiesAPI = {
+  getActive({ placement = "home", cityId = null, branchId = null } = {}) {
+    const params = { placement };
+    if (cityId) params.city_id = cityId;
+    if (branchId) params.branch_id = branchId;
+    return withNormalizedResponse(api.get("/stories/active", { params, ...getStoriesRequestConfig() }));
+  },
+  trackImpression({ campaignId, slideId = null, placement = "home" }) {
+    return api.post(
+      "/stories/impression",
+      {
+        campaign_id: campaignId,
+        slide_id: slideId,
+        placement,
+      },
+      getStoriesRequestConfig()
+    );
+  },
+  trackClick({ campaignId, slideId = null, placement = "home", ctaType = "none", ctaValue = null }) {
+    return api.post(
+      "/stories/click",
+      {
+        campaign_id: campaignId,
+        slide_id: slideId,
+        placement,
+        cta_type: ctaType,
+        cta_value: ctaValue,
+      },
+      getStoriesRequestConfig()
+    );
+  },
+  trackComplete({ campaignId, lastSlideIndex = 0 }) {
+    return api.post(
+      "/stories/complete",
+      {
+        campaign_id: campaignId,
+        last_slide_index: lastSlideIndex,
+      },
+      getStoriesRequestConfig()
+    );
   },
 };

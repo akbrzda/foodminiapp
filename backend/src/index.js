@@ -31,6 +31,7 @@ import { router as uploadsRoutes } from "./modules/uploads/index.js";
 import { router as settingsRoutes } from "./modules/settings/index.js";
 import { router as broadcastsRoutes } from "./modules/broadcasts/index.js";
 import { router as subscriptionCampaignsRoutes } from "./modules/subscription-campaigns/index.js";
+import { router as storiesRoutes } from "./modules/stories/index.js";
 import {
   adminRouter as integrationsAdminRoutes,
   webhooksRouter as integrationsWebhooksRoutes,
@@ -153,7 +154,7 @@ const corsOptions = {
   },
   credentials: true,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "X-CSRF-Token"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "X-CSRF-Token", "X-Miniapp-Platform"],
   exposedHeaders: ["Content-Range", "X-Content-Range"],
   maxAge: 86400,
 };
@@ -283,6 +284,7 @@ app.use("/api/analytics", analyticsRoutes);
 app.use("/api/uploads", uploadsRoutes);
 app.use("/api/broadcasts", broadcastsRoutes);
 app.use("/api/campaign", subscriptionCampaignsRoutes);
+app.use("/api/stories", storiesRoutes);
 app.use("/api/admin/integrations", integrationsAdminRoutes);
 app.use("/api/webhooks/iiko", integrationsWebhooksRoutes);
 app.use(notFoundHandler);

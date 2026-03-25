@@ -1,5 +1,44 @@
 export const broadcastsRoutes = [
   {
+    path: "stories",
+    name: "stories",
+    component: () => import("@/modules/stories/views/Stories.vue"),
+    meta: {
+      title: "Stories",
+      subtitle: "Stories-кампании внутри Mini App",
+      permissions: ["marketing.stories.manage"],
+      breadcrumbs: [{ label: "Stories", to: "/stories" }],
+      isList: true,
+      listName: "stories",
+    },
+  },
+  {
+    path: "stories/new",
+    name: "stories-new",
+    component: () => import("@/modules/stories/views/StoryForm.vue"),
+    meta: {
+      title: "Новая Stories-кампания",
+      subtitle: "Создание кампании",
+      permissions: ["marketing.stories.manage"],
+      breadcrumbs: [{ label: "Stories", to: "/stories" }, { label: "Новая кампания" }],
+      isEdit: true,
+      parentList: "stories",
+    },
+  },
+  {
+    path: "stories/:id/edit",
+    name: "stories-edit",
+    component: () => import("@/modules/stories/views/StoryForm.vue"),
+    meta: {
+      title: "Редактирование Stories-кампании",
+      subtitle: "Настройка кампании",
+      permissions: ["marketing.stories.manage"],
+      breadcrumbs: [{ label: "Stories", to: "/stories" }, { label: "Редактирование" }],
+      isEdit: true,
+      parentList: "stories",
+    },
+  },
+  {
     path: "broadcasts",
     name: "broadcasts",
     component: () => import("@/modules/broadcasts/views/Broadcasts.vue"),

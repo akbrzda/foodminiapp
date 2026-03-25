@@ -1193,6 +1193,111 @@ CREATE TABLE `broadcast_queue` (
   CONSTRAINT `broadcast_queue_ibfk_1` FOREIGN KEY (`message_id`) REFERENCES `broadcast_messages` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE `stories_campaigns` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `name` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `title` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `placement` enum('home') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'home',
+  `status` enum('draft','active','paused','archived') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'draft',
+  `is_active` tinyint(1) NOT NULL DEFAULT '1',
+  `priority` int NOT NULL DEFAULT '0',
+  `cover_image_url` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `start_at` timestamp NULL DEFAULT NULL,
+  `end_at` timestamp NULL DEFAULT NULL,
+  `city_id` int DEFAULT NULL,
+  `branch_id` int DEFAULT NULL,
+  `segment_config` json DEFAULT NULL,
+  `created_by` int NOT NULL,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_stories_campaigns_status` (`status`),
+  KEY `idx_stories_campaigns_placement_status` (`placement`,`status`,`is_active`),
+  KEY `idx_stories_campaigns_dates` (`start_at`,`end_at`),
+  KEY `idx_stories_campaigns_city_id` (`city_id`),
+  KEY `idx_stories_campaigns_branch_id` (`branch_id`),
+  KEY `idx_stories_campaigns_created_by` (`created_by`),
+  CONSTRAINT `fk_stories_campaigns_branch_id` FOREIGN KEY (`branch_id`) REFERENCES `branches` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_stories_campaigns_city_id` FOREIGN KEY (`city_id`) REFERENCES `cities` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_stories_campaigns_created_by` FOREIGN KEY (`created_by`) REFERENCES `admin_users` (`id`) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `stories_slides` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `campaign_id` int NOT NULL,
+  `title` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `subtitle` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `media_url` varchar(500) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `cta_text` varchar(120) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `cta_type` enum('none','route','url','category','product','promo') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'none',
+  `cta_value` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `duration_seconds` int NOT NULL DEFAULT '6',
+  `sort_order` int NOT NULL DEFAULT '0',
+  `is_active` tinyint(1) NOT NULL DEFAULT '1',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_stories_slides_campaign_id` (`campaign_id`),
+  KEY `idx_stories_slides_campaign_sort` (`campaign_id`,`sort_order`,`is_active`),
+  CONSTRAINT `fk_stories_slides_campaign_id` FOREIGN KEY (`campaign_id`) REFERENCES `stories_campaigns` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `stories_impressions` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `campaign_id` int NOT NULL,
+  `slide_id` int DEFAULT NULL,
+  `user_id` int NOT NULL,
+  `placement` enum('home') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'home',
+  `platform` enum('telegram','max','unknown') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'unknown',
+  `viewed_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_stories_impressions_campaign_id` (`campaign_id`),
+  KEY `idx_stories_impressions_user_id` (`user_id`),
+  KEY `idx_stories_impressions_campaign_user` (`campaign_id`,`user_id`),
+  KEY `idx_stories_impressions_viewed_at` (`viewed_at`),
+  CONSTRAINT `fk_stories_impressions_campaign_id` FOREIGN KEY (`campaign_id`) REFERENCES `stories_campaigns` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_stories_impressions_slide_id` FOREIGN KEY (`slide_id`) REFERENCES `stories_slides` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_stories_impressions_user_id` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `stories_clicks` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `campaign_id` int NOT NULL,
+  `slide_id` int DEFAULT NULL,
+  `user_id` int NOT NULL,
+  `placement` enum('home') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'home',
+  `platform` enum('telegram','max','unknown') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'unknown',
+  `cta_type` enum('none','route','url','category','product','promo') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'none',
+  `cta_value` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `clicked_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_stories_clicks_campaign_id` (`campaign_id`),
+  KEY `idx_stories_clicks_user_id` (`user_id`),
+  KEY `idx_stories_clicks_campaign_user` (`campaign_id`,`user_id`),
+  KEY `idx_stories_clicks_clicked_at` (`clicked_at`),
+  CONSTRAINT `fk_stories_clicks_campaign_id` FOREIGN KEY (`campaign_id`) REFERENCES `stories_campaigns` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_stories_clicks_slide_id` FOREIGN KEY (`slide_id`) REFERENCES `stories_slides` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_stories_clicks_user_id` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `stories_user_state` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `user_id` int NOT NULL,
+  `campaign_id` int NOT NULL,
+  `last_slide_index` int NOT NULL DEFAULT '0',
+  `completed_at` timestamp NULL DEFAULT NULL,
+  `last_viewed_at` timestamp NULL DEFAULT NULL,
+  `views_count` int NOT NULL DEFAULT '0',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_stories_user_state` (`user_id`,`campaign_id`),
+  KEY `idx_stories_user_state_campaign_id` (`campaign_id`),
+  KEY `idx_stories_user_state_completed_at` (`completed_at`),
+  CONSTRAINT `fk_stories_user_state_campaign_id` FOREIGN KEY (`campaign_id`) REFERENCES `stories_campaigns` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_stories_user_state_user_id` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 
 INSERT INTO `loyalty_levels` (`id`, `name`, `threshold_amount`, `earn_percentage`, `max_spend_percentage`, `is_enabled`, `sort_order`, `pb_group_id`, `pb_group_name`) VALUES
 (1, 'Бронза', 0.00, 3, 25, 1, 10, NULL, NULL),
@@ -1235,11 +1340,12 @@ INSERT INTO `admin_permissions` (`id`, `code`, `module`, `action`, `description`
 (26, 'system.queues.manage', 'system', 'queues_manage', 'Управление очередями', 1),
 (27, 'system.access.manage', 'system', 'access_manage', 'Управление ролями и доступами', 1),
 (28, 'system.auth_limits.manage', 'system', 'auth_limits_manage', 'Управление auth-лимитами', 1),
-(29, 'locations.delivery_zones.toggle', 'locations', 'delivery_zones_toggle', 'Блокировка/разблокировка и переключение зон доставки', 1);
+(29, 'locations.delivery_zones.toggle', 'locations', 'delivery_zones_toggle', 'Блокировка/разблокировка и переключение зон доставки', 1),
+(30, 'marketing.stories.manage', 'marketing', 'stories_manage', 'Управление stories-кампаниями', 1);
 
 INSERT INTO `admin_role_permissions` (`role_id`, `permission_id`) VALUES
-(1, 1), (1, 2), (1, 3), (1, 4), (1, 5), (1, 6), (1, 7), (1, 8), (1, 9), (1, 10), (1, 11), (1, 12), (1, 13), (1, 14), (1, 15), (1, 16), (1, 17), (1, 18), (1, 19), (1, 20), (1, 21), (1, 22), (1, 23), (1, 24), (1, 25), (1, 26), (1, 27), (1, 28), (1, 29),
-(2, 1), (2, 2), (2, 3), (2, 4), (2, 5), (2, 6), (2, 7), (2, 8), (2, 9), (2, 10), (2, 11), (2, 12), (2, 13), (2, 14), (2, 15), (2, 16), (2, 17), (2, 18), (2, 19), (2, 20), (2, 21), (2, 22), (2, 23), (2, 24), (2, 25), (2, 26), (2, 27), (2, 28), (2, 29),
+(1, 1), (1, 2), (1, 3), (1, 4), (1, 5), (1, 6), (1, 7), (1, 8), (1, 9), (1, 10), (1, 11), (1, 12), (1, 13), (1, 14), (1, 15), (1, 16), (1, 17), (1, 18), (1, 19), (1, 20), (1, 21), (1, 22), (1, 23), (1, 24), (1, 25), (1, 26), (1, 27), (1, 28), (1, 29), (1, 30),
+(2, 1), (2, 2), (2, 3), (2, 4), (2, 5), (2, 6), (2, 7), (2, 8), (2, 9), (2, 10), (2, 11), (2, 12), (2, 13), (2, 14), (2, 15), (2, 16), (2, 17), (2, 18), (2, 19), (2, 20), (2, 21), (2, 22), (2, 23), (2, 24), (2, 25), (2, 26), (2, 27), (2, 28), (2, 29), (2, 30),
 (3, 1), (3, 2), (3, 3), (3, 5), (3, 6), (3, 9), (3, 11), (3, 12), (3, 17);
 
 SET FOREIGN_KEY_CHECKS=1;

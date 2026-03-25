@@ -49,6 +49,12 @@ export const ACCESS_PERMISSION_DEFINITIONS = [
     action: "campaigns_manage",
     description: "Управление кампаниями подписки",
   },
+  {
+    code: "marketing.stories.manage",
+    module: "marketing",
+    action: "stories_manage",
+    description: "Управление stories-кампаниями",
+  },
 
   { code: "system.settings.manage", module: "system", action: "settings_manage", description: "Управление системными настройками" },
   { code: "system.integrations.manage", module: "system", action: "integrations_manage", description: "Управление интеграциями" },

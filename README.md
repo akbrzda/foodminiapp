@@ -88,6 +88,7 @@ npm run check
 - Меню: `docs/menu.md`
 - Доставка и тарифы: `docs/delivery_zone.md`
 - Модуль рассылок: `docs/newsletter.md`
+- Модуль Stories: `docs/stories.md`
 - Интеграции: `docs/integration.md`
 - Инженерные стандарты: `docs/code-standards.md`
 

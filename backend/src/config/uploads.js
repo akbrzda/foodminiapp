@@ -9,6 +9,7 @@ export const IMAGE_CATEGORIES = {
   MODIFIER_GROUPS: "modifier-groups",
   TAGS: "tags",
   BROADCASTS: "broadcasts",
+  STORIES: "stories",
   SUBSCRIPTION_CAMPAIGNS: "subscription-campaigns",
   TELEGRAM_START: "telegram-start",
 };

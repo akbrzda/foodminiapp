@@ -38,6 +38,12 @@
       </div>
       <div v-if="activeOrders.length > 1" class="scroll-hint">← Пролистайте →</div>
     </div>
+    <StoriesRow
+      v-if="locationStore.selectedCity"
+      :city-id="locationStore.selectedCity.id"
+      :branch-id="locationStore.selectedBranch?.id || null"
+      placement="home"
+    />
     <div class="menu-section" v-if="locationStore.selectedCity">
       <div class="categories-sticky" v-if="menuStore.categories.length">
         <div class="categories" ref="categoriesRef">
@@ -173,6 +179,7 @@ import { menuAPI, ordersAPI } from "@/shared/api/endpoints.js";
 import { hapticFeedback } from "@/shared/services/telegram.js";
 import { wsService } from "@/shared/services/websocket.js";
 import AppHeader from "@/shared/components/AppHeader.vue";
+import StoriesRow from "@/modules/stories/components/StoriesRow.vue";
 import { formatPrice, normalizeImageUrl } from "@/shared/utils/format";
 import { formatWeight, formatWeightValue } from "@/shared/utils/weight";
 import { calculateDeliveryCost } from "@/shared/utils/deliveryTariffs";
@@ -273,6 +280,12 @@ watch(
     if (locationStore.selectedCity) {
       await loadMenu();
     }
+  },
+);
+watch(
+  () => [route.query.category_id, route.query.story_nav],
+  () => {
+    applyCategoryFromStoryQuery();
   },
 );
 onUnmounted(() => {
@@ -457,12 +470,20 @@ async function loadMenuInternal({ force = false } = {}) {
     }
     await nextTick();
     setupIntersectionObserver();
+    applyCategoryFromStoryQuery();
   } catch (error) {
     devError("Не удалось загрузить меню:", error);
     menuStore.setError("Не удалось загрузить меню");
   } finally {
     menuStore.setLoading(false);
   }
+}
+function applyCategoryFromStoryQuery() {
+  const rawCategoryId = Number(route.query.category_id);
+  if (!Number.isInteger(rawCategoryId) || rawCategoryId <= 0) return;
+  const exists = menuStore.categories.some((category) => Number(category.id) === rawCategoryId);
+  if (!exists) return;
+  scrollToCategory(rawCategoryId);
 }
 function setupMenuRealtimeSync() {
   if (!menuUpdatedWsHandler) {
