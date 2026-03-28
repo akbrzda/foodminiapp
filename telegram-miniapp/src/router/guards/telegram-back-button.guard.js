@@ -1,6 +1,6 @@
 import { getPlatformBridge, PLATFORM_IDS } from "@/shared/platform/index.js";
 
-const resolveBackFallback = (route) => {
+const resolveBackRoute = (route) => {
   if (route?.name === "OrderDetail") {
     return "/orders";
   }
@@ -8,13 +8,13 @@ const resolveBackFallback = (route) => {
   return "/";
 };
 
-const navigateBackWithFallback = (router, route) => {
+const navigateBack = (router, route) => {
   if (typeof window !== "undefined" && window.history.state?.back) {
     router.back();
     return;
   }
 
-  router.replace(resolveBackFallback(route));
+  router.replace(resolveBackRoute(route));
 };
 
 export const registerTelegramBackButtonGuard = (router) => {
@@ -39,7 +39,7 @@ export const registerTelegramBackButtonGuard = (router) => {
 
     if (to.meta.showBackButton) {
       backButtonCleanup = bridge.showBackButton(() => {
-        navigateBackWithFallback(router, to);
+        navigateBack(router, to);
       });
       return;
     }

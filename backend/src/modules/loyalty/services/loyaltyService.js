@@ -332,7 +332,7 @@ export async function applyManualBonusAdjustment({ userId, delta, description, c
   }
   const currentBalance = toInt(parseFloat(snapshot.loyalty_balance) || 0);
   if (delta === 0) {
-    return { balance: currentBalance };
+    return { balance: currentBalance, transaction_id: null };
   }
   const newBalance = currentBalance + toInt(delta);
   if (newBalance < 0) {
@@ -365,7 +365,7 @@ export async function applyManualBonusAdjustment({ userId, delta, description, c
     { connection },
   );
   await invalidateBonusCache(userId);
-  return { balance: newBalance };
+  return { balance: newBalance, transaction_id: txId };
 }
 
 async function consumeEarnAmounts(userId, amount, connection = null) {

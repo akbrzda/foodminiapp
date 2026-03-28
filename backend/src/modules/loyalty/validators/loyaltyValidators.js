@@ -51,3 +51,42 @@ export function validateAdjustBody(body = {}) {
     },
   };
 }
+
+export function validateBulkAccrualCalculateBody(body = {}) {
+  const config = body.segment_config;
+  if (!config || typeof config !== "object" || Array.isArray(config)) {
+    return { error: "segment_config обязателен и должен быть объектом" };
+  }
+  if (!Array.isArray(config.conditions) || config.conditions.length === 0) {
+    return { error: "segment_config.conditions должен содержать хотя бы одно условие" };
+  }
+  return { value: { segmentConfig: config } };
+}
+
+export function validateBulkAccrualCreateBody(body = {}) {
+  const parsedAmount = Number(body.bonus_amount);
+  if (!Number.isInteger(parsedAmount) || parsedAmount <= 0) {
+    return { error: "bonus_amount должен быть положительным целым числом" };
+  }
+
+  const config = body.segment_config;
+  if (!config || typeof config !== "object" || Array.isArray(config)) {
+    return { error: "segment_config обязателен и должен быть объектом" };
+  }
+  if (!Array.isArray(config.conditions) || config.conditions.length === 0) {
+    return { error: "segment_config.conditions должен содержать хотя бы одно условие" };
+  }
+
+  const rawName = String(body.name || "").trim();
+  const name = rawName || `Массовое начисление ${new Date().toISOString().slice(0, 19).replace("T", " ")}`;
+  const messageTemplate = String(body.message_template || "").trim();
+
+  return {
+    value: {
+      name,
+      bonusAmount: parsedAmount,
+      segmentConfig: config,
+      messageTemplate,
+    },
+  };
+}

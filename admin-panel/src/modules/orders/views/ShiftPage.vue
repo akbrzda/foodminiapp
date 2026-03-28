@@ -94,6 +94,7 @@ import { useOrdersStore } from "@/modules/orders/stores/orders.js";
 import { useAuthStore } from "@/shared/stores/auth.js";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
 import { useTheme } from "@/shared/composables/useTheme.js";
+import { useQueryTab } from "@/shared/composables/useQueryTab.js";
 import { loadYandexMaps } from "@/shared/services/yandexMaps.js";
 import { buildPolygonBalloonContent } from "@/shared/utils/polygonBalloon.js";
 import ShiftHeader from "@/modules/orders/components/ShiftHeader.vue";
@@ -121,7 +122,10 @@ const orderMapRef = ref(null);
 // Состояние заказов
 const orders = ref([]);
 const recentOrderIds = ref(new Set());
-const activeTab = ref("active");
+const activeTab = useQueryTab({
+  defaultValue: "active",
+  allowedValues: ["active", "completed", "search"],
+});
 const orderTypeFilter = ref("all");
 const searchQuery = ref("");
 const debouncedSearch = ref("");

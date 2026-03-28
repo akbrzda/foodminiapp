@@ -306,6 +306,7 @@ import BackButton from "@/shared/components/BackButton.vue";
 import Skeleton from "@/shared/components/ui/skeleton/Skeleton.vue";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/shared/components/ui/dialog/index.js";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
+import { useQueryTab } from "@/shared/composables/useQueryTab.js";
 import { useOrdersStore } from "@/modules/orders/stores/orders.js";
 import { useAuthStore } from "@/shared/stores/auth.js";
 const route = useRoute();
@@ -314,7 +315,10 @@ const { showErrorNotification, showSuccessNotification } = useNotifications();
 const ordersStore = useOrdersStore();
 const authStore = useAuthStore();
 const order = ref(null);
-const activeTab = ref("general");
+const activeTab = useQueryTab({
+  defaultValue: "general",
+  allowedValues: ["general", "details", "history"],
+});
 const statusUpdate = ref("");
 const deleteDialogOpen = ref(false);
 const deletingOrder = ref(false);

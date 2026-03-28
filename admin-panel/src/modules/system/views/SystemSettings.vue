@@ -4,7 +4,7 @@
       <CardContent>
         <PageHeader title="Системные настройки" description="Управление ключевыми модулями и их параметрами">
           <template #actions>
-            <div v-if="activeTab === 0 && canManageSettings" class="header-actions">
+            <div v-if="activeTab === 'modules' && canManageSettings" class="header-actions">
               <Button variant="secondary" :disabled="moduleLoading || moduleSaving" @click="loadModuleSettings">
                 <Spinner v-if="moduleLoading" class="h-4 w-4" />
                 <RefreshCcw v-else :size="16" />
@@ -16,7 +16,7 @@
                 {{ moduleSaving ? "Сохранение..." : "Сохранить" }}
               </Button>
             </div>
-            <div v-else-if="activeTab === 1 && canManageSettings" class="header-actions">
+            <div v-else-if="activeTab === 'maps' && canManageSettings" class="header-actions">
               <Button variant="secondary" :disabled="moduleLoading || moduleSaving || mapsTesting" @click="loadModuleSettings">
                 <Spinner v-if="moduleLoading" class="h-4 w-4" />
                 <RefreshCcw v-else :size="16" />
@@ -33,7 +33,7 @@
                 {{ moduleSaving ? "Сохранение..." : "Сохранить" }}
               </Button>
             </div>
-            <div v-else-if="activeTab === 2 && canManageSettings" class="header-actions">
+            <div v-else-if="activeTab === 'appearance' && canManageSettings" class="header-actions">
               <Button variant="secondary" :disabled="moduleLoading || moduleSaving" @click="loadModuleSettings">
                 <Spinner v-if="moduleLoading" class="h-4 w-4" />
                 <RefreshCcw v-else :size="16" />
@@ -45,7 +45,7 @@
                 {{ moduleSaving ? "Сохранение..." : "Сохранить" }}
               </Button>
             </div>
-            <div v-else-if="activeTab === 4 && canManageSettings" class="header-actions">
+            <div v-else-if="activeTab === 'start-message' && canManageSettings" class="header-actions">
               <Button variant="secondary" :disabled="telegramLoading || telegramSaving || telegramTesting" @click="loadTelegramStartSettings">
                 <Spinner v-if="telegramLoading" class="h-4 w-4" />
                 <RefreshCcw v-else :size="16" />
@@ -62,7 +62,7 @@
                 {{ telegramSaving ? "Сохранение..." : "Сохранить" }}
               </Button>
             </div>
-            <div v-else-if="activeTab === 5 && canManageSettings" class="header-actions">
+            <div v-else-if="activeTab === 'order-notifications' && canManageSettings" class="header-actions">
               <Button
                 variant="secondary"
                 :disabled="telegramLoading || telegramSaving || telegramOrderTesting || telegramCitiesLoading"
@@ -95,10 +95,10 @@
     <Tabs v-model="activeTab">
       <div class="overflow-x-auto pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
         <TabsList class="inline-flex min-w-max whitespace-nowrap">
-          <TabsTrigger v-for="(tab, index) in tabs" :key="tab" :value="index">{{ tab }}</TabsTrigger>
+          <TabsTrigger v-for="tab in tabs" :key="tab.value" :value="tab.value">{{ tab.label }}</TabsTrigger>
         </TabsList>
       </div>
-      <TabsContent :value="0" class="space-y-4">
+      <TabsContent value="modules" class="space-y-4">
         <Card v-if="moduleLoading">
           <CardContent class="space-y-3 pt-6">
             <Skeleton class="h-4 w-56" />
@@ -174,7 +174,7 @@
         </Card>
       </TabsContent>
 
-      <TabsContent :value="1" class="space-y-4">
+      <TabsContent value="maps" class="space-y-4">
         <Card v-if="moduleLoading">
           <CardContent class="space-y-3 pt-6">
             <Skeleton class="h-4 w-56" />
@@ -234,7 +234,7 @@
         </Card>
       </TabsContent>
 
-      <TabsContent :value="2" class="space-y-4">
+      <TabsContent value="appearance" class="space-y-4">
         <Card v-if="moduleLoading">
           <CardContent class="space-y-3 pt-6">
             <Skeleton class="h-4 w-56" />
@@ -317,7 +317,7 @@
         </Card>
       </TabsContent>
 
-      <TabsContent :value="3" class="space-y-4">
+      <TabsContent value="stop-list-reasons" class="space-y-4">
         <Card>
           <CardContent class="!p-0">
             <div class="flex flex-col gap-2 border-b border-border/60 px-4 py-3 md:flex-row md:items-center md:justify-between">
@@ -383,7 +383,7 @@
         </Card>
       </TabsContent>
 
-      <TabsContent :value="4" class="space-y-4">
+      <TabsContent value="start-message" class="space-y-4">
         <Card v-if="telegramLoading">
           <CardContent class="space-y-3 pt-6">
             <Skeleton class="h-10 w-full" />
@@ -571,7 +571,7 @@
         </Card>
       </TabsContent>
 
-      <TabsContent :value="5" class="space-y-4">
+      <TabsContent value="order-notifications" class="space-y-4">
         <Card v-if="telegramLoading || telegramCitiesLoading">
           <CardContent class="space-y-3 pt-6">
             <Skeleton class="h-10 w-full" />
@@ -853,6 +853,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui
 import { Field, FieldContent, FieldGroup, FieldLabel } from "@/shared/components/ui/field";
 import Spinner from "@/shared/components/ui/spinner/Spinner.vue";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
+import { useQueryTab } from "@/shared/composables/useQueryTab.js";
 import { formatNumber, normalizeBoolean, setActiveCurrencyCode } from "@/shared/utils/format.js";
 import { useAuthStore } from "@/shared/stores/auth.js";
 
@@ -904,8 +905,19 @@ const moduleSaving = ref(false);
 const mapsTesting = ref(false);
 const reasons = ref([]);
 const reasonsLoading = ref(false);
-const tabs = ["Модули", "Карты", "Оформление", "Причины стоп-листа", "Приветственное сообщение", "Уведомления по заказам"];
-const activeTab = ref(0);
+const SYSTEM_TAB_OPTIONS = [
+  { value: "modules", label: "Модули" },
+  { value: "maps", label: "Карты" },
+  { value: "appearance", label: "Оформление" },
+  { value: "stop-list-reasons", label: "Причины стоп-листа" },
+  { value: "start-message", label: "Приветственное сообщение" },
+  { value: "order-notifications", label: "Уведомления по заказам" },
+];
+const tabs = SYSTEM_TAB_OPTIONS;
+const activeTab = useQueryTab({
+  defaultValue: "modules",
+  allowedValues: SYSTEM_TAB_OPTIONS.map((tab) => tab.value),
+});
 const showModal = ref(false);
 const editing = ref(null);
 const savingReason = ref(false);
@@ -1544,7 +1556,7 @@ onMounted(async () => {
 watch(
   () => activeTab.value,
   async (value) => {
-    if (value !== 4 && value !== 5) return;
+    if (value !== "start-message" && value !== "order-notifications") return;
     if (telegramSettingsLoaded.value) return;
     telegramCitiesLoading.value = true;
     try {

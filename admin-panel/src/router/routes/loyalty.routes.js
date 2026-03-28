@@ -4,8 +4,8 @@ export const loyaltyRoutes = [
     name: "loyalty-levels",
     component: () => import("@/modules/system/views/LoyaltyLevelsSettings.vue"),
     meta: {
-      title: "Уровни лояльности",
-      subtitle: "Локальные уровни и маппинг PremiumBonus",
+      title: "Лояльность",
+      subtitle: "Уровни и массовое начисление бонусов",
       permissions: ["system.loyalty_levels.manage"],
     },
   },

@@ -73,7 +73,7 @@ const toSafeUser = (user) => {
   };
 };
 
-const requestContactWithFallback = async (webApp, timeoutMs = 10000) => {
+const requestContactFromSdk = async (webApp, timeoutMs = 10000) => {
   if (!webApp || typeof webApp.requestContact !== "function") {
     return null;
   }
@@ -311,7 +311,7 @@ const buildMaxBridge = () => ({
   },
   requestContact({ timeoutMs = 10000 } = {}) {
     const webApp = resolveMaxWebApp();
-    return requestContactWithFallback(webApp, timeoutMs);
+    return requestContactFromSdk(webApp, timeoutMs);
   },
   storage: {
     get(key) {

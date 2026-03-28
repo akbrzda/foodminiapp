@@ -223,7 +223,7 @@ const navSections = computed(() => {
           permissions: ["marketing.broadcasts.manage"],
         },
         {
-          label: "Уровни лояльности",
+          label: "Лояльность",
           to: "/loyalty-levels",
           icon: Award,
           permissions: ["system.loyalty_levels.manage"],

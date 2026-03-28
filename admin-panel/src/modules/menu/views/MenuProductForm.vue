@@ -46,7 +46,7 @@
       <TabsList>
         <TabsTrigger v-for="tab in visibleTabs" :key="tab.value" :value="tab.value">{{ tab.label }}</TabsTrigger>
       </TabsList>
-      <TabsContent :value="0" class="space-y-3">
+      <TabsContent value="main" class="space-y-3">
         <Card>
           <CardHeader>
             <CardTitle class="text-base">Основная информация</CardTitle>
@@ -310,7 +310,7 @@
           </CardContent>
         </Card>
       </TabsContent>
-      <TabsContent :value="1" class="space-y-4">
+      <TabsContent value="variants" class="space-y-4">
         <template v-if="!isComboItem">
         <Card>
           <CardHeader class="flex flex-row items-center justify-between">
@@ -451,7 +451,7 @@
         </Card>
         </template>
       </TabsContent>
-      <TabsContent :value="2" class="space-y-4">
+      <TabsContent value="modifiers" class="space-y-4">
         <template v-if="!isComboItem">
         <Card>
           <CardHeader>
@@ -496,7 +496,7 @@
         </Card>
         </template>
       </TabsContent>
-      <TabsContent :value="3" class="space-y-4">
+      <TabsContent value="availability" class="space-y-4">
         <Card>
           <CardHeader>
             <CardTitle class="text-base">Доступность по городам</CardTitle>
@@ -581,7 +581,7 @@
           </CardContent>
         </Card>
       </TabsContent>
-      <TabsContent :value="4" class="space-y-4">
+      <TabsContent value="tags" class="space-y-4">
         <Card v-if="menuBadgesEnabled">
           <CardHeader>
             <CardTitle class="text-base">Бейджи карточки</CardTitle>
@@ -678,6 +678,7 @@ import { useReferenceStore } from "@/shared/stores/reference.js";
 import { useOrdersStore } from "@/modules/orders/stores/orders.js";
 import { useAuthStore } from "@/shared/stores/auth.js";
 import { formatNumberWithCurrency } from "@/shared/utils/format.js";
+import { useQueryTab } from "@/shared/composables/useQueryTab.js";
 const router = useRouter();
 const route = useRoute();
 const referenceStore = useReferenceStore();
@@ -691,7 +692,17 @@ const tags = ref([]);
 const comboVariantOptions = ref([]);
 const saving = ref(false);
 const isInitialLoading = ref(false);
-const activeTab = ref(0);
+const PRODUCT_TAB_OPTIONS = [
+  { value: "main", label: "Основное" },
+  { value: "variants", label: "Вариации" },
+  { value: "modifiers", label: "Модификаторы" },
+  { value: "availability", label: "Доступность и цены" },
+  { value: "tags", label: "Теги и бейджи" },
+];
+const activeTab = useQueryTab({
+  defaultValue: "main",
+  allowedValues: PRODUCT_TAB_OPTIONS.map((tab) => tab.value),
+});
 const fileInput = ref(null);
 const uploadState = ref({ loading: false, error: null, preview: null });
 const variantUploadStates = ref({});
@@ -707,17 +718,17 @@ const menuBadgesEnabled = ref(true);
 const visibleTabs = computed(() => {
   if (isComboItem.value) {
     return [
-      { value: 0, label: "Основное" },
-      { value: 3, label: "Доступность и цены" },
-      { value: 4, label: menuBadgesEnabled.value ? "Теги и бейджи" : "Теги" },
+      { value: "main", label: "Основное" },
+      { value: "availability", label: "Доступность и цены" },
+      { value: "tags", label: menuBadgesEnabled.value ? "Теги и бейджи" : "Теги" },
     ];
   }
   return [
-    { value: 0, label: "Основное" },
-    { value: 1, label: "Вариации" },
-    { value: 2, label: "Модификаторы" },
-    { value: 3, label: "Доступность и цены" },
-    { value: 4, label: menuBadgesEnabled.value ? "Теги и бейджи" : "Теги" },
+    { value: "main", label: "Основное" },
+    { value: "variants", label: "Вариации" },
+    { value: "modifiers", label: "Модификаторы" },
+    { value: "availability", label: "Доступность и цены" },
+    { value: "tags", label: menuBadgesEnabled.value ? "Теги и бейджи" : "Теги" },
   ];
 });
 const allowedFulfillmentValues = ["pickup", "delivery"];
@@ -1458,8 +1469,8 @@ watch(
   () => isComboItem.value,
   (isCombo) => {
     if (!isCombo) return;
-    if (![0, 3, 4].includes(Number(activeTab.value))) {
-      activeTab.value = 0;
+    if (!["main", "availability", "tags"].includes(activeTab.value)) {
+      activeTab.value = "main";
     }
     form.value.variants = [];
     form.value.modifier_group_ids = [];
@@ -1491,8 +1502,8 @@ watch(
 watch(
   () => visibleTabs.value.map((tab) => tab.value),
   (values) => {
-    if (!values.includes(Number(activeTab.value))) {
-      activeTab.value = values[0] ?? 0;
+    if (!values.includes(activeTab.value)) {
+      activeTab.value = values[0] ?? "main";
     }
   },
   { immediate: true },

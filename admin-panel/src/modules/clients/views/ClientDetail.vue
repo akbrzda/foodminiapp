@@ -389,6 +389,7 @@ import Skeleton from "@/shared/components/ui/skeleton/Skeleton.vue";
 import Spinner from "@/shared/components/ui/spinner/Spinner.vue";
 import TablePagination from "@/shared/components/TablePagination.vue";
 import BackButton from "@/shared/components/BackButton.vue";
+import { useQueryTab } from "@/shared/composables/useQueryTab.js";
 const route = useRoute();
 const router = useRouter();
 const { showErrorNotification, showSuccessNotification } = useNotifications();
@@ -400,7 +401,10 @@ const clientLoading = ref(false);
 const favoriteDishes = ref([]);
 const favoriteCategories = ref([]);
 const orders = ref([]);
-const ordersTab = ref("completed");
+const ordersTab = useQueryTab({
+  defaultValue: "completed",
+  allowedValues: ["completed", "active", "cancelled"],
+});
 const ordersSummary = reactive({
   active: 0,
   completed: 0,

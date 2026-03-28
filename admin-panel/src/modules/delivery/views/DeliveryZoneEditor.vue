@@ -139,6 +139,7 @@ import { useRoute, useRouter } from "vue-router";
 import api from "@/shared/api/client.js";
 import { useReferenceStore } from "@/shared/stores/reference.js";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
+import { useQueryTab } from "@/shared/composables/useQueryTab.js";
 import { loadYandexMaps } from "@/shared/services/yandexMaps.js";
 import Button from "@/shared/components/ui/button/Button.vue";
 import CardContent from "@/shared/components/ui/card/CardContent.vue";
@@ -265,7 +266,10 @@ const cityId = computed(() => parseInt(route.query.cityId, 10));
 const form = ref({ ...DEFAULT_FORM });
 const branchPolygons = ref([]);
 const pageTitle = computed(() => (polygonId.value === "new" ? "Новый полигон" : "Редактировать полигон"));
-const activeTab = ref("general");
+const activeTab = useQueryTab({
+  defaultValue: "general",
+  allowedValues: ["general", "delivery"],
+});
 const tariffs = ref([]);
 const tariffsLoading = ref(false);
 const tariffEditorOpen = ref(false);

@@ -103,6 +103,13 @@ Do not turn commit into:
 - diff summary
 - technical report
 
+Example commit messages:
+Стабилизирована работа бонусной системы и упрощена логика расчета
+
+- устранены расхождения в балансе
+- улучшена обработка начислений и списаний
+- снижено влияние legacy-логики
+
 ### Size
 
 Small change:

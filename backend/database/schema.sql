@@ -896,6 +896,56 @@ CREATE TABLE `loyalty_transactions` (
 ) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb3;
 
 
+CREATE TABLE `loyalty_bulk_accruals` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `name` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `status` enum('draft','processing','completed','failed','cancelled') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'draft',
+  `segment_config` json NOT NULL,
+  `bonus_amount` int NOT NULL,
+  `message_template` text COLLATE utf8mb4_unicode_ci,
+  `audience_count` int NOT NULL DEFAULT '0',
+  `success_count` int NOT NULL DEFAULT '0',
+  `failed_count` int NOT NULL DEFAULT '0',
+  `skipped_count` int NOT NULL DEFAULT '0',
+  `requested_total_amount` int NOT NULL DEFAULT '0',
+  `actual_total_amount` int NOT NULL DEFAULT '0',
+  `created_by` int NOT NULL,
+  `started_at` timestamp NULL DEFAULT NULL,
+  `completed_at` timestamp NULL DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_loyalty_bulk_accruals_status` (`status`),
+  KEY `idx_loyalty_bulk_accruals_created_by` (`created_by`),
+  KEY `idx_loyalty_bulk_accruals_created_at` (`created_at`),
+  CONSTRAINT `loyalty_bulk_accruals_ibfk_1` FOREIGN KEY (`created_by`) REFERENCES `admin_users` (`id`) ON DELETE RESTRICT,
+  CONSTRAINT `chk_loyalty_bulk_accruals_bonus_amount` CHECK ((`bonus_amount` > 0))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+CREATE TABLE `loyalty_bulk_accrual_recipients` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `accrual_id` int NOT NULL,
+  `user_id` int NOT NULL,
+  `status` enum('pending','completed','failed','skipped') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'pending',
+  `error_message` text COLLATE utf8mb4_unicode_ci,
+  `transaction_id` int DEFAULT NULL,
+  `notification_status` enum('pending','sent','failed','skipped') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'skipped',
+  `notification_error` text COLLATE utf8mb4_unicode_ci,
+  `processed_at` timestamp NULL DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_loyalty_bulk_accrual_user` (`accrual_id`,`user_id`),
+  KEY `idx_loyalty_bulk_recipients_status` (`status`),
+  KEY `idx_loyalty_bulk_recipients_user` (`user_id`),
+  KEY `idx_loyalty_bulk_recipients_processed_at` (`processed_at`),
+  CONSTRAINT `loyalty_bulk_accrual_recipients_ibfk_1` FOREIGN KEY (`accrual_id`) REFERENCES `loyalty_bulk_accruals` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `loyalty_bulk_accrual_recipients_ibfk_2` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `loyalty_bulk_accrual_recipients_ibfk_3` FOREIGN KEY (`transaction_id`) REFERENCES `loyalty_transactions` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
 CREATE TABLE `order_status_history` (
   `id` int NOT NULL AUTO_INCREMENT,
   `order_id` int NOT NULL,

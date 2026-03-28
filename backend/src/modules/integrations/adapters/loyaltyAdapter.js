@@ -149,28 +149,16 @@ function assertPremiumBonusSuccess(payload, fallbackMessage) {
   }
 }
 
-async function loadBuyerInfoWithFallback(client, identifiers = []) {
-  const uniqueIdentifiers = Array.from(
-    new Set(
-      (Array.isArray(identifiers) ? identifiers : [])
-        .map((value) => String(value || "").trim())
-        .filter(Boolean)
-    )
-  );
-
-  let lastResponse = null;
-  for (const identificator of uniqueIdentifiers) {
-    const response = await client.buyerInfo({
-      identificator,
-      extra_fields: ["payments_amount"],
-    });
-    lastResponse = response;
-    if (response?.success !== false) {
-      return response;
-    }
+async function loadBuyerInfo(client, identificator = "") {
+  const normalizedIdentificator = String(identificator || "").trim();
+  if (!normalizedIdentificator) {
+    return null;
   }
 
-  return lastResponse;
+  return client.buyerInfo({
+    identificator: normalizedIdentificator,
+    extra_fields: ["payments_amount"],
+  });
 }
 
 function firstFinite(...values) {
@@ -1168,7 +1156,7 @@ export class LoyaltyAdapter {
     const { client, identifiers } = await this.resolvePremiumBonusContext(userId);
 
     try {
-      const info = await loadBuyerInfoWithFallback(client, identifiers);
+      const info = await loadBuyerInfo(client, identifiers[0]);
       assertPremiumBonusSuccess(
         info,
         "PremiumBonus вернул ошибку при получении профиля покупателя"
@@ -1289,7 +1277,7 @@ export class LoyaltyAdapter {
     }
     const { client, identifiers, user } = await this.resolvePremiumBonusContext(userId);
     try {
-      const info = await loadBuyerInfoWithFallback(client, identifiers);
+      const info = await loadBuyerInfo(client, identifiers[0]);
       assertPremiumBonusSuccess(
         info,
         "PremiumBonus вернул ошибку при получении баланса покупателя"
@@ -1398,7 +1386,7 @@ export class LoyaltyAdapter {
         client.transactionHistory({
           identificator,
         }),
-        loadBuyerInfoWithFallback(client, [normalizedPhone, pbClientId].filter(Boolean)),
+        loadBuyerInfo(client, normalizedPhone || pbClientId),
       ]);
       assertPremiumBonusSuccess(
         buyerInfo,

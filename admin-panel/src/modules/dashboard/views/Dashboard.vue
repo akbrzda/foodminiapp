@@ -224,7 +224,7 @@
       <CardContent>
         <Tabs v-model="activeTab">
           <TabsList>
-            <TabsTrigger v-for="(tab, index) in chartTabs" :key="tab" :value="index">{{ tab }}</TabsTrigger>
+            <TabsTrigger v-for="tab in chartTabs" :key="tab.value" :value="tab.value">{{ tab.label }}</TabsTrigger>
           </TabsList>
         </Tabs>
         <div class="mt-4 overflow-x-auto">
@@ -345,6 +345,7 @@ import api from "@/shared/api/client.js";
 import { useReferenceStore } from "@/shared/stores/reference.js";
 import { useAuthStore } from "@/shared/stores/auth.js";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
+import { useQueryTab } from "@/shared/composables/useQueryTab.js";
 import { formatCurrency, formatNumber, formatPaymentMethod, normalizePaymentMethodKey } from "@/shared/utils/format.js";
 import Button from "@/shared/components/ui/button/Button.vue";
 import Card from "@/shared/components/ui/card/Card.vue";
@@ -365,7 +366,15 @@ const stats = ref(null);
 const branches = ref([]);
 const branchesRequestId = ref(0);
 const loadTimer = ref(null);
-const activeTab = ref(0);
+const CHART_TAB_OPTIONS = [
+  { value: "revenue", label: "Выручка" },
+  { value: "orders", label: "Заказы" },
+  { value: "avg-check", label: "Средний чек" },
+];
+const activeTab = useQueryTab({
+  defaultValue: "revenue",
+  allowedValues: CHART_TAB_OPTIONS.map((tab) => tab.value),
+});
 const toDateString = (date) => {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -478,7 +487,7 @@ const clearDateRange = () => {
 const updateCalendarMonths = () => {
   calendarMonths.value = getCalendarMonthCount();
 };
-const chartTabs = ["Выручка", "Заказы", "Средний чек"];
+const chartTabs = CHART_TAB_OPTIONS;
 const isCustomPeriod = computed(() => filters.value.period === "custom");
 const isManager = computed(() => authStore.scopeRole === "manager");
 const managerBranches = computed(() => authStore.user?.branches || []);
@@ -592,8 +601,8 @@ const comparisonIcon = (comparison) => {
   return Minus;
 };
 const seriesMetricKey = computed(() => {
-  if (activeTab.value === 1) return "orders_count";
-  if (activeTab.value === 2) return "avg_order_value";
+  if (activeTab.value === "orders") return "orders_count";
+  if (activeTab.value === "avg-check") return "avg_order_value";
   return "revenue";
 });
 const seriesMax = computed(() => {

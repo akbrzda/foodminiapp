@@ -2,18 +2,32 @@
   <div class="space-y-5">
     <Card>
       <CardContent>
-        <PageHeader title="Уровни лояльности" description="Управление уровнями и маппингом на PremiumBonus">
+        <PageHeader title="Лояльность" description="Управление уровнями и массовым начислением бонусов">
           <template #actions>
             <div class="header-actions">
-              <Button v-if="canManageLoyaltyLevels" variant="secondary" :disabled="loading || saving" @click="loadLevels">
+              <Button
+                v-if="canManageLoyaltyLevels && activeTab === 'levels'"
+                variant="secondary"
+                :disabled="loading || saving"
+                @click="loadLevels"
+              >
                 <RefreshCcw :size="16" />
                 Обновить
               </Button>
-              <Button v-if="canManageLoyaltyLevels" variant="secondary" :disabled="loading || saving" @click="addLevel">
+              <Button
+                v-if="canManageLoyaltyLevels && activeTab === 'levels'"
+                variant="secondary"
+                :disabled="loading || saving"
+                @click="addLevel"
+              >
                 <Plus :size="16" />
                 Добавить уровень
               </Button>
-              <Button v-if="canManageLoyaltyLevels" :disabled="loading || saving" @click="saveLevels">
+              <Button
+                v-if="canManageLoyaltyLevels && activeTab === 'levels'"
+                :disabled="loading || saving"
+                @click="saveLevels"
+              >
                 <Save v-if="!saving" :size="16" />
                 <RefreshCcw v-else class="h-4 w-4 animate-spin" />
                 {{ saving ? "Сохранение..." : "Сохранить" }}
@@ -24,144 +38,157 @@
       </CardContent>
     </Card>
 
-    <Card>
-      <CardContent class="space-y-3 pt-6">
-        <div class="rounded-lg border border-border/60 bg-muted/20 p-3 text-sm">
-          <div class="font-medium">Режим лояльности: {{ modeLabel }}</div>
-          <div class="text-xs text-muted-foreground">
-            При внешнем режиме отображаются локальные уровни, а расчёт начисления/списания/переходов берётся из PremiumBonus.
-          </div>
-        </div>
-        <div v-if="pbGroups.length" class="rounded-lg border border-border/60 bg-muted/20 p-3 text-xs text-muted-foreground">
-          В PremiumBonus найдено групп: {{ pbGroups.length }}. Используйте кнопку «Подставить из PB» для быстрого маппинга.
-        </div>
-      </CardContent>
-    </Card>
+    <Tabs v-model="activeTab" class="space-y-4">
+      <TabsList>
+        <TabsTrigger value="levels">Уровни</TabsTrigger>
+        <TabsTrigger value="bulk">Массовое начисление</TabsTrigger>
+      </TabsList>
 
-    <div v-if="loading" class="space-y-3">
-      <Card v-for="index in 3" :key="`level-skeleton-${index}`">
-        <CardContent class="space-y-3 pt-6">
-          <Skeleton class="h-4 w-56" />
-          <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <Skeleton class="h-10 w-full" />
-            <Skeleton class="h-10 w-full" />
-            <Skeleton class="h-10 w-full" />
-            <Skeleton class="h-10 w-full" />
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-
-    <div v-else class="space-y-3">
-      <Card v-for="(level, index) in levels" :key="level.local_key">
-        <CardHeader class="pb-2">
-          <div class="flex flex-wrap items-center justify-between gap-2">
-            <CardTitle class="text-base">Уровень #{{ index + 1 }}</CardTitle>
-            <div class="flex gap-1">
-              <Button
-                v-if="canManageLoyaltyLevels"
-                type="button"
-                size="sm"
-                variant="outline"
-                :disabled="index === 0"
-                @click="moveLevel(index, -1)"
-              >
-                <ChevronUp :size="14" />
-              </Button>
-              <Button
-                v-if="canManageLoyaltyLevels"
-                type="button"
-                size="sm"
-                variant="outline"
-                :disabled="index === levels.length - 1"
-                @click="moveLevel(index, 1)"
-              >
-                <ChevronDown :size="14" />
-              </Button>
-              <Button
-                v-if="canManageLoyaltyLevels"
-                type="button"
-                size="sm"
-                variant="outline"
-                :disabled="!pbGroups.length"
-                @click="applyNextPbGroup(level)"
-              >
-                <Link :size="14" />
-                Подставить из PB
-              </Button>
-              <Button v-if="canManageLoyaltyLevels" type="button" size="sm" variant="outline" @click="removeLevel(index)">
-                <Trash2 :size="14" />
-                {{ level.id ? "Отключить" : "Удалить" }}
-              </Button>
+      <TabsContent value="levels" class="space-y-5">
+        <Card>
+          <CardContent class="space-y-3 pt-6">
+            <div class="rounded-lg border border-border/60 bg-muted/20 p-3 text-sm">
+              <div class="font-medium">Режим лояльности: {{ modeLabel }}</div>
+              <div class="text-xs text-muted-foreground">
+                При внешнем режиме отображаются локальные уровни, а расчёт начисления/списания/переходов берётся из PremiumBonus.
+              </div>
             </div>
-          </div>
-        </CardHeader>
-        <CardContent class="space-y-4 pt-0">
-          <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <Field>
-              <FieldLabel>Название</FieldLabel>
-              <FieldContent>
-                <Input v-model="level.name" placeholder="Карта 3%" />
-              </FieldContent>
-            </Field>
-            <Field>
-              <FieldLabel>Порог суммы оплат</FieldLabel>
-              <FieldContent>
-                <Input v-model.number="level.threshold_amount" type="number" min="0" step="0.01" />
-              </FieldContent>
-            </Field>
-            <Field>
-              <FieldLabel>Начисление, %</FieldLabel>
-              <FieldContent>
-                <Input v-model.number="level.earn_percentage" type="number" min="0" max="100" step="1" />
-              </FieldContent>
-            </Field>
-            <Field>
-              <FieldLabel>Макс. списание, %</FieldLabel>
-              <FieldContent>
-                <Input v-model.number="level.max_spend_percentage" type="number" min="0" max="100" step="1" />
-              </FieldContent>
-            </Field>
-            <Field>
-              <FieldLabel>Порядок сортировки</FieldLabel>
-              <FieldContent>
-                <Input v-model.number="level.sort_order" type="number" step="1" />
-              </FieldContent>
-            </Field>
-            <Field>
-              <FieldLabel>Статус</FieldLabel>
-              <FieldContent>
-                <Select v-model="level.is_enabled">
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem :value="true">Активен</SelectItem>
-                    <SelectItem :value="false">Отключен</SelectItem>
-                  </SelectContent>
-                </Select>
-              </FieldContent>
-            </Field>
-            <Field>
-              <FieldLabel>PB Group ID</FieldLabel>
-              <FieldContent>
-                <Input v-model="level.pb_group_id" placeholder="ID группы в PremiumBonus" />
-              </FieldContent>
-            </Field>
-            <Field>
-              <FieldLabel>PB Group Name</FieldLabel>
-              <FieldContent>
-                <Input v-model="level.pb_group_name" placeholder="Название группы в PremiumBonus" />
-              </FieldContent>
-            </Field>
-          </div>
-        </CardContent>
-      </Card>
+            <div v-if="pbGroups.length" class="rounded-lg border border-border/60 bg-muted/20 p-3 text-xs text-muted-foreground">
+              В PremiumBonus найдено групп: {{ pbGroups.length }}. Используйте кнопку «Подставить из PB» для быстрого маппинга.
+            </div>
+          </CardContent>
+        </Card>
 
-      <Card v-if="!levels.length">
-        <CardContent class="py-8 text-center text-sm text-muted-foreground">Уровни не найдены. Добавьте первый уровень.</CardContent>
-      </Card>
-    </div>
+        <div v-if="loading" class="space-y-3">
+          <Card v-for="index in 3" :key="`level-skeleton-${index}`">
+            <CardContent class="space-y-3 pt-6">
+              <Skeleton class="h-4 w-56" />
+              <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <Skeleton class="h-10 w-full" />
+                <Skeleton class="h-10 w-full" />
+                <Skeleton class="h-10 w-full" />
+                <Skeleton class="h-10 w-full" />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <div v-else class="space-y-3">
+          <Card v-for="(level, index) in levels" :key="level.local_key">
+            <CardHeader class="pb-2">
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <CardTitle class="text-base">Уровень #{{ index + 1 }}</CardTitle>
+                <div class="flex gap-1">
+                  <Button
+                    v-if="canManageLoyaltyLevels"
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    :disabled="index === 0"
+                    @click="moveLevel(index, -1)"
+                  >
+                    <ChevronUp :size="14" />
+                  </Button>
+                  <Button
+                    v-if="canManageLoyaltyLevels"
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    :disabled="index === levels.length - 1"
+                    @click="moveLevel(index, 1)"
+                  >
+                    <ChevronDown :size="14" />
+                  </Button>
+                  <Button
+                    v-if="canManageLoyaltyLevels"
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    :disabled="!pbGroups.length"
+                    @click="applyNextPbGroup(level)"
+                  >
+                    <Link :size="14" />
+                    Подставить из PB
+                  </Button>
+                  <Button v-if="canManageLoyaltyLevels" type="button" size="sm" variant="outline" @click="removeLevel(index)">
+                    <Trash2 :size="14" />
+                    {{ level.id ? "Отключить" : "Удалить" }}
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent class="space-y-4 pt-0">
+              <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <Field>
+                  <FieldLabel>Название</FieldLabel>
+                  <FieldContent>
+                    <Input v-model="level.name" placeholder="Карта 3%" />
+                  </FieldContent>
+                </Field>
+                <Field>
+                  <FieldLabel>Порог суммы оплат</FieldLabel>
+                  <FieldContent>
+                    <Input v-model.number="level.threshold_amount" type="number" min="0" step="0.01" />
+                  </FieldContent>
+                </Field>
+                <Field>
+                  <FieldLabel>Начисление, %</FieldLabel>
+                  <FieldContent>
+                    <Input v-model.number="level.earn_percentage" type="number" min="0" max="100" step="1" />
+                  </FieldContent>
+                </Field>
+                <Field>
+                  <FieldLabel>Макс. списание, %</FieldLabel>
+                  <FieldContent>
+                    <Input v-model.number="level.max_spend_percentage" type="number" min="0" max="100" step="1" />
+                  </FieldContent>
+                </Field>
+                <Field>
+                  <FieldLabel>Порядок сортировки</FieldLabel>
+                  <FieldContent>
+                    <Input v-model.number="level.sort_order" type="number" step="1" />
+                  </FieldContent>
+                </Field>
+                <Field>
+                  <FieldLabel>Статус</FieldLabel>
+                  <FieldContent>
+                    <Select v-model="level.is_enabled">
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem :value="true">Активен</SelectItem>
+                        <SelectItem :value="false">Отключен</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </FieldContent>
+                </Field>
+                <Field>
+                  <FieldLabel>PB Group ID</FieldLabel>
+                  <FieldContent>
+                    <Input v-model="level.pb_group_id" placeholder="ID группы в PremiumBonus" />
+                  </FieldContent>
+                </Field>
+                <Field>
+                  <FieldLabel>PB Group Name</FieldLabel>
+                  <FieldContent>
+                    <Input v-model="level.pb_group_name" placeholder="Название группы в PremiumBonus" />
+                  </FieldContent>
+                </Field>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card v-if="!levels.length">
+            <CardContent class="py-8 text-center text-sm text-muted-foreground">Уровни не найдены. Добавьте первый уровень.</CardContent>
+          </Card>
+        </div>
+      </TabsContent>
+
+      <TabsContent value="bulk" class="space-y-5">
+        <LoyaltyBulkAccrualsTab :is-premium-bonus-mode="isPremiumBonusMode" />
+      </TabsContent>
+    </Tabs>
   </div>
 </template>
 
@@ -180,7 +207,10 @@ import Skeleton from "@/shared/components/ui/skeleton/Skeleton.vue";
 import { Field, FieldContent, FieldLabel } from "@/shared/components/ui/field";
 import Input from "@/shared/components/ui/input/Input.vue";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
 import { useAuthStore } from "@/shared/stores/auth.js";
+import { useQueryTab } from "@/shared/composables/useQueryTab.js";
+import LoyaltyBulkAccrualsTab from "@/modules/system/components/LoyaltyBulkAccrualsTab.vue";
 
 const { showErrorNotification, showSuccessNotification } = useNotifications();
 const authStore = useAuthStore();
@@ -190,14 +220,21 @@ const loading = ref(false);
 const saving = ref(false);
 const levels = ref([]);
 const pbGroups = ref([]);
+const activeTab = useQueryTab({
+  defaultValue: "levels",
+  allowedValues: ["levels", "bulk"],
+});
 const mode = ref({
   premiumbonus_enabled: false,
   loyalty_integration_mode: "local",
 });
 
+const isPremiumBonusMode = computed(() => {
+  return Boolean(mode.value.premiumbonus_enabled);
+});
+
 const modeLabel = computed(() => {
-  const isExternal = mode.value.premiumbonus_enabled && String(mode.value.loyalty_integration_mode || "local").toLowerCase() === "external";
-  return isExternal ? "PremiumBonus (external)" : "Локальный";
+  return isPremiumBonusMode.value ? "PremiumBonus (external)" : "Локальный";
 });
 
 const toNumber = (value, fallback = 0) => {

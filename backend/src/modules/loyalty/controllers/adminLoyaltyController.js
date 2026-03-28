@@ -1,11 +1,19 @@
 import { getSystemSettings, updateSystemSettings } from "../../../utils/settings.js";
 import { logger } from "../../../utils/logger.js";
-import { validateAdjustBody, validateToggleBody, parseIntParam } from "../validators/loyaltyValidators.js";
+import {
+  validateAdjustBody,
+  validateToggleBody,
+  validateBulkAccrualCalculateBody,
+  validateBulkAccrualCreateBody,
+} from "../validators/loyaltyValidators.js";
 import { getOrdersByUserAndCities } from "../repositories/loyaltyRepository.js";
 import loyaltyAdapter from "../../integrations/adapters/loyaltyAdapter.js";
 import db from "../../../config/database.js";
 import { getIntegrationSettings, getPremiumBonusClientOrNull } from "../../integrations/services/integrationConfigService.js";
 import { decryptEmail } from "../../../utils/encryption.js";
+import { buildSegmentQuery, calculateSegmentSize } from "../../broadcasts/services/segmentService.js";
+import { getChannelAdapter } from "../../notifications/services/channelAdapters.js";
+import { resolvePreferredNotificationChannelForUser } from "../../notifications/services/externalAccountService.js";
 
 const DEFAULT_PB_EARN_TRIGGER_AMOUNTS = new Set([1, 5, 10, 50, 100]);
 
@@ -125,6 +133,61 @@ export function createAdminLoyaltyController({ loyaltyService }) {
     pb_group_id: row.pb_group_id || "",
     pb_group_name: row.pb_group_name || "",
   });
+
+  const isPremiumBonusExternalMode = async () => {
+    const settings = await getSystemSettings();
+    return Boolean(settings.premiumbonus_enabled);
+  };
+
+  const renderAccrualMessage = (template, payload) => {
+    const messageTemplate = String(template || "").trim();
+    if (!messageTemplate) return "";
+
+    const replacements = {
+      "{first_name}": String(payload?.first_name || "").trim(),
+      "{last_name}": String(payload?.last_name || "").trim(),
+      "{bonus_amount}": String(payload?.bonus_amount || 0),
+      "{bonus_balance}": String(payload?.bonus_balance || 0),
+      "{accrual_name}": String(payload?.accrual_name || "").trim(),
+      "{accrual_date}": String(payload?.accrual_date || "").trim(),
+    };
+
+    let result = messageTemplate;
+    for (const [token, value] of Object.entries(replacements)) {
+      result = result.split(token).join(value);
+    }
+    return result;
+  };
+
+  const sendAccrualNotification = async ({ userId, text }) => {
+    const normalizedText = String(text || "").trim();
+    if (!normalizedText) {
+      return { status: "skipped", error: null };
+    }
+
+    const channel = await resolvePreferredNotificationChannelForUser(userId);
+    if (!channel?.platform || !channel?.externalId) {
+      return { status: "skipped", error: null };
+    }
+
+    const adapter = getChannelAdapter(channel.platform);
+    if (!adapter?.sendBroadcast) {
+      return { status: "failed", error: "Канал уведомления недоступен" };
+    }
+
+    try {
+      await adapter.sendBroadcast({
+        externalId: channel.externalId,
+        text: normalizedText,
+      });
+      return { status: "sent", error: null };
+    } catch (error) {
+      return {
+        status: "failed",
+        error: String(error?.message || "Ошибка отправки уведомления"),
+      };
+    }
+  };
 
   return {
     async getStatus(req, res, next) {
@@ -295,6 +358,343 @@ export function createAdminLoyaltyController({ loyaltyService }) {
         } finally {
           connection.release();
         }
+      } catch (error) {
+        next(error);
+      }
+    },
+
+    async calculateBulkAccrualAudience(req, res, next) {
+      try {
+        const { value, error } = validateBulkAccrualCalculateBody(req.body);
+        if (error) {
+          return res.status(400).json({ error });
+        }
+
+        if (await isPremiumBonusExternalMode()) {
+          return res.status(403).json({
+            error: "Массовое начисление недоступно при активной интеграции PremiumBonus",
+          });
+        }
+
+        const audienceCount = await calculateSegmentSize(value.segmentConfig, { useCache: false });
+        return res.json({ audience_count: Number(audienceCount || 0) });
+      } catch (error) {
+        next(error);
+      }
+    },
+
+    async createBulkAccrual(req, res, next) {
+      try {
+        const { value, error } = validateBulkAccrualCreateBody(req.body);
+        if (error) {
+          return res.status(400).json({ error });
+        }
+
+        if (await isPremiumBonusExternalMode()) {
+          return res.status(403).json({
+            error: "Массовое начисление недоступно при активной интеграции PremiumBonus",
+          });
+        }
+
+        const [result] = await db.query(
+          `INSERT INTO loyalty_bulk_accruals
+           (name, status, segment_config, bonus_amount, message_template, created_by)
+           VALUES (?, 'draft', ?, ?, ?, ?)`,
+          [value.name, JSON.stringify(value.segmentConfig), value.bonusAmount, value.messageTemplate || null, req.user.id],
+        );
+
+        return res.status(201).json({ id: result.insertId });
+      } catch (error) {
+        next(error);
+      }
+    },
+
+    async startBulkAccrual(req, res, next) {
+      try {
+        if (await isPremiumBonusExternalMode()) {
+          return res.status(403).json({
+            error: "Массовое начисление недоступно при активной интеграции PremiumBonus",
+          });
+        }
+
+        const accrualId = Number(req.params.id);
+        if (!Number.isInteger(accrualId) || accrualId <= 0) {
+          return res.status(400).json({ error: "Некорректный id операции" });
+        }
+
+        const [accrualRows] = await db.query(
+          `SELECT id, name, status, segment_config, bonus_amount, message_template, created_by
+           FROM loyalty_bulk_accruals
+           WHERE id = ?
+           LIMIT 1`,
+          [accrualId],
+        );
+        if (!accrualRows.length) {
+          return res.status(404).json({ error: "Операция массового начисления не найдена" });
+        }
+        const accrual = accrualRows[0];
+        if (accrual.status !== "draft") {
+          return res.status(400).json({ error: "Запустить можно только операцию в статусе draft" });
+        }
+
+        let segmentConfig = accrual.segment_config;
+        if (typeof segmentConfig === "string") {
+          try {
+            segmentConfig = JSON.parse(segmentConfig);
+          } catch (parseError) {
+            segmentConfig = null;
+          }
+        }
+        if (!segmentConfig || typeof segmentConfig !== "object") {
+          return res.status(400).json({ error: "Некорректный segment_config у операции начисления" });
+        }
+
+        await db.query(
+          `UPDATE loyalty_bulk_accruals
+           SET status = 'processing', started_at = NOW(), completed_at = NULL
+           WHERE id = ?`,
+          [accrualId],
+        );
+
+        const bonusAmount = Number(accrual.bonus_amount || 0);
+        const { sql, params } = buildSegmentQuery(segmentConfig, { select: "u.id, u.first_name, u.last_name" });
+        const [users] = await db.query(`SELECT segment.id, segment.first_name, segment.last_name FROM (${sql}) as segment`, params);
+
+        const audienceCount = users.length;
+        const requestedTotalAmount = audienceCount * bonusAmount;
+        await db.query(
+          `UPDATE loyalty_bulk_accruals
+           SET audience_count = ?, requested_total_amount = ?
+           WHERE id = ?`,
+          [audienceCount, requestedTotalAmount, accrualId],
+        );
+
+        let successCount = 0;
+        let failedCount = 0;
+        let skippedCount = 0;
+        let actualTotalAmount = 0;
+
+        const nowDate = new Date().toISOString().slice(0, 10);
+
+        for (const user of users) {
+          const userId = Number(user.id);
+          if (!Number.isInteger(userId) || userId <= 0) {
+            continue;
+          }
+
+          try {
+            const [existingRows] = await db.query(
+              `SELECT id, status
+               FROM loyalty_bulk_accrual_recipients
+               WHERE accrual_id = ? AND user_id = ?
+               LIMIT 1`,
+              [accrualId, userId],
+            );
+            if (existingRows.length > 0 && existingRows[0].status === "completed") {
+              skippedCount += 1;
+              continue;
+            }
+
+            const connection = await loyaltyService.getConnection();
+            let adjustmentResult = null;
+            try {
+              await connection.beginTransaction();
+              adjustmentResult = await loyaltyService.applyManualBonusAdjustment({
+                userId,
+                delta: bonusAmount,
+                description: `Массовое начисление: ${accrual.name}`,
+                connection,
+                adminId: req.user.id,
+              });
+              await connection.commit();
+            } catch (error) {
+              await connection.rollback();
+              throw error;
+            } finally {
+              connection.release();
+            }
+
+            const message = renderAccrualMessage(accrual.message_template, {
+              first_name: user.first_name,
+              last_name: user.last_name,
+              bonus_amount: bonusAmount,
+              bonus_balance: Math.floor(Number(adjustmentResult?.balance || 0)),
+              accrual_name: accrual.name,
+              accrual_date: nowDate,
+            });
+            const notifyResult = await sendAccrualNotification({
+              userId,
+              text: message,
+            });
+
+            await db.query(
+              `INSERT INTO loyalty_bulk_accrual_recipients
+               (accrual_id, user_id, status, error_message, transaction_id, notification_status, notification_error, processed_at)
+               VALUES (?, ?, 'completed', NULL, ?, ?, ?, NOW())
+               ON DUPLICATE KEY UPDATE
+                 status = VALUES(status),
+                 error_message = VALUES(error_message),
+                 transaction_id = VALUES(transaction_id),
+                 notification_status = VALUES(notification_status),
+                 notification_error = VALUES(notification_error),
+                 processed_at = VALUES(processed_at),
+                 updated_at = CURRENT_TIMESTAMP`,
+              [
+                accrualId,
+                userId,
+                adjustmentResult?.transaction_id || null,
+                notifyResult.status,
+                notifyResult.error || null,
+              ],
+            );
+
+            successCount += 1;
+            actualTotalAmount += bonusAmount;
+          } catch (error) {
+            failedCount += 1;
+            await db.query(
+              `INSERT INTO loyalty_bulk_accrual_recipients
+               (accrual_id, user_id, status, error_message, notification_status, processed_at)
+               VALUES (?, ?, 'failed', ?, 'skipped', NOW())
+               ON DUPLICATE KEY UPDATE
+                 status = VALUES(status),
+                 error_message = VALUES(error_message),
+                 notification_status = VALUES(notification_status),
+                 processed_at = VALUES(processed_at),
+                 updated_at = CURRENT_TIMESTAMP`,
+              [accrualId, userId, String(error?.message || "Ошибка начисления")],
+            );
+          }
+        }
+
+        const finalStatus = failedCount > 0 && successCount === 0 ? "failed" : "completed";
+        await db.query(
+          `UPDATE loyalty_bulk_accruals
+           SET status = ?, success_count = ?, failed_count = ?, skipped_count = ?, actual_total_amount = ?, completed_at = NOW()
+           WHERE id = ?`,
+          [finalStatus, successCount, failedCount, skippedCount, actualTotalAmount, accrualId],
+        );
+
+        await logger.admin.action(
+          req.user?.id,
+          "loyalty_bulk_accrual_start",
+          "loyalty_bulk_accruals",
+          accrualId,
+          JSON.stringify({
+            audience_count: audienceCount,
+            success_count: successCount,
+            failed_count: failedCount,
+            skipped_count: skippedCount,
+            bonus_amount: bonusAmount,
+          }),
+          req,
+        );
+
+        return res.json({
+          id: accrualId,
+          status: finalStatus,
+          audience_count: audienceCount,
+          success_count: successCount,
+          failed_count: failedCount,
+          skipped_count: skippedCount,
+          requested_total_amount: requestedTotalAmount,
+          actual_total_amount: actualTotalAmount,
+        });
+      } catch (error) {
+        next(error);
+      }
+    },
+
+    async listBulkAccruals(req, res, next) {
+      try {
+        const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 20));
+        const offset = Math.max(0, Number(req.query.offset) || 0);
+
+        const [rows] = await db.query(
+          `SELECT a.id, a.name, a.status, a.bonus_amount, a.audience_count, a.success_count, a.failed_count, a.skipped_count,
+                  a.requested_total_amount, a.actual_total_amount, a.created_by, a.started_at, a.completed_at, a.created_at, a.updated_at,
+                  au.first_name as created_by_first_name, au.last_name as created_by_last_name
+           FROM loyalty_bulk_accruals a
+           LEFT JOIN admin_users au ON au.id = a.created_by
+           ORDER BY a.created_at DESC
+           LIMIT ? OFFSET ?`,
+          [limit, offset],
+        );
+
+        return res.json({ items: rows });
+      } catch (error) {
+        next(error);
+      }
+    },
+
+    async getBulkAccrual(req, res, next) {
+      try {
+        const accrualId = Number(req.params.id);
+        if (!Number.isInteger(accrualId) || accrualId <= 0) {
+          return res.status(400).json({ error: "Некорректный id операции" });
+        }
+
+        const [rows] = await db.query(
+          `SELECT a.id, a.name, a.status, a.segment_config, a.bonus_amount, a.message_template,
+                  a.audience_count, a.success_count, a.failed_count, a.skipped_count,
+                  a.requested_total_amount, a.actual_total_amount, a.created_by,
+                  a.started_at, a.completed_at, a.created_at, a.updated_at,
+                  au.first_name as created_by_first_name, au.last_name as created_by_last_name
+           FROM loyalty_bulk_accruals a
+           LEFT JOIN admin_users au ON au.id = a.created_by
+           WHERE a.id = ?
+           LIMIT 1`,
+          [accrualId],
+        );
+        if (!rows.length) {
+          return res.status(404).json({ error: "Операция массового начисления не найдена" });
+        }
+
+        const item = rows[0];
+        if (typeof item.segment_config === "string") {
+          try {
+            item.segment_config = JSON.parse(item.segment_config);
+          } catch (parseError) {
+            item.segment_config = null;
+          }
+        }
+
+        return res.json({ item });
+      } catch (error) {
+        next(error);
+      }
+    },
+
+    async listBulkAccrualRecipients(req, res, next) {
+      try {
+        const accrualId = Number(req.params.id);
+        if (!Number.isInteger(accrualId) || accrualId <= 0) {
+          return res.status(400).json({ error: "Некорректный id операции" });
+        }
+        const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 50));
+        const offset = Math.max(0, Number(req.query.offset) || 0);
+        const status = String(req.query.status || "").trim();
+
+        const whereClauses = ["r.accrual_id = ?"];
+        const params = [accrualId];
+        if (status) {
+          whereClauses.push("r.status = ?");
+          params.push(status);
+        }
+
+        params.push(limit, offset);
+        const [rows] = await db.query(
+          `SELECT r.id, r.user_id, r.status, r.error_message, r.transaction_id, r.notification_status, r.notification_error, r.processed_at, r.created_at,
+                  u.first_name, u.last_name, u.phone
+           FROM loyalty_bulk_accrual_recipients r
+           LEFT JOIN users u ON u.id = r.user_id
+           WHERE ${whereClauses.join(" AND ")}
+           ORDER BY r.id DESC
+           LIMIT ? OFFSET ?`,
+          params,
+        );
+
+        return res.json({ items: rows });
       } catch (error) {
         next(error);
       }

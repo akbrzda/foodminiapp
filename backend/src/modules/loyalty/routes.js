@@ -23,6 +23,42 @@ export function createLoyaltyRoutes({ clientController, adminController }) {
     adminController.toggle,
   );
   adminRouter.post("/adjust", authenticateToken, requirePermission("clients.loyalty.adjust"), adminController.adjust);
+  adminRouter.post(
+    "/accruals/calculate",
+    authenticateToken,
+    requirePermission("system.loyalty_levels.manage"),
+    adminController.calculateBulkAccrualAudience,
+  );
+  adminRouter.get(
+    "/accruals",
+    authenticateToken,
+    requirePermission("system.loyalty_levels.manage"),
+    adminController.listBulkAccruals,
+  );
+  adminRouter.post(
+    "/accruals",
+    authenticateToken,
+    requirePermission("system.loyalty_levels.manage"),
+    adminController.createBulkAccrual,
+  );
+  adminRouter.get(
+    "/accruals/:id",
+    authenticateToken,
+    requirePermission("system.loyalty_levels.manage"),
+    adminController.getBulkAccrual,
+  );
+  adminRouter.post(
+    "/accruals/:id/start",
+    authenticateToken,
+    requirePermission("system.loyalty_levels.manage"),
+    adminController.startBulkAccrual,
+  );
+  adminRouter.get(
+    "/accruals/:id/recipients",
+    authenticateToken,
+    requirePermission("system.loyalty_levels.manage"),
+    adminController.listBulkAccrualRecipients,
+  );
   adminRouter.get("/levels", authenticateToken, requirePermission("system.loyalty_levels.manage"), adminController.getLevels);
   adminRouter.put("/levels", authenticateToken, requirePermission("system.loyalty_levels.manage"), adminController.saveLevels);
   adminRouter.get(

@@ -76,7 +76,7 @@ export async function processPremiumBonusClientSync(userId, source = "queue") {
       email: email || undefined,
     };
 
-    const sendProfilePayloadWithFallback = async (mode) => {
+    const sendProfilePayload = async (mode) => {
       const method = mode === "edit" ? "editBuyer" : "registerBuyer";
       const fallbackMessage =
         mode === "edit"
@@ -118,10 +118,10 @@ export async function processPremiumBonusClientSync(userId, source = "queue") {
     const buyerFound = isPremiumBonusBuyerFound(info);
 
     if (buyerFound) {
-      responsePayload = await sendProfilePayloadWithFallback("edit");
+      responsePayload = await sendProfilePayload("edit");
       pbClientId = pbClientId || extractPremiumBonusClientId(responsePayload);
     } else {
-      const registration = await sendProfilePayloadWithFallback("register");
+      const registration = await sendProfilePayload("register");
       pbClientId = pbClientId || extractPremiumBonusClientId(registration);
       responsePayload = registration;
     }

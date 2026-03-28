@@ -786,6 +786,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/shared/components/ui/dialog/index.js";
 import { useAuthStore } from "@/shared/stores/auth.js";
 import { formatNumberWithCurrency } from "@/shared/utils/format.js";
+import { useQueryTab } from "@/shared/composables/useQueryTab.js";
 
 const { showErrorNotification, showSuccessNotification } = useNotifications();
 const authStore = useAuthStore();
@@ -793,7 +794,10 @@ const canManageIntegrations = computed(() => authStore.hasPermission("system.int
 
 const loading = ref(false);
 const settingsLoaded = ref(false);
-const activeTab = ref("iiko");
+const activeTab = useQueryTab({
+  defaultValue: "iiko",
+  allowedValues: ["iiko", "premiumbonus", "status", "queues", "logs"],
+});
 const saving = ref(false);
 const retryLoading = ref(false);
 const overviewLoading = ref(false);
