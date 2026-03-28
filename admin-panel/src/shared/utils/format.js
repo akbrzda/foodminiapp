@@ -1,11 +1,48 @@
-export function formatCurrency(value) {
+let activeCurrencyCode = "RUB";
+
+export function normalizeCurrencyCode(value, fallback = "RUB") {
+  const normalized = String(value || "")
+    .trim()
+    .toUpperCase();
+  if (normalized === "UZBS") return "UZS";
+  if (["RUB", "USD", "TJS", "KZT", "KGS", "UZS"].includes(normalized)) return normalized;
+  return fallback;
+}
+
+export function setActiveCurrencyCode(value) {
+  activeCurrencyCode = normalizeCurrencyCode(value, "RUB");
+}
+
+export function getActiveCurrencyCode() {
+  return activeCurrencyCode;
+}
+
+export function getCurrencySymbol(value = activeCurrencyCode) {
+  const code = normalizeCurrencyCode(value, "RUB");
+  const symbols = {
+    RUB: "₽",
+    USD: "$",
+    TJS: "TJS",
+    KZT: "₸",
+    KGS: "KGS",
+    UZS: "UZS",
+  };
+  return symbols[code] || "₽";
+}
+
+export function formatCurrency(value, currencyCode = activeCurrencyCode) {
   const number = Number(value || 0);
+  const normalizedCurrencyCode = normalizeCurrencyCode(currencyCode, "RUB");
   return new Intl.NumberFormat("ru-RU", {
     style: "currency",
-    currency: "RUB",
+    currency: normalizedCurrencyCode,
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   }).format(number);
+}
+
+export function formatNumberWithCurrency(value, currencyCode = activeCurrencyCode) {
+  return `${formatNumber(value)} ${getCurrencySymbol(currencyCode)}`;
 }
 
 export function normalizePaymentMethodKey(value) {

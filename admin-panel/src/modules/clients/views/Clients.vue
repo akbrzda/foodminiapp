@@ -230,7 +230,7 @@ import api from "@/shared/api/client.js";
 import { useReferenceStore } from "@/shared/stores/reference.js";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
 import { useListContext } from "@/shared/composables/useListContext.js";
-import { formatCurrency, formatNumber, formatPhone, normalizePhone } from "@/shared/utils/format.js";
+import { formatCurrency, formatNumber, formatPhone, getCurrencySymbol, normalizePhone } from "@/shared/utils/format.js";
 import Badge from "@/shared/components/ui/badge/Badge.vue";
 import Button from "@/shared/components/ui/button/Button.vue";
 import Card from "@/shared/components/ui/card/Card.vue";
@@ -255,10 +255,11 @@ const router = useRouter();
 
 const { shouldRestore, saveContext, restoreContext, restoreScroll } = useListContext("clients");
 
+const currencySymbol = getCurrencySymbol();
 const rangeMeta = {
   orders_count: { label: "Всего заказов: шт", from: "orders_count_from", to: "orders_count_to" },
-  total_orders_sum: { label: "Сумма заказов: ₽", from: "total_orders_sum_from", to: "total_orders_sum_to" },
-  avg_check: { label: "Средний чек: ₽", from: "avg_check_from", to: "avg_check_to" },
+  total_orders_sum: { label: `Сумма заказов: ${currencySymbol}`, from: "total_orders_sum_from", to: "total_orders_sum_to" },
+  avg_check: { label: `Средний чек: ${currencySymbol}`, from: "avg_check_from", to: "avg_check_to" },
   loyalty_balance: { label: "Всего баллов", from: "loyalty_balance_from", to: "loyalty_balance_to" },
   last_order_days: { label: "Последний заказ: дней", from: "last_order_days_from", to: "last_order_days_to" },
 };

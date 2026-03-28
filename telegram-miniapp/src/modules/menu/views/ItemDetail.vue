@@ -76,7 +76,9 @@
             @click="selectVariant(variant)"
           >
             <span class="variant-name">{{ variant.name }}</span>
-            <span class="variant-price">{{ isVariantUnavailable(variant) ? "Недоступно" : `${formatPrice(variant.price)} ₽` }}</span>
+            <span class="variant-price">{{
+              isVariantUnavailable(variant) ? "Недоступно" : formatPriceWithCurrency(variant.price, settingsStore.currencyCode)
+            }}</span>
           </button>
         </div>
       </div>
@@ -115,7 +117,7 @@
                 <Minus size="12" />
               </button>
               <span v-else class="modifier-ctrl-placeholder"></span>
-              <span class="modifier-card-price">{{ formatPrice(getModifierPrice(modifier)) }} ₽</span>
+              <span class="modifier-card-price">{{ formatPriceWithCurrency(getModifierPrice(modifier), settingsStore.currencyCode) }}</span>
               <button
                 v-if="getModifierCount(group.id, modifier.id) > 0"
                 type="button"
@@ -163,7 +165,7 @@
                 <Minus size="12" />
               </button>
               <span v-else class="modifier-ctrl-placeholder"></span>
-              <span class="modifier-card-price">{{ formatPrice(getModifierPrice(modifier)) }} ₽</span>
+              <span class="modifier-card-price">{{ formatPriceWithCurrency(getModifierPrice(modifier), settingsStore.currencyCode) }}</span>
               <button
                 v-if="getModifierCount(group.id, modifier.id) > 0"
                 type="button"
@@ -184,13 +186,13 @@
       <div class="footer-content">
         <div v-if="!cartItem" class="add-button-wrapper">
           <button class="add-to-cart-btn action-btn btn-primary" :disabled="!canAddToCart" @click="addToCart">
-            {{ canAddToCart ? `Добавить за ${formatPrice(totalPrice)} ₽` : addDisabledReason }}
+            {{ canAddToCart ? `Добавить за ${formatPriceWithCurrency(totalPrice, settingsStore.currencyCode)}` : addDisabledReason }}
           </button>
         </div>
         <div v-else class="quantity-button-wrapper">
           <button class="qty-btn" aria-label="Уменьшить количество" :disabled="!canOrder" @click="decreaseQuantity"><Minus size="12" /></button>
           <div class="qty-info">
-            <span class="qty-price"> {{ formatPrice(cartItem.totalPrice) }} ₽ × {{ cartItem.quantity }} </span>
+            <span class="qty-price"> {{ formatPriceWithCurrency(cartItem.totalPrice, settingsStore.currencyCode) }} × {{ cartItem.quantity }} </span>
           </div>
           <button class="qty-btn" aria-label="Увеличить количество" :disabled="!canOrder" @click="increaseQuantity"><Plus size="12" /></button>
         </div>
@@ -234,7 +236,7 @@ import { useSettingsStore } from "@/modules/settings/stores/settings.js";
 import { useKeyboardHandler } from "@/shared/composables/useKeyboardHandler";
 import { menuAPI } from "@/shared/api/endpoints.js";
 import { hapticFeedback } from "@/shared/services/telegram.js";
-import { formatPrice, normalizeImageUrl } from "@/shared/utils/format";
+import { formatPrice, formatPriceWithCurrency, normalizeImageUrl } from "@/shared/utils/format";
 import { formatModifierWeight, formatWeight, formatWeightValue } from "@/shared/utils/weight";
 import { devError } from "@/shared/utils/logger.js";
 const route = useRoute();

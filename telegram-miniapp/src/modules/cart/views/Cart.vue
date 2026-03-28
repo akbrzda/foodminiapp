@@ -18,7 +18,7 @@
               <div class="modifiers" v-if="getModifierSummary(item).length">
                 <div class="modifier">{{ getModifierSummary(item).join(", ") }}</div>
               </div>
-              <div class="price">{{ getItemTotalPrice(item) }} ₽</div>
+              <div class="price">{{ formatPriceWithCurrency(getItemTotalPrice(item), settingsStore.currencyCode) }}</div>
             </div>
             <div class="quantity-controls">
               <button aria-label="Уменьшить количество" @click="decreaseQuantity(index)">-</button>
@@ -48,26 +48,30 @@
         <div class="summary">
           <div class="summary-row">
             <span>Товары ({{ cartStore.itemsCount }})</span>
-            <span>{{ formatPrice(cartStore.totalPrice) }} ₽</span>
+            <span>{{ formatPriceWithCurrency(cartStore.totalPrice, settingsStore.currencyCode) }}</span>
           </div>
           <div class="summary-row" v-if="isDelivery">
             <span>Доставка</span>
-            <span>{{ formatPrice(deliveryCost) }} ₽</span>
+            <span>{{ formatPriceWithCurrency(deliveryCost, settingsStore.currencyCode) }}</span>
           </div>
           <div class="summary-row bonus-discount" v-if="appliedBonusToUse > 0">
             <span>Бонусы</span>
-            <span class="discount">-{{ formatPrice(appliedBonusToUse) }} ₽</span>
+            <span class="discount">-{{ formatPriceWithCurrency(appliedBonusToUse, settingsStore.currencyCode) }}</span>
           </div>
           <div class="summary-row total">
             <span>Итого</span>
-            <span>{{ formatPrice(finalCartTotal) }} ₽</span>
+            <span>{{ formatPriceWithCurrency(finalCartTotal, settingsStore.currencyCode) }}</span>
           </div>
-          <div class="summary-warning" v-if="isDelivery && !isMinOrderReached">Минимальная сумма заказа: {{ formatPrice(minOrderAmount) }} ₽</div>
+          <div v-if="isDelivery && !isMinOrderReached" class="summary-warning">
+            Минимальная сумма заказа: {{ formatPriceWithCurrency(minOrderAmount, settingsStore.currencyCode) }}
+          </div>
         </div>
         <div class="delivery-tariff-widget" v-if="isDelivery && deliveryTariffs.length >= 2">
           <div class="tariff-title">Стоимость доставки</div>
           <div v-if="deliveryCost === 0" class="tariff-subtitle">У вас бесплатная доставка</div>
-          <div v-else class="tariff-subtitle">Добавьте еще на {{ formatPrice(nextThreshold?.delta || 0) }} ₽, чтобы снизить стоимость доставки</div>
+          <div v-else class="tariff-subtitle">
+            Добавьте еще на {{ formatPriceWithCurrency(nextThreshold?.delta || 0, settingsStore.currencyCode) }}, чтобы снизить стоимость доставки
+          </div>
           <div class="tariff-pills">
             <div
               v-for="(tariff, index) in normalizedTariffs"
@@ -75,7 +79,7 @@
               class="tariff-pill"
               :class="{ free: tariff.delivery_cost === 0, current: isCurrentTariff(tariff) }"
             >
-              <span>{{ formatPrice(tariff.delivery_cost) }} ₽</span>
+              <span>{{ formatPriceWithCurrency(tariff.delivery_cost, settingsStore.currencyCode) }}</span>
             </div>
           </div>
         </div>
@@ -100,7 +104,9 @@
               <div class="upsell-body">
                 <div class="upsell-name">{{ item.name }}</div>
                 <div class="upsell-weight">{{ getItemWeight(item) || " " }}</div>
-                <button class="upsell-btn" type="button" @click="handleUpsellAction(item)">{{ formatPrice(item.price) }} ₽</button>
+                <button class="upsell-btn" type="button" @click="handleUpsellAction(item)">
+                  {{ formatPriceWithCurrency(item.price, settingsStore.currencyCode) }}
+                </button>
               </div>
             </div>
           </div>
@@ -115,7 +121,9 @@
             <X :size="18" />
           </button>
         </div>
-        <div class="bonus-modal-subtitle">Доступно к списанию до {{ maxRedeemPercentLabel }}% от {{ formatPrice(cartStore.totalPrice) }} ₽.</div>
+        <div class="bonus-modal-subtitle">
+          Доступно к списанию до {{ maxRedeemPercentLabel }}% от {{ formatPriceWithCurrency(cartStore.totalPrice, settingsStore.currencyCode) }}.
+        </div>
         <FloatingField
           v-model="partialBonusInput"
           label="Введите сумму"
@@ -149,7 +157,7 @@ import { useSettingsStore } from "@/modules/settings/stores/settings.js";
 import { useKeyboardHandler } from "@/shared/composables/useKeyboardHandler";
 import { hapticFeedback, showAlert } from "@/shared/services/telegram.js";
 import { bonusesAPI, addressesAPI, citiesAPI, menuAPI } from "@/shared/api/endpoints.js";
-import { formatPrice, normalizeImageUrl } from "@/shared/utils/format";
+import { formatPrice, formatPriceWithCurrency, normalizeImageUrl } from "@/shared/utils/format";
 import { formatWeight, formatWeightValue } from "@/shared/utils/weight";
 import { calculateDeliveryCost, getThresholds, normalizeTariffs, findTariffForAmount } from "@/shared/utils/deliveryTariffs";
 import { getBranchOpenState } from "@/shared/utils/workingHours";
@@ -310,9 +318,9 @@ function getItemTotalPrice(item) {
   const total = price * quantity;
   if (isNaN(total)) {
     devError("Некорректный расчёт цены:", { item, price, quantity, total });
-    return "0";
+    return 0;
   }
-  return formatPrice(total);
+  return total;
 }
 function increaseQuantity(index) {
   hapticFeedback("light");
@@ -593,7 +601,9 @@ watch(
     const beforeCost = hasDeliveryTariffs.value ? calculateDeliveryCost(deliveryTariffs.value, beforeAmount) : fallbackDeliveryCost.value;
     const afterCost = hasDeliveryTariffs.value ? calculateDeliveryCost(deliveryTariffs.value, afterAmount) : fallbackDeliveryCost.value;
     if (afterCost > beforeCost) {
-      showAlert(`Внимание! После списания бонусов стоимость доставки изменится с ${beforeCost} ₽ на ${afterCost} ₽`);
+      showAlert(
+        `Внимание! После списания бонусов стоимость доставки изменится с ${formatPriceWithCurrency(beforeCost, settingsStore.currencyCode)} на ${formatPriceWithCurrency(afterCost, settingsStore.currencyCode)}`,
+      );
     }
     bonusChangeRequested.value = false;
   },

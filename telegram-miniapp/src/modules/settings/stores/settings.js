@@ -10,6 +10,7 @@ const DEFAULT_SETTINGS = {
   pickup_enabled: true,
   menu_badges_enabled: true,
   menu_cards_layout: "horizontal",
+  site_currency: "RUB",
 };
 const normalizeBoolean = (value, fallback) => {
   if (typeof value === "boolean") return value;
@@ -30,6 +31,22 @@ const normalizeMenuLayout = (value, fallback = "horizontal") => {
   const normalized = String(value || "").trim().toLowerCase();
   return normalized === "vertical" ? "vertical" : fallback;
 };
+const normalizeSiteCurrency = (value, fallback = "RUB") => {
+  const normalized = String(value || "")
+    .trim()
+    .toUpperCase();
+  if (normalized === "UZBS") return "UZS";
+  if (["RUB", "USD", "TJS", "KZT", "KGS", "UZS"].includes(normalized)) return normalized;
+  return fallback;
+};
+const CURRENCY_SYMBOLS = {
+  RUB: "₽",
+  USD: "$",
+  TJS: "TJS",
+  KZT: "₸",
+  KGS: "KGS",
+  UZS: "UZS",
+};
 
 export const useSettingsStore = defineStore("settings", {
   state: () => ({
@@ -44,6 +61,8 @@ export const useSettingsStore = defineStore("settings", {
     pickupEnabled: (state) => state.pickup_enabled,
     menuBadgesEnabled: (state) => state.menu_badges_enabled,
     menuCardsLayout: (state) => state.menu_cards_layout,
+    currencyCode: (state) => normalizeSiteCurrency(state.site_currency, "RUB"),
+    currencySymbol: (state) => CURRENCY_SYMBOLS[normalizeSiteCurrency(state.site_currency, "RUB")] || "₽",
   },
   actions: {
     applySettings(settings) {
@@ -54,6 +73,8 @@ export const useSettingsStore = defineStore("settings", {
             this[key] = normalizeBoolean(payload[key], DEFAULT_SETTINGS[key]);
           } else if (key === "menu_cards_layout") {
             this[key] = normalizeMenuLayout(payload[key], DEFAULT_SETTINGS[key]);
+          } else if (key === "site_currency") {
+            this[key] = normalizeSiteCurrency(payload[key], DEFAULT_SETTINGS[key]);
           } else if (typeof DEFAULT_SETTINGS[key] === "string") {
             this[key] = typeof payload[key] === "string" ? payload[key] : DEFAULT_SETTINGS[key];
           } else {

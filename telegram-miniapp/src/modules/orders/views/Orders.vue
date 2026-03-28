@@ -30,7 +30,7 @@
               <Store v-else :size="16" />
               {{ order.order_type === "delivery" ? "Доставка" : "Самовывоз" }}
             </div>
-            <div class="order-total">{{ formatPrice(order.total_amount) }} ₽</div>
+            <div class="order-total">{{ formatPriceWithCurrency(order.total_amount, settingsStore.currencyCode) }}</div>
           </div>
         </div>
       </div>
@@ -45,10 +45,12 @@ import PageHeader from "@/shared/components/PageHeader.vue";
 import { ordersAPI } from "@/shared/api/endpoints.js";
 import { hapticFeedback } from "@/shared/services/telegram.js";
 import { wsService } from "@/shared/services/websocket.js";
-import { formatPrice } from "@/shared/utils/format";
+import { formatPriceWithCurrency } from "@/shared/utils/format";
 import { formatCalendarDateTime } from "@/shared/utils/date";
 import { devError } from "@/shared/utils/logger.js";
+import { useSettingsStore } from "@/modules/settings/stores/settings.js";
 const router = useRouter();
+const settingsStore = useSettingsStore();
 const orders = ref([]);
 const loading = ref(false);
 let statusUpdateHandler = null;

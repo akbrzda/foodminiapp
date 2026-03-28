@@ -84,7 +84,7 @@
                   :class="tariff.delivery_cost === 0 ? 'border-emerald-400 text-emerald-500' : 'border-border text-muted-foreground'"
                 >
                   <span v-if="tariff.ellipsis">• • •</span>
-                  <span v-else>{{ tariff.delivery_cost }} ₽</span>
+                  <span v-else>{{ formatNumberWithCurrency(tariff.delivery_cost) }}</span>
                 </div>
               </div>
             </div>
@@ -99,13 +99,13 @@
               </Button>
             </div>
             <Field>
-              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Мин. заказ (₽)</FieldLabel>
+              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Мин. заказ ({{ currencySymbol }})</FieldLabel>
               <FieldContent>
                 <Input v-model.number="form.min_order_amount" type="number" min="0" />
               </FieldContent>
             </Field>
             <Field>
-              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Доставка (₽)</FieldLabel>
+              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Доставка ({{ currencySymbol }})</FieldLabel>
               <FieldContent>
                 <Input v-model.number="form.delivery_cost" type="number" min="0" />
               </FieldContent>
@@ -150,10 +150,12 @@ import PageHeader from "@/shared/components/PageHeader.vue";
 import { Field, FieldContent, FieldGroup, FieldLabel } from "@/shared/components/ui/field";
 import DeliveryTariffEditorDialog from "@/modules/delivery/components/DeliveryTariffEditorDialog.vue";
 import DeliveryTariffCopyDialog from "@/modules/delivery/components/DeliveryTariffCopyDialog.vue";
+import { formatNumberWithCurrency, getCurrencySymbol } from "@/shared/utils/format.js";
 
 const MAP_ACCENT = "#ffd200";
 const MAP_ACCENT_FILL = "rgba(255, 210, 0, 0.26)";
 const MAP_MUTED = "rgba(148, 163, 184, 0.24)";
+const currencySymbol = computed(() => getCurrencySymbol());
 
 const isValidLatLng = (lat, lng) => Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
 const calcCenter = (coords = []) => {

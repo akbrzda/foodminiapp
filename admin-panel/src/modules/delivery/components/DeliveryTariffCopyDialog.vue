@@ -24,8 +24,8 @@
           <div class="bg-muted/40 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Предпросмотр</div>
           <div class="divide-y divide-border">
             <div v-for="(tariff, index) in preview" :key="index" class="flex items-center justify-between px-4 py-2 text-sm">
-              <span>От {{ tariff.amount_from }} ₽ до {{ tariff.amount_to ?? "∞" }} ₽</span>
-              <span class="font-medium">{{ tariff.delivery_cost }} ₽</span>
+              <span>От {{ formatNumberWithCurrency(tariff.amount_from) }} до {{ tariff.amount_to === null ? "∞" : formatNumberWithCurrency(tariff.amount_to) }}</span>
+              <span class="font-medium">{{ formatNumberWithCurrency(tariff.delivery_cost) }}</span>
             </div>
           </div>
         </div>
@@ -47,6 +47,7 @@ import Button from "@/shared/components/ui/button/Button.vue";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/shared/components/ui/dialog/index.js";
 import { Label } from "@/shared/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/components/ui/select";
+import { formatNumberWithCurrency } from "@/shared/utils/format.js";
 
 const props = defineProps({
   open: Boolean,

@@ -677,6 +677,7 @@ import { useNotifications } from "@/shared/composables/useNotifications.js";
 import { useReferenceStore } from "@/shared/stores/reference.js";
 import { useOrdersStore } from "@/modules/orders/stores/orders.js";
 import { useAuthStore } from "@/shared/stores/auth.js";
+import { formatNumberWithCurrency } from "@/shared/utils/format.js";
 const router = useRouter();
 const route = useRoute();
 const referenceStore = useReferenceStore();
@@ -863,9 +864,7 @@ const getVariantImagePreview = (variant, index) => {
   return state.preview || variant?.image_url || "";
 };
 const formatPrice = (value) => {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) return "0 ₽";
-  return `${numeric.toFixed(0)} ₽`;
+  return formatNumberWithCurrency(value);
 };
 const getBaseItemPrice = () => {
   // Если у блюда есть базовая цена в форме (для блюд без вариантов)

@@ -76,15 +76,17 @@
 
           <div class="progress-card">
             <div class="progress-values">
-              <span>{{ formatPrice(totalSpent) }} ₽</span>
+              <span>{{ formatPriceWithCurrency(totalSpent, settingsStore.currencyCode) }}</span>
               <span>/</span>
-              <span v-if="nextLevel">{{ formatPrice(nextLevel.min) }} ₽</span>
+              <span v-if="nextLevel">{{ formatPriceWithCurrency(nextLevel.min, settingsStore.currencyCode) }}</span>
               <span v-else>∞</span>
             </div>
             <div class="progress-bar">
               <span class="progress-fill" :style="{ width: `${progressPercent}%` }"></span>
             </div>
-            <div class="progress-caption" v-if="nextLevel">До обновления статуса — {{ formatPrice(amountToNextLevel) }} ₽ за всё время</div>
+            <div v-if="nextLevel" class="progress-caption">
+              До обновления статуса — {{ formatPriceWithCurrency(amountToNextLevel, settingsStore.currencyCode) }} за всё время
+            </div>
             <div class="progress-caption" v-else>У вас максимальный статус</div>
           </div>
 
@@ -112,7 +114,7 @@
           <div v-if="expiringBonuses.length > 0" class="expiring-section">
             <div class="expiring-list">
               <div v-for="bonus in expiringBonuses" :key="bonus.id" class="expiring-item">
-                <span class="expiring-amount">{{ formatPrice(bonus.amount) }} ₽</span>
+                <span class="expiring-amount">{{ formatPriceWithCurrency(bonus.amount, settingsStore.currencyCode) }}</span>
                 <span class="expiring-date">{{ formatDateShort(bonus.expires_at) }}</span>
                 <span class="expiring-days" :class="{ urgent: bonus.days_left <= 3 }">{{ bonus.days_left }} дн.</span>
               </div>
@@ -149,7 +151,7 @@
                       { 'transaction-text--muted': isPendingEarn(transaction) },
                     ]"
                   >
-                    Акционные: {{ getPromoSign(transaction.type) }}{{ formatPrice(getPromoAmount(transaction)) }} ₽
+                    Акционные: {{ getPromoSign(transaction.type) }}{{ formatPriceWithCurrency(getPromoAmount(transaction), settingsStore.currencyCode) }}
                   </div>
                   <div v-if="isPendingEarn(transaction)" class="transaction-pending">
                     Активация через {{ getActivationCountdown(transaction) }}
@@ -158,7 +160,7 @@
                   <div v-else-if="transaction.expires_at && new Date(transaction.expires_at) < new Date()" class="transaction-expired">Истек</div>
                 </div>
                 <div class="transaction-amount" :class="[getTransactionClass(transaction.type), { muted: isPendingEarn(transaction) }]">
-                  {{ getTransactionSign(transaction.type) }}{{ formatPrice(Math.abs(transaction.amount)) }} ₽
+                  {{ getTransactionSign(transaction.type) }}{{ formatPriceWithCurrency(Math.abs(transaction.amount), settingsStore.currencyCode) }}
                 </div>
               </div>
               <button v-if="historyHasMore" class="history-more" type="button" :disabled="loadingMore" @click="loadMoreHistory">
@@ -175,7 +177,7 @@
 import { computed, ref, onMounted, onBeforeUnmount } from "vue";
 import { X, Plus, Minus, Award } from "lucide-vue-next";
 import { bonusesAPI } from "@/shared/api/endpoints.js";
-import { formatPrice } from "@/shared/utils/format";
+import { formatPrice, formatPriceWithCurrency } from "@/shared/utils/format";
 import { formatCalendarDateTime, formatDate as formatDateByTz } from "@/shared/utils/date";
 import { useLoyaltyStore } from "@/modules/loyalty/stores/loyalty.js";
 import { useSettingsStore } from "@/modules/settings/stores/settings.js";
@@ -211,7 +213,9 @@ const formattedLevels = computed(() =>
     ...level,
     rateLabel: Math.round(level.rate * 100),
     redeemLabel: Math.round((level.redeemPercent ?? loyaltyStore.fallbackRedeemPercent) * 100),
-    rangeLabel: Number.isFinite(level.max) ? `${formatPrice(level.min)} ₽ – ${formatPrice(level.max)} ₽` : `от ${formatPrice(level.min)} ₽`,
+    rangeLabel: Number.isFinite(level.max)
+      ? `${formatPriceWithCurrency(level.min, settingsStore.currencyCode)} – ${formatPriceWithCurrency(level.max, settingsStore.currencyCode)}`
+      : `от ${formatPriceWithCurrency(level.min, settingsStore.currencyCode)}`,
   })),
 );
 const levelsPopup = ref({ open: false });

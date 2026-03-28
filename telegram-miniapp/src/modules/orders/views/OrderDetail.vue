@@ -43,14 +43,14 @@
                 {{ item.item_name }}
                 <span v-if="item.variant_name" class="variant">({{ item.variant_name }})</span>
               </div>
-              <div class="item-qty">× {{ item.quantity }} • {{ formatPrice(item.item_price) }} ₽</div>
+              <div class="item-qty">× {{ item.quantity }} • {{ formatPriceWithCurrency(item.item_price, settingsStore.currencyCode) }}</div>
               <div v-if="item.modifiers && item.modifiers.length > 0" class="item-modifiers">
                 <div v-for="mod in item.modifiers" :key="mod.id" class="modifier">
-                  + {{ mod.modifier_name }} (+{{ formatPrice(mod.modifier_price) }} ₽)
+                  + {{ mod.modifier_name }} (+{{ formatPriceWithCurrency(mod.modifier_price, settingsStore.currencyCode) }})
                 </div>
               </div>
             </div>
-            <div class="item-price">{{ formatPrice(item.subtotal) }} ₽</div>
+            <div class="item-price">{{ formatPriceWithCurrency(item.subtotal, settingsStore.currencyCode) }}</div>
           </div>
         </div>
         <div v-else class="empty-state">Заказ пуст</div>
@@ -75,11 +75,11 @@
         <h3>Итого</h3>
         <div class="total-row">
           <span>Сумма заказа</span>
-          <span>{{ formatPrice(order.subtotal) }} ₽</span>
+          <span>{{ formatPriceWithCurrency(order.subtotal, settingsStore.currencyCode) }}</span>
         </div>
         <div class="total-row" v-if="order.delivery_cost > 0">
           <span>Доставка</span>
-          <span>{{ formatPrice(order.delivery_cost) }} ₽</span>
+          <span>{{ formatPriceWithCurrency(order.delivery_cost, settingsStore.currencyCode) }}</span>
         </div>
         <div class="total-row" v-if="order.bonus_spent > 0">
           <span>Списано бонусов</span>
@@ -95,7 +95,7 @@
         </div>
         <div class="total-row final">
           <span>К оплате</span>
-          <span>{{ formatPrice(order.total) }} ₽</span>
+          <span>{{ formatPriceWithCurrency(order.total, settingsStore.currencyCode) }}</span>
         </div>
       </div>
       <div class="actions" v-if="canRepeatOrder">
@@ -114,7 +114,7 @@ import { useRoute, useRouter } from "vue-router";
 import { useCartStore } from "@/modules/cart/stores/cart.js";
 import { useSettingsStore } from "@/modules/settings/stores/settings.js";
 import { ordersAPI } from "@/shared/api/endpoints.js";
-import { formatPaymentMethod, formatPrice } from "@/shared/utils/format";
+import { formatPaymentMethod, formatPrice, formatPriceWithCurrency } from "@/shared/utils/format";
 import { hapticFeedback } from "@/shared/services/telegram.js";
 import { wsService } from "@/shared/services/websocket.js";
 import { devError } from "@/shared/utils/logger.js";

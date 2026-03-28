@@ -12,6 +12,32 @@ export function formatPrice(value) {
     .replace(/(\.\d)0$/, "$1");
 }
 
+export function normalizeCurrencyCode(value, fallback = "RUB") {
+  const normalized = String(value || "")
+    .trim()
+    .toUpperCase();
+  if (normalized === "UZBS") return "UZS";
+  if (["RUB", "USD", "TJS", "KZT", "KGS", "UZS"].includes(normalized)) return normalized;
+  return fallback;
+}
+
+export function getCurrencySymbol(currencyCode) {
+  const normalized = normalizeCurrencyCode(currencyCode);
+  const symbols = {
+    RUB: "₽",
+    USD: "$",
+    TJS: "TJS",
+    KZT: "₸",
+    KGS: "KGS",
+    UZS: "UZS",
+  };
+  return symbols[normalized] || "₽";
+}
+
+export function formatPriceWithCurrency(value, currencyCode) {
+  return `${formatPrice(value)} ${getCurrencySymbol(currencyCode)}`;
+}
+
 export function normalizePaymentMethodKey(value) {
   const key = String(value || "")
     .trim()

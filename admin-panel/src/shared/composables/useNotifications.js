@@ -1,6 +1,7 @@
 import { ref } from "vue";
 import { toast } from "vue-sonner";
 import { devError, devWarn } from "@/shared/utils/logger";
+import { formatCurrency } from "@/shared/utils/format";
 export function useNotifications() {
   const isSupported = typeof window !== "undefined" && "Notification" in window;
   const permission = ref(isSupported ? Notification.permission : "denied");
@@ -75,7 +76,7 @@ export function useNotifications() {
   const showNewOrderNotification = (order) => {
     const type = order.type === "delivery" ? "Доставка" : "Самовывоз";
     const title = `🔔 Новый заказ #${order.order_number}`;
-    const body = `${type} • ${order.total.toLocaleString("ru-RU")}₽\n${order.branch?.name || ""}`;
+    const body = `${type} • ${formatCurrency(order.total)}\n${order.branch?.name || ""}`;
     playSound();
     toast.message(title, { description: body });
     return showNotification(title, {

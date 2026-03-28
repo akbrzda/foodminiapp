@@ -297,13 +297,13 @@
               </FieldContent>
             </Field>
             <Field>
-              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Мин. заказ (₽)</FieldLabel>
+              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Мин. заказ ({{ currencySymbol }})</FieldLabel>
               <FieldContent>
                 <Input v-model.number="form.min_order_amount" type="number" min="0" />
               </FieldContent>
             </Field>
             <Field>
-              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Доставка (₽)</FieldLabel>
+              <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Доставка ({{ currencySymbol }})</FieldLabel>
               <FieldContent>
                 <Input v-model.number="form.delivery_cost" type="number" min="0" />
               </FieldContent>
@@ -453,6 +453,7 @@ import { useNotifications } from "@/shared/composables/useNotifications.js";
 import { useListContext } from "@/shared/composables/useListContext.js";
 import { loadYandexMaps } from "@/shared/services/yandexMaps.js";
 import { buildPolygonBalloonContent } from "@/shared/utils/polygonBalloon.js";
+import { getCurrencySymbol } from "@/shared/utils/format.js";
 
 const MAP_DANGER = "#ef4444";
 const hexToRgba = (hex, alpha) => {
@@ -481,6 +482,7 @@ const { shouldRestore, saveContext, restoreContext, restoreScroll } = useListCon
 const isManager = computed(() => authStore.scopeRole === "manager");
 const canManageDeliveryZones = computed(() => authStore.hasPermission("locations.delivery_zones.manage"));
 const canToggleDeliveryZones = computed(() => authStore.hasAnyPermission(["locations.delivery_zones.manage", "locations.delivery_zones.toggle"]));
+const currencySymbol = computed(() => getCurrencySymbol());
 const cityId = ref("");
 const branchId = ref("");
 const polygonFilterId = ref("");

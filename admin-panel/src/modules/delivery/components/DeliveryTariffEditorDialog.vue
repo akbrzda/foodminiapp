@@ -65,6 +65,7 @@ import { AlertTriangle, Plus, Trash2 } from "lucide-vue-next";
 import Button from "@/shared/components/ui/button/Button.vue";
 import Input from "@/shared/components/ui/input/Input.vue";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/shared/components/ui/dialog/index.js";
+import { getCurrencySymbol } from "@/shared/utils/format.js";
 
 const props = defineProps({
   open: Boolean,
@@ -83,6 +84,7 @@ const props = defineProps({
 });
 
 const emit = defineEmits(["close", "save"]);
+const currencySymbol = getCurrencySymbol();
 
 const localTariffs = ref([]);
 const showValidationErrors = ref(false);
@@ -150,7 +152,7 @@ const validate = (tariffs) => {
   });
   const first = sorted[0];
   if (first && first.amount_from !== 0) {
-    errors.push("Первая ступень должна начинаться с 0 ₽.");
+    errors.push(`Первая ступень должна начинаться с 0 ${currencySymbol}.`);
   }
   const last = sorted[sorted.length - 1];
   if (last && last.amount_to !== null) {

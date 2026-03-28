@@ -112,7 +112,7 @@
                   :class="{ active: changeFrom === amount }"
                   @click="setQuickChange(amount)"
                 >
-                  {{ amount }} ₽
+                  {{ formatPriceWithCurrency(amount, settingsStore.currencyCode) }}
                 </button>
               </div>
               <FloatingField
@@ -142,11 +142,11 @@
         <div class="order-summary">
           <div class="summary-row">
             <span>Сумма</span>
-            <span>{{ formatPrice(summarySubtotal) }} ₽</span>
+            <span>{{ formatPriceWithCurrency(summarySubtotal, settingsStore.currencyCode) }}</span>
           </div>
           <div class="summary-row" v-if="orderType === 'delivery' && deliveryCost > 0">
             <span>Доставка</span>
-            <span>{{ formatPrice(deliveryCost) }} ₽</span>
+            <span>{{ formatPriceWithCurrency(deliveryCost, settingsStore.currencyCode) }}</span>
           </div>
           <div class="summary-row bonus-earn" v-if="bonusesEnabled && bonusesToEarn > 0">
             <span>Будет начислено</span>
@@ -158,14 +158,14 @@
           </div>
           <div class="summary-row total">
             <span>Итого к оплате</span>
-            <span>{{ formatPrice(finalTotalPrice) }} ₽</span>
+            <span>{{ formatPriceWithCurrency(finalTotalPrice, settingsStore.currencyCode) }}</span>
           </div>
         </div>
       </div>
     </div>
     <div class="footer" :class="{ 'hidden-on-keyboard': isKeyboardOpen }" v-if="ordersEnabled && orderType">
       <button class="submit-btn action-btn btn-primary" @click="submitOrder" :disabled="submitting || !canSubmitOrder">
-        {{ submitting ? "Оформление..." : `Оформить заказ • ${formatPrice(finalTotalPrice)} ₽` }}
+        {{ submitting ? "Оформление..." : `Оформить заказ • ${formatPriceWithCurrency(finalTotalPrice, settingsStore.currencyCode)}` }}
       </button>
     </div>
   </div>
@@ -182,7 +182,7 @@ import { useSettingsStore } from "@/modules/settings/stores/settings.js";
 import { useKeyboardHandler } from "@/shared/composables/useKeyboardHandler";
 import { citiesAPI, addressesAPI, ordersAPI, menuAPI, bonusesAPI } from "@/shared/api/endpoints.js";
 import { hapticFeedback, showAlert } from "@/shared/services/telegram.js";
-import { formatPrice } from "@/shared/utils/format";
+import { formatPrice, formatPriceWithCurrency } from "@/shared/utils/format";
 import { calculateDeliveryCost } from "@/shared/utils/deliveryTariffs";
 import { getBranchOpenState, normalizeWorkHours } from "@/shared/utils/workingHours";
 import { devError } from "@/shared/utils/logger.js";
@@ -797,7 +797,7 @@ async function submitOrder() {
       const serverError = error.data.error;
       if (serverError.startsWith("Minimum order amount is")) {
         const amount = serverError.replace("Minimum order amount is", "").trim();
-        errorMessage = `Минимальная сумма заказа ${amount} ₽`;
+        errorMessage = `Минимальная сумма заказа ${amount} ${settingsStore.currencySymbol}`;
       } else {
         errorMessage = errorTranslations[serverError] || serverError;
       }

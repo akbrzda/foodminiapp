@@ -54,11 +54,11 @@
         </div>
         <div v-else-if="activeTab === 'delivery'" class="space-y-4">
           <div>
-            <p class="text-xs text-muted-foreground mb-2">Мин. заказ (₽)</p>
+            <p class="text-xs text-muted-foreground mb-2">Мин. заказ ({{ currencySymbol }})</p>
             <Input v-model.number="editForm.min_order_amount" type="number" min="0" class="max-w-[200px]" :disabled="readOnly" />
           </div>
           <div>
-            <p class="text-xs text-muted-foreground mb-2">Стоимость доставки (₽)</p>
+            <p class="text-xs text-muted-foreground mb-2">Стоимость доставки ({{ currencySymbol }})</p>
             <Input v-model.number="editForm.delivery_cost" type="number" min="0" class="max-w-[200px]" :disabled="readOnly" />
           </div>
           <div class="space-y-2">
@@ -74,8 +74,8 @@
               >
                 <span v-if="tariff.ellipsis">• • •</span>
                 <div v-else class="flex flex-col items-center leading-tight">
-                  <span>{{ tariff.delivery_cost }} ₽</span>
-                  <span class="text-[10px] text-muted-foreground">от {{ tariff.amount_from }} ₽</span>
+                  <span>{{ formatNumberWithCurrency(tariff.delivery_cost) }}</span>
+                  <span class="text-[10px] text-muted-foreground">от {{ formatNumberWithCurrency(tariff.amount_from) }}</span>
                 </div>
               </div>
             </div>
@@ -136,6 +136,7 @@ import Button from "@/shared/components/ui/button/Button.vue";
 import Input from "@/shared/components/ui/input/Input.vue";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/components/ui/select";
 import { Label } from "@/shared/components/ui/label";
+import { formatNumberWithCurrency, getCurrencySymbol } from "@/shared/utils/format.js";
 const props = defineProps({
   isOpen: Boolean,
   polygon: Object,
@@ -163,6 +164,7 @@ const props = defineProps({
   },
 });
 const emit = defineEmits(["close", "save", "block", "unblock", "delete", "transfer", "redraw", "edit-tariffs", "copy-tariffs"]);
+const currencySymbol = computed(() => getCurrencySymbol());
 const transferBranchId = ref("");
 const activeTab = ref("general");
 const tabs = computed(() => {

@@ -277,6 +277,22 @@
                         </SelectContent>
                       </Select>
                       <Select
+                        v-else-if="item.key === 'site_currency'"
+                        v-model="appearanceForm[item.key]"
+                      >
+                        <SelectTrigger class="w-full">
+                          <SelectValue placeholder="Выберите валюту" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="RUB">Рубли (RUB)</SelectItem>
+                          <SelectItem value="USD">Доллары (USD)</SelectItem>
+                          <SelectItem value="TJS">Сомони (TJS)</SelectItem>
+                          <SelectItem value="KZT">Тенге (KZT)</SelectItem>
+                          <SelectItem value="KGS">Сом (KGS)</SelectItem>
+                          <SelectItem value="UZS">Сом (UZS)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Select
                         v-else-if="item.type === 'boolean' || typeof appearanceForm[item.key] === 'boolean'"
                         v-model="appearanceForm[item.key]"
                       >
@@ -837,7 +853,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui
 import { Field, FieldContent, FieldGroup, FieldLabel } from "@/shared/components/ui/field";
 import Spinner from "@/shared/components/ui/spinner/Spinner.vue";
 import { useNotifications } from "@/shared/composables/useNotifications.js";
-import { formatNumber, normalizeBoolean } from "@/shared/utils/format.js";
+import { formatNumber, normalizeBoolean, setActiveCurrencyCode } from "@/shared/utils/format.js";
 import { useAuthStore } from "@/shared/stores/auth.js";
 
 const DEFAULT_TELEGRAM_START_FORM = {
@@ -939,7 +955,7 @@ const modalTitle = computed(() => (editing.value ? "Редактировать �
 const modalSubtitle = computed(() => (editing.value ? "Измените параметры" : "Создайте причину стоп-листа"));
 const percentKeys = new Set();
 const MAP_SETTING_KEYS = new Set(["yandex_js_api_key", "yandex_suggest_api_key", "maps_default_language", "maps_default_country"]);
-const APPEARANCE_SETTING_KEYS = new Set(["menu_badges_enabled", "menu_cards_layout"]);
+const APPEARANCE_SETTING_KEYS = new Set(["menu_badges_enabled", "menu_cards_layout", "site_currency"]);
 const primitiveTypes = new Set(["boolean", "string", "number"]);
 const TELEGRAM_ORDER_PLACEHOLDERS = [
   "{{order_id}}",
@@ -1074,6 +1090,7 @@ const normalizeMaxOrderNotificationForm = (value = {}) => {
 
 const applySettingsResponse = (data) => {
   const settings = data?.settings || {};
+  setActiveCurrencyCode(settings.site_currency || "RUB");
   const primitiveItems = (data?.items || []).filter((item) => item.group !== "Интеграции" && primitiveTypes.has(item.type));
   moduleItems.value = primitiveItems.filter((item) => !MAP_SETTING_KEYS.has(item.key) && !APPEARANCE_SETTING_KEYS.has(item.key));
   mapItems.value = primitiveItems.filter((item) => MAP_SETTING_KEYS.has(item.key));

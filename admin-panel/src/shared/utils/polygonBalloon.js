@@ -36,8 +36,8 @@ export const buildPolygonBalloonContent = (polygon, options = {}) => {
   const tariffsCount = toNumber(polygon?.tariffs_count, 0);
   const minOrderAmount = toNumber(polygon?.min_order_amount, 0);
   const deliveryCost = toNumber(polygon?.delivery_cost, 0);
-  const minOrderLabel = useTariffBasedLabels && tariffsCount > 0 ? "по тарифам" : `${minOrderAmount} ₽`;
-  const deliveryCostLabel = useTariffBasedLabels && tariffsCount > 0 ? "по тарифам" : `${deliveryCost} ₽`;
+  const minOrderLabel = useTariffBasedLabels && tariffsCount > 0 ? "по тарифам" : formatNumberWithCurrency(minOrderAmount);
+  const deliveryCostLabel = useTariffBasedLabels && tariffsCount > 0 ? "по тарифам" : formatNumberWithCurrency(deliveryCost);
   const statusBadge = buildStatusBadge(isBlocked, isInactive);
 
   return `
@@ -66,3 +66,4 @@ export const buildPolygonBalloonContent = (polygon, options = {}) => {
     </div>
   `;
 };
+import { formatNumberWithCurrency } from "@/shared/utils/format.js";

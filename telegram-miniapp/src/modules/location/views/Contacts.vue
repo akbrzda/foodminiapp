@@ -71,6 +71,7 @@ import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
 import { ChevronDown, Clock, MapPin, Phone } from "lucide-vue-next";
 import { useLocationStore } from "@/modules/location/stores/location.js";
+import { useSettingsStore } from "@/modules/settings/stores/settings.js";
 import { citiesAPI } from "@/shared/api/endpoints.js";
 import { formatPhone, normalizePhone } from "@/shared/utils/phone.js";
 import { hapticFeedback } from "@/shared/services/telegram.js";
@@ -78,8 +79,10 @@ import { normalizeTariffs } from "@/shared/utils/deliveryTariffs";
 import { formatWorkHoursLines, normalizeWorkHours } from "@/shared/utils/workingHours";
 import { devError } from "@/shared/utils/logger.js";
 import { loadYandexMaps } from "@/shared/services/yandexMaps.js";
+import { formatPriceWithCurrency } from "@/shared/utils/format";
 const router = useRouter();
 const locationStore = useLocationStore();
+const settingsStore = useSettingsStore();
 const branches = ref([]);
 const polygons = ref([]);
 const loading = ref(false);
@@ -259,14 +262,17 @@ function buildTariffPopup(polygon, index) {
     const deliveryCost = Number(polygon?.delivery_cost);
     const normalizedMinOrderAmount = Number.isFinite(minOrderAmount) && minOrderAmount >= 0 ? minOrderAmount : 0;
     const normalizedDeliveryCost = Number.isFinite(deliveryCost) && deliveryCost >= 0 ? deliveryCost : 0;
-    return `<div><b>${getPolygonTitle(polygon, index)}</b><div>Мин. заказ: ${normalizedMinOrderAmount} ₽</div><div>Доставка: ${normalizedDeliveryCost} ₽</div></div>`;
+    return `<div><b>${getPolygonTitle(polygon, index)}</b><div>Мин. заказ: ${formatPriceWithCurrency(normalizedMinOrderAmount, settingsStore.currencyCode)}</div><div>Доставка: ${formatPriceWithCurrency(normalizedDeliveryCost, settingsStore.currencyCode)}</div></div>`;
   }
   const tariffs = normalizeTariffs(rawTariffs);
   const rows = tariffs
     .map((tariff) => {
       const from = tariff.amount_from ?? 0;
-      const label = tariff.amount_to === null ? `от ${from} ₽` : `${from}–${tariff.amount_to} ₽`;
-      return `<div>${label}: ${tariff.delivery_cost} ₽</div>`;
+      const label =
+        tariff.amount_to === null
+          ? `от ${formatPriceWithCurrency(from, settingsStore.currencyCode)}`
+          : `${formatPriceWithCurrency(from, settingsStore.currencyCode)}–${formatPriceWithCurrency(tariff.amount_to, settingsStore.currencyCode)}`;
+      return `<div>${label}: ${formatPriceWithCurrency(tariff.delivery_cost, settingsStore.currencyCode)}</div>`;
     })
     .join("");
   return `<div><b>${getPolygonTitle(polygon, index)}</b>${rows}</div>`;

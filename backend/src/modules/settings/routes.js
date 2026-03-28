@@ -70,6 +70,7 @@ const PUBLIC_SETTINGS_ALLOWLIST = new Set([
   "pickup_enabled",
   "menu_badges_enabled",
   "menu_cards_layout",
+  "site_currency",
   "iiko_enabled",
   "premiumbonus_enabled",
   "integration_mode",

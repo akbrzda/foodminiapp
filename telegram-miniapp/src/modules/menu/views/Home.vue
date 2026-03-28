@@ -30,7 +30,7 @@
             <div class="status-indicator" :class="getStatusClass(order.status)"></div>
             <div class="order-info">
               <div class="order-title">{{ getStatusText(order.status, order.order_type) }}</div>
-              <div class="order-subtitle">Заказ #{{ order.order_number }} • {{ formatPrice(order.total) }} ₽</div>
+              <div class="order-subtitle">Заказ #{{ order.order_number }} • {{ formatPriceWithCurrency(order.total, settingsStore.currencyCode) }}</div>
             </div>
           </div>
           <ChevronRight :size="20" />
@@ -161,7 +161,7 @@
         </span>
         <span class="cart-text">В корзину</span>
       </span>
-      <span class="cart-total">{{ formatPrice(cartTotalWithDelivery) }} ₽</span>
+      <span class="cart-total">{{ formatPriceWithCurrency(cartTotalWithDelivery, settingsStore.currencyCode) }}</span>
     </button>
   </div>
 </template>
@@ -180,7 +180,7 @@ import { hapticFeedback } from "@/shared/services/telegram.js";
 import { wsService } from "@/shared/services/websocket.js";
 import AppHeader from "@/shared/components/AppHeader.vue";
 import StoriesRow from "@/modules/stories/components/StoriesRow.vue";
-import { formatPrice, normalizeImageUrl } from "@/shared/utils/format";
+import { formatPrice, formatPriceWithCurrency, normalizeImageUrl } from "@/shared/utils/format";
 import { formatWeight, formatWeightValue } from "@/shared/utils/weight";
 import { calculateDeliveryCost } from "@/shared/utils/deliveryTariffs";
 import { devError } from "@/shared/utils/logger.js";
@@ -645,19 +645,19 @@ function getItemPrice(item) {
       .filter((variant) => !variant.in_stop_list && variant.price !== null && variant.price !== undefined)
       .map((variant) => parseFloat(variant.price) || 0);
     if (prices.length === 0) {
-      return `${formatPrice(item.price || 0)} ₽`;
+      return formatPriceWithCurrency(item.price || 0, settingsStore.currencyCode);
     }
     const minPrice = Math.min(...prices);
     const maxPrice = Math.max(...prices);
     if (minPrice === maxPrice) {
-      return `${formatPrice(minPrice)} ₽`;
+      return formatPriceWithCurrency(minPrice, settingsStore.currencyCode);
     }
-    return `от ${formatPrice(minPrice)} ₽`;
+    return `от ${formatPriceWithCurrency(minPrice, settingsStore.currencyCode)}`;
   }
   if (item.modifier_groups && item.modifier_groups.some((group) => group.is_required)) {
-    return `от ${formatPrice(item.price || 0)} ₽`;
+    return `от ${formatPriceWithCurrency(item.price || 0, settingsStore.currencyCode)}`;
   }
-  return `${formatPrice(item.price || 0)} ₽`;
+  return formatPriceWithCurrency(item.price || 0, settingsStore.currencyCode);
 }
 function handleItemCardClick(item) {
   if (isItemUnavailable(item)) return;

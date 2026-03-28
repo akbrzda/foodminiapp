@@ -50,6 +50,7 @@ const MAPS_API_KEY_MAX_LENGTH = 512;
 const MAPS_LANGUAGE_REGEX = /^[a-z]{2}_[A-Z]{2}$/;
 const MAPS_COUNTRY_REGEX = /^[A-Z]{2}$/;
 const MENU_CARDS_LAYOUT_VALUES = new Set(["horizontal", "vertical"]);
+const SITE_CURRENCY_VALUES = new Set(["RUB", "USD", "TJS", "KZT", "KGS", "UZS"]);
 const ENCRYPTED_SETTING_KEYS = new Set([
   "iiko_api_token",
   "iiko_api_key",
@@ -107,6 +108,13 @@ export const SETTINGS_SCHEMA = {
     default: "horizontal",
     label: "Раскладка карточек меню",
     description: "Горизонтально (1 в ряд) или вертикально (2 в ряд)",
+    group: "Оформление",
+    type: "string",
+  },
+  site_currency: {
+    default: "RUB",
+    label: "Валюта сайта",
+    description: "Валюта отображения цен в интерфейсе сайта",
     group: "Оформление",
     type: "string",
   },
@@ -419,13 +427,27 @@ const validateMapsSetting = (key, value) => {
   return null;
 };
 const validateAppearanceSetting = (key, value) => {
-  if (key !== "menu_cards_layout") return null;
-  if (typeof value !== "string") {
-    return "menu_cards_layout должен быть строкой";
+  if (key === "menu_cards_layout") {
+    if (typeof value !== "string") {
+      return "menu_cards_layout должен быть строкой";
+    }
+    if (!MENU_CARDS_LAYOUT_VALUES.has(value)) {
+      return "menu_cards_layout должен быть horizontal или vertical";
+    }
+    return null;
   }
-  if (!MENU_CARDS_LAYOUT_VALUES.has(value)) {
-    return "menu_cards_layout должен быть horizontal или vertical";
+
+  if (key === "site_currency") {
+    if (typeof value !== "string") {
+      return "site_currency должен быть строкой";
+    }
+    const normalizedCurrency = value.trim().toUpperCase() === "UZBS" ? "UZS" : value.trim().toUpperCase();
+    if (!SITE_CURRENCY_VALUES.has(normalizedCurrency)) {
+      return "site_currency должен быть одним из: RUB, USD, TJS, KZT, KGS, UZS";
+    }
+    return null;
   }
+
   return null;
 };
 const validateOrderNotificationPlatformSetting = (key, value) => {
@@ -955,6 +977,9 @@ export const updateSystemSettings = async (patch) => {
           continue;
         }
         updates[key] = normalized;
+      }
+      if (key === "site_currency") {
+        updates[key] = updates[key].toUpperCase() === "UZBS" ? "UZS" : updates[key].toUpperCase();
       }
       const mapsValidationError = validateMapsSetting(key, updates[key]);
       if (mapsValidationError) {

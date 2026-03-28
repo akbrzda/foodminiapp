@@ -785,6 +785,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/shared/components/ui/dialog/index.js";
 import { useAuthStore } from "@/shared/stores/auth.js";
+import { formatNumberWithCurrency } from "@/shared/utils/format.js";
 
 const { showErrorNotification, showSuccessNotification } = useNotifications();
 const authStore = useAuthStore();
@@ -1069,7 +1070,7 @@ const getCandidateSideData = (candidate, side) => {
 const formatCandidatePrice = (value) => {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return "—";
-  return `${numeric.toFixed(2)} ₽`;
+  return formatNumberWithCurrency(Number(numeric.toFixed(2)));
 };
 
 const formatCandidateNutrition = (payload) => {
