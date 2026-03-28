@@ -184,6 +184,7 @@ import { formatPrice, formatPriceWithCurrency, normalizeImageUrl } from "@/share
 import { formatWeight, formatWeightValue } from "@/shared/utils/weight";
 import { calculateDeliveryCost } from "@/shared/utils/deliveryTariffs";
 import { devError } from "@/shared/utils/logger.js";
+import { ROUTE_QUERY_KEYS } from "@/shared/constants/storage-keys.js";
 const router = useRouter();
 const route = useRoute();
 const authStore = useAuthStore();
@@ -204,6 +205,17 @@ let activeCategoryScrollHandler = null;
 let orderStatusHandler = null;
 let orderCreatedHandler = null;
 let menuUpdatedWsHandler = null;
+
+const waitForCityRestore = async ({ timeoutMs = 1800, stepMs = 100 } = {}) => {
+  if (locationStore.selectedCity) return true;
+
+  const startedAt = Date.now();
+  while (!locationStore.selectedCity && Date.now() - startedAt < timeoutMs) {
+    await new Promise((resolve) => setTimeout(resolve, stepMs));
+  }
+
+  return Boolean(locationStore.selectedCity);
+};
 const ordersEnabled = computed(() => settingsStore.ordersEnabled);
 const deliveryEnabled = computed(() => settingsStore.deliveryEnabled);
 const pickupEnabled = computed(() => settingsStore.pickupEnabled);
@@ -236,9 +248,15 @@ const actionButtonText = computed(() => {
 });
 onMounted(async () => {
   resolveDeliveryType();
-  if (route.query.openCity === "1") {
-    window.dispatchEvent(new CustomEvent("open-city-popup"));
-    router.replace({ query: {} });
+  if (route.query[ROUTE_QUERY_KEYS.OPEN_CITY] === "1") {
+    const isCityRestored = await waitForCityRestore();
+    if (!isCityRestored) {
+      window.dispatchEvent(new CustomEvent("open-city-popup"));
+    }
+
+    const nextQuery = { ...route.query };
+    delete nextQuery[ROUTE_QUERY_KEYS.OPEN_CITY];
+    router.replace({ query: nextQuery });
   }
   if (locationStore.selectedCity) {
     await loadMenu();
