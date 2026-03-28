@@ -1,6 +1,7 @@
 import { getSystemSettings, updateSystemSettings } from "../../../utils/settings.js";
 import { logger } from "../../../utils/logger.js";
 import {
+  parseIntParam,
   validateAdjustBody,
   validateToggleBody,
   validateBulkAccrualCalculateBody,
