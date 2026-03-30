@@ -504,6 +504,7 @@ const fulfillmentLabelMap = {
   pickup: "Самовывоз",
   delivery: "Доставка",
 };
+const allowedFulfillmentValues = ["pickup", "delivery"];
 const hours = Array.from({ length: 24 }, (_, index) => String(index).padStart(2, "0"));
 const minutes = Array.from({ length: 60 }, (_, index) => String(index).padStart(2, "0"));
 const paginatedStopList = computed(() => {
@@ -599,11 +600,20 @@ const getBranchName = (branchId) => {
 };
 const getFulfillmentTypes = (value) => {
   if (!value) return [];
-  if (Array.isArray(value)) return value;
+  if (Array.isArray(value)) {
+    const normalized = Array.from(new Set(value.map((item) => String(item || "").trim()).filter((item) => allowedFulfillmentValues.includes(item))));
+    if (normalized.length === allowedFulfillmentValues.length) return [];
+    return normalized;
+  }
   if (typeof value === "string") {
     try {
       const parsed = JSON.parse(value);
-      return Array.isArray(parsed) ? parsed : [];
+      if (!Array.isArray(parsed)) return [];
+      const normalized = Array.from(
+        new Set(parsed.map((item) => String(item || "").trim()).filter((item) => allowedFulfillmentValues.includes(item))),
+      );
+      if (normalized.length === allowedFulfillmentValues.length) return [];
+      return normalized;
     } catch {
       return [];
     }

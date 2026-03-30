@@ -68,7 +68,7 @@ export const getCartCategoryIds = async (cartItemIds) => {
   return new Set(rows.map((row) => Number(row.category_id)).filter(Number.isInteger));
 };
 
-export const getCandidates = async ({ cityId, branchId, fulfillmentType, cartItemIds }) => {
+export const getCandidates = async ({ cityId, branchId, fulfillmentType, cartItemIds, useIikoSource = false }) => {
   const params = [cityId, cityId, fulfillmentType, cityId, fulfillmentType];
 
   let cartExclusionSql = "";
@@ -89,6 +89,10 @@ export const getCandidates = async ({ cityId, branchId, fulfillmentType, cartIte
     )`;
     params.push(branchId, fulfillmentType);
   }
+
+  const sourceFilterSql = useIikoSource
+    ? "AND (COALESCE(NULLIF(TRIM(mi.iiko_item_id), ''), NULL) IS NOT NULL OR mi.item_type = 'combo')"
+    : "";
 
   const [rows] = await db.query(
     `SELECT
@@ -131,7 +135,12 @@ export const getCandidates = async ({ cityId, branchId, fulfillmentType, cartIte
        GROUP BY img.item_id
      ) req ON req.item_id = mi.id
      WHERE mi.is_active = TRUE
-       AND (mip.price IS NOT NULL OR mvp_min.min_variant_price IS NOT NULL)
+       ${sourceFilterSql}
+       AND (
+         (COALESCE(vs.has_variants, 0) = 1 AND COALESCE(mvp_min.min_variant_price, 0) > 0)
+         OR
+         (COALESCE(vs.has_variants, 0) = 0 AND COALESCE(mip.price, 0) > 0)
+       )
        ${cartExclusionSql}
        ${itemStopListSql}
      LIMIT 120`,

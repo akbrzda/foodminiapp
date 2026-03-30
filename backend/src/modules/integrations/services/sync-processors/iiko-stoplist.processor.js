@@ -8,7 +8,7 @@ import { buildStopListEntryMap, resolveStopListEntityMaps } from "./iiko-stoplis
 
 async function invalidatePublicMenuCache() {
   try {
-    const keys = await redis.keys("menu:city:*");
+    const keys = await redis.keys("menu:*:city:*");
     if (keys.length > 0) {
       await redis.del(keys);
     }

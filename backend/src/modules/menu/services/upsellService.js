@@ -1,5 +1,6 @@
 import { createHash } from "crypto";
 import redis from "../../../config/redis.js";
+import { getIntegrationSettings } from "../../integrations/services/integrationConfigService.js";
 import {
   getCandidates,
   getCartAssociationStats,
@@ -196,6 +197,11 @@ export const getDynamicUpsell = async ({
   limit = DEFAULT_LIMIT,
 }) => {
   const safeLimit = normalizeLimit(limit);
+  const integrationSettings = await getIntegrationSettings();
+  const menuMode = String(integrationSettings?.integrationMode?.menu || "local")
+    .trim()
+    .toLowerCase();
+  const useIikoSource = Boolean(integrationSettings?.iikoEnabled) && menuMode === "external";
   const cartItemIds = [...new Set(cartItems.map((item) => toNumber(item.item_id ?? item.id)).filter(Number.isInteger))];
   if (cartItemIds.length === 0) return [];
   const cartSignature = getCartSignature(cartItems);
@@ -219,7 +225,7 @@ export const getDynamicUpsell = async ({
   const cartAvgPrice = cartItems.reduce((sum, item) => sum + (Number(item.price) || 0), 0) / Math.max(cartItems.length, 1);
 
   const [rawCandidates, cartCategoryIds, associationStats, userStats] = await Promise.all([
-    getCandidates({ cityId, branchId, fulfillmentType, cartItemIds }),
+    getCandidates({ cityId, branchId, fulfillmentType, cartItemIds, useIikoSource }),
     getCartCategoryIds(cartItemIds),
     getCartAssociationStats(cartItemIds),
     getUserItemStats(userId),

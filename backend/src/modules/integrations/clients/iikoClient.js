@@ -30,16 +30,32 @@ export function createIikoClient({ apiUrl, apiLogin, apiKey, organizationId }) {
     const hasLogin = Boolean(normalizedLogin);
     const hasKey = Boolean(normalizedKey);
 
-    if (!hasLogin) {
-      throw new Error("Не заполнен iiko_api_login");
+    if (!hasLogin && !hasKey) {
+      throw new Error("Не заполнены iiko_api_login/iiko_api_key");
     }
 
-    // Совместимость с iiko-профилями, где используется только apiLogin.
+    // Совместимость с разными профилями iiko:
+    // - legacy: apiLogin + apiKey
+    // - iikoCloud: apiLogin == API key
     const requestPayloads = [];
+    const seenPayloadKeys = new Set();
+    const pushPayload = (payload) => {
+      const key = JSON.stringify(payload);
+      if (seenPayloadKeys.has(key)) return;
+      seenPayloadKeys.add(key);
+      requestPayloads.push(payload);
+    };
+
     if (hasKey) {
-      requestPayloads.push({ apiLogin: normalizedLogin, apiKey: normalizedKey });
+      if (hasLogin) {
+        pushPayload({ apiLogin: normalizedLogin, apiKey: normalizedKey });
+        pushPayload({ apiLogin: normalizedLogin });
+      }
+      pushPayload({ apiLogin: normalizedKey });
     }
-    requestPayloads.push({ apiLogin: normalizedLogin });
+    if (hasLogin) {
+      pushPayload({ apiLogin: normalizedLogin });
+    }
 
     try {
       let lastError = null;
@@ -538,6 +554,38 @@ export function createIikoClient({ apiUrl, apiLogin, apiKey, organizationId }) {
         return data;
       } catch (error) {
         throw normalizeIntegrationError(error, "Ошибка получения стоп-листа iiko");
+      }
+    },
+
+    async addProductsToStopList(payload = {}) {
+      try {
+        const requestPayload = { ...payload };
+        if (!requestPayload.organizationId) {
+          requestPayload.organizationId = await getPrimaryOrganizationId();
+        }
+        const { data } = await requestWithRetry(
+          () => withAuthorizedRequest((client) => client.post("/api/1/stop_lists/add", requestPayload)),
+          { retries: 2 },
+        );
+        return data;
+      } catch (error) {
+        throw normalizeIntegrationError(error, "Ошибка добавления позиции в стоп-лист iiko");
+      }
+    },
+
+    async removeProductsFromStopList(payload = {}) {
+      try {
+        const requestPayload = { ...payload };
+        if (!requestPayload.organizationId) {
+          requestPayload.organizationId = await getPrimaryOrganizationId();
+        }
+        const { data } = await requestWithRetry(
+          () => withAuthorizedRequest((client) => client.post("/api/1/stop_lists/remove", requestPayload)),
+          { retries: 2 },
+        );
+        return data;
+      } catch (error) {
+        throw normalizeIntegrationError(error, "Ошибка удаления позиции из стоп-листа iiko");
       }
     },
 

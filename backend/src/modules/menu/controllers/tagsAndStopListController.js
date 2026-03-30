@@ -1,6 +1,10 @@
 import db from "../../../config/database.js";
 import logger from "../../../utils/logger.js";
 import { notifyMenuUpdated } from "../../../websocket/runtime.js";
+import { getIikoClientOrNull, getIntegrationSettings } from "../../integrations/services/integrationConfigService.js";
+
+const AUTO_NO_PRICE_REASON = "Не задана цена";
+const IIKO_STOPLIST_SYNC_REASON = "Синхронизация стоп-листа из iiko";
 
 // Вспомогательные функции
 async function getItemCityIds(itemId) {
@@ -25,6 +29,339 @@ async function invalidateAllMenuCache() {
     notifyMenuUpdated({ source: "admin", scope: "all" });
   } catch (error) {
     logger.error("Failed to invalidate all menu cache", { error });
+  }
+}
+
+function normalizeFulfillmentTypes(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => String(item || "").trim())
+      .filter(Boolean)
+      .sort();
+  }
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      return normalizeFulfillmentTypes(parsed);
+    } catch (error) {
+      return [];
+    }
+  }
+  return [];
+}
+
+function resolveNoPriceFulfillmentTypes(row) {
+  const hasVariants = Number(row.has_variants) === 1;
+  const deliveryPositive = hasVariants ? Number(row.variant_delivery_positive) === 1 : Number(row.item_delivery_positive) === 1;
+  const pickupPositive = hasVariants ? Number(row.variant_pickup_positive) === 1 : Number(row.item_pickup_positive) === 1;
+
+  const missing = [];
+  if (!deliveryPositive) missing.push("delivery");
+  if (!pickupPositive) missing.push("pickup");
+  return missing;
+}
+
+function extractProductSizeId(externalVariantId) {
+  const value = String(externalVariantId || "").trim();
+  if (!value) return "";
+  const uuidRegex =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (uuidRegex.test(value)) return value;
+  const splitByUnderscore = value.split("_");
+  const lastPart = splitByUnderscore[splitByUnderscore.length - 1];
+  if (uuidRegex.test(lastPart)) return lastPart;
+  return "";
+}
+
+async function resolveIikoStopListChangeContext({ branchId, entityType, entityId, createdBy = undefined, reason = undefined }) {
+  const settings = await getIntegrationSettings();
+  const menuMode = String(settings?.integrationMode?.menu || "local").trim().toLowerCase();
+  const isIikoExternalMode = settings.iikoEnabled && menuMode === "external";
+  if (!isIikoExternalMode) {
+    return { shouldSync: false, skipReason: "Режим iiko для меню не активен" };
+  }
+
+  if (createdBy === null && String(reason || "").trim() === AUTO_NO_PRICE_REASON) {
+    return { shouldSync: false, skipReason: "Автоматический локальный стоп-лист по нулевой цене" };
+  }
+
+  if (createdBy === null && String(reason || "").trim() === IIKO_STOPLIST_SYNC_REASON) {
+    return { shouldSync: false, skipReason: "Запись синхронизирована из iiko, обратная отправка не требуется" };
+  }
+
+  const [branchRows] = await db.query(
+    `SELECT id, iiko_terminal_group_id, iiko_organization_id
+     FROM branches
+     WHERE id = ?
+     LIMIT 1`,
+    [branchId],
+  );
+  if (!Array.isArray(branchRows) || branchRows.length === 0) {
+    throw new Error("Филиал не найден");
+  }
+  const branch = branchRows[0];
+  const organizationId = String(branch.iiko_organization_id || settings.iikoOrganizationId || "").trim();
+  const terminalGroupId = String(branch.iiko_terminal_group_id || "").trim();
+  if (!organizationId) {
+    throw new Error("Для филиала не задан iiko_organization_id");
+  }
+  if (!terminalGroupId) {
+    throw new Error("Для филиала не задан iiko_terminal_group_id");
+  }
+
+  let itemPayload = null;
+  if (entityType === "item") {
+    const [rows] = await db.query(
+      `SELECT iiko_item_id
+       FROM menu_items
+       WHERE id = ?
+       LIMIT 1`,
+      [entityId],
+    );
+    const productId = String(rows?.[0]?.iiko_item_id || "").trim();
+    if (!productId) {
+      throw new Error("У блюда не задан iiko_item_id");
+    }
+    itemPayload = { productId };
+  } else if (entityType === "variant") {
+    const [rows] = await db.query(
+      `SELECT iv.iiko_variant_id, mi.iiko_item_id
+       FROM item_variants iv
+       LEFT JOIN menu_items mi ON mi.id = iv.item_id
+       WHERE iv.id = ?
+       LIMIT 1`,
+      [entityId],
+    );
+    const productId = String(rows?.[0]?.iiko_item_id || "").trim();
+    const sizeId = extractProductSizeId(rows?.[0]?.iiko_variant_id);
+    if (!productId) {
+      throw new Error("Для варианта не найден iiko_item_id базового блюда");
+    }
+    if (!sizeId) {
+      throw new Error("У варианта не задан корректный iiko_variant_id (sizeId)");
+    }
+    itemPayload = { productId, sizeId };
+  } else if (entityType === "modifier") {
+    const [rows] = await db.query(
+      `SELECT iiko_modifier_id
+       FROM modifiers
+       WHERE id = ?
+       LIMIT 1`,
+      [entityId],
+    );
+    const productId = String(rows?.[0]?.iiko_modifier_id || "").trim();
+    if (!productId) {
+      throw new Error("У модификатора не задан iiko_modifier_id");
+    }
+    itemPayload = { productId };
+  } else {
+    throw new Error("Неподдерживаемый entity_type для синхронизации с iiko");
+  }
+
+  const client = await getIikoClientOrNull();
+  if (!client) {
+    throw new Error("Клиент iiko недоступен");
+  }
+
+  return {
+    shouldSync: true,
+    client,
+    payload: {
+      organizationId,
+      terminalGroupId,
+      item: itemPayload,
+    },
+  };
+}
+
+async function syncStopListChangeToIiko({ operation, branchId, entityType, entityId, createdBy = undefined, reason = undefined }) {
+  const context = await resolveIikoStopListChangeContext({
+    branchId,
+    entityType,
+    entityId,
+    createdBy,
+    reason,
+  });
+  if (!context.shouldSync) return context;
+
+  const { client, payload } = context;
+  const basePayload = {
+    organizationId: payload.organizationId,
+    terminalGroupId: payload.terminalGroupId,
+  };
+  if (operation === "add") {
+    await client.addProductsToStopList({
+      ...basePayload,
+      items: [{ ...payload.item, balance: 0 }],
+    });
+  } else if (operation === "remove") {
+    await client.removeProductsFromStopList({
+      ...basePayload,
+      items: [payload.item],
+    });
+  } else {
+    throw new Error("Неподдерживаемая операция синхронизации стоп-листа");
+  }
+
+  return {
+    shouldSync: true,
+    synced: true,
+  };
+}
+
+async function syncAutoNoPriceStopList(branchId = null) {
+  const normalizedBranchId = Number(branchId);
+  const branchFilter = Number.isInteger(normalizedBranchId) && normalizedBranchId > 0 ? normalizedBranchId : null;
+  const branchWhere = branchFilter ? "WHERE id = ?" : "";
+  const branchParams = branchFilter ? [branchFilter] : [];
+
+  const [branches] = await db.query(
+    `SELECT id, city_id
+     FROM branches
+     ${branchWhere}`,
+    branchParams,
+  );
+  if (!Array.isArray(branches) || branches.length === 0) return;
+
+  const branchIds = branches.map((row) => Number(row.id)).filter(Number.isInteger);
+  const cityIds = [...new Set(branches.map((row) => Number(row.city_id)).filter(Number.isInteger))];
+  if (branchIds.length === 0 || cityIds.length === 0) return;
+
+  const [rows] = await db.query(
+    `SELECT
+       mi.id AS item_id,
+       mic.city_id,
+       COALESCE(vs.has_variants, 0) AS has_variants,
+       COALESCE(ip.delivery_positive, 0) AS item_delivery_positive,
+       COALESCE(ip.pickup_positive, 0) AS item_pickup_positive,
+       COALESCE(vp.delivery_positive, 0) AS variant_delivery_positive,
+       COALESCE(vp.pickup_positive, 0) AS variant_pickup_positive
+     FROM menu_items mi
+     JOIN menu_item_cities mic ON mic.item_id = mi.id AND mic.is_active = TRUE
+     LEFT JOIN (
+       SELECT item_id, 1 AS has_variants
+       FROM item_variants
+       WHERE is_active = TRUE
+       GROUP BY item_id
+     ) vs ON vs.item_id = mi.id
+     LEFT JOIN (
+       SELECT
+         item_id,
+         city_id,
+         MAX(CASE WHEN fulfillment_type = 'delivery' AND price > 0 THEN 1 ELSE 0 END) AS delivery_positive,
+         MAX(CASE WHEN fulfillment_type = 'pickup' AND price > 0 THEN 1 ELSE 0 END) AS pickup_positive
+       FROM menu_item_prices
+       WHERE city_id IN (${cityIds.map(() => "?").join(", ")})
+       GROUP BY item_id, city_id
+     ) ip ON ip.item_id = mi.id AND ip.city_id = mic.city_id
+     LEFT JOIN (
+       SELECT
+         iv.item_id,
+         mvp.city_id,
+         MAX(CASE WHEN mvp.fulfillment_type = 'delivery' AND mvp.price > 0 THEN 1 ELSE 0 END) AS delivery_positive,
+         MAX(CASE WHEN mvp.fulfillment_type = 'pickup' AND mvp.price > 0 THEN 1 ELSE 0 END) AS pickup_positive
+       FROM item_variants iv
+       JOIN menu_variant_prices mvp ON mvp.variant_id = iv.id
+       WHERE iv.is_active = TRUE
+         AND mvp.city_id IN (${cityIds.map(() => "?").join(", ")})
+       GROUP BY iv.item_id, mvp.city_id
+     ) vp ON vp.item_id = mi.id AND vp.city_id = mic.city_id
+     WHERE mi.is_active = TRUE
+       AND mic.city_id IN (${cityIds.map(() => "?").join(", ")})`,
+    [...cityIds, ...cityIds, ...cityIds],
+  );
+
+  const noPriceByCity = new Map();
+  for (const row of rows) {
+    const cityId = Number(row.city_id);
+    const itemId = Number(row.item_id);
+    if (!Number.isInteger(cityId) || !Number.isInteger(itemId)) continue;
+    const missingFulfillment = resolveNoPriceFulfillmentTypes(row);
+    if (missingFulfillment.length === 0) continue;
+    if (!noPriceByCity.has(cityId)) {
+      noPriceByCity.set(cityId, new Map());
+    }
+    noPriceByCity.get(cityId).set(itemId, missingFulfillment);
+  }
+
+  const [existingRows] = await db.query(
+    `SELECT id, branch_id, entity_id, reason, created_by, fulfillment_types
+     FROM menu_stop_list
+     WHERE entity_type = 'item'
+       AND branch_id IN (${branchIds.map(() => "?").join(", ")})`,
+    branchIds,
+  );
+
+  const existingByKey = new Map();
+  for (const row of existingRows) {
+    const key = `${row.branch_id}:${row.entity_id}`;
+    existingByKey.set(key, row);
+  }
+
+  const desiredByKey = new Map();
+  for (const branch of branches) {
+    const branchIdValue = Number(branch.id);
+    const branchCityId = Number(branch.city_id);
+    if (!Number.isInteger(branchIdValue) || !Number.isInteger(branchCityId)) continue;
+    const cityItems = noPriceByCity.get(branchCityId);
+    if (!cityItems) continue;
+    for (const [itemId, missingFulfillment] of cityItems.entries()) {
+      const key = `${branchIdValue}:${itemId}`;
+      const existing = existingByKey.get(key);
+      if (existing && !(existing.created_by === null && String(existing.reason || "") === AUTO_NO_PRICE_REASON)) {
+        continue;
+      }
+      desiredByKey.set(key, {
+        branchId: branchIdValue,
+        itemId,
+        fulfillmentTypes: missingFulfillment,
+      });
+    }
+  }
+
+  const connection = await db.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    for (const row of existingRows) {
+      const isAutoNoPrice = row.created_by === null && String(row.reason || "") === AUTO_NO_PRICE_REASON;
+      if (!isAutoNoPrice) continue;
+      const key = `${row.branch_id}:${row.entity_id}`;
+      if (!desiredByKey.has(key)) {
+        await connection.query("DELETE FROM menu_stop_list WHERE id = ?", [row.id]);
+        continue;
+      }
+
+      const desired = desiredByKey.get(key);
+      const currentFulfillment = normalizeFulfillmentTypes(row.fulfillment_types);
+      const nextFulfillment = normalizeFulfillmentTypes(desired.fulfillmentTypes);
+      if (JSON.stringify(currentFulfillment) === JSON.stringify(nextFulfillment)) {
+        continue;
+      }
+      await connection.query(
+        `UPDATE menu_stop_list
+         SET fulfillment_types = ?
+         WHERE id = ?`,
+        [JSON.stringify(nextFulfillment), row.id],
+      );
+    }
+
+    for (const [key, desired] of desiredByKey.entries()) {
+      if (existingByKey.has(key)) continue;
+      await connection.query(
+        `INSERT INTO menu_stop_list (branch_id, entity_type, entity_id, fulfillment_types, reason, auto_remove, remove_at, created_by)
+         VALUES (?, 'item', ?, ?, ?, 0, NULL, NULL)`,
+        [desired.branchId, desired.itemId, JSON.stringify(desired.fulfillmentTypes), AUTO_NO_PRICE_REASON],
+      );
+    }
+
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
   }
 }
 
@@ -369,6 +706,8 @@ export const updateItemCategories = async (req, res, next) => {
 export const getStopList = async (req, res, next) => {
   try {
     const { branch_id } = req.query;
+    await syncAutoNoPriceStopList(branch_id);
+
     const params = [];
     const whereBranch = branch_id ? "WHERE msl.branch_id = ?" : "";
     if (branch_id) {
@@ -514,6 +853,14 @@ export const addToStopList = async (req, res, next) => {
     const normalizedFulfillment = Array.isArray(fulfillment_types)
       ? Array.from(new Set(fulfillment_types.filter((type) => allowedFulfillment.includes(type))))
       : null;
+    const isAllFulfillmentSelected =
+      Array.isArray(normalizedFulfillment) &&
+      normalizedFulfillment.length === allowedFulfillment.length &&
+      allowedFulfillment.every((type) => normalizedFulfillment.includes(type));
+    const stopListFulfillmentValue =
+      normalizedFulfillment && normalizedFulfillment.length > 0 && !isAllFulfillmentSelected
+        ? JSON.stringify(normalizedFulfillment)
+        : null;
 
     const autoRemove = Boolean(auto_remove);
     const removeAtValue = autoRemove ? remove_at : null;
@@ -560,14 +907,14 @@ export const addToStopList = async (req, res, next) => {
       });
     }
 
-    await db.query(
+    const [insertResult] = await db.query(
       `INSERT INTO menu_stop_list (branch_id, entity_type, entity_id, fulfillment_types, reason, auto_remove, remove_at, created_by)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         branch_id,
         entity_type,
         entity_id,
-        normalizedFulfillment && normalizedFulfillment.length > 0 ? JSON.stringify(normalizedFulfillment) : null,
+        stopListFulfillmentValue,
         reason || null,
         autoRemove,
         parsedRemoveAt,
@@ -575,9 +922,32 @@ export const addToStopList = async (req, res, next) => {
       ],
     );
 
+    let iikoSyncMeta = { shouldSync: false, skipReason: "Режим iiko для меню не активен" };
+    try {
+      iikoSyncMeta = await syncStopListChangeToIiko({
+        operation: "add",
+        branchId: branch_id,
+        entityType: entity_type,
+        entityId: entity_id,
+        createdBy: req.user.id,
+        reason: reason || null,
+      });
+    } catch (syncError) {
+      if (Number.isFinite(Number(insertResult?.insertId))) {
+        await db.query("DELETE FROM menu_stop_list WHERE id = ?", [Number(insertResult.insertId)]);
+      }
+      return res.status(502).json({
+        error: "Позиция добавлена локально, но не отправлена в стоп-лист iiko. Изменение отменено.",
+        details: syncError?.message || "Не удалось синхронизировать стоп-лист с iiko",
+      });
+    }
+
     await invalidateAllMenuCache();
 
-    res.status(201).json({ message: "Added to stop list successfully" });
+    res.status(201).json({
+      message: "Added to stop list successfully",
+      iiko: iikoSyncMeta,
+    });
   } catch (error) {
     next(error);
   }
@@ -588,10 +958,42 @@ export const removeFromStopList = async (req, res, next) => {
   try {
     const stopListId = req.params.id;
 
+    const [rows] = await db.query(
+      `SELECT id, branch_id, entity_type, entity_id, created_by, reason
+       FROM menu_stop_list
+       WHERE id = ?
+       LIMIT 1`,
+      [stopListId],
+    );
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return res.status(404).json({ error: "Позиция стоп-листа не найдена" });
+    }
+    const row = rows[0];
+
+    let iikoSyncMeta = { shouldSync: false, skipReason: "Режим iiko для меню не активен" };
+    try {
+      iikoSyncMeta = await syncStopListChangeToIiko({
+        operation: "remove",
+        branchId: row.branch_id,
+        entityType: row.entity_type,
+        entityId: row.entity_id,
+        createdBy: row.created_by,
+        reason: row.reason,
+      });
+    } catch (syncError) {
+      return res.status(502).json({
+        error: "Не удалось удалить позицию из стоп-листа iiko. Локальное удаление отменено.",
+        details: syncError?.message || "Не удалось синхронизировать стоп-лист с iiko",
+      });
+    }
+
     await db.query("DELETE FROM menu_stop_list WHERE id = ?", [stopListId]);
     await invalidateAllMenuCache();
 
-    res.json({ message: "Removed from stop list successfully" });
+    res.json({
+      message: "Removed from stop list successfully",
+      iiko: iikoSyncMeta,
+    });
   } catch (error) {
     next(error);
   }
