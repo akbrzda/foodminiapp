@@ -17,10 +17,12 @@ export async function getIntegrationSettings() {
       if (!rawMapping || typeof rawMapping !== "object" || Array.isArray(rawMapping)) continue;
       const orderTypeId = String(rawMapping.order_type_id || rawMapping.id || "").trim();
       const orderServiceType = String(rawMapping.order_service_type || rawMapping.orderServiceType || "").trim();
+      const priceCategoryId = String(rawMapping.price_category_id || rawMapping.priceCategoryId || "").trim();
       const name = String(rawMapping.name || "").trim();
       result[String(localOrderType || "").trim()] = {
         orderTypeId,
         orderServiceType,
+        priceCategoryId,
         name,
       };
     }

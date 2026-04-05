@@ -107,6 +107,13 @@ export const SETTINGS_SCHEMA = {
     group: "Заказы",
     type: "boolean",
   },
+  dine_in_enabled: {
+    default: true,
+    label: "В зале",
+    description: "Оформление заказов в зале",
+    group: "Заказы",
+    type: "boolean",
+  },
   menu_badges_enabled: {
     default: true,
     label: "Бейджи в меню",

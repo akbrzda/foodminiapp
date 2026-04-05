@@ -219,7 +219,7 @@
               <div class="space-y-2">
                 <div class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Типы заказа</div>
                 <div class="space-y-2">
-                  <div v-for="option in LOCAL_ORDER_TYPE_OPTIONS" :key="`order-type-${option.key}`" class="grid gap-2 md:grid-cols-2">
+                  <div v-for="option in LOCAL_ORDER_TYPE_OPTIONS" :key="`order-type-${option.key}`" class="grid gap-2 md:grid-cols-3">
                     <div class="flex items-center rounded-md border border-border/60 px-3 text-sm">{{ option.label }}</div>
                     <Select
                       :model-value="getSelectedOrderTypeId(option.key)"
@@ -232,6 +232,24 @@
                         <SelectItem value="">Не сопоставлено</SelectItem>
                         <SelectItem v-for="iikoType in iikoOrderTypes" :key="`iiko-order-type-${option.key}-${iikoType.id}`" :value="iikoType.id">
                           {{ iikoType.name }} ({{ iikoType.order_service_type || "—" }})
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Select
+                      :model-value="getSelectedOrderTypePriceCategoryId(option.key)"
+                      @update:model-value="(value) => updateOrderTypePriceCategoryMapping(option.key, value)"
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Категория цен (опционально)" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">Базовые цены</SelectItem>
+                        <SelectItem
+                          v-for="category in iikoOverview.priceCategories"
+                          :key="`iiko-order-type-price-${option.key}-${category.id}`"
+                          :value="category.id"
+                        >
+                          {{ category.name }}
                         </SelectItem>
                       </SelectContent>
                     </Select>
@@ -871,6 +889,7 @@ const orderPaymentWarningsList = ref([]);
 const LOCAL_ORDER_TYPE_OPTIONS = [
   { key: "delivery", label: "Доставка", fallbackOrderServiceType: "DeliveryByCourier" },
   { key: "pickup", label: "Самовывоз", fallbackOrderServiceType: "DeliveryByClient" },
+  { key: "dine_in", label: "Зал", fallbackOrderServiceType: "DeliveryByClient" },
 ];
 
 const LOCAL_PAYMENT_METHOD_OPTIONS = [
@@ -954,6 +973,7 @@ const applyForm = (settings = {}) => {
       result[option.key] = {
         order_type_id: String(row.order_type_id || row.orderTypeId || row.id || "").trim(),
         order_service_type: String(row.order_service_type || row.orderServiceType || option.fallbackOrderServiceType).trim(),
+        price_category_id: String(row.price_category_id || row.priceCategoryId || "").trim(),
         name: String(row.name || "").trim(),
       };
     }
@@ -1007,22 +1027,58 @@ const applyForm = (settings = {}) => {
 };
 
 const getSelectedOrderTypeId = (localOrderType) => String(form.value.iiko_order_type_mapping?.[localOrderType]?.order_type_id || "");
+const getSelectedOrderTypePriceCategoryId = (localOrderType) =>
+  String(form.value.iiko_order_type_mapping?.[localOrderType]?.price_category_id || "");
 
 const getSelectedPaymentTypeId = (localPaymentMethod) => String(form.value.iiko_payment_type_mapping?.[localPaymentMethod]?.payment_type_id || "");
 
 const updateOrderTypeMapping = (localOrderType, selectedId) => {
   const mapping = { ...(form.value.iiko_order_type_mapping || {}) };
+  const currentRow =
+    mapping[localOrderType] && typeof mapping[localOrderType] === "object" ? { ...mapping[localOrderType] } : {};
+  const selectedPriceCategoryId = String(currentRow.price_category_id || "").trim();
   const id = String(selectedId || "").trim();
   const matched = iikoOrderTypes.value.find((row) => row.id === id);
   if (!id || !matched) {
-    delete mapping[localOrderType];
+    if (!selectedPriceCategoryId) {
+      delete mapping[localOrderType];
+    } else {
+      mapping[localOrderType] = {
+        price_category_id: selectedPriceCategoryId,
+      };
+    }
   } else {
     mapping[localOrderType] = {
       order_type_id: matched.id,
       order_service_type: matched.order_service_type || "",
+      price_category_id: selectedPriceCategoryId,
       name: matched.name || "",
     };
   }
+  form.value.iiko_order_type_mapping = mapping;
+};
+
+const updateOrderTypePriceCategoryMapping = (localOrderType, selectedId) => {
+  const mapping = { ...(form.value.iiko_order_type_mapping || {}) };
+  const currentRow =
+    mapping[localOrderType] && typeof mapping[localOrderType] === "object" ? { ...mapping[localOrderType] } : {};
+  const priceCategoryId = String(selectedId || "").trim();
+  const hasMappedOrderTypeId = Boolean(String(currentRow.order_type_id || "").trim());
+
+  if (!priceCategoryId) {
+    if (!hasMappedOrderTypeId) {
+      delete mapping[localOrderType];
+    } else {
+      delete currentRow.price_category_id;
+      mapping[localOrderType] = currentRow;
+    }
+  } else {
+    mapping[localOrderType] = {
+      ...currentRow,
+      price_category_id: priceCategoryId,
+    };
+  }
+
   form.value.iiko_order_type_mapping = mapping;
 };
 

@@ -78,6 +78,10 @@ const ensureOrderAccess = (settings, orderType, res) => {
     res.status(400).json({ error: "Pickup is disabled" });
     return false;
   }
+  if (orderType === "dine_in" && !settings.dine_in_enabled) {
+    res.status(400).json({ error: "Dine in is disabled" });
+    return false;
+  }
   return true;
 };
 
@@ -381,10 +385,10 @@ export const createOrder = async (req, res, next) => {
       });
     }
 
-    if (!["delivery", "pickup"].includes(order_type)) {
+    if (!["delivery", "pickup", "dine_in"].includes(order_type)) {
       await connection.rollback();
       return res.status(400).json({
-        error: "order_type must be 'delivery' or 'pickup'",
+        error: "order_type must be 'delivery', 'pickup' or 'dine_in'",
       });
     }
 
@@ -431,15 +435,16 @@ export const createOrder = async (req, res, next) => {
       }
     }
 
-    if (order_type === "pickup" && !branch_id) {
+    if (["pickup", "dine_in"].includes(order_type) && !branch_id) {
       await connection.rollback();
       return res.status(400).json({
-        error: "branch_id is required for pickup orders",
+        error: "branch_id is required for pickup and dine_in orders",
       });
     }
 
-    if (order_type === "pickup") {
-      const openCheck = await ensureBranchIsOpen(connection, branch_id, city_id, "pickup");
+    if (["pickup", "dine_in"].includes(order_type)) {
+      const scheduleType = order_type === "pickup" ? "pickup" : null;
+      const openCheck = await ensureBranchIsOpen(connection, branch_id, city_id, scheduleType);
       if (!openCheck.ok) {
         await connection.rollback();
         return res.status(400).json({ error: openCheck.error });
@@ -555,7 +560,7 @@ export const createOrder = async (req, res, next) => {
       }
     }
 
-    const fulfillmentType = order_type === "pickup" ? "pickup" : "delivery";
+    const fulfillmentType = order_type;
     const loyaltyEnabled = settings.bonuses_enabled || settings.premiumbonus_enabled;
     const effectiveBonusToUse = loyaltyEnabled ? normalizedBonusToUse : 0;
     const iikoOrdersExternal = settings.iiko_enabled && settings?.integration_mode?.orders === "external";

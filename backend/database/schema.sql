@@ -474,7 +474,7 @@ CREATE TABLE `orders` (
   `user_id` int NOT NULL,
   `city_id` int NOT NULL,
   `branch_id` int DEFAULT NULL,
-  `order_type` enum('delivery','pickup') COLLATE utf8mb4_unicode_ci NOT NULL,
+  `order_type` enum('delivery','pickup','dine_in') COLLATE utf8mb4_unicode_ci NOT NULL,
   `status` enum('pending','confirmed','preparing','ready','delivering','completed','cancelled') COLLATE utf8mb4_unicode_ci DEFAULT 'pending',
   `iiko_order_id` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `iiko_sync_status` enum('pending','synced','error','failed') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'pending',

@@ -1,6 +1,7 @@
 const DEFAULT_ORDER_SERVICE_TYPE_BY_LOCAL_TYPE = {
   delivery: "DeliveryByCourier",
   pickup: "DeliveryByClient",
+  dine_in: "DeliveryByClient",
 };
 const ALLOWED_ORDER_SERVICE_TYPES = new Set(["DeliveryByCourier", "DeliveryByClient"]);
 
@@ -135,17 +136,22 @@ export function resolveOrderTypePayload(orderType, settings) {
   const mapping = settings?.iikoOrderTypeMapping?.[localOrderType] || {};
   const mappedOrderTypeId = String(mapping.orderTypeId || "").trim();
   const mappedOrderServiceType = String(mapping.orderServiceType || "").trim();
+  const mappedPriceCategoryId = String(mapping.priceCategoryId || "").trim();
   const fallbackOrderServiceType =
     DEFAULT_ORDER_SERVICE_TYPE_BY_LOCAL_TYPE[localOrderType] || "DeliveryByCourier";
 
   if (mappedOrderTypeId) {
-    return { orderTypeId: mappedOrderTypeId };
+    return {
+      orderTypeId: mappedOrderTypeId,
+      ...(mappedPriceCategoryId ? { priceCategoryId: mappedPriceCategoryId } : {}),
+    };
   }
 
   return {
     orderServiceType: ALLOWED_ORDER_SERVICE_TYPES.has(mappedOrderServiceType)
       ? mappedOrderServiceType
       : fallbackOrderServiceType,
+    ...(mappedPriceCategoryId ? { priceCategoryId: mappedPriceCategoryId } : {}),
   };
 }
 

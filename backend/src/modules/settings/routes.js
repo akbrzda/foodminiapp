@@ -68,6 +68,7 @@ const PUBLIC_SETTINGS_ALLOWLIST = new Set([
   "orders_enabled",
   "delivery_enabled",
   "pickup_enabled",
+  "dine_in_enabled",
   "menu_badges_enabled",
   "menu_cards_layout",
   "site_currency",
