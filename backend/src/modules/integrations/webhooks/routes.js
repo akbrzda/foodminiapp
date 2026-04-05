@@ -4,8 +4,8 @@ import db from "../../../config/database.js";
 import { IIKO_STATUS_MAP_TO_LOCAL, INTEGRATION_MODULE, INTEGRATION_TYPE, SYNC_STATUS } from "../constants.js";
 import { getIntegrationSettings } from "../services/integrationConfigService.js";
 import { logIntegrationEvent } from "../services/integrationLoggerService.js";
-import menuAdapter from "../adapters/menuAdapter.js";
 import ordersAdapter from "../adapters/ordersAdapter.js";
+import { processIikoStopListWebhookPayloadSync } from "../services/syncProcessors.js";
 import { getSystemSettings } from "../../../utils/settings.js";
 import {
   cancelOrderBonuses,
@@ -321,56 +321,54 @@ async function processStopListWebhookPayload(payload = {}) {
   }
 
   const syncResults = [];
-  if (targetBranchIds.length > 0) {
-    for (const targetBranchId of targetBranchIds) {
-      const result = await menuAdapter.triggerStopListSync({
-        reason: "webhook",
-        branchId: targetBranchId,
-      });
+  const targetSyncBranchIds = targetBranchIds.length > 0 ? targetBranchIds : [null];
+
+  for (const targetBranchId of targetSyncBranchIds) {
+    try {
+      const result = await processIikoStopListWebhookPayloadSync(payload, targetBranchId);
       syncResults.push({
         branch_id: targetBranchId,
-        ...result,
+        ok: true,
+        removed_count: result.removedCount,
+        matched_count: result.matchedCount,
+        unmatched_count: result.unmatchedCount,
+        updated_count: result.updatedCount,
+      });
+    } catch (error) {
+      syncResults.push({
+        branch_id: targetBranchId,
+        ok: false,
+        error: error?.message || "Не удалось применить webhook стоп-листа",
       });
     }
-  } else {
-    const result = await menuAdapter.triggerStopListSync({
-      reason: "webhook",
-      branchId: null,
-    });
-    syncResults.push({
-      branch_id: null,
-      ...result,
-    });
   }
-  const acceptedJobs = syncResults.filter((result) => result.accepted);
-  const failedJobs = syncResults.filter((result) => !result.accepted);
+
+  const successResults = syncResults.filter((result) => result.ok);
+  const failedResults = syncResults.filter((result) => !result.ok);
 
   await logIntegrationEvent({
     integrationType: INTEGRATION_TYPE.IIKO,
     module: INTEGRATION_MODULE.STOPLIST,
     action: "webhook_stoplist",
-    status: failedJobs.length === 0 ? "success" : "failed",
+    status: failedResults.length === 0 ? "success" : "failed",
     requestData: payload,
     responseData: {
       terminal_group_ids: terminalGroupIds,
       target_branch_ids: targetBranchIds,
-      jobs: syncResults,
+      sync_results: syncResults,
     },
     errorMessage:
-      failedJobs.length === 0 ? null : failedJobs.map((result) => result.reason || "Не удалось поставить задачу синхронизации стоп-листа").join("; "),
+      failedResults.length === 0 ? null : failedResults.map((result) => result.error || "Не удалось применить webhook стоп-листа").join("; "),
   });
 
-  if (acceptedJobs.length === 0) {
-    return { ok: false, statusCode: 400, error: "Не удалось запустить синхронизацию стоп-листа", jobs: syncResults };
+  if (successResults.length === 0) {
+    return { ok: false, statusCode: 400, error: "Не удалось применить webhook стоп-листа", results: syncResults };
   }
 
   return {
     ok: true,
-    statusCode: 202,
-    jobs: acceptedJobs.map((result) => ({
-      branch_id: result.branch_id,
-      job_id: result.jobId || null,
-    })),
+    statusCode: 200,
+    results: syncResults,
   };
 }
 
@@ -478,9 +476,9 @@ router.post("/stoplist", async (req, res, next) => {
     }
     const result = await processStopListWebhookPayload(req.body || {});
     if (!result.ok) {
-      return res.status(result.statusCode || 400).json({ ok: false, error: result.error, jobs: result.jobs || [] });
+      return res.status(result.statusCode || 400).json({ ok: false, error: result.error, results: result.results || [] });
     }
-    return res.status(result.statusCode || 202).json({ ok: true, jobs: result.jobs || [] });
+    return res.status(result.statusCode || 200).json({ ok: true, results: result.results || [] });
   } catch (error) {
     next(error);
   }

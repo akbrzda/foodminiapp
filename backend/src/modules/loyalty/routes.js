@@ -60,6 +60,8 @@ export function createLoyaltyRoutes({ clientController, adminController }) {
     adminController.listBulkAccrualRecipients,
   );
   adminRouter.get("/levels", authenticateToken, requirePermission("system.loyalty_levels.manage"), adminController.getLevels);
+  adminRouter.get("/info-sections", authenticateToken, requirePermission("system.loyalty_levels.manage"), adminController.getInfoSections);
+  adminRouter.put("/info-sections", authenticateToken, requirePermission("system.loyalty_levels.manage"), adminController.saveInfoSections);
   adminRouter.put("/levels", authenticateToken, requirePermission("system.loyalty_levels.manage"), adminController.saveLevels);
   adminRouter.get(
     "/users/:id/loyalty",

@@ -59,6 +59,31 @@ const ensureBonusesEnabled = async (res) => {
   return true;
 };
 
+const normalizeLoyaltyInfoSections = (value) => {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => ({
+      title: String(item?.title || "").trim(),
+      description: String(item?.description || "").trim(),
+    }))
+    .filter((item) => item.title && item.description);
+};
+
+const getClientLoyaltyCapabilities = (settings = {}) => ({
+  historyAvailableForClient: !settings.premiumbonus_enabled,
+  loyaltyInfoSections: normalizeLoyaltyInfoSections(settings.loyalty_info_sections),
+});
+
+const attachClientLoyaltyCapabilities = (payload, settings = {}) => {
+  if (!payload || typeof payload !== "object") {
+    return payload;
+  }
+  return {
+    ...payload,
+    ...getClientLoyaltyCapabilities(settings),
+  };
+};
+
 export function createClientLoyaltyController({ loyaltyService }) {
   return {
     async getBalance(req, res, next) {
@@ -68,7 +93,7 @@ export function createClientLoyaltyController({ loyaltyService }) {
         const data = settings.premiumbonus_enabled
           ? await loyaltyAdapter.getUserBalance(req.user.id)
           : await loyaltyService.getBalanceSummary(req.user.id);
-        res.json(data);
+        res.json(attachClientLoyaltyCapabilities(data, settings));
       } catch (error) {
         next(error);
       }
@@ -85,7 +110,7 @@ export function createClientLoyaltyController({ loyaltyService }) {
         const data = settings.premiumbonus_enabled
           ? await loyaltyAdapter.calculateMaxSpend(req.user.id, value.orderTotal, value.deliveryCost)
           : await loyaltyService.calculateMaxSpend(req.user.id, value.orderTotal, value.deliveryCost);
-        res.json(data);
+        res.json(attachClientLoyaltyCapabilities(data, settings));
       } catch (error) {
         next(error);
       }
@@ -96,10 +121,18 @@ export function createClientLoyaltyController({ loyaltyService }) {
         if (!(await ensureBonusesEnabled(res))) return;
         const { value } = validateHistoryQuery(req.query);
         const settings = await getSystemSettings();
+        const capabilities = getClientLoyaltyCapabilities(settings);
+        if (!capabilities.historyAvailableForClient) {
+          return res.json({
+            transactions: [],
+            has_more: false,
+            ...capabilities,
+          });
+        }
         const data = settings.premiumbonus_enabled
           ? await loyaltyAdapter.getTransactionHistory(req.user.id)
           : await loyaltyService.getHistory(req.user.id, value.page, value.limit);
-        res.json(data);
+        res.json(attachClientLoyaltyCapabilities(data, settings));
       } catch (error) {
         next(error);
       }
@@ -112,7 +145,7 @@ export function createClientLoyaltyController({ loyaltyService }) {
         const data = settings.premiumbonus_enabled
           ? await loyaltyAdapter.getLevelsSummary(req.user.id)
           : await loyaltyService.getLevelsSummary(req.user.id);
-        res.json(data);
+        res.json(attachClientLoyaltyCapabilities(data, settings));
       } catch (error) {
         next(error);
       }

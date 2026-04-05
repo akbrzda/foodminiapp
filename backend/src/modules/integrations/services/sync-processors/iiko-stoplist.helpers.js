@@ -35,8 +35,10 @@ export function buildStopListEntryMap(data, targetBranches, autoReason) {
 
   const resolveTopLevelContainers = (payload = {}) => {
     if (Array.isArray(payload?.terminalGroupStopLists)) return payload.terminalGroupStopLists;
+    if (Array.isArray(payload?.terminalGroupsStopListsUpdates)) return payload.terminalGroupsStopListsUpdates;
     if (Array.isArray(payload?.stopLists)) return payload.stopLists;
     if (Array.isArray(payload?.organizationStopLists)) return payload.organizationStopLists;
+    if (Array.isArray(payload?.eventInfo?.terminalGroupsStopListsUpdates)) return payload.eventInfo.terminalGroupsStopListsUpdates;
     return [];
   };
 

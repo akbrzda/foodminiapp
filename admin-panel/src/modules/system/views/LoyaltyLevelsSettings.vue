@@ -32,6 +32,33 @@
                 <RefreshCcw v-else class="h-4 w-4 animate-spin" />
                 {{ saving ? "Сохранение..." : "Сохранить" }}
               </Button>
+              <Button
+                v-if="canManageLoyaltyLevels && activeTab === 'info'"
+                variant="secondary"
+                :disabled="infoLoading || infoSaving"
+                @click="loadInfoSections"
+              >
+                <RefreshCcw :size="16" />
+                Обновить
+              </Button>
+              <Button
+                v-if="canManageLoyaltyLevels && activeTab === 'info'"
+                variant="secondary"
+                :disabled="infoLoading || infoSaving"
+                @click="addInfoSection"
+              >
+                <Plus :size="16" />
+                Добавить блок
+              </Button>
+              <Button
+                v-if="canManageLoyaltyLevels && activeTab === 'info'"
+                :disabled="infoLoading || infoSaving"
+                @click="saveInfoSections"
+              >
+                <Save v-if="!infoSaving" :size="16" />
+                <RefreshCcw v-else class="h-4 w-4 animate-spin" />
+                {{ infoSaving ? "Сохранение..." : "Сохранить" }}
+              </Button>
             </div>
           </template>
         </PageHeader>
@@ -41,6 +68,7 @@
     <Tabs v-model="activeTab" class="space-y-4">
       <TabsList>
         <TabsTrigger value="levels">Уровни</TabsTrigger>
+        <TabsTrigger value="info">Информация</TabsTrigger>
         <TabsTrigger value="bulk">Массовое начисление</TabsTrigger>
       </TabsList>
 
@@ -185,6 +213,48 @@
         </div>
       </TabsContent>
 
+      <TabsContent value="info" class="space-y-5">
+        <Card v-if="infoLoading">
+          <CardContent class="space-y-3 pt-6">
+            <Skeleton class="h-4 w-56" />
+            <Skeleton class="h-24 w-full" />
+            <Skeleton class="h-24 w-full" />
+          </CardContent>
+        </Card>
+
+        <div v-else class="space-y-3">
+          <Card v-for="(section, index) in infoSections" :key="section.localKey">
+            <CardContent class="space-y-3 pt-6">
+              <div class="flex items-center justify-between gap-3">
+                <div class="text-sm font-semibold">Блок #{{ index + 1 }}</div>
+                <Button v-if="canManageLoyaltyLevels" type="button" size="sm" variant="outline" @click="removeInfoSection(index)">
+                  <Trash2 :size="14" />
+                  Удалить
+                </Button>
+              </div>
+              <Field>
+                <FieldLabel>Заголовок *</FieldLabel>
+                <FieldContent>
+                  <Input v-model="section.title" placeholder="Что такое кэшбэк" />
+                </FieldContent>
+              </Field>
+              <Field>
+                <FieldLabel>Описание *</FieldLabel>
+                <FieldContent>
+                  <textarea v-model="section.description" rows="4" class="mini-field w-full" placeholder="Описание блока" />
+                </FieldContent>
+              </Field>
+            </CardContent>
+          </Card>
+
+          <Card v-if="!infoSections.length">
+            <CardContent class="py-8 text-center text-sm text-muted-foreground">
+              Информационные блоки не добавлены.
+            </CardContent>
+          </Card>
+        </div>
+      </TabsContent>
+
       <TabsContent value="bulk" class="space-y-5">
         <LoyaltyBulkAccrualsTab :is-premium-bonus-mode="isPremiumBonusMode" />
       </TabsContent>
@@ -219,10 +289,13 @@ const canManageLoyaltyLevels = computed(() => authStore.hasPermission("system.lo
 const loading = ref(false);
 const saving = ref(false);
 const levels = ref([]);
+const infoSections = ref([]);
 const pbGroups = ref([]);
+const infoLoading = ref(false);
+const infoSaving = ref(false);
 const activeTab = useQueryTab({
   defaultValue: "levels",
-  allowedValues: ["levels", "bulk"],
+  allowedValues: ["levels", "info", "bulk"],
 });
 const mode = ref({
   premiumbonus_enabled: false,
@@ -254,6 +327,15 @@ const normalizeLevel = (level = {}, index = 0) => ({
   pb_group_id: String(level.pb_group_id || "").trim(),
   pb_group_name: String(level.pb_group_name || "").trim(),
 });
+const createInfoSection = (value = {}, index = 0) => ({
+  localKey: `${Date.now()}-${index}-${Math.random().toString(16).slice(2)}`,
+  title: String(value?.title || "").trim(),
+  description: String(value?.description || "").trim(),
+});
+const normalizeInfoSectionForSave = (section = {}) => ({
+  title: String(section?.title || "").trim(),
+  description: String(section?.description || "").trim(),
+});
 
 const loadLevels = async () => {
   loading.value = true;
@@ -269,6 +351,47 @@ const loadLevels = async () => {
     showErrorNotification(error?.response?.data?.error || "Не удалось загрузить уровни лояльности");
   } finally {
     loading.value = false;
+  }
+};
+const loadInfoSections = async () => {
+  infoLoading.value = true;
+  try {
+    const response = await api.get("/api/admin/loyalty/info-sections");
+    const sections = Array.isArray(response.data?.sections) ? response.data.sections : [];
+    infoSections.value = sections.map((section, index) => createInfoSection(section, index));
+  } catch (error) {
+    showErrorNotification(error?.response?.data?.error || "Не удалось загрузить информационные блоки");
+  } finally {
+    infoLoading.value = false;
+  }
+};
+const addInfoSection = () => {
+  if (!canManageLoyaltyLevels.value) return;
+  infoSections.value.push(createInfoSection({}, infoSections.value.length));
+};
+const removeInfoSection = (index) => {
+  if (!canManageLoyaltyLevels.value) return;
+  infoSections.value.splice(index, 1);
+};
+const saveInfoSections = async () => {
+  if (!canManageLoyaltyLevels.value) return;
+  const payload = infoSections.value.map(normalizeInfoSectionForSave);
+  if (payload.some((item) => !item.title || !item.description)) {
+    showErrorNotification("Укажите заголовок и описание для каждого блока");
+    return;
+  }
+  infoSaving.value = true;
+  try {
+    const response = await api.put("/api/admin/loyalty/info-sections", {
+      sections: payload,
+    });
+    const sections = Array.isArray(response.data?.sections) ? response.data.sections : [];
+    infoSections.value = sections.map((section, index) => createInfoSection(section, index));
+    showSuccessNotification("Информационные блоки сохранены");
+  } catch (error) {
+    showErrorNotification(error?.response?.data?.errors?.loyalty_info_sections || error?.response?.data?.error || "Не удалось сохранить информационные блоки");
+  } finally {
+    infoSaving.value = false;
   }
 };
 
@@ -368,5 +491,6 @@ const saveLevels = async () => {
 
 onMounted(() => {
   loadLevels();
+  loadInfoSections();
 });
 </script>

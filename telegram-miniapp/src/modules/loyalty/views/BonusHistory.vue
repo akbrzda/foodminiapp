@@ -28,10 +28,12 @@
           </div>
           <div class="progress-card">
             <div class="skeleton skeleton-line skeleton-w-52 skeleton-h-22"></div>
-            <div class="skeleton skeleton-line skeleton-w-100 skeleton-h-8 skeleton-rounded-full"></div>
+            <div
+              class="skeleton skeleton-line skeleton-w-100 skeleton-h-8 skeleton-rounded-full"
+            ></div>
             <div class="skeleton skeleton-line skeleton-w-80"></div>
           </div>
-          <div class="history-section">
+          <div v-if="showTransactionHistory" class="history-section">
             <h3>История операций</h3>
             <div class="transactions">
               <div v-for="index in 4" :key="`history-skeleton-${index}`" class="transaction-item">
@@ -58,7 +60,14 @@
                 <div class="loyalty-rate">Ваш статус {{ currentRateLabel }}%</div>
                 <div class="loyalty-tier">
                   <span>{{ currentLevel.name }}</span>
-                  <button class="level-info-button" type="button" aria-label="Показать уровни бонусной программы" @click="openLevelsPopup">!</button>
+                  <button
+                    class="level-info-button"
+                    type="button"
+                    aria-label="Показать уровни бонусной программы"
+                    @click="openLevelsPopup"
+                  >
+                    !
+                  </button>
                 </div>
               </div>
             </div>
@@ -72,20 +81,32 @@
                 <span class="benefit-value">{{ maxRedeemPercentLabel }}%</span>
               </div>
             </div>
+            <button
+              v-if="hasInfoSections"
+              class="info-card-button"
+              type="button"
+              @click="openInfoPopup"
+            >
+              Как все работает
+            </button>
           </div>
 
           <div class="progress-card">
             <div class="progress-values">
               <span>{{ formatPriceWithCurrency(totalSpent, settingsStore.currencyCode) }}</span>
               <span>/</span>
-              <span v-if="nextLevel">{{ formatPriceWithCurrency(nextLevel.min, settingsStore.currencyCode) }}</span>
+              <span v-if="nextLevel">{{
+                formatPriceWithCurrency(nextLevel.min, settingsStore.currencyCode)
+              }}</span>
               <span v-else>∞</span>
             </div>
             <div class="progress-bar">
               <span class="progress-fill" :style="{ width: `${progressPercent}%` }"></span>
             </div>
             <div v-if="nextLevel" class="progress-caption">
-              До обновления статуса — {{ formatPriceWithCurrency(amountToNextLevel, settingsStore.currencyCode) }} за всё время
+              До обновления статуса —
+              {{ formatPriceWithCurrency(amountToNextLevel, settingsStore.currencyCode) }} за всё
+              время
             </div>
             <div class="progress-caption" v-else>У вас максимальный статус</div>
           </div>
@@ -98,7 +119,9 @@
                 <div v-for="level in formattedLevels" :key="level.id" class="levels-list__item">
                   <div class="levels-list__header">
                     <span class="levels-list__name">{{ level.name }}</span>
-                    <span v-if="level.id === currentLevel.id" class="levels-list__badge">Текущий</span>
+                    <span v-if="level.id === currentLevel.id" class="levels-list__badge"
+                      >Текущий</span
+                    >
                   </div>
                   <div class="levels-list__meta">
                     <span>Начисление: {{ level.rateLabel }}%</span>
@@ -111,17 +134,7 @@
             </div>
           </div>
 
-          <div v-if="expiringBonuses.length > 0" class="expiring-section">
-            <div class="expiring-list">
-              <div v-for="bonus in expiringBonuses" :key="bonus.id" class="expiring-item">
-                <span class="expiring-amount">{{ formatPriceWithCurrency(bonus.amount, settingsStore.currencyCode) }}</span>
-                <span class="expiring-date">{{ formatDateShort(bonus.expires_at) }}</span>
-                <span class="expiring-days" :class="{ urgent: bonus.days_left <= 3 }">{{ bonus.days_left }} дн.</span>
-              </div>
-            </div>
-          </div>
-
-          <div class="history-section">
+          <div v-if="showTransactionHistory" class="history-section">
             <h3>История операций</h3>
             <div class="empty" v-if="!transactions.length">
               <p>У вас пока нет операций с бонусами</p>
@@ -139,8 +152,16 @@
                   <X v-else :size="20" />
                 </div>
                 <div class="transaction-info">
-                  <div class="transaction-title" :class="{ 'transaction-text--muted': isPendingEarn(transaction) }">{{ getTransactionTitle(transaction) }}</div>
-                  <div class="transaction-date" :class="{ 'transaction-text--muted': isPendingEarn(transaction) }">
+                  <div
+                    class="transaction-title"
+                    :class="{ 'transaction-text--muted': isPendingEarn(transaction) }"
+                  >
+                    {{ getTransactionTitle(transaction) }}
+                  </div>
+                  <div
+                    class="transaction-date"
+                    :class="{ 'transaction-text--muted': isPendingEarn(transaction) }"
+                  >
                     {{ formatCalendarDateTime(transaction.created_at) }}
                   </div>
                   <div
@@ -151,21 +172,80 @@
                       { 'transaction-text--muted': isPendingEarn(transaction) },
                     ]"
                   >
-                    Акционные: {{ getPromoSign(transaction.type) }}{{ formatPriceWithCurrency(getPromoAmount(transaction), settingsStore.currencyCode) }}
+                    Акционные: {{ getPromoSign(transaction.type)
+                    }}{{
+                      formatPriceWithCurrency(
+                        getPromoAmount(transaction),
+                        settingsStore.currencyCode
+                      )
+                    }}
                   </div>
                   <div v-if="isPendingEarn(transaction)" class="transaction-pending">
                     Активация через {{ getActivationCountdown(transaction) }}
                   </div>
-                  <div v-else-if="isActiveEarn(transaction)" class="transaction-expire">Действует до {{ formatDateShort(transaction.expires_at) }}</div>
-                  <div v-else-if="transaction.expires_at && new Date(transaction.expires_at) < new Date()" class="transaction-expired">Истек</div>
+                  <div v-else-if="isActiveEarn(transaction)" class="transaction-expire">
+                    Действует до {{ formatDateShort(transaction.expires_at) }}
+                  </div>
+                  <div
+                    v-else-if="
+                      transaction.expires_at && new Date(transaction.expires_at) < new Date()
+                    "
+                    class="transaction-expired"
+                  >
+                    Истек
+                  </div>
                 </div>
-                <div class="transaction-amount" :class="[getTransactionClass(transaction.type), { muted: isPendingEarn(transaction) }]">
-                  {{ getTransactionSign(transaction.type) }}{{ formatPriceWithCurrency(Math.abs(transaction.amount), settingsStore.currencyCode) }}
+                <div
+                  class="transaction-amount"
+                  :class="[
+                    getTransactionClass(transaction.type),
+                    { muted: isPendingEarn(transaction) },
+                  ]"
+                >
+                  {{ getTransactionSign(transaction.type)
+                  }}{{
+                    formatPriceWithCurrency(
+                      Math.abs(transaction.amount),
+                      settingsStore.currencyCode
+                    )
+                  }}
                 </div>
               </div>
-              <button v-if="historyHasMore" class="history-more" type="button" :disabled="loadingMore" @click="loadMoreHistory">
+              <button
+                v-if="historyHasMore"
+                class="history-more"
+                type="button"
+                :disabled="loadingMore"
+                @click="loadMoreHistory"
+              >
                 {{ loadingMore ? "Загрузка..." : "Загрузить еще" }}
               </button>
+            </div>
+          </div>
+
+          <div v-if="infoPopupOpen && hasInfoSections" class="info-sheet">
+            <div class="info-sheet__overlay" @click="closeInfoPopup"></div>
+            <div
+              ref="infoSheetContentRef"
+              class="info-sheet__content"
+              @touchstart.passive="handleInfoSheetTouchStart"
+              @touchmove="handleInfoSheetTouchMove"
+              @touchend="handleInfoSheetTouchEnd"
+            >
+              <div class="info-sheet__handle"></div>
+              <div class="info-sheet__header">
+                <h2 class="info-sheet__title">Как все работает</h2>
+              </div>
+              <div ref="infoSheetBodyRef" class="info-sheet__body">
+                <section
+                  v-for="(section, index) in infoSections"
+                  :key="`${section.title}-${index}`"
+                  class="info-sheet__section"
+                >
+                  <h3 class="info-sheet__section-title">{{ section.title }}</h3>
+                  <p class="info-sheet__section-description">{{ section.description }}</p>
+                </section>
+              </div>
             </div>
           </div>
         </template>
@@ -174,7 +254,7 @@
   </div>
 </template>
 <script setup>
-import { computed, ref, onMounted, onBeforeUnmount } from "vue";
+import { computed, ref, onMounted, onBeforeUnmount, watch } from "vue";
 import { X, Plus, Minus, Award } from "lucide-vue-next";
 import { bonusesAPI } from "@/shared/api/endpoints.js";
 import { formatPrice, formatPriceWithCurrency } from "@/shared/utils/format";
@@ -185,8 +265,6 @@ import { devError } from "@/shared/utils/logger.js";
 
 const bonusBalance = ref(0);
 const transactions = ref([]);
-const expiringBonuses = ref([]);
-const totalExpiring = ref(0);
 const inactiveBonusAmount = ref(0);
 const inactiveBonusActivationText = ref("");
 const loading = ref(true);
@@ -200,9 +278,12 @@ const loyaltyStore = useLoyaltyStore();
 const settingsStore = useSettingsStore();
 
 const bonusesEnabled = computed(() => settingsStore.bonusesEnabled);
+const showTransactionHistory = computed(() => loyaltyStore.historyAvailableForClient);
 const currentLevel = computed(() => loyaltyStore.currentLevel);
 const nextLevel = computed(() => loyaltyStore.nextLevel);
 const totalSpent = computed(() => loyaltyStore.totalSpent);
+const infoSections = computed(() => loyaltyStore.infoSections);
+const hasInfoSections = computed(() => infoSections.value.length > 0);
 const currentRateLabel = computed(() => Math.round(currentLevel.value.rate * 100));
 const maxRedeemPercentLabel = computed(() => Math.round(loyaltyStore.maxRedeemPercent * 100));
 const progressPercent = computed(() => Math.round(loyaltyStore.progressToNextLevel * 100));
@@ -216,15 +297,101 @@ const formattedLevels = computed(() =>
     rangeLabel: Number.isFinite(level.max)
       ? `${formatPriceWithCurrency(level.min, settingsStore.currencyCode)} – ${formatPriceWithCurrency(level.max, settingsStore.currencyCode)}`
       : `от ${formatPriceWithCurrency(level.min, settingsStore.currencyCode)}`,
-  })),
+  }))
 );
 const levelsPopup = ref({ open: false });
+const infoPopupOpen = ref(false);
+const infoSheetContentRef = ref(null);
+const infoSheetBodyRef = ref(null);
+const infoSheetTouchStartY = ref(0);
+const infoSheetTouchOffset = ref(0);
+const infoSheetTouchActive = ref(false);
+const lockedScrollTop = ref(0);
 const openLevelsPopup = () => {
   levelsPopup.value = { open: true };
 };
 const closeLevelsPopup = () => {
   levelsPopup.value = { open: false };
 };
+const openInfoPopup = () => {
+  infoPopupOpen.value = true;
+};
+const closeInfoPopup = () => {
+  infoPopupOpen.value = false;
+};
+const lockPageScroll = () => {
+  if (typeof window === "undefined" || typeof document === "undefined") return;
+  const body = document.body;
+  lockedScrollTop.value = window.scrollY || window.pageYOffset || 0;
+  body.style.position = "fixed";
+  body.style.top = `-${lockedScrollTop.value}px`;
+  body.style.left = "0";
+  body.style.right = "0";
+  body.style.width = "100%";
+  body.style.overflow = "hidden";
+};
+const unlockPageScroll = () => {
+  if (typeof window === "undefined" || typeof document === "undefined") return;
+  const body = document.body;
+  body.style.position = "";
+  body.style.top = "";
+  body.style.left = "";
+  body.style.right = "";
+  body.style.width = "";
+  body.style.overflow = "";
+  window.scrollTo(0, lockedScrollTop.value || 0);
+};
+const resetInfoSheetPosition = () => {
+  const content = infoSheetContentRef.value;
+  if (!content) return;
+  content.style.transition = "transform 180ms ease";
+  content.style.transform = "translateY(0px)";
+};
+const handleInfoSheetTouchStart = (event) => {
+  const content = infoSheetContentRef.value;
+  if (!content) return;
+  infoSheetTouchActive.value = true;
+  infoSheetTouchStartY.value = Number(event.touches?.[0]?.clientY || 0);
+  infoSheetTouchOffset.value = 0;
+  content.style.transition = "none";
+};
+const handleInfoSheetTouchMove = (event) => {
+  if (!infoSheetTouchActive.value) return;
+  const content = infoSheetContentRef.value;
+  if (!content) return;
+  const currentY = Number(event.touches?.[0]?.clientY || 0);
+  const delta = Math.max(0, currentY - infoSheetTouchStartY.value);
+  const bodyScrollTop = Number(infoSheetBodyRef.value?.scrollTop || 0);
+  const isAtTop = bodyScrollTop <= 0;
+  if (!isAtTop || delta <= 0) return;
+
+  infoSheetTouchOffset.value = Math.min(delta, 280);
+  content.style.transform = `translateY(${infoSheetTouchOffset.value}px)`;
+  if (event.cancelable) {
+    event.preventDefault();
+  }
+};
+const handleInfoSheetTouchEnd = () => {
+  if (!infoSheetTouchActive.value) return;
+  infoSheetTouchActive.value = false;
+  if (infoSheetTouchOffset.value > 120) {
+    closeInfoPopup();
+  } else {
+    resetInfoSheetPosition();
+  }
+};
+
+watch(
+  () => infoPopupOpen.value,
+  (open) => {
+    if (open) {
+      lockPageScroll();
+      return;
+    }
+    unlockPageScroll();
+    resetInfoSheetPosition();
+  }
+);
 
 onMounted(async () => {
   if (!bonusesEnabled.value) {
@@ -238,6 +405,7 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+  unlockPageScroll();
   if (timerId.value) {
     clearInterval(timerId.value);
     timerId.value = null;
@@ -247,16 +415,24 @@ onBeforeUnmount(() => {
 async function loadData() {
   loading.value = true;
   try {
-    const [balanceResponse, historyResponse] = await Promise.all([
-      bonusesAPI.getBalance(),
-      bonusesAPI.getHistory({ page: historyPage.value, limit: 20 }),
-    ]);
+    const balanceResponse = await bonusesAPI.getBalance();
+    loyaltyStore.setClientCapabilities(balanceResponse.data || {});
     bonusBalance.value = balanceResponse.data.balance || 0;
-    expiringBonuses.value = balanceResponse.data.expiring_bonuses || [];
-    totalExpiring.value = balanceResponse.data.total_expiring || 0;
     inactiveBonusAmount.value = Math.max(0, Number(balanceResponse.data?.bonus_inactive || 0));
-    inactiveBonusActivationText.value = String(balanceResponse.data?.bonus_next_activation_text || "").trim();
-    transactions.value = markPendingEarnTransactions(sortTransactions(historyResponse.data.transactions || []), inactiveBonusAmount.value);
+    inactiveBonusActivationText.value = String(
+      balanceResponse.data?.bonus_next_activation_text || ""
+    ).trim();
+    if (!showTransactionHistory.value) {
+      transactions.value = [];
+      historyHasMore.value = false;
+      historyPage.value = 1;
+      return;
+    }
+    const historyResponse = await bonusesAPI.getHistory({ page: historyPage.value, limit: 20 });
+    transactions.value = markPendingEarnTransactions(
+      sortTransactions(historyResponse.data.transactions || []),
+      inactiveBonusAmount.value
+    );
     historyHasMore.value = Boolean(historyResponse.data.has_more);
   } catch (error) {
     devError("Не удалось загрузить данные бонусов:", error);
@@ -266,13 +442,17 @@ async function loadData() {
 }
 
 async function loadMoreHistory() {
+  if (!showTransactionHistory.value) return;
   if (loadingMore.value || !historyHasMore.value) return;
   loadingMore.value = true;
   try {
     const nextPage = historyPage.value + 1;
     const response = await bonusesAPI.getHistory({ page: nextPage, limit: 20 });
     const newItems = response.data.transactions || [];
-    transactions.value = markPendingEarnTransactions(sortTransactions([...transactions.value, ...newItems]), inactiveBonusAmount.value);
+    transactions.value = markPendingEarnTransactions(
+      sortTransactions([...transactions.value, ...newItems]),
+      inactiveBonusAmount.value
+    );
     historyPage.value = nextPage;
     historyHasMore.value = Boolean(response.data.has_more);
   } catch (error) {
@@ -371,7 +551,11 @@ function getTransactionTitle(transaction) {
   };
 
   const label = typeLabels[transaction.type] || "Операция";
-  const orderRef = transaction.order_number ? `#${transaction.order_number}` : transaction.order_id ? `#${transaction.order_id}` : "";
+  const orderRef = transaction.order_number
+    ? `#${transaction.order_number}`
+    : transaction.order_id
+      ? `#${transaction.order_id}`
+      : "";
 
   if (transaction.type === "earn" && !orderRef) {
     return "Начисление бонусов";
@@ -393,7 +577,8 @@ function sortTransactions(list = []) {
   return [...list].sort((a, b) => {
     const diff = new Date(b?.created_at || 0).getTime() - new Date(a?.created_at || 0).getTime();
     if (diff !== 0) return diff;
-    const sameOrder = String(a?.order_id || "") && String(a?.order_id || "") === String(b?.order_id || "");
+    const sameOrder =
+      String(a?.order_id || "") && String(a?.order_id || "") === String(b?.order_id || "");
     if (sameOrder && a?.type !== b?.type) {
       if (a?.type === "earn") return -1;
       if (b?.type === "earn") return 1;
@@ -414,7 +599,7 @@ function markPendingEarnTransactions(list = [], inactiveAmount = 0) {
   // Для PremiumBonus fallback по inactive может неверно "подсвечивать" старые начисления,
   // если API истории не возвращает отдельные pending-операции.
   const hasPremiumBonusMarkers = base.some((tx) =>
-    Object.prototype.hasOwnProperty.call(tx || {}, "raw_status"),
+    Object.prototype.hasOwnProperty.call(tx || {}, "raw_status")
   );
   if (hasPremiumBonusMarkers) {
     return base;
@@ -546,6 +731,31 @@ function markPendingEarnTransactions(list = [], inactiveAmount = 0) {
   font-weight: var(--font-weight-bold);
   color: var(--color-text-primary);
 }
+.info-card-button {
+  margin-top: 12px;
+  width: 100%;
+  padding: 11px 14px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.28) 0%, rgba(255, 255, 255, 0.12) 100%);
+  color: #111827;
+  font-size: var(--font-size-body);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.12s ease,
+    background 0.12s ease;
+}
+.info-card-button:active {
+  transform: translateY(1px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    0 2px 8px rgba(0, 0, 0, 0.08);
+}
+.info-card-button:hover {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.34) 0%, rgba(255, 255, 255, 0.16) 100%);
+}
 
 .info-button {
   width: 22px;
@@ -639,6 +849,38 @@ function markPendingEarnTransactions(list = [], inactiveAmount = 0) {
 .expiring-section {
   margin-bottom: 20px;
 }
+.expiring-section h3 {
+  font-size: var(--font-size-h3);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  margin-bottom: 12px;
+}
+
+.inactive-bonus-card {
+  margin-bottom: 12px;
+  padding: 12px;
+  border-radius: var(--border-radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-background-secondary);
+}
+
+.inactive-bonus-card__title {
+  font-size: var(--font-size-caption);
+  color: var(--color-text-secondary);
+}
+
+.inactive-bonus-card__value {
+  margin-top: 4px;
+  font-size: var(--font-size-h3);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.inactive-bonus-card__hint {
+  margin-top: 6px;
+  font-size: var(--font-size-caption);
+  color: var(--color-text-secondary);
+}
 
 .expiring-icon {
   font-size: 24px;
@@ -707,6 +949,85 @@ function markPendingEarnTransactions(list = [], inactiveAmount = 0) {
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-primary);
   margin-bottom: 12px;
+}
+.info-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+}
+.info-sheet__overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+}
+.info-sheet__content {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-height: 88vh;
+  background: var(--color-background);
+  border-top-left-radius: 24px;
+  border-top-right-radius: 24px;
+  padding: 10px 16px 24px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 -12px 30px rgba(15, 23, 42, 0.18);
+  touch-action: pan-y;
+}
+.info-sheet__handle {
+  width: 64px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--color-border);
+  margin: 0 auto 12px;
+}
+.info-sheet__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.info-sheet__title {
+  margin: 0;
+  font-size: 40px;
+  line-height: 1.05;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+}
+.info-sheet__body {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.info-sheet__section-title {
+  margin: 0 0 8px;
+  font-size: 48px;
+  line-height: 1.08;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+}
+.info-sheet__section-description {
+  margin: 0;
+  white-space: pre-line;
+  font-size: 20px;
+  line-height: 1.35;
+  color: var(--color-text-primary);
+}
+@media (max-width: 520px) {
+  .info-sheet__title {
+    font-size: 24px;
+  }
+  .info-sheet__section-title {
+    font-size: 18px;
+  }
+  .info-sheet__section-description {
+    font-size: 16px;
+  }
 }
 .history-more {
   width: 100%;

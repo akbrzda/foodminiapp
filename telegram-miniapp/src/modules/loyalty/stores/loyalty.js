@@ -18,6 +18,8 @@ export const useLoyaltyStore = defineStore("loyalty", {
     levels: LOYALTY_LEVELS,
     fallbackRedeemPercent: MAX_BONUS_REDEEM_PERCENT,
     periodDays: null,
+    historyAvailableForClient: true,
+    infoSections: [],
   }),
   getters: {
     currentLevel: (state) => getLoyaltyLevel(state.totalSpent, state.levels),
@@ -78,11 +80,29 @@ export const useLoyaltyStore = defineStore("loyalty", {
       });
       this.fallbackRedeemPercent = fallbackRedeemPercent;
     },
+    setHistoryAvailability(value) {
+      if (typeof value !== "boolean") return;
+      this.historyAvailableForClient = value;
+    },
+    setInfoSections(value) {
+      if (!Array.isArray(value)) return;
+      this.infoSections = value
+        .map((item) => ({
+          title: String(item?.title || "").trim(),
+          description: String(item?.description || "").trim(),
+        }))
+        .filter((item) => item.title && item.description);
+    },
+    setClientCapabilities(payload = {}) {
+      this.setHistoryAvailability(payload?.historyAvailableForClient);
+      this.setInfoSections(payload?.loyaltyInfoSections);
+    },
     async refreshFromProfile() {
       if (this.loading) return;
       this.loading = true;
       try {
         const response = await bonusesAPI.getLevels();
+        this.setClientCapabilities(response.data || {});
         const totalSpent = response.data?.total_spent_all_time || 0;
         this.setTotalSpent(totalSpent);
         this.periodDays = null;

@@ -17,7 +17,7 @@ import { processIikoOrderSync } from "./sync-processors/iiko-order.processor.js"
 import { processPremiumBonusClientSync } from "./sync-processors/premiumbonus-client.processor.js";
 import { processPremiumBonusPurchaseSync } from "./sync-processors/premiumbonus-purchase.processor.js";
 import { processIikoMenuSync } from "./sync-processors/iiko-menu-db-sync.js";
-import { processIikoStopListSync } from "./sync-processors/iiko-stoplist.processor.js";
+import { processIikoStopListSync, processIikoStopListWebhookPayloadSync } from "./sync-processors/iiko-stoplist.processor.js";
 
 export { markOrderIikoSync, markOrderPbSync, markUserPbSync };
 export {
@@ -26,6 +26,7 @@ export {
   processPremiumBonusPurchaseSync,
   processIikoMenuSync,
   processIikoStopListSync,
+  processIikoStopListWebhookPayloadSync,
 };
 
 export async function retryFailedSyncs() {

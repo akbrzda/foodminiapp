@@ -6,6 +6,8 @@ import { logIntegrationEvent } from "../integrationLoggerService.js";
 import { notifyMenuUpdated } from "../../../../websocket/runtime.js";
 import { buildStopListEntryMap, resolveStopListEntityMaps } from "./iiko-stoplist.helpers.js";
 
+const IIKO_STOPLIST_SYNC_REASON = "Синхронизация стоп-листа из iiko";
+
 async function invalidatePublicMenuCache() {
   try {
     const keys = await redis.keys("menu:*:city:*");
@@ -17,23 +19,16 @@ async function invalidatePublicMenuCache() {
   }
 }
 
-export async function processIikoStopListSync(reason = "manual", branchId = null) {
-  const client = await getIikoClientOrNull();
-  if (!client) throw new Error("Клиент iiko недоступен");
-
-  const startedAt = Date.now();
-  const autoReason = "Синхронизация стоп-листа из iiko";
-
+async function loadTargetBranches(branchId = null) {
   const requestedBranchId = Number(branchId);
-  const branchFilter =
-    Number.isFinite(requestedBranchId) && requestedBranchId > 0 ? requestedBranchId : null;
+  const branchFilter = Number.isFinite(requestedBranchId) && requestedBranchId > 0 ? requestedBranchId : null;
   const [branches] = await db.query(
     `SELECT id, iiko_terminal_group_id
      FROM branches
      WHERE (? IS NULL OR id = ?)
        AND iiko_terminal_group_id IS NOT NULL
        AND iiko_terminal_group_id <> ''`,
-    [branchFilter, branchFilter]
+    [branchFilter, branchFilter],
   );
 
   const targetBranches = branches.map((row) => ({
@@ -41,18 +36,21 @@ export async function processIikoStopListSync(reason = "manual", branchId = null
     terminalGroupId: String(row.iiko_terminal_group_id || "").trim(),
   }));
   const targetBranchIds = targetBranches.map((row) => row.id).filter(Number.isFinite);
-  const terminalGroupsIds = targetBranches.map((row) => row.terminalGroupId).filter(Boolean);
 
-  const data = await client.getStopList({
-    ...(terminalGroupsIds.length > 0 ? { terminalGroupsIds } : {}),
-  });
+  return {
+    branchFilter,
+    targetBranches,
+    targetBranchIds,
+  };
+}
 
-  const { entryMap, allExternalIdsSet } = buildStopListEntryMap(data, targetBranches, autoReason);
+async function applyIikoStopListPayloadSync(data, { reason = "manual", branchId = null, source = "sync" } = {}) {
+  const startedAt = Date.now();
+
+  const { targetBranches, targetBranchIds } = await loadTargetBranches(branchId);
+  const { entryMap, allExternalIdsSet } = buildStopListEntryMap(data, targetBranches, IIKO_STOPLIST_SYNC_REASON);
   const allExternalIds = [...allExternalIdsSet];
-  const { itemIdMap, variantIdMap, modifierIdMap } = await resolveStopListEntityMaps(
-    db,
-    allExternalIds
-  );
+  const { itemIdMap, variantIdMap, modifierIdMap } = await resolveStopListEntityMaps(db, allExternalIds);
 
   let updatedCount = 0;
   let matchedCount = 0;
@@ -70,7 +68,7 @@ export async function processIikoStopListSync(reason = "manual", branchId = null
          WHERE branch_id IN (${branchPlaceholders})
            AND created_by IS NULL
            AND reason = ?`,
-        [...targetBranchIds, autoReason]
+        [...targetBranchIds, IIKO_STOPLIST_SYNC_REASON],
       );
       removedCount = Number(deleteResult?.affectedRows || 0);
     }
@@ -88,7 +86,7 @@ export async function processIikoStopListSync(reason = "manual", branchId = null
           const existingTs = existing.createdAt ? new Date(existing.createdAt).getTime() : 0;
           const nextTs = meta?.createdAt ? new Date(meta.createdAt).getTime() : 0;
           branchScopedEntries.set(externalId, {
-            reason: meta?.reason || existing.reason || autoReason,
+            reason: meta?.reason || existing.reason || IIKO_STOPLIST_SYNC_REASON,
             createdAt: nextTs > existingTs ? meta.createdAt : existing.createdAt,
           });
         }
@@ -131,13 +129,7 @@ export async function processIikoStopListSync(reason = "manual", branchId = null
              remove_at = NULL,
              created_by = NULL,
              created_at = VALUES(created_at)`,
-          [
-            branch.id,
-            entityType,
-            entityId,
-            stopMeta?.reason || autoReason,
-            stopMeta?.createdAt || null,
-          ]
+          [branch.id, entityType, entityId, stopMeta?.reason || IIKO_STOPLIST_SYNC_REASON, stopMeta?.createdAt || null],
         );
         updatedCount += 1;
       }
@@ -153,7 +145,7 @@ export async function processIikoStopListSync(reason = "manual", branchId = null
 
   if (unmatchedExternalIds.size > 0) {
     const externalContext = JSON.stringify({
-      source: "iiko_stoplist_sync",
+      source: source === "webhook" ? "iiko_stoplist_webhook" : "iiko_stoplist_sync",
       branch_id: branchId || null,
       synced_at: new Date().toISOString(),
     });
@@ -173,7 +165,7 @@ export async function processIikoStopListSync(reason = "manual", branchId = null
              AND c.external_entity_id = ?
              AND c.state IN ('suggested', 'requires_review')
          )`,
-        [externalId, externalContext, externalId]
+        [externalId, externalContext, externalId],
       );
     }
   }
@@ -195,7 +187,7 @@ export async function processIikoStopListSync(reason = "manual", branchId = null
            AND module = 'stoplist'
            AND external_entity_id IN (${placeholders})
            AND state IN ('suggested', 'requires_review')`,
-        matchedIds
+        matchedIds,
       );
     }
   }
@@ -206,22 +198,19 @@ export async function processIikoStopListSync(reason = "manual", branchId = null
        FROM menu_stop_list
        WHERE created_by IS NULL
          AND reason = ?`,
-      [autoReason]
+      [IIKO_STOPLIST_SYNC_REASON],
     ),
     db.query(
       `SELECT status
        FROM integration_readiness
        WHERE provider = 'iiko' AND module = 'menu'
-       LIMIT 1`
+       LIMIT 1`,
     ),
   ]);
 
   const stopListTotal = Number(stopListTotalRows?.[0]?.total || 0);
   const unmatchedCount = unmatchedExternalIds.size;
-  const stopListStatus =
-    menuReadinessRows?.[0]?.status === "ready" && unmatchedCount === 0
-      ? "ready"
-      : "needs_mapping";
+  const stopListStatus = menuReadinessRows?.[0]?.status === "ready" && unmatchedCount === 0 ? "ready" : "needs_mapping";
   const stopListStats = {
     synced_entries: stopListTotal,
     unmatched_candidates: unmatchedCount,
@@ -241,18 +230,12 @@ export async function processIikoStopListSync(reason = "manual", branchId = null
        unlinked_count = VALUES(unlinked_count),
        stats = VALUES(stats),
        last_checked_at = NOW()`,
-    [
-      stopListStatus,
-      stopListTotal,
-      Math.max(stopListTotal - unmatchedCount, 0),
-      unmatchedCount,
-      JSON.stringify(stopListStats),
-    ]
+    [stopListStatus, stopListTotal, Math.max(stopListTotal - unmatchedCount, 0), unmatchedCount, JSON.stringify(stopListStats)],
   );
 
   await invalidatePublicMenuCache();
   notifyMenuUpdated({
-    source: "iiko-stoplist-sync",
+    source: source === "webhook" ? "iiko-stoplist-webhook" : "iiko-stoplist-sync",
     scope: targetBranchIds.length === 1 ? "branch" : "all",
     branchId: targetBranchIds.length === 1 ? targetBranchIds[0] : null,
   });
@@ -260,9 +243,9 @@ export async function processIikoStopListSync(reason = "manual", branchId = null
   await logIntegrationEvent({
     integrationType: INTEGRATION_TYPE.IIKO,
     module: INTEGRATION_MODULE.STOPLIST,
-    action: "sync_stoplist",
+    action: source === "webhook" ? "apply_stoplist_webhook" : "sync_stoplist",
     status: "success",
-    requestData: { reason, branchId },
+    requestData: { reason, branchId, source },
     responseData: {
       hasData: Boolean(data),
       keys: data ? Object.keys(data).slice(0, 20) : [],
@@ -275,5 +258,34 @@ export async function processIikoStopListSync(reason = "manual", branchId = null
     durationMs: Date.now() - startedAt,
   });
 
-  return data;
+  return {
+    rawData: data,
+    targetBranchIds,
+    removedCount,
+    matchedCount,
+    unmatchedCount,
+    updatedCount,
+  };
+}
+
+export async function processIikoStopListSync(reason = "manual", branchId = null) {
+  const client = await getIikoClientOrNull();
+  if (!client) throw new Error("Клиент iiko недоступен");
+
+  const { targetBranches } = await loadTargetBranches(branchId);
+  const terminalGroupsIds = targetBranches.map((row) => row.terminalGroupId).filter(Boolean);
+  const data = await client.getStopList({
+    ...(terminalGroupsIds.length > 0 ? { terminalGroupsIds } : {}),
+  });
+
+  const result = await applyIikoStopListPayloadSync(data, { reason, branchId, source: "sync" });
+  return result.rawData;
+}
+
+export async function processIikoStopListWebhookPayloadSync(payload = {}, branchId = null) {
+  return applyIikoStopListPayloadSync(payload, {
+    reason: "webhook",
+    branchId,
+    source: "webhook",
+  });
 }

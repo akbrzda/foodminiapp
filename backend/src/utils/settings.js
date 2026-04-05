@@ -51,6 +51,9 @@ const MAPS_LANGUAGE_REGEX = /^[a-z]{2}_[A-Z]{2}$/;
 const MAPS_COUNTRY_REGEX = /^[A-Z]{2}$/;
 const MENU_CARDS_LAYOUT_VALUES = new Set(["horizontal", "vertical"]);
 const SITE_CURRENCY_VALUES = new Set(["RUB", "USD", "TJS", "KZT", "KGS", "UZS"]);
+const LOYALTY_INFO_SECTIONS_MAX_ITEMS = 20;
+const LOYALTY_INFO_TITLE_MAX_LENGTH = 120;
+const LOYALTY_INFO_DESCRIPTION_MAX_LENGTH = 2000;
 const ENCRYPTED_SETTING_KEYS = new Set([
   "iiko_api_token",
   "iiko_api_key",
@@ -75,6 +78,13 @@ export const SETTINGS_SCHEMA = {
     description: "Количество дней до сгорания начисленных бонусов",
     group: "Лояльность",
     type: "number",
+  },
+  loyalty_info_sections: {
+    default: [],
+    label: "Инфо-блоки бонусной программы",
+    description: "Заголовки и описания для раздела «Как всё работает» в Mini App",
+    group: "Лояльность",
+    type: "json_array",
   },
   orders_enabled: {
     default: true,
@@ -467,6 +477,45 @@ const validateLoyaltyNumberSetting = (key, value) => {
     return "default_bonus_expires_days должен быть целым числом не меньше 1";
   }
   return null;
+};
+const validateLoyaltyInfoSections = (key, value) => {
+  if (key !== "loyalty_info_sections") return { normalized: value, error: null };
+  if (!Array.isArray(value)) {
+    return { normalized: null, error: "Ожидался JSON-массив" };
+  }
+  if (value.length > LOYALTY_INFO_SECTIONS_MAX_ITEMS) {
+    return { normalized: null, error: `Максимум ${LOYALTY_INFO_SECTIONS_MAX_ITEMS} информационных блоков` };
+  }
+
+  const normalized = [];
+  for (let index = 0; index < value.length; index += 1) {
+    const item = value[index];
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      return { normalized: null, error: `Блок #${index + 1}: некорректный формат` };
+    }
+
+    const title = String(item.title || "").trim();
+    const description = String(item.description || "").trim();
+    if (!title) {
+      return { normalized: null, error: `Блок #${index + 1}: заголовок обязателен` };
+    }
+    if (!description) {
+      return { normalized: null, error: `Блок #${index + 1}: описание обязательно` };
+    }
+    if (title.length > LOYALTY_INFO_TITLE_MAX_LENGTH) {
+      return { normalized: null, error: `Блок #${index + 1}: заголовок не длиннее ${LOYALTY_INFO_TITLE_MAX_LENGTH} символов` };
+    }
+    if (description.length > LOYALTY_INFO_DESCRIPTION_MAX_LENGTH) {
+      return { normalized: null, error: `Блок #${index + 1}: описание не длиннее ${LOYALTY_INFO_DESCRIPTION_MAX_LENGTH} символов` };
+    }
+
+    normalized.push({
+      title,
+      description,
+    });
+  }
+
+  return { normalized, error: null };
 };
 const TELEGRAM_START_MAX_IMAGES = 20;
 const TELEGRAM_START_MAX_IMAGE_WEIGHT = 1000;
@@ -1043,7 +1092,12 @@ export const updateSystemSettings = async (patch) => {
         errors[key] = "Ожидался JSON-массив";
         continue;
       }
-      updates[key] = value;
+      const { normalized, error } = validateLoyaltyInfoSections(key, value);
+      if (error) {
+        errors[key] = error;
+        continue;
+      }
+      updates[key] = normalized;
     } else {
       updates[key] = value;
     }

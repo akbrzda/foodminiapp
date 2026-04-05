@@ -134,6 +134,15 @@ export function createAdminLoyaltyController({ loyaltyService }) {
     pb_group_id: row.pb_group_id || "",
     pb_group_name: row.pb_group_name || "",
   });
+  const normalizeInfoSections = (value) => {
+    if (!Array.isArray(value)) return [];
+    return value
+      .map((item) => ({
+        title: String(item?.title || "").trim(),
+        description: String(item?.description || "").trim(),
+      }))
+      .filter((item) => item.title && item.description);
+  };
 
   const isPremiumBonusExternalMode = async () => {
     const settings = await getSystemSettings();
@@ -739,6 +748,45 @@ export function createAdminLoyaltyController({ loyaltyService }) {
             premiumbonus_enabled: Boolean(integrationSettings?.premiumbonusEnabled),
             loyalty_integration_mode: String(integrationSettings?.integrationMode?.loyalty || "local"),
           },
+        });
+      } catch (error) {
+        next(error);
+      }
+    },
+
+    async getInfoSections(req, res, next) {
+      try {
+        const settings = await getSystemSettings();
+        return res.json({
+          sections: normalizeInfoSections(settings.loyalty_info_sections),
+        });
+      } catch (error) {
+        next(error);
+      }
+    },
+
+    async saveInfoSections(req, res, next) {
+      try {
+        const sections = normalizeInfoSections(req.body?.sections);
+        const { updated, errors } = await updateSystemSettings({
+          loyalty_info_sections: sections,
+        });
+        if (errors) {
+          return res.status(400).json({ errors });
+        }
+
+        await logger.admin.action(
+          req.user?.id,
+          "loyalty_info_sections_save",
+          "settings",
+          null,
+          JSON.stringify(updated),
+          req,
+        );
+
+        const settings = await getSystemSettings();
+        return res.json({
+          sections: normalizeInfoSections(settings.loyalty_info_sections),
         });
       } catch (error) {
         next(error);
