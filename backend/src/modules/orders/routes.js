@@ -6,13 +6,14 @@ import { adminActionLogger } from "../../utils/logger.js";
 // Контроллеры
 import { calculateOrder } from "./controllers/calculateController.js";
 import { createOrder } from "./controllers/createOrderController.js";
-import { getUserOrders, getUserOrderById, repeatOrder } from "./controllers/userOrdersController.js";
+import { getUserOrders, getUserOrderById, repeatOrder, getUserOrderRating, createUserOrderRating } from "./controllers/userOrdersController.js";
 import {
   getAdminOrders,
   getShiftOrders,
   getOrdersCount,
   getAdminOrderById,
   updateOrderStatus,
+  getOrderRatings,
   getOrdersStats,
   deleteAdminOrder,
 } from "./controllers/adminOrdersController.js";
@@ -32,6 +33,8 @@ const adminOrderMutationLimiter = redisRateLimiter({
 router.post("/calculate", authenticateToken, createLimiter, calculateOrder);
 router.post("/", authenticateToken, orderLimiter, createLimiter, createOrder);
 router.get("/", authenticateToken, getUserOrders);
+router.get("/:id/rating", authenticateToken, getUserOrderRating);
+router.post("/:id/rating", authenticateToken, createLimiter, createUserOrderRating);
 router.get("/:id", authenticateToken, getUserOrderById);
 router.post("/:id/repeat", authenticateToken, orderLimiter, createLimiter, repeatOrder);
 
@@ -39,6 +42,7 @@ router.post("/:id/repeat", authenticateToken, orderLimiter, createLimiter, repea
 router.get("/admin/all", authenticateToken, requirePermission("orders.view"), getAdminOrders);
 router.get("/admin/shift", authenticateToken, requirePermission("orders.view"), getShiftOrders);
 router.get("/admin/count", authenticateToken, requirePermission("orders.view"), getOrdersCount);
+router.get("/admin/ratings", authenticateToken, requirePermission("orders.view"), getOrderRatings);
 router.get("/admin/:id", authenticateToken, requirePermission("orders.view"), getAdminOrderById);
 
 router.put(

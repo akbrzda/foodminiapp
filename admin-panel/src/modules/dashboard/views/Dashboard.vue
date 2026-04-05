@@ -101,7 +101,7 @@
         </Select>
       </template>
     </BaseFilters>
-    <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+    <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-7">
       <Card>
         <CardContent class="space-y-3">
           <div class="flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -187,6 +187,42 @@
             <span class="text-muted-foreground">к прошлому периоду</span>
           </div>
           <div class="text-xs text-muted-foreground">Сумма списанных бонусов</div>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardContent class="space-y-3">
+          <div class="flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Средняя оценка
+            <Star :size="16" />
+          </div>
+          <div class="text-3xl font-semibold text-foreground">{{ Number(stats?.customer_feedback?.avg_rating || 0).toFixed(2) }}</div>
+          <div class="flex items-center gap-2 text-xs">
+            <span :class="comparisonClass(stats?.comparisons?.avg_rating) + ' flex'">
+              <component :is="comparisonIcon(stats?.comparisons?.avg_rating)" :size="14" v-if="comparisonIcon(stats?.comparisons?.avg_rating)" />
+              {{ formatPercent(stats?.comparisons?.avg_rating?.percent) }}
+            </span>
+            <span class="text-muted-foreground">к прошлому периоду</span>
+          </div>
+          <div class="text-xs text-muted-foreground">Оценок: {{ formatNumber(stats?.customer_feedback?.total_ratings || 0) }}</div>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardContent class="space-y-3">
+          <div class="flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            NPS
+            <BarChart2 :size="16" />
+          </div>
+          <div class="text-3xl font-semibold text-foreground">{{ formatSignedValue(stats?.customer_feedback?.nps_value) }}</div>
+          <div class="flex items-center gap-2 text-xs">
+            <span :class="comparisonClass(stats?.comparisons?.nps) + ' flex'">
+              <component :is="comparisonIcon(stats?.comparisons?.nps)" :size="14" v-if="comparisonIcon(stats?.comparisons?.nps)" />
+              {{ formatPercent(stats?.comparisons?.nps?.percent) }}
+            </span>
+            <span class="text-muted-foreground">к прошлому периоду</span>
+          </div>
+          <div class="text-xs text-muted-foreground">
+            Ответов: {{ formatNumber(stats?.customer_feedback?.nps_total_responses || 0) }}
+          </div>
         </CardContent>
       </Card>
       <Card>
@@ -336,6 +372,8 @@ import {
   Truck,
   Users,
   Wallet,
+  Star,
+  BarChart2,
   ArrowDownRight,
   ArrowUpRight,
   Minus,
@@ -587,6 +625,11 @@ const shiftPeriod = (direction) => {
 const formatPercent = (value) => {
   if (value === null || value === undefined) return "—";
   return `${Math.abs(value).toFixed(1)}%`;
+};
+const formatSignedValue = (value) => {
+  const normalized = Number(value) || 0;
+  if (normalized > 0) return `+${normalized.toFixed(1)}`;
+  return normalized.toFixed(1);
 };
 const comparisonClass = (comparison) => {
   if (!comparison || comparison.percent === null) return "text-muted-foreground";

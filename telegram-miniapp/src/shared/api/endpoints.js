@@ -55,6 +55,15 @@ export const userStateAPI = {
   },
 };
 
+export const npsAPI = {
+  getMonthlyStatus() {
+    return api.get("/users/nps/monthly");
+  },
+  submitMonthly(payload) {
+    return api.post("/users/nps/monthly", payload);
+  },
+};
+
 export const citiesAPI = {
   getCities() {
     return api.get("/cities");
@@ -101,6 +110,12 @@ export const ordersAPI = {
   },
   getOrderById(orderId) {
     return api.get(`/orders/${orderId}`);
+  },
+  getOrderRating(orderId) {
+    return api.get(`/orders/${orderId}/rating`);
+  },
+  createOrderRating(orderId, payload) {
+    return api.post(`/orders/${orderId}/rating`, payload);
   },
   repeatOrder(orderId) {
     return api.post(`/orders/${orderId}/repeat`);

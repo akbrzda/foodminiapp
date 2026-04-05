@@ -16,6 +16,7 @@ import {
   decryptAddressData,
 } from "../../utils/encryption.js";
 import { validateEmail, validatePhone, validateName, validateBirthdate, validateAddress } from "../../utils/validation.js";
+import { createNpsSubmission, getUserNpsStatus, validateNpsPayload } from "./services/npsService.js";
 const router = express.Router();
 router.post("/register", async (req, res, next) => {
   try {
@@ -616,4 +617,59 @@ router.delete("/addresses/:id", authenticateToken, async (req, res, next) => {
     next(error);
   }
 });
+
+router.get("/nps/monthly", authenticateToken, async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const status = await getUserNpsStatus(userId, { requireCompletedOrder: true });
+    return res.json(status);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/nps/monthly", authenticateToken, async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const payload = validateNpsPayload(req.body || {});
+    if (!payload.valid) {
+      return res.status(400).json({ error: payload.error });
+    }
+
+    const status = await getUserNpsStatus(userId, { requireCompletedOrder: true });
+    if (!status.should_show) {
+      const nextAvailableAt = status.next_available_at;
+      return res.status(409).json({
+        error: nextAvailableAt
+          ? `Следующая NPS-оценка будет доступна после ${new Date(nextAvailableAt).toLocaleString("ru-RU")}`
+          : "NPS пока недоступен",
+        next_available_at: nextAvailableAt || null,
+      });
+    }
+
+    const result = await createNpsSubmission({
+      userId,
+      score: payload.score,
+      comment: payload.comment,
+    });
+
+    return res.status(201).json({
+      survey_month: result.survey_month,
+      nps: {
+        score: result.score,
+        comment: result.comment,
+      },
+    });
+  } catch (error) {
+    if (error?.code === "ER_DUP_ENTRY") {
+      const status = await getUserNpsStatus(req.user.id, { requireCompletedOrder: true });
+      return res.status(409).json({
+        error: "NPS уже отправлен. Следующий будет доступен через месяц.",
+        next_available_at: status.next_available_at || null,
+      });
+    }
+    next(error);
+  }
+});
+
 export default router;

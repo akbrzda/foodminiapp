@@ -12,6 +12,7 @@ import { notifyOrderStatusUpdate } from "../../../websocket/runtime.js";
 import { addTelegramNotification } from "../../../queues/config.js";
 import ordersAdapter from "../../integrations/adapters/ordersAdapter.js";
 import { sendOrderStatusNotification } from "../../notifications/services/userNotificationService.js";
+import { scheduleOrderRatingReminder } from "../services/orderRatingReminderService.js";
 
 // Вспомогательные функции для работы с временными зонами
 const getTimeZoneOffset = (date, timeZone) => {
@@ -99,6 +100,9 @@ export const getAdminOrders = async (req, res, next) => {
     let query = `
       SELECT o.*, 
         (SELECT COALESCE(SUM(lt.amount), 0) FROM loyalty_transactions lt WHERE lt.order_id = o.id AND lt.type = 'earn') as bonuses_earned,
+        r.rating as user_rating,
+        r.comment as user_rating_comment,
+        r.created_at as user_rating_created_at,
         c.name as city_name, 
         b.name as branch_name,
         u.phone as user_phone,
@@ -108,6 +112,7 @@ export const getAdminOrders = async (req, res, next) => {
       LEFT JOIN cities c ON o.city_id = c.id
       LEFT JOIN branches b ON o.branch_id = b.id
       LEFT JOIN users u ON o.user_id = u.id
+      LEFT JOIN order_ratings r ON r.order_id = o.id AND r.user_id = o.user_id
       WHERE 1=1
     `;
 
@@ -368,6 +373,9 @@ export const getAdminOrderById = async (req, res, next) => {
     const [orders] = await db.query(
       `SELECT o.*, 
         (SELECT COALESCE(SUM(lt.amount), 0) FROM loyalty_transactions lt WHERE lt.order_id = o.id AND lt.type = 'earn') as bonuses_earned,
+        r.rating as user_rating,
+        r.comment as user_rating_comment,
+        r.created_at as user_rating_created_at,
         c.name as city_name, 
         c.timezone as city_timezone,
         b.name as branch_name, 
@@ -382,6 +390,7 @@ export const getAdminOrderById = async (req, res, next) => {
        LEFT JOIN cities c ON o.city_id = c.id
        LEFT JOIN branches b ON o.branch_id = b.id
        LEFT JOIN users u ON o.user_id = u.id
+       LEFT JOIN order_ratings r ON r.order_id = o.id AND r.user_id = o.user_id
        LEFT JOIN loyalty_levels ll ON u.current_loyalty_level_id = ll.id
        WHERE o.id = ?`,
       [orderId],
@@ -629,6 +638,15 @@ export const updateOrderStatus = async (req, res, next, forcedStatus = null) => 
       // Ошибки пользовательских уведомлений не критичны
     }
 
+    if (status === "completed" && oldStatus !== "completed") {
+      await scheduleOrderRatingReminder({
+        orderId,
+        userId,
+        orderNumber: updatedOrders[0].order_number,
+        completedAt: updatedOrders[0].completed_at || new Date(),
+      });
+    }
+
     // Трекинг конверсий
     if (status === "completed" && oldStatus !== "completed") {
       try {
@@ -708,6 +726,97 @@ export const updateOrderStatus = async (req, res, next, forcedStatus = null) => 
     }
 
     res.json({ order: updatedOrders[0] });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Получение оценок заказов (админ)
+ */
+export const getOrderRatings = async (req, res, next) => {
+  try {
+    const { city_id, branch_id, rating, date_from, date_to, search, limit = 50, offset = 0 } = req.query;
+
+    const safeLimit = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 200);
+    const safeOffset = Math.max(parseInt(offset, 10) || 0, 0);
+    const where = ["1=1"];
+    const params = [];
+
+    if (req.user.role === "manager") {
+      where.push("o.city_id IN (?)");
+      params.push(req.user.cities);
+    } else if (city_id) {
+      where.push("o.city_id = ?");
+      params.push(Number(city_id));
+    }
+
+    if (branch_id) {
+      where.push("o.branch_id = ?");
+      params.push(Number(branch_id));
+    }
+
+    if (rating) {
+      const numericRating = Number(rating);
+      if (!Number.isInteger(numericRating) || numericRating < 1 || numericRating > 5) {
+        return res.status(400).json({ error: "Фильтр rating должен быть числом от 1 до 5" });
+      }
+      where.push("r.rating = ?");
+      params.push(numericRating);
+    }
+
+    if (date_from) {
+      where.push("DATE(r.created_at) >= ?");
+      params.push(date_from);
+    }
+
+    if (date_to) {
+      where.push("DATE(r.created_at) <= ?");
+      params.push(date_to);
+    }
+
+    if (search) {
+      const searchValue = `%${String(search).trim()}%`;
+      where.push(
+        "(o.order_number LIKE ? OR u.phone LIKE ? OR CONCAT_WS(' ', u.first_name, u.last_name) LIKE ? OR r.comment LIKE ?)",
+      );
+      params.push(searchValue, searchValue, searchValue, searchValue);
+    }
+
+    const whereClause = where.join(" AND ");
+
+    const [rows] = await db.query(
+      `SELECT r.id, r.rating, r.comment, r.created_at, r.updated_at,
+              o.id as order_id, o.order_number, o.order_type, o.completed_at,
+              c.id as city_id, c.name as city_name,
+              b.id as branch_id, b.name as branch_name,
+              u.id as user_id, u.phone as user_phone, u.first_name as user_first_name, u.last_name as user_last_name
+       FROM order_ratings r
+       JOIN orders o ON o.id = r.order_id
+       LEFT JOIN cities c ON c.id = o.city_id
+       LEFT JOIN branches b ON b.id = o.branch_id
+       LEFT JOIN users u ON u.id = r.user_id
+       WHERE ${whereClause}
+       ORDER BY r.created_at DESC, r.id DESC
+       LIMIT ? OFFSET ?`,
+      [...params, safeLimit, safeOffset],
+    );
+
+    const [countRows] = await db.query(
+      `SELECT COUNT(*) as total
+       FROM order_ratings r
+       JOIN orders o ON o.id = r.order_id
+       LEFT JOIN users u ON u.id = r.user_id
+       WHERE ${whereClause}`,
+      params,
+    );
+
+    res.json({
+      ratings: rows,
+      total: Number(countRows[0]?.total || 0),
+      limit: safeLimit,
+      offset: safeOffset,
+    });
   } catch (error) {
     next(error);
   }

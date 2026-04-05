@@ -9,6 +9,7 @@ import { createIikoStopListSyncWorker } from "./iikoStopListSync.worker.js";
 import { createIikoOrderSyncWorker } from "./iikoOrderSync.worker.js";
 import { createPbClientSyncWorker } from "./pbClientSync.worker.js";
 import { createPbPurchaseSyncWorker } from "./pbPurchaseSync.worker.js";
+import { createOrderRatingReminderWorker } from "./orderRatingReminder.worker.js";
 import { createIntegrationSchedulerWorker } from "./integrationScheduler.worker.js";
 import { createIntegrationRetryWorker } from "./integrationRetry.worker.js";
 import { createAdminActionLogsCleanupWorker } from "./adminActionLogsCleanup.worker.js";
@@ -33,6 +34,7 @@ let iikoStopListSyncWorker;
 let iikoOrderSyncWorker;
 let pbClientSyncWorker;
 let pbPurchaseSyncWorker;
+let orderRatingReminderWorker;
 let integrationSchedulerWorker;
 let integrationRetryWorker;
 let adminActionLogsCleanupWorker;
@@ -49,6 +51,7 @@ export async function startWorkers() {
     iikoOrderSyncWorker = createIikoOrderSyncWorker(redisConnection);
     pbClientSyncWorker = createPbClientSyncWorker(redisConnection);
     pbPurchaseSyncWorker = createPbPurchaseSyncWorker(redisConnection);
+    orderRatingReminderWorker = createOrderRatingReminderWorker(redisConnection);
     integrationSchedulerWorker = createIntegrationSchedulerWorker();
     integrationRetryWorker = createIntegrationRetryWorker();
     adminActionLogsCleanupWorker = createAdminActionLogsCleanupWorker();
@@ -69,6 +72,7 @@ export async function startWorkers() {
       iikoOrderSyncWorker,
       pbClientSyncWorker,
       pbPurchaseSyncWorker,
+      orderRatingReminderWorker,
     };
   } catch (error) {
     logger.system.dbError(`Failed to start workers: ${error.message}`);
@@ -104,6 +108,9 @@ export async function stopWorkers() {
     }
     if (pbPurchaseSyncWorker) {
       promises.push(pbPurchaseSyncWorker.close());
+    }
+    if (orderRatingReminderWorker) {
+      promises.push(orderRatingReminderWorker.close());
     }
     if (iikoMenuSyncWorker) {
       promises.push(iikoMenuSyncWorker.close());

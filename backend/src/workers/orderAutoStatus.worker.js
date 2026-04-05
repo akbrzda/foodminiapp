@@ -5,6 +5,7 @@ import { logger } from "../utils/logger.js";
 import { addTelegramNotification } from "../queues/config.js";
 import ordersAdapter from "../modules/integrations/adapters/ordersAdapter.js";
 import { sendOrderStatusNotification } from "../modules/notifications/services/userNotificationService.js";
+import { scheduleOrderRatingReminder } from "../modules/orders/services/orderRatingReminderService.js";
 
 const AUTO_STATUS_INTERVAL_MS = 60 * 1000;
 const PROCESS_WINDOW_MINUTES = 5;
@@ -93,6 +94,13 @@ async function updateOrderStatus(order, localDate) {
         logger.bonus.error(`Failed to earn bonuses for order ${order.id}`, { error: bonusError.message });
       }
     }
+
+    await scheduleOrderRatingReminder({
+      orderId: order.id,
+      userId: order.user_id,
+      orderNumber: order.order_number,
+      completedAt: completedAt || new Date(),
+    });
   } else if (newStatus === "cancelled") {
     try {
       const settings = await getSystemSettings();

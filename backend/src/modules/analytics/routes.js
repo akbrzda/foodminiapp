@@ -210,6 +210,75 @@ router.get("/dashboard", async (req, res, next) => {
       WHERE ${dateFilter}${filterSql}${dashboardStatusFilter}`,
       paramsPreviousWithStatuses,
     );
+    const [ratingStatsCurrent] = await db.query(
+      `SELECT
+        COUNT(*) as total_ratings,
+        COALESCE(AVG(r.rating), 0) as avg_rating
+       FROM order_ratings r
+       JOIN orders o ON o.id = r.order_id
+       WHERE r.created_at >= ? AND r.created_at < ?${filterSql}`,
+      paramsCurrent,
+    );
+    const [ratingStatsPrevious] = await db.query(
+      `SELECT
+        COUNT(*) as total_ratings,
+        COALESCE(AVG(r.rating), 0) as avg_rating
+       FROM order_ratings r
+       JOIN orders o ON o.id = r.order_id
+       WHERE r.created_at >= ? AND r.created_at < ?${filterSql}`,
+      paramsPrevious,
+    );
+    const npsFilterSql = String(filterSql || "").replaceAll("o.", "o_nps.");
+    const npsCurrentExistsParams = [toDateString(range.start), toDateString(range.end), ...filterParams];
+    const npsPreviousExistsParams = [toDateString(range.compareStart), toDateString(range.compareEnd), ...filterParams];
+    const [npsStatsCurrent] = await db.query(
+      `SELECT
+        COUNT(*) as total_responses,
+        COUNT(CASE WHEN n.score >= 9 THEN 1 END) as promoters_count,
+        COUNT(CASE WHEN n.score BETWEEN 7 AND 8 THEN 1 END) as passives_count,
+        COUNT(CASE WHEN n.score <= 6 THEN 1 END) as detractors_count
+       FROM monthly_nps_surveys n
+       WHERE n.submitted_at >= ?
+         AND n.submitted_at < ?
+         AND n.score IS NOT NULL
+         AND EXISTS (
+           SELECT 1
+           FROM orders o_nps
+           WHERE o_nps.user_id = n.user_id
+             AND o_nps.created_at >= ?
+             AND o_nps.created_at < ?${npsFilterSql}
+           LIMIT 1
+         )`,
+      [toDateString(range.start), toDateString(range.end), ...npsCurrentExistsParams],
+    );
+    const [npsStatsPrevious] = await db.query(
+      `SELECT
+        COUNT(*) as total_responses,
+        COUNT(CASE WHEN n.score >= 9 THEN 1 END) as promoters_count,
+        COUNT(CASE WHEN n.score BETWEEN 7 AND 8 THEN 1 END) as passives_count,
+        COUNT(CASE WHEN n.score <= 6 THEN 1 END) as detractors_count
+       FROM monthly_nps_surveys n
+       WHERE n.submitted_at >= ?
+         AND n.submitted_at < ?
+         AND n.score IS NOT NULL
+         AND EXISTS (
+           SELECT 1
+           FROM orders o_nps
+           WHERE o_nps.user_id = n.user_id
+             AND o_nps.created_at >= ?
+             AND o_nps.created_at < ?${npsFilterSql}
+           LIMIT 1
+         )`,
+      [toDateString(range.compareStart), toDateString(range.compareEnd), ...npsPreviousExistsParams],
+    );
+
+    const calcNpsValue = (row) => {
+      const total = Number(row?.total_responses || 0);
+      const promoters = Number(row?.promoters_count || 0);
+      const detractors = Number(row?.detractors_count || 0);
+      if (total <= 0) return 0;
+      return ((promoters / total - detractors / total) * 100).toFixed(1);
+    };
     const compareMetric = (currentRaw, previousRaw) => {
       const current = Number(currentRaw) || 0;
       const previous = Number(previousRaw) || 0;
@@ -229,6 +298,8 @@ router.get("/dashboard", async (req, res, next) => {
       revenue: compareMetric(orderStatsCurrent[0].total_revenue, orderStatsPrevious[0].total_revenue),
       customers: compareMetric(customerStatsCurrent[0].total_customers, customerStatsPrevious[0].total_customers),
       discounts: compareMetric(discountsCurrent[0].total_discounts, discountsPrevious[0].total_discounts),
+      avg_rating: compareMetric(ratingStatsCurrent[0].avg_rating, ratingStatsPrevious[0].avg_rating),
+      nps: compareMetric(calcNpsValue(npsStatsCurrent[0]), calcNpsValue(npsStatsPrevious[0])),
     };
     const [orderTypes] = await db.query(
       `SELECT 
@@ -303,6 +374,15 @@ router.get("/dashboard", async (req, res, next) => {
       },
       discounts: discountsCurrent[0],
       customers: customerStatsCurrent[0],
+      customer_feedback: {
+        total_ratings: Number(ratingStatsCurrent[0]?.total_ratings || 0),
+        avg_rating: Number(ratingStatsCurrent[0]?.avg_rating || 0),
+        nps_total_responses: Number(npsStatsCurrent[0]?.total_responses || 0),
+        nps_promoters: Number(npsStatsCurrent[0]?.promoters_count || 0),
+        nps_passives: Number(npsStatsCurrent[0]?.passives_count || 0),
+        nps_detractors: Number(npsStatsCurrent[0]?.detractors_count || 0),
+        nps_value: Number(calcNpsValue(npsStatsCurrent[0]) || 0),
+      },
       comparisons,
       orderTypes,
       paymentMethods,

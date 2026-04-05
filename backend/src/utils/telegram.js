@@ -28,17 +28,31 @@ const resolveMiniAppBaseUrl = () => {
   return normalized.replace(/\/$/, "");
 };
 
-export const buildOrderDetailsReplyMarkup = (orderId) => {
-  if (!orderId) return null;
+export const buildMiniAppOrderUrl = (orderId) => {
   const miniAppBaseUrl = resolveMiniAppBaseUrl();
   if (!miniAppBaseUrl) return null;
+  if (!orderId) return null;
+  return `${miniAppBaseUrl}/order/${encodeURIComponent(String(orderId))}`;
+};
 
-  const webAppUrl = `${miniAppBaseUrl}/order/${encodeURIComponent(String(orderId))}`;
+export const buildMiniAppProfileUrl = (query = "") => {
+  const miniAppBaseUrl = resolveMiniAppBaseUrl();
+  if (!miniAppBaseUrl) return null;
+  const normalizedQuery = String(query || "").trim();
+  if (!normalizedQuery) return `${miniAppBaseUrl}/profile`;
+  const prefix = normalizedQuery.startsWith("?") ? "" : "?";
+  return `${miniAppBaseUrl}/profile${prefix}${normalizedQuery}`;
+};
+
+export const buildOrderDetailsReplyMarkup = (orderId, buttonText = "Открыть заказ") => {
+  const webAppUrl = buildMiniAppOrderUrl(orderId);
+  if (!webAppUrl) return null;
+
   return {
     inline_keyboard: [
       [
         {
-          text: "Открыть заказ",
+          text: buttonText,
           web_app: { url: webAppUrl },
         },
       ],
@@ -74,7 +88,7 @@ export const sendTelegramStartMessage = async (telegramId, systemSettings = null
   }
 };
 
-export const formatOrderStatusMessage = (orderNumber, status, orderType) => {
+export const formatOrderStatusMessage = (orderNumber, status, orderType, orderId = null) => {
   const statusMessages = {
     delivery: {
       pending: "⏳ Ваш заказ получен и ожидает подтверждения",
@@ -98,6 +112,11 @@ export const formatOrderStatusMessage = (orderNumber, status, orderType) => {
 
   const orderTypeKey = orderType === "pickup" ? "pickup" : "delivery";
   const statusMessage = statusMessages[orderTypeKey]?.[status] || "📋 Статус заказа обновлен";
+  const orderUrl = status === "completed" ? buildMiniAppOrderUrl(orderId) : null;
+
+  if (orderUrl) {
+    return `Заказ #${orderNumber}\n\n${statusMessage}\n\n⭐ Оцените заказ в течение 24 часов:\n${orderUrl}`;
+  }
 
   return `Заказ #${orderNumber}\n\n${statusMessage}`;
 };
@@ -108,5 +127,7 @@ export default {
   sendTelegramNotification,
   sendTelegramStartMessage,
   formatOrderStatusMessage,
+  buildMiniAppOrderUrl,
+  buildMiniAppProfileUrl,
   buildOrderDetailsReplyMarkup,
 };

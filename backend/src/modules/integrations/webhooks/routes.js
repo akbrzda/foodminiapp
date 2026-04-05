@@ -14,6 +14,7 @@ import {
   redeliveryEarnBonuses,
   removeEarnedBonuses,
 } from "../../loyalty/services/loyaltyService.js";
+import { scheduleOrderRatingReminder } from "../../orders/services/orderRatingReminderService.js";
 
 const router = express.Router();
 
@@ -198,7 +199,7 @@ async function processOrderStatusWebhookPayload(payload = {}, options = {}) {
   let orders = [];
   if (iikoOrderId) {
     const [rows] = await db.query(
-      `SELECT id, status, user_id, total, subtotal, delivery_cost, bonus_spent, bonus_earn_amount, order_number
+      `SELECT id, status, user_id, total, subtotal, delivery_cost, bonus_spent, bonus_earn_amount, order_number, completed_at
        FROM orders
        WHERE iiko_order_id = ?
        LIMIT 1`,
@@ -209,7 +210,7 @@ async function processOrderStatusWebhookPayload(payload = {}, options = {}) {
 
   if (allowOrderNumberFallback && orders.length === 0 && externalNumber) {
     const [rows] = await db.query(
-      `SELECT id, status, user_id, total, subtotal, delivery_cost, bonus_spent, bonus_earn_amount, order_number
+      `SELECT id, status, user_id, total, subtotal, delivery_cost, bonus_spent, bonus_earn_amount, order_number, completed_at
        FROM orders
        WHERE order_number = ?
        ORDER BY created_at DESC
@@ -237,7 +238,18 @@ async function processOrderStatusWebhookPayload(payload = {}, options = {}) {
 
   if (mappedStatus && order.status !== mappedStatus) {
     const oldStatus = order.status;
-    await db.query("UPDATE orders SET status = ?, iiko_sync_status = ?, updated_at = NOW() WHERE id = ?", [mappedStatus, SYNC_STATUS.SYNCED, order.id]);
+    const nextCompletedAt =
+      mappedStatus === "completed" && oldStatus !== "completed"
+        ? new Date()
+        : oldStatus === "completed" && mappedStatus !== "completed"
+          ? null
+          : order.completed_at || null;
+    await db.query("UPDATE orders SET status = ?, completed_at = ?, iiko_sync_status = ?, updated_at = NOW() WHERE id = ?", [
+      mappedStatus,
+      nextCompletedAt,
+      SYNC_STATUS.SYNCED,
+      order.id,
+    ]);
     await db.query(
       "UPDATE orders SET pb_sync_status = 'pending', pb_sync_error = NULL, pb_sync_attempts = 0, pb_last_sync_at = NOW() WHERE id = ?",
       [order.id],
@@ -274,6 +286,15 @@ async function processOrderStatusWebhookPayload(payload = {}, options = {}) {
         errorMessage: pbSyncError?.message || "Ошибка постановки PB sync из webhook iiko",
         requestData: payload,
         responseData: { mappedStatus },
+      });
+    }
+
+    if (mappedStatus === "completed" && oldStatus !== "completed") {
+      await scheduleOrderRatingReminder({
+        orderId: order.id,
+        userId: order.user_id,
+        orderNumber: order.order_number,
+        completedAt: nextCompletedAt || new Date(),
       });
     }
   }

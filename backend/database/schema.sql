@@ -963,6 +963,45 @@ CREATE TABLE `order_status_history` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 
+CREATE TABLE `order_ratings` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `order_id` int NOT NULL,
+  `user_id` int NOT NULL,
+  `rating` tinyint NOT NULL,
+  `comment` text COLLATE utf8mb4_unicode_ci,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_order_ratings_order_user` (`order_id`,`user_id`),
+  KEY `idx_order_ratings_user` (`user_id`),
+  KEY `idx_order_ratings_rating` (`rating`),
+  KEY `idx_order_ratings_created_at` (`created_at`),
+  CONSTRAINT `order_ratings_ibfk_1` FOREIGN KEY (`order_id`) REFERENCES `orders` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `order_ratings_ibfk_2` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `chk_order_ratings_rating` CHECK ((`rating` >= 1) AND (`rating` <= 5))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+CREATE TABLE `monthly_nps_surveys` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `user_id` int NOT NULL,
+  `survey_month` date NOT NULL,
+  `score` tinyint DEFAULT NULL,
+  `comment` text COLLATE utf8mb4_unicode_ci,
+  `notified_at` timestamp NULL DEFAULT NULL,
+  `submitted_at` timestamp NULL DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_monthly_nps_user_month` (`user_id`,`survey_month`),
+  KEY `idx_monthly_nps_survey_month` (`survey_month`),
+  KEY `idx_monthly_nps_score` (`score`),
+  KEY `idx_monthly_nps_submitted_at` (`submitted_at`),
+  CONSTRAINT `monthly_nps_surveys_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `chk_monthly_nps_score` CHECK (`score` IS NULL OR (`score` >= 0 AND `score` <= 10))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
 CREATE TABLE `broadcast_campaigns` (
   `id` int NOT NULL AUTO_INCREMENT,
   `name` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,

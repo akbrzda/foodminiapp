@@ -18,6 +18,7 @@ import { processPremiumBonusClientSync } from "./sync-processors/premiumbonus-cl
 import { processPremiumBonusPurchaseSync } from "./sync-processors/premiumbonus-purchase.processor.js";
 import { processIikoMenuSync } from "./sync-processors/iiko-menu-db-sync.js";
 import { processIikoStopListSync, processIikoStopListWebhookPayloadSync } from "./sync-processors/iiko-stoplist.processor.js";
+import { scheduleOrderRatingReminder } from "../../orders/services/orderRatingReminderService.js";
 
 export { markOrderIikoSync, markOrderPbSync, markUserPbSync };
 export {
@@ -148,8 +149,10 @@ export async function reconcileIikoOrderStatuses({ limit = 100 } = {}) {
   const [orders] = await db.query(
     `SELECT o.id,
             o.status,
+            o.user_id,
             o.iiko_order_id,
             o.order_number,
+            o.completed_at,
             b.iiko_organization_id AS branch_iiko_organization_id
      FROM orders o
      LEFT JOIN branches b ON b.id = o.branch_id
@@ -235,9 +238,16 @@ export async function reconcileIikoOrderStatuses({ limit = 100 } = {}) {
         null;
       if (!mappedStatus || mappedStatus === localOrder.status) continue;
 
+      const nextCompletedAt =
+        mappedStatus === "completed" && localOrder.status !== "completed"
+          ? new Date()
+          : localOrder.status === "completed" && mappedStatus !== "completed"
+            ? null
+            : localOrder.completed_at || null;
+
       await db.query(
-        "UPDATE orders SET status = ?, iiko_sync_status = ?, iiko_sync_error = NULL, iiko_last_sync_at = NOW() WHERE id = ?",
-        [mappedStatus, SYNC_STATUS.SYNCED, localOrder.id]
+        "UPDATE orders SET status = ?, completed_at = ?, iiko_sync_status = ?, iiko_sync_error = NULL, iiko_last_sync_at = NOW() WHERE id = ?",
+        [mappedStatus, nextCompletedAt, SYNC_STATUS.SYNCED, localOrder.id]
       );
       await db.query(
         "UPDATE orders SET pb_sync_status = 'pending', pb_sync_error = NULL, pb_sync_attempts = 0, pb_last_sync_at = NOW() WHERE id = ?",
@@ -261,6 +271,15 @@ export async function reconcileIikoOrderStatuses({ limit = 100 } = {}) {
           local_status_after: mappedStatus,
         },
       });
+
+      if (mappedStatus === "completed" && localOrder.status !== "completed") {
+        await scheduleOrderRatingReminder({
+          orderId: localOrder.id,
+          userId: localOrder.user_id,
+          orderNumber: localOrder.order_number,
+          completedAt: nextCompletedAt || new Date(),
+        });
+      }
     }
   }
 

@@ -128,6 +128,17 @@
               </div>
               <div class="mt-1 text-xs text-muted-foreground">{{ order.branch_name || "—" }}</div>
               <div class="mt-1 text-xs text-muted-foreground">Адрес: {{ formatDeliveryAddress(order) }}</div>
+              <div class="mt-1 text-xs text-muted-foreground">
+                Оценка:
+                <span v-if="order.user_rating" class="inline-flex items-center gap-1 text-amber-600">
+                  <Star :size="12" />
+                  {{ order.user_rating }}/5
+                </span>
+                <span v-else>—</span>
+              </div>
+              <div v-if="order.user_rating_comment" class="mt-1 text-xs text-muted-foreground line-clamp-2">
+                {{ order.user_rating_comment }}
+              </div>
               <div class="mt-3 flex items-center justify-between">
                 <Badge variant="outline">{{ order.order_type === "delivery" ? "Доставка" : "Самовывоз" }}</Badge>
                 <div class="text-right">
@@ -147,6 +158,7 @@
                 <TableHead>Адрес</TableHead>
                 <TableHead>Клиент</TableHead>
                 <TableHead>Тип</TableHead>
+                <TableHead>Оценка</TableHead>
                 <TableHead class="text-right">Сумма</TableHead>
                 <TableHead>Статус</TableHead>
               </TableRow>
@@ -191,6 +203,16 @@
                   <TableCell>
                     <Badge variant="outline">{{ order.order_type === "delivery" ? "Доставка" : "Самовывоз" }}</Badge>
                   </TableCell>
+                  <TableCell>
+                    <div v-if="order.user_rating" class="flex items-center gap-1 text-amber-600">
+                      <Star :size="14" />
+                      <span class="text-xs font-medium">{{ order.user_rating }}/5</span>
+                    </div>
+                    <div v-else class="text-xs text-muted-foreground">—</div>
+                    <div v-if="order.user_rating_comment" class="mt-1 max-w-[180px] truncate text-xs text-muted-foreground">
+                      {{ order.user_rating_comment }}
+                    </div>
+                  </TableCell>
                   <TableCell class="text-right">
                     <div class="font-semibold text-foreground">{{ formatCurrency(order.total) }}</div>
                   </TableCell>
@@ -201,7 +223,7 @@
                   </TableCell>
                 </TableRow>
                 <TableRow v-if="orders.length === 0">
-                  <TableCell colspan="7" class="py-8 text-center text-sm text-muted-foreground">Заказы не найдены</TableCell>
+                  <TableCell colspan="8" class="py-8 text-center text-sm text-muted-foreground">Заказы не найдены</TableCell>
                 </TableRow>
               </template>
             </TableBody>
@@ -216,7 +238,7 @@
 import { devError } from "@/shared/utils/logger";
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { useRouter } from "vue-router";
-import { Calendar as CalendarIcon, RotateCcw, Search } from "lucide-vue-next";
+import { Calendar as CalendarIcon, RotateCcw, Search, Star } from "lucide-vue-next";
 import { DateFormatter, getLocalTimeZone, parseDate, today } from "@internationalized/date";
 import api from "@/shared/api/client.js";
 import { useReferenceStore } from "@/shared/stores/reference.js";

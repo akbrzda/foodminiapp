@@ -82,6 +82,24 @@ export const premiumBonusPurchasesSyncQueue = new Queue("sync-premiumbonus-purch
   connection: redisConnection,
   defaultJobOptions: integrationDefaultOptions,
 });
+
+export const orderRatingReminderQueue = new Queue("order-rating-reminders", {
+  connection: redisConnection,
+  defaultJobOptions: {
+    attempts: 3,
+    backoff: {
+      type: "exponential",
+      delay: 60000,
+    },
+    removeOnComplete: {
+      age: 86400,
+      count: 1000,
+    },
+    removeOnFail: {
+      age: 604800,
+    },
+  },
+});
 export async function addTelegramNotification(data) {
   try {
     const job = await telegramQueue.add("send-notification", data, {
@@ -133,6 +151,22 @@ export async function enqueuePremiumBonusPurchaseSync(data) {
   return premiumBonusPurchasesSyncQueue.add("sync-purchase", data, {
     priority: data.priority || 1,
     jobId: data?.orderId ? `pb-purchase-${data.orderId}-${Date.now()}` : undefined,
+  });
+}
+
+export async function enqueueOrderRatingReminder(data) {
+  const orderId = Number(data?.orderId);
+  if (!Number.isInteger(orderId) || orderId <= 0) {
+    throw new Error("orderId обязателен для очереди напоминаний об оценке");
+  }
+
+  const delayMs = Number(data?.delayMs);
+  const delay = Number.isFinite(delayMs) && delayMs > 0 ? Math.floor(delayMs) : 0;
+
+  return orderRatingReminderQueue.add("send-order-rating-reminder", data, {
+    priority: data.priority || 2,
+    delay,
+    jobId: `order-rating-reminder-${orderId}`,
   });
 }
 export async function getQueueStats(queue) {
@@ -202,6 +236,7 @@ export default {
   iikoOrdersSyncQueue,
   premiumBonusClientsSyncQueue,
   premiumBonusPurchasesSyncQueue,
+  orderRatingReminderQueue,
   addTelegramNotification,
   addImageProcessing,
   enqueueIikoMenuSync,
@@ -209,6 +244,7 @@ export default {
   enqueueIikoOrderSync,
   enqueuePremiumBonusClientSync,
   enqueuePremiumBonusPurchaseSync,
+  enqueueOrderRatingReminder,
   getQueueStats,
   getFailedJobs,
   retryFailedJobs,

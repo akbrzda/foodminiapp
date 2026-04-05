@@ -98,6 +98,85 @@
           <span>{{ formatPriceWithCurrency(order.total, settingsStore.currencyCode) }}</span>
         </div>
       </div>
+      <div v-if="order.status === 'completed'" class="section">
+        <h3>Оценка заказа</h3>
+        <div v-if="hasSubmittedRating" class="rating-summary">
+          <div class="rating-stars readonly">
+            <Star v-for="index in 5" :key="`saved-star-${index}`" :size="20" :class="['star-icon', { active: index <= (order.user_rating || 0) }]" />
+          </div>
+          <div class="rating-value">Ваша оценка: {{ order.user_rating }} из 5</div>
+          <div v-if="order.user_rating_comment" class="rating-comment">
+            {{ order.user_rating_comment }}
+          </div>
+        </div>
+        <div v-else-if="canRateOrder" class="rating-form">
+          <div class="rating-stars">
+            <button
+              v-for="index in 5"
+              :key="`rate-star-${index}`"
+              type="button"
+              class="star-button"
+              :disabled="ratingSubmitting"
+              @click="setRating(index)"
+            >
+              <Star :size="22" :class="['star-icon', { active: index <= ratingForm.rating }]" />
+            </button>
+          </div>
+          <textarea
+            v-model="ratingForm.comment"
+            class="rating-comment-input"
+            :disabled="ratingSubmitting"
+            maxlength="1000"
+            placeholder="Комментарий (необязательно)"
+          />
+          <button class="submit-rating-btn" :disabled="ratingSubmitting || ratingForm.rating < 1" @click="submitOrderRating">
+            {{ ratingSubmitting ? "Отправка..." : "Отправить оценку" }}
+          </button>
+          <div v-if="ratingError" class="rating-error">{{ ratingError }}</div>
+        </div>
+        <div v-else class="rating-locked">Оценку можно поставить только в течение 24 часов после закрытия заказа.</div>
+
+        <div v-if="hasSubmittedRating" class="nps-block">
+          <template v-if="npsStatus.shouldShow">
+            <label class="nps-title">Оцените наш сервис (NPS)</label>
+            <div class="nps-scale">
+              <button
+                v-for="value in npsValues"
+                :key="`order-nps-${value}`"
+                type="button"
+                class="nps-btn"
+                :class="{ active: npsForm.score === value }"
+                :disabled="npsSubmitting"
+                @click="setNpsScore(value)"
+              >
+                {{ value }}
+              </button>
+            </div>
+            <textarea
+              v-model="npsForm.comment"
+              class="nps-comment-input"
+              :disabled="npsSubmitting"
+              maxlength="1000"
+              placeholder="Комментарий (необязательно)"
+            />
+            <button class="submit-rating-btn" :disabled="npsSubmitting || npsForm.score === null" @click="submitNps">
+              {{ npsSubmitting ? "Отправка..." : "Отправить NPS" }}
+            </button>
+            <div v-if="npsError" class="rating-error">{{ npsError }}</div>
+          </template>
+          <template v-else-if="npsStatus.submitted">
+            <label class="nps-title">Ваш NPS</label>
+            <div class="nps-value">{{ npsStatus.score }}/10</div>
+            <div v-if="npsStatus.comment" class="rating-comment">
+              {{ npsStatus.comment }}
+            </div>
+            <div v-if="npsStatus.nextAvailableAt" class="nps-next-date">Следующую NPS-оценку можно поставить после {{ formatDate(npsStatus.nextAvailableAt) }}</div>
+          </template>
+          <template v-else-if="npsStatus.nextAvailableAt">
+            <div class="nps-next-date">Следующую NPS-оценку можно поставить после {{ formatDate(npsStatus.nextAvailableAt) }}</div>
+          </template>
+        </div>
+      </div>
       <div class="actions" v-if="canRepeatOrder">
         <button class="repeat-btn" @click="repeatOrder">
           <RefreshCw :size="20" />
@@ -109,11 +188,11 @@
 </template>
 <script setup>
 import { computed, ref, onMounted, onUnmounted } from "vue";
-import { RefreshCw } from "lucide-vue-next";
+import { RefreshCw, Star } from "lucide-vue-next";
 import { useRoute, useRouter } from "vue-router";
 import { useCartStore } from "@/modules/cart/stores/cart.js";
 import { useSettingsStore } from "@/modules/settings/stores/settings.js";
-import { ordersAPI } from "@/shared/api/endpoints.js";
+import { npsAPI, ordersAPI } from "@/shared/api/endpoints.js";
 import { formatPaymentMethod, formatPrice, formatPriceWithCurrency } from "@/shared/utils/format";
 import { hapticFeedback } from "@/shared/services/telegram.js";
 import { wsService } from "@/shared/services/websocket.js";
@@ -124,6 +203,26 @@ const cartStore = useCartStore();
 const settingsStore = useSettingsStore();
 const order = ref(null);
 const loading = ref(false);
+const ratingSubmitting = ref(false);
+const ratingError = ref("");
+const ratingForm = ref({
+  rating: 0,
+  comment: "",
+});
+const npsValues = Array.from({ length: 11 }, (_, index) => index);
+const npsSubmitting = ref(false);
+const npsError = ref("");
+const npsStatus = ref({
+  shouldShow: false,
+  submitted: false,
+  score: null,
+  comment: "",
+  nextAvailableAt: null,
+});
+const npsForm = ref({
+  score: null,
+  comment: "",
+});
 let statusUpdateHandler = null;
 const canRepeatOrder = computed(() => {
   if (!order.value) return false;
@@ -132,6 +231,20 @@ const canRepeatOrder = computed(() => {
   if (order.value.order_type === "delivery") return settingsStore.deliveryEnabled;
   if (order.value.order_type === "pickup") return settingsStore.pickupEnabled;
   return false;
+});
+const hasSubmittedRating = computed(() => {
+  const value = Number(order.value?.user_rating || 0);
+  return Number.isInteger(value) && value >= 1 && value <= 5;
+});
+const canRateOrder = computed(() => {
+  if (!order.value || hasSubmittedRating.value) return false;
+  if (order.value.status !== "completed") return false;
+  if (order.value.can_rate_order === true) return true;
+
+  const completedAt = order.value.completed_at ? new Date(order.value.completed_at) : null;
+  if (!completedAt || Number.isNaN(completedAt.getTime())) return false;
+  const deadlineMs = completedAt.getTime() + 24 * 60 * 60 * 1000;
+  return Date.now() <= deadlineMs;
 });
 onMounted(async () => {
   await loadOrder();
@@ -157,6 +270,10 @@ async function loadOrder() {
     loading.value = true;
     const response = await ordersAPI.getOrderById(route.params.id);
     order.value = response.data.order;
+    if (order.value?.user_rating_comment) {
+      ratingForm.value.comment = order.value.user_rating_comment;
+    }
+    applyNpsPrompt(order.value?.nps_prompt || null);
   } catch (error) {
     devError("Не удалось загрузить заказ:", error);
   } finally {
@@ -194,6 +311,111 @@ async function repeatOrder() {
   });
   hapticFeedback("success");
   router.push("/cart");
+}
+function setRating(value) {
+  if (ratingSubmitting.value) return;
+  ratingForm.value.rating = value;
+  ratingError.value = "";
+  hapticFeedback("light");
+}
+async function submitOrderRating() {
+  if (!order.value || !canRateOrder.value || ratingSubmitting.value) return;
+  if (!Number.isInteger(ratingForm.value.rating) || ratingForm.value.rating < 1 || ratingForm.value.rating > 5) {
+    ratingError.value = "Выберите оценку от 1 до 5";
+    hapticFeedback("error");
+    return;
+  }
+
+  ratingSubmitting.value = true;
+  ratingError.value = "";
+
+  try {
+    const response = await ordersAPI.createOrderRating(order.value.id, {
+      rating: ratingForm.value.rating,
+      comment: ratingForm.value.comment || "",
+    });
+
+    const rating = response.data?.rating || null;
+    if (rating) {
+      order.value.user_rating = Number(rating.rating) || null;
+      order.value.user_rating_comment = rating.comment || null;
+      order.value.user_rating_created_at = rating.created_at || null;
+      order.value.can_rate_order = false;
+      applyNpsPrompt(response.data?.nps_prompt || null);
+      hapticFeedback("success");
+    }
+  } catch (error) {
+    const apiError = error?.response?.data?.error || "Не удалось отправить оценку";
+    ratingError.value = apiError;
+    hapticFeedback("error");
+  } finally {
+    ratingSubmitting.value = false;
+  }
+}
+function applyNpsPrompt(prompt) {
+  const shouldShow = prompt?.should_show === true;
+  const lastScore = Number.isInteger(Number(prompt?.last_score)) ? Number(prompt.last_score) : null;
+  const lastComment = typeof prompt?.last_comment === "string" ? prompt.last_comment : "";
+  const nextAvailableAt = prompt?.next_available_at || null;
+
+  npsStatus.value = {
+    shouldShow,
+    submitted: lastScore !== null,
+    score: lastScore,
+    comment: lastComment,
+    nextAvailableAt,
+  };
+
+  if (shouldShow) {
+    npsForm.value.score = null;
+    npsForm.value.comment = "";
+  }
+}
+function setNpsScore(value) {
+  if (npsSubmitting.value) return;
+  npsForm.value.score = value;
+  npsError.value = "";
+  hapticFeedback("light");
+}
+async function submitNps() {
+  if (npsSubmitting.value || !hasSubmittedRating.value || !npsStatus.value.shouldShow) return;
+  if (!Number.isInteger(npsForm.value.score) || npsForm.value.score < 0 || npsForm.value.score > 10) {
+    npsError.value = "Выберите оценку от 0 до 10";
+    hapticFeedback("error");
+    return;
+  }
+
+  npsSubmitting.value = true;
+  npsError.value = "";
+  try {
+    const response = await npsAPI.submitMonthly({
+      score: npsForm.value.score,
+      comment: npsForm.value.comment || "",
+    });
+
+    const score = Number(response.data?.nps?.score);
+    npsStatus.value = {
+      shouldShow: false,
+      submitted: Number.isInteger(score),
+      score: Number.isInteger(score) ? score : npsForm.value.score,
+      comment: response.data?.nps?.comment || npsForm.value.comment || "",
+      nextAvailableAt: null,
+    };
+    hapticFeedback("success");
+  } catch (error) {
+    hapticFeedback("error");
+    npsError.value = error?.response?.data?.error || "Не удалось отправить NPS";
+    const nextAvailableAt = error?.response?.data?.next_available_at || null;
+    if (nextAvailableAt) {
+      npsStatus.value = {
+        ...npsStatus.value,
+        shouldShow: false,
+        nextAvailableAt,
+      };
+    }
+  } finally {
+    npsSubmitting.value = false;
+  }
 }
 function getStatusText(status) {
   const isDelivery = order.value?.order_type === "delivery";
@@ -432,6 +654,137 @@ function formatDeliveryAddress(orderData) {
 .actions {
   padding: 0 16px;
   margin-top: 8px;
+}
+.rating-form {
+  display: grid;
+  gap: 12px;
+}
+.rating-summary {
+  display: grid;
+  gap: 8px;
+}
+.rating-stars {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.rating-stars.readonly {
+  pointer-events: none;
+}
+.star-button {
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.star-button:disabled {
+  cursor: default;
+}
+.star-icon {
+  color: var(--color-border);
+  fill: transparent;
+  transition: color var(--transition-duration) var(--transition-easing);
+}
+.star-icon.active {
+  color: #f59e0b;
+  fill: #f59e0b;
+}
+.rating-value {
+  font-size: var(--font-size-body);
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-medium);
+}
+.rating-comment {
+  font-size: var(--font-size-body);
+  color: var(--color-text-secondary);
+  white-space: pre-wrap;
+}
+.rating-comment-input {
+  width: 100%;
+  min-height: 88px;
+  resize: vertical;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  padding: 10px 12px;
+  font-size: var(--font-size-body);
+  color: var(--color-text-primary);
+  background: var(--color-background);
+}
+.submit-rating-btn {
+  width: 100%;
+  padding: 12px 14px;
+  border: none;
+  border-radius: var(--border-radius-sm);
+  background: var(--color-primary);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+}
+.submit-rating-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.rating-error {
+  font-size: var(--font-size-caption);
+  color: var(--color-error);
+}
+.rating-locked {
+  font-size: var(--font-size-body);
+  color: var(--color-text-secondary);
+}
+.nps-block {
+  margin-top: 14px;
+  display: grid;
+  gap: 10px;
+  border-top: 1px dashed var(--color-border);
+  padding-top: 14px;
+}
+.nps-title {
+  font-size: var(--font-size-caption);
+  color: var(--color-text-secondary);
+}
+.nps-scale {
+  display: grid;
+  grid-template-columns: repeat(11, minmax(0, 1fr));
+  gap: 4px;
+}
+.nps-btn {
+  height: 34px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  background: var(--color-background);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-caption);
+  cursor: pointer;
+}
+.nps-btn.active {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+}
+.nps-comment-input {
+  width: 100%;
+  min-height: 72px;
+  resize: vertical;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  padding: 10px 12px;
+  font-size: var(--font-size-body);
+  color: var(--color-text-primary);
+  background: var(--color-background);
+}
+.nps-value {
+  font-size: var(--font-size-h2);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+.nps-next-date {
+  font-size: var(--font-size-caption);
+  color: var(--color-text-secondary);
 }
 .repeat-btn {
   width: 100%;

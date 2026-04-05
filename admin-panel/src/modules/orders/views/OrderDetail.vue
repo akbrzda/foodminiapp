@@ -124,6 +124,22 @@
                 <div v-if="orderComment" class="rounded-md border border-border/60 bg-muted/40 p-3 text-xs text-muted-foreground">
                   Комментарий: {{ orderComment }}
                 </div>
+                <div class="rounded-md border border-border/60 bg-muted/40 p-3 text-xs text-muted-foreground">
+                  <div class="flex items-center gap-2">
+                    <span class="font-medium text-foreground">Оценка заказа:</span>
+                    <span v-if="hasOrderRating" class="inline-flex items-center gap-1 text-amber-600">
+                      <Star :size="14" />
+                      {{ order.user_rating }}/5
+                    </span>
+                    <span v-else>—</span>
+                  </div>
+                  <div v-if="hasOrderRating && order.user_rating_comment" class="mt-2 whitespace-pre-wrap">
+                    {{ order.user_rating_comment }}
+                  </div>
+                  <div v-if="hasOrderRating && order.user_rating_created_at" class="mt-1">
+                    Поставлена: {{ formatDateTime(order.user_rating_created_at, { timeZone: orderTimeZone }) }}
+                  </div>
+                </div>
               </CardContent>
             </Card>
           </div>
@@ -282,7 +298,7 @@
 import { devError } from "@/shared/utils/logger";
 import { ref, computed, onMounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { CircleCheck, Trash2 } from "lucide-vue-next";
+import { CircleCheck, Star, Trash2 } from "lucide-vue-next";
 import api from "@/shared/api/client.js";
 import { formatCurrency, formatDateTime, formatNumber, formatPaymentMethod, formatPhone, normalizePhone } from "@/shared/utils/format.js";
 import Badge from "@/shared/components/ui/badge/Badge.vue";
@@ -338,6 +354,10 @@ const accrualBonusesAmount = computed(() => Number(order.value?.bonus_earn_amoun
 const orderComment = computed(() => {
   const value = order.value?.comment || "";
   return String(value).trim();
+});
+const hasOrderRating = computed(() => {
+  const value = Number(order.value?.user_rating || 0);
+  return Number.isInteger(value) && value >= 1 && value <= 5;
 });
 const orderTitle = computed(() => {
   if (order.value?.order_number) return `Заказ #${order.value.order_number}`;

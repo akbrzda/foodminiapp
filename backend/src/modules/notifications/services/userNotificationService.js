@@ -29,8 +29,8 @@ export const sendNotificationToUser = async ({ userId, message, replyMarkup = nu
 };
 
 export const sendOrderStatusNotification = async ({ userId, orderId, orderNumber, status, orderType }) => {
-  const message = formatOrderStatusMessage(orderNumber, status, orderType);
-  const replyMarkup = buildOrderDetailsReplyMarkup(orderId);
+  const message = formatOrderStatusMessage(orderNumber, status, orderType, orderId);
+  const replyMarkup = buildOrderDetailsReplyMarkup(orderId, status === "completed" ? "Оценить заказ" : "Открыть заказ");
   return sendNotificationToUser({
     userId,
     message,
