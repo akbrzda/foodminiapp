@@ -46,7 +46,6 @@ const DEFAULT_LOYALTY_LEVELS = {
 };
 
 const LOYALTY_LEVEL_PERIOD_DAYS = null;
-const DEFAULT_BONUS_EXPIRES_DAYS = 60;
 const REGISTRATION_BONUS_AMOUNT = 1000;
 const REGISTRATION_BONUS_EXPIRES_DAYS = 30;
 const BIRTHDAY_BONUS_AMOUNT = 500;
@@ -114,7 +113,7 @@ const getProgress = (totalSpent, current, next) => {
 };
 
 const getExpiryDateFromSettings = (settings = {}) => {
-  const days = Math.max(1, normalizeNumber(settings.default_bonus_expires_days, DEFAULT_BONUS_EXPIRES_DAYS));
+  const days = Math.max(1, normalizeNumber(settings.default_bonus_expires_days, 1));
   return new Date(Date.now() + days * 24 * 60 * 60 * 1000);
 };
 
@@ -629,7 +628,7 @@ export async function earnBonuses(order, connection = null, levels = DEFAULT_LOY
 
   await updateOrderBonusEarnAmount(order.id, toInt(amount), { connection });
 
-  const expiresAt = new Date(Date.now() + DEFAULT_BONUS_EXPIRES_DAYS * 24 * 60 * 60 * 1000);
+  const expiresAt = getExpiryDateFromSettings(await getSystemSettings());
   const txId = await insertLoyaltyTransaction(
     {
       user_id: order.user_id,
@@ -754,7 +753,7 @@ export async function redeliveryEarnBonuses(order, connection = null) {
 
   await updateUserBalance(order.user_id, newBalance, { connection });
 
-  const expiresAt = new Date(Date.now() + DEFAULT_BONUS_EXPIRES_DAYS * 24 * 60 * 60 * 1000);
+  const expiresAt = getExpiryDateFromSettings(await getSystemSettings());
 
   const txId = await insertLoyaltyTransaction(
     {

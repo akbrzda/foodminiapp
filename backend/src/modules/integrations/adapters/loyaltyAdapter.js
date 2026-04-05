@@ -5,7 +5,6 @@ import {
 import * as localLoyaltyService from "../../loyalty/services/loyaltyService.js";
 import db from "../../../config/database.js";
 import redis from "../../../config/redis.js";
-import { getSystemSettings } from "../../../utils/settings.js";
 
 const DEFAULT_MAX_SPEND_PERCENT = 0.2;
 const DEFAULT_LEVEL_THRESHOLDS = [0, 10000, 20000];
@@ -53,34 +52,8 @@ function parseBonusPackageAmount(value) {
   return Number(parsed.toFixed(2));
 }
 
-function resolveLastApprovedPurchaseDate(purchases = []) {
-  const list = Array.isArray(purchases) ? purchases : [];
-  const approvedDates = list
-    .filter((item) => String(item?.status || "").trim().toLowerCase() === "approved")
-    .map((item) => parseIsoDateOrNull(item?.date))
-    .filter(Boolean)
-    .sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
-  if (approvedDates.length > 0) return approvedDates[0];
-
-  const fallbackDates = list
-    .map((item) => parseIsoDateOrNull(item?.date))
-    .filter(Boolean)
-    .sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
-  return fallbackDates[0] || null;
-}
-
-function getProjectedAccumulatedExpireAt(lastPurchaseAt, defaultBonusExpireDays) {
-  const lastPurchaseIso = parseIsoDateOrNull(lastPurchaseAt);
-  const days = Number(defaultBonusExpireDays);
-  if (!lastPurchaseIso || !Number.isInteger(days) || days < 1) return null;
-  const baseTs = new Date(lastPurchaseIso).getTime();
-  if (!Number.isFinite(baseTs)) return null;
-  return new Date(baseTs + days * 24 * 60 * 60 * 1000).toISOString();
-}
-
 function buildPremiumBonusExpiringBonuses({
   buyerBonusPackages = [],
-  projectedAccumulatedExpireAt = null,
   windowDays = PB_EXPIRING_WINDOW_DAYS,
   now = new Date(),
 } = {}) {
@@ -95,7 +68,7 @@ function buildPremiumBonusExpiringBonuses({
 
     const activationAt = parseIsoDateOrNull(pkg?.activation_at);
     const explicitExpireAt = parseIsoDateOrNull(pkg?.expire_at);
-    const expireAt = explicitExpireAt || projectedAccumulatedExpireAt;
+    const expireAt = explicitExpireAt;
     if (!expireAt) continue;
 
     const expireTs = new Date(expireAt).getTime();
@@ -107,7 +80,7 @@ function buildPremiumBonusExpiringBonuses({
       String(activationAt || ""),
       String(expireAt),
       String(amount),
-      explicitExpireAt ? "explicit" : "projected",
+      "explicit",
     ].join("|");
 
     items.push({
@@ -115,7 +88,7 @@ function buildPremiumBonusExpiringBonuses({
       amount,
       expires_at: expireAt,
       days_left: daysLeft,
-      projected: !explicitExpireAt,
+      projected: false,
     });
   }
 
@@ -619,20 +592,25 @@ function mapPbPurchasesToTransactions(list = []) {
     const writeOnAccumulated = toNumber(purchase?.bonus_accumulated_write_on);
     const writeOnPresent = toNumber(purchase?.bonus_present_write_on);
     const writeOnAction = toNumber(purchase?.bonus_action_write_on);
+    const expireAccumulated = toNumber(purchase?.bonus_accumulated_expire);
+    const expirePresent = toNumber(purchase?.bonus_present_expire);
+    const expireAction = toNumber(purchase?.bonus_action_expire);
 
     const writeOnTotal = writeOnAccumulated + writeOnPresent + writeOnAction;
     const writeOffTotal = writeOffAccumulated + writeOffPresent + writeOffAction;
-    if (writeOnTotal <= 0 && writeOffTotal <= 0) continue;
+    const expireTotal = expireAccumulated + expirePresent + expireAction;
+    if (writeOnTotal <= 0 && writeOffTotal <= 0 && expireTotal <= 0) continue;
 
     const explicitOperationName = String(
       purchase?.operation_name || purchase?.operation || purchase?.operation_type || ""
     ).trim();
-    const isExpireEvent =
-      (writeOffAction > 0 &&
+    const isLegacyExpireEvent =
+      expireTotal <= 0 &&
+      ((writeOffAction > 0 &&
         writeOffAccumulated === 0 &&
         writeOffPresent === 0 &&
         writeOnTotal === 0) ||
-      /сгора/i.test(explicitOperationName);
+      /сгора/i.test(explicitOperationName));
 
     const activationAtRaw =
       purchase?.bonus_activation_at ||
@@ -659,29 +637,30 @@ function mapPbPurchasesToTransactions(list = []) {
       });
     }
 
-    if (isExpireEvent) {
-      if (writeOffAction > 0) {
-        transactions.push({
-          id: `${purchase?.id || orderRef || createdAt || Math.random()}-expire`,
-          type: "expire",
-          amount: normalizeBonusAmount(writeOffAction),
-          promo_amount: normalizeBonusAmount(writeOffAction),
-          created_at: createdAt,
-          order_id: orderRef,
-          order_number: orderRef,
-          status: "completed",
-          raw_status: purchase?.status || null,
-        });
-      }
-      continue;
+    if (expireTotal > 0 || isLegacyExpireEvent) {
+      const expiredAmount = expireTotal > 0 ? expireTotal : writeOffAction;
+      const expiredPromoAmount = expireTotal > 0 ? expireAction : writeOffAction;
+      transactions.push({
+        id: `${purchase?.id || orderRef || createdAt || Math.random()}-expire`,
+        type: "expire",
+        amount: normalizeBonusAmount(expiredAmount),
+        promo_amount: normalizeBonusAmount(expiredPromoAmount),
+        created_at: createdAt,
+        order_id: orderRef,
+        order_number: orderRef,
+        status: "completed",
+        raw_status: purchase?.status || null,
+      });
     }
 
-    if (writeOffTotal > 0) {
+    const effectiveWriteOffTotal = Math.max(0, writeOffTotal - Math.max(0, expireTotal));
+    const effectiveWriteOffAction = Math.max(0, writeOffAction - Math.max(0, expireAction));
+    if (effectiveWriteOffTotal > 0) {
       transactions.push({
         id: `${purchase?.id || orderRef || createdAt || Math.random()}-spend`,
         type: "spend",
-        amount: normalizeBonusAmount(writeOffTotal),
-        promo_amount: normalizeBonusAmount(writeOffAction),
+        amount: normalizeBonusAmount(effectiveWriteOffTotal),
+        promo_amount: normalizeBonusAmount(effectiveWriteOffAction),
         created_at: createdAt,
         order_id: orderRef,
         order_number: orderRef,
@@ -957,21 +936,6 @@ function buildSyntheticTransactionsFromObserved(packages = [], now = new Date())
       });
     }
 
-    const expireTs = expireAt ? new Date(expireAt).getTime() : null;
-    const isExpired = Number.isFinite(expireTs) && expireTs <= nowTs;
-    if (expireAt && isExpired && !emittedExpireAt) {
-      transactions.push({
-        id: `${pkg.key}-expire`,
-        type: "expire",
-        amount: normalizeBonusAmount(amount),
-        promo_amount: normalizeBonusAmount(amount),
-        created_at: expireAt,
-        order_id: null,
-        order_number: null,
-        status: "completed",
-      });
-      nextPackage.emitted_expire_at = now.toISOString();
-    }
     nextState.push(nextPackage);
   }
 
@@ -1284,7 +1248,6 @@ export class LoyaltyAdapter {
       );
       const buyerBonusPhone = normalizePhoneForPremiumBonus(info?.phone || identifiers[0]);
       let buyerBonusPackages = [];
-      let lastPurchaseAt = null;
       if (buyerBonusPhone) {
         const [buyerBonusResponse, historyResponse] = await Promise.all([
           client.buyerBonus({ phone: buyerBonusPhone }),
@@ -1299,18 +1262,9 @@ export class LoyaltyAdapter {
           "PremiumBonus вернул ошибку при получении истории транзакций"
         );
         buyerBonusPackages = Array.isArray(buyerBonusResponse?.data) ? buyerBonusResponse.data : [];
-        const purchases = Array.isArray(historyResponse?.list) ? historyResponse.list : [];
-        lastPurchaseAt = resolveLastApprovedPurchaseDate(purchases);
       }
-
-      const systemSettings = await getSystemSettings();
-      const projectedAccumulatedExpireAt = getProjectedAccumulatedExpireAt(
-        lastPurchaseAt,
-        systemSettings?.default_bonus_expires_days
-      );
       const { items: expiringBonuses, total: totalExpiring } = buildPremiumBonusExpiringBonuses({
         buyerBonusPackages,
-        projectedAccumulatedExpireAt,
       });
 
       const result = {
@@ -1411,8 +1365,8 @@ export class LoyaltyAdapter {
       const purchaseTransactions = mapPbPurchasesToTransactions(purchases);
 
       // Синтетика по buyer-bonus:
-      // - показываем начисления пакетов, которые не покрыты операциями purchase-list
-      // - показываем сгорание пакета по expire_at один раз
+      // - показываем только начисления пакетов, которые не покрыты операциями purchase-list.
+      // Сгорание берем из transactionHistory, чтобы не создавать ложные expire по расчетным датам.
       const observedPackages = await loadObservedExpirePackages(userId);
       const freshObservedPackages = mapObservedPackagesFromBuyerBonus(buyerBonusData);
       const mergedObservedPackages = mergeObservedPackages(
