@@ -12,6 +12,20 @@ const DEFAULT_SETTINGS = {
   menu_badges_enabled: true,
   menu_cards_layout: "horizontal",
   site_currency: "RUB",
+  yandex_metrika_enabled: false,
+  yandex_metrika_counter_id: "",
+  yandex_metrika_webvisor_enabled: false,
+  yandex_metrika_clickmap_enabled: true,
+  yandex_metrika_track_links_enabled: true,
+  yandex_metrika_accurate_bounce_enabled: true,
+  yandex_metrika_goals: {
+    login_success: "login_success",
+    login_failed: "login_failed",
+    add_to_cart: "add_to_cart",
+    begin_checkout: "begin_checkout",
+    order_created: "order_created",
+    order_create_failed: "order_create_failed",
+  },
 };
 const normalizeBoolean = (value, fallback) => {
   if (typeof value === "boolean") return value;
@@ -65,6 +79,26 @@ export const useSettingsStore = defineStore("settings", {
     menuCardsLayout: (state) => state.menu_cards_layout,
     currencyCode: (state) => normalizeSiteCurrency(state.site_currency, "RUB"),
     currencySymbol: (state) => CURRENCY_SYMBOLS[normalizeSiteCurrency(state.site_currency, "RUB")] || "₽",
+    metrikaEnabled: (state) => normalizeBoolean(state.yandex_metrika_enabled, false),
+    metrikaCounterId: (state) => String(state.yandex_metrika_counter_id || "").trim(),
+    metrikaWebvisorEnabled: (state) => normalizeBoolean(state.yandex_metrika_webvisor_enabled, false),
+    metrikaClickmapEnabled: (state) => normalizeBoolean(state.yandex_metrika_clickmap_enabled, true),
+    metrikaTrackLinksEnabled: (state) => normalizeBoolean(state.yandex_metrika_track_links_enabled, true),
+    metrikaAccurateBounceEnabled: (state) => normalizeBoolean(state.yandex_metrika_accurate_bounce_enabled, true),
+    metrikaGoals: (state) => {
+      const raw = state.yandex_metrika_goals;
+      if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+        return { ...DEFAULT_SETTINGS.yandex_metrika_goals };
+      }
+      const normalized = {};
+      for (const [eventKey, goalId] of Object.entries(raw)) {
+        const normalizedKey = String(eventKey || "").trim();
+        const normalizedGoal = String(goalId || "").trim();
+        if (!normalizedKey || !normalizedGoal) continue;
+        normalized[normalizedKey] = normalizedGoal;
+      }
+      return Object.keys(normalized).length ? normalized : { ...DEFAULT_SETTINGS.yandex_metrika_goals };
+    },
   },
   actions: {
     applySettings(settings) {

@@ -42,6 +42,14 @@ export const MAX_NEW_ORDER_NOTIFICATION_DEFAULT = {
   message_template:
     "🔔 <b>Новый заказ #{{order_number}}</b>\n\n📍 <b>Тип:</b> {{order_type_label}}\n🏙️ <b>Город:</b> {{city_name}}\n🏪 <b>Филиал:</b> {{branch_name}}\n📫 <b>Адрес:</b> {{delivery_address}}\n💳 <b>Оплата:</b> {{payment_method_label}}\n💰 <b>Сумма:</b> {{total}}₽\n\n📦 <b>Состав заказа:</b>\n{{items_list}}\n\n💬 <b>Комментарий:</b> {{comment}}",
 };
+export const METRIKA_DEFAULT_GOALS = {
+  login_success: "login_success",
+  login_failed: "login_failed",
+  add_to_cart: "add_to_cart",
+  begin_checkout: "begin_checkout",
+  order_created: "order_created",
+  order_create_failed: "order_create_failed",
+};
 
 const TELEGRAM_START_BUTTON_TYPES = new Set(["url", "web_app"]);
 const MAX_START_BUTTON_TYPES = new Set(["link", "open_app"]);
@@ -49,6 +57,7 @@ const ORDER_NOTIFICATION_PLATFORMS = new Set(["telegram", "max"]);
 const MAPS_API_KEY_MAX_LENGTH = 512;
 const MAPS_LANGUAGE_REGEX = /^[a-z]{2}_[A-Z]{2}$/;
 const MAPS_COUNTRY_REGEX = /^[A-Z]{2}$/;
+const METRIKA_COUNTER_ID_REGEX = /^\d{3,20}$/;
 const MENU_CARDS_LAYOUT_VALUES = new Set(["horizontal", "vertical"]);
 const SITE_CURRENCY_VALUES = new Set(["RUB", "USD", "TJS", "KZT", "KGS", "UZS"]);
 const LOYALTY_INFO_SECTIONS_MAX_ITEMS = 20;
@@ -373,6 +382,55 @@ export const SETTINGS_SCHEMA = {
     group: "Карты",
     type: "string",
   },
+  yandex_metrika_enabled: {
+    default: false,
+    label: "Яндекс Метрика",
+    description: "Включает отправку аналитических событий из Mini App",
+    group: "Аналитика",
+    type: "boolean",
+  },
+  yandex_metrika_counter_id: {
+    default: "",
+    label: "ID счетчика Яндекс Метрики",
+    description: "Числовой идентификатор счетчика Метрики",
+    group: "Аналитика",
+    type: "string",
+  },
+  yandex_metrika_webvisor_enabled: {
+    default: false,
+    label: "Вебвизор",
+    description: "Разрешает запись сессий в Яндекс Метрике",
+    group: "Аналитика",
+    type: "boolean",
+  },
+  yandex_metrika_clickmap_enabled: {
+    default: true,
+    label: "Карта кликов",
+    description: "Отправляет данные для карты кликов Метрики",
+    group: "Аналитика",
+    type: "boolean",
+  },
+  yandex_metrika_track_links_enabled: {
+    default: true,
+    label: "Отслеживание ссылок",
+    description: "Отслеживает переходы по внешним ссылкам",
+    group: "Аналитика",
+    type: "boolean",
+  },
+  yandex_metrika_accurate_bounce_enabled: {
+    default: true,
+    label: "Точный показатель отказов",
+    description: "Включает точный расчет отказов в Метрике",
+    group: "Аналитика",
+    type: "boolean",
+  },
+  yandex_metrika_goals: {
+    default: METRIKA_DEFAULT_GOALS,
+    label: "Карта целей Метрики",
+    description: "Соответствие внутренних событий и ID JS-целей Метрики",
+    group: "Аналитика",
+    type: "json",
+  },
 };
 
 const normalizeSettingValue = (rawValue, fallback) => {
@@ -466,6 +524,43 @@ const validateAppearanceSetting = (key, value) => {
   }
 
   return null;
+};
+const validateAnalyticsSetting = (key, value) => {
+  if (key !== "yandex_metrika_counter_id") return null;
+  if (!value) return null;
+  if (!METRIKA_COUNTER_ID_REGEX.test(value)) {
+    return "yandex_metrika_counter_id должен содержать только цифры (от 3 до 20)";
+  }
+  return null;
+};
+const validateMetrikaGoals = (key, value) => {
+  if (key !== "yandex_metrika_goals") return { normalized: value, error: null };
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return { normalized: null, error: "Ожидался JSON-объект для yandex_metrika_goals" };
+  }
+
+  const normalized = {};
+  for (const [eventKey, goalId] of Object.entries(value)) {
+    const normalizedEventKey = String(eventKey || "").trim();
+    const normalizedGoalId = String(goalId || "").trim();
+
+    if (!normalizedEventKey) {
+      return { normalized: null, error: "Ключ события в yandex_metrika_goals не должен быть пустым" };
+    }
+    if (!/^[a-z0-9_]{2,64}$/i.test(normalizedEventKey)) {
+      return { normalized: null, error: `Некорректный ключ события: ${normalizedEventKey}` };
+    }
+    if (!normalizedGoalId) {
+      return { normalized: null, error: `Для события ${normalizedEventKey} не задан ID цели` };
+    }
+    if (normalizedGoalId.length > 128) {
+      return { normalized: null, error: `ID цели для события ${normalizedEventKey} слишком длинный` };
+    }
+
+    normalized[normalizedEventKey] = normalizedGoalId;
+  }
+
+  return { normalized, error: null };
 };
 const validateOrderNotificationPlatformSetting = (key, value) => {
   if (key !== "order_notifications_platform") return null;
@@ -1052,6 +1147,11 @@ export const updateSystemSettings = async (patch) => {
         errors[key] = orderPlatformValidationError;
         continue;
       }
+      const analyticsValidationError = validateAnalyticsSetting(key, updates[key]);
+      if (analyticsValidationError) {
+        errors[key] = analyticsValidationError;
+        continue;
+      }
     } else if (meta.type === "json") {
       if (!value || typeof value !== "object" || Array.isArray(value)) {
         errors[key] = "Ожидался JSON-объект";
@@ -1086,6 +1186,15 @@ export const updateSystemSettings = async (patch) => {
       }
       if (key === "max_new_order_notification") {
         const { normalized, error } = validateMaxNewOrderNotification(value);
+        if (error) {
+          errors[key] = error;
+          continue;
+        }
+        updates[key] = normalized;
+        continue;
+      }
+      if (key === "yandex_metrika_goals") {
+        const { normalized, error } = validateMetrikaGoals(key, value);
         if (error) {
           errors[key] = error;
           continue;

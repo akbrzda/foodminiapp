@@ -6,6 +6,7 @@ import {
   registerScrollRestoreGuard,
 } from "@/router/guards/scroll-restore.guard.js";
 import { registerTelegramBackButtonGuard } from "@/router/guards/telegram-back-button.guard.js";
+import { trackPageView } from "@/shared/services/metrika.js";
 
 const loadRouteWithRetry = (loader, { retries = 2, delayMs = 350 } = {}) => {
   return async () => {
@@ -114,6 +115,13 @@ registerScrollRestoreGuard(router);
 registerAuthGuard(router, navigationContext);
 registerLocationGuard(router, navigationContext);
 registerTelegramBackButtonGuard(router);
+router.afterEach((to, from) => {
+  trackPageView({
+    path: to.fullPath,
+    title: document.title,
+    referer: from?.fullPath || undefined,
+  });
+});
 
 router.onError((error) => {
   const message = String(error?.message || "").toLowerCase();

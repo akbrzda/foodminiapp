@@ -12,6 +12,7 @@ import { useLoyaltyStore } from "@/modules/loyalty/stores/loyalty.js";
 import { useLocationStore } from "@/modules/location/stores/location.js";
 import { useSettingsStore } from "@/modules/settings/stores/settings.js";
 import { citiesAPI, userStateAPI } from "@/shared/api/endpoints.js";
+import { configureMetrika, setMetrikaUserId, trackPageView, trackUserParams } from "@/shared/services/metrika.js";
 import { wsService } from "@/shared/services/websocket.js";
 import { getWebApp, isDesktop } from "@/shared/services/telegram.js";
 import { devLog } from "@/shared/utils/logger.js";
@@ -109,6 +110,25 @@ onMounted(async () => {
     await router.replace("/login");
   }
   await settingsStore.loadSettings();
+  await configureMetrika({
+    enabled: settingsStore.metrikaEnabled,
+    counterId: settingsStore.metrikaCounterId,
+    webvisor: settingsStore.metrikaWebvisorEnabled,
+    clickmap: settingsStore.metrikaClickmapEnabled,
+    trackLinks: settingsStore.metrikaTrackLinksEnabled,
+    accurateTrackBounce: settingsStore.metrikaAccurateBounceEnabled,
+    goals: settingsStore.metrikaGoals,
+  });
+  trackPageView({
+    path: router.currentRoute.value.fullPath,
+    title: document.title,
+  });
+  if (authStore.currentUser?.id) {
+    setMetrikaUserId(authStore.currentUser.id);
+    trackUserParams({
+      authorized: true,
+    });
+  }
   if (settingsStore.bonusesEnabled && authStore.isAuthenticated) {
     await loyaltyStore.refreshFromProfile();
   }
@@ -162,8 +182,17 @@ function setupWebSocket() {
       (isAuthenticated) => {
         if (isAuthenticated) {
           wsService.connect();
+          if (authStore.currentUser?.id) {
+            setMetrikaUserId(authStore.currentUser.id);
+          }
+          trackUserParams({
+            authorized: true,
+          });
         } else {
           wsService.disconnect();
+          trackUserParams({
+            authorized: false,
+          });
         }
       },
     );

@@ -181,6 +181,7 @@ import { useMenuStore } from "@/modules/menu/stores/menu.js";
 import { useSettingsStore } from "@/modules/settings/stores/settings.js";
 import { useKeyboardHandler } from "@/shared/composables/useKeyboardHandler";
 import { citiesAPI, addressesAPI, ordersAPI, menuAPI, bonusesAPI } from "@/shared/api/endpoints.js";
+import { trackGoalByKey } from "@/shared/services/metrika.js";
 import { hapticFeedback, showAlert } from "@/shared/services/telegram.js";
 import { formatPrice, formatPriceWithCurrency } from "@/shared/utils/format";
 import { calculateDeliveryCost } from "@/shared/utils/deliveryTariffs";
@@ -771,11 +772,23 @@ async function submitOrder() {
       orderData.change_from = Number(changeFrom.value);
     }
     const response = await ordersAPI.createOrder(orderData);
+    trackGoalByKey("order_created", {
+      order_type: orderType.value,
+      items_count: cartStore.itemsCount,
+      total: Math.round(finalTotalPrice.value),
+      payment_method: paymentMethod.value,
+      has_bonus_spend: bonusToUse > 0,
+      delivery_cost: Math.round(deliveryCostForSummary.value || 0),
+    });
     hapticFeedback("success");
     cartStore.clearCart();
     router.push("/");
   } catch (error) {
     devError("Не удалось создать заказ:", error);
+    trackGoalByKey("order_create_failed", {
+      order_type: orderType.value || "unknown",
+      code: String(error?.data?.error || error?.message || "unknown").slice(0, 120),
+    });
     hapticFeedback("error");
     let errorMessage = "Ошибка при оформлении заказа";
     const errorTranslations = {

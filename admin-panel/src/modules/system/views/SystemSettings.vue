@@ -45,6 +45,23 @@
                 {{ moduleSaving ? "Сохранение..." : "Сохранить" }}
               </Button>
             </div>
+            <div v-else-if="activeTab === 'analytics' && canManageSettings" class="header-actions">
+              <Button variant="secondary" :disabled="moduleLoading || moduleSaving || analyticsTesting" @click="loadModuleSettings">
+                <Spinner v-if="moduleLoading" class="h-4 w-4" />
+                <RefreshCcw v-else :size="16" />
+                Сбросить
+              </Button>
+              <Button variant="secondary" :disabled="moduleLoading || moduleSaving || analyticsTesting" @click="testAnalyticsSettings">
+                <Spinner v-if="analyticsTesting" class="h-4 w-4" />
+                <SendHorizontal v-else :size="16" />
+                {{ analyticsTesting ? "Проверка..." : "Тест конфигурации" }}
+              </Button>
+              <Button :disabled="moduleLoading || moduleSaving || analyticsTesting" @click="saveAnalyticsSettings">
+                <Spinner v-if="moduleSaving" class="h-4 w-4" />
+                <Save v-else :size="16" />
+                {{ moduleSaving ? "Сохранение..." : "Сохранить" }}
+              </Button>
+            </div>
             <div v-else-if="activeTab === 'start-message' && canManageSettings" class="header-actions">
               <Button variant="secondary" :disabled="telegramLoading || telegramSaving || telegramTesting" @click="loadTelegramStartSettings">
                 <Spinner v-if="telegramLoading" class="h-4 w-4" />
@@ -314,6 +331,125 @@
         </Card>
         <Card v-else>
           <CardContent class="py-8 text-center text-sm text-muted-foreground">Настройки оформления не найдены</CardContent>
+        </Card>
+      </TabsContent>
+
+      <TabsContent value="analytics" class="space-y-4">
+        <Card v-if="moduleLoading">
+          <CardContent class="space-y-3 pt-6">
+            <Skeleton class="h-4 w-56" />
+            <Skeleton class="h-14 w-full" />
+            <Skeleton class="h-14 w-full" />
+            <Skeleton class="h-28 w-full" />
+          </CardContent>
+        </Card>
+        <Card v-else-if="analyticsGroups.length">
+          <CardHeader>
+            <CardTitle>Яндекс Метрика</CardTitle>
+            <CardDescription>Опциональная аналитика Mini App, управляется через системные настройки</CardDescription>
+          </CardHeader>
+          <CardContent class="pt-0 space-y-4">
+            <div class="space-y-4">
+              <div v-for="group in analyticsGroups" :key="`analytics-${group.name}`" class="space-y-4">
+                <div class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  {{ group.name }}
+                </div>
+                <div class="space-y-2.5">
+                  <div
+                    v-for="item in group.items"
+                    :key="item.key"
+                    class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/60 bg-background px-3 py-2.5"
+                  >
+                    <div class="min-w-0">
+                      <div class="text-sm font-semibold text-foreground">{{ item.label }}</div>
+                      <div class="text-xs text-muted-foreground">{{ item.description }}</div>
+                    </div>
+                    <div class="w-52">
+                      <Select
+                        v-if="item.type === 'boolean' || typeof analyticsForm[item.key] === 'boolean'"
+                        v-model="analyticsForm[item.key]"
+                      >
+                        <SelectTrigger class="w-full">
+                          <SelectValue placeholder="Выберите статус" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem :value="true">Включено</SelectItem>
+                          <SelectItem :value="false">Выключено</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        v-else
+                        v-model="analyticsForm[item.key]"
+                        type="text"
+                        autocomplete="off"
+                        autocapitalize="none"
+                        autocorrect="off"
+                        spellcheck="false"
+                        placeholder="Например: 12345678"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <Card class="border-dashed">
+              <CardHeader>
+                <CardTitle class="text-sm">Карта целей</CardTitle>
+                <CardDescription>Сопоставление внутреннего события Mini App и ID цели в Метрике</CardDescription>
+              </CardHeader>
+              <CardContent class="space-y-3 pt-0">
+                <div class="grid gap-2 rounded-lg border border-border/60 bg-muted/20 p-2 md:grid-cols-[1fr_1fr_auto]">
+                  <div class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Ключ события</div>
+                  <div class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">ID цели</div>
+                  <div class="text-xs font-semibold uppercase tracking-wide text-muted-foreground text-right">Действие</div>
+                </div>
+                <div
+                  v-for="(row, index) in analyticsGoalRows"
+                  :key="`analytics-goal-${index}`"
+                  class="grid gap-2 rounded-lg border border-border/60 p-2 md:grid-cols-[1fr_1fr_auto]"
+                >
+                  <Input
+                    v-model="row.event_key"
+                    type="text"
+                    autocomplete="off"
+                    autocapitalize="none"
+                    autocorrect="off"
+                    spellcheck="false"
+                    placeholder="Например: order_created"
+                  />
+                  <Input
+                    v-model="row.goal_id"
+                    type="text"
+                    autocomplete="off"
+                    autocapitalize="none"
+                    autocorrect="off"
+                    spellcheck="false"
+                    placeholder="Например: order_created"
+                  />
+                  <div class="flex justify-end">
+                    <Button type="button" variant="outline" size="icon" @click="removeAnalyticsGoalRow(index)">
+                      <X :size="16" />
+                    </Button>
+                  </div>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                  <Button type="button" variant="outline" @click="addAnalyticsGoalRow()">
+                    <Plus :size="16" />
+                    Добавить цель
+                  </Button>
+                  <Button type="button" variant="outline" @click="restoreDefaultAnalyticsGoals">
+                    Восстановить значения по умолчанию
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+            <div class="rounded-xl border border-dashed border-border/60 bg-muted/30 px-4 py-3 text-xs text-muted-foreground">
+              События в Mini App отправляются по ключам карты целей. Можно переименовать ID целей без правки кода клиента.
+            </div>
+          </CardContent>
+        </Card>
+        <Card v-else>
+          <CardContent class="py-8 text-center text-sm text-muted-foreground">Настройки аналитики не найдены</CardContent>
         </Card>
       </TabsContent>
 
@@ -900,15 +1036,20 @@ const mapItems = ref([]);
 const mapForm = ref({});
 const appearanceItems = ref([]);
 const appearanceForm = ref({});
+const analyticsItems = ref([]);
+const analyticsForm = ref({});
+const analyticsGoalRows = ref([]);
 const moduleLoading = ref(false);
 const moduleSaving = ref(false);
 const mapsTesting = ref(false);
+const analyticsTesting = ref(false);
 const reasons = ref([]);
 const reasonsLoading = ref(false);
 const SYSTEM_TAB_OPTIONS = [
   { value: "modules", label: "Модули" },
   { value: "maps", label: "Карты" },
   { value: "appearance", label: "Оформление" },
+  { value: "analytics", label: "Аналитика" },
   { value: "stop-list-reasons", label: "Причины стоп-листа" },
   { value: "start-message", label: "Приветственное сообщение" },
   { value: "order-notifications", label: "Уведомления по заказам" },
@@ -968,6 +1109,23 @@ const modalSubtitle = computed(() => (editing.value ? "Измените пара
 const percentKeys = new Set();
 const MAP_SETTING_KEYS = new Set(["yandex_js_api_key", "yandex_suggest_api_key", "maps_default_language", "maps_default_country"]);
 const APPEARANCE_SETTING_KEYS = new Set(["menu_badges_enabled", "menu_cards_layout", "site_currency"]);
+const ANALYTICS_SETTING_KEYS = new Set([
+  "yandex_metrika_enabled",
+  "yandex_metrika_counter_id",
+  "yandex_metrika_webvisor_enabled",
+  "yandex_metrika_clickmap_enabled",
+  "yandex_metrika_track_links_enabled",
+  "yandex_metrika_accurate_bounce_enabled",
+]);
+const ANALYTICS_GOAL_KEY_REGEX = /^[a-z0-9_]{2,64}$/i;
+const DEFAULT_ANALYTICS_GOALS = {
+  login_success: "login_success",
+  login_failed: "login_failed",
+  add_to_cart: "add_to_cart",
+  begin_checkout: "begin_checkout",
+  order_created: "order_created",
+  order_create_failed: "order_create_failed",
+};
 const primitiveTypes = new Set(["boolean", "string", "number"]);
 const TELEGRAM_ORDER_PLACEHOLDERS = [
   "{{order_id}}",
@@ -1100,16 +1258,87 @@ const normalizeMaxOrderNotificationForm = (value = {}) => {
   };
 };
 
+const mapAnalyticsGoalsToRows = (goals) => {
+  const source = goals && typeof goals === "object" && !Array.isArray(goals) ? goals : DEFAULT_ANALYTICS_GOALS;
+  const rows = Object.entries(source).map(([eventKey, goalId]) => ({
+    event_key: String(eventKey || "").trim(),
+    goal_id: String(goalId || "").trim(),
+  }));
+  return rows.length > 0 ? rows : [{ event_key: "", goal_id: "" }];
+};
+
+const buildAnalyticsGoalsPayload = () => {
+  const payload = {};
+  const keySet = new Set();
+
+  for (let index = 0; index < analyticsGoalRows.value.length; index += 1) {
+    const row = analyticsGoalRows.value[index] || {};
+    const eventKey = String(row.event_key || "").trim();
+    const goalId = String(row.goal_id || "").trim();
+
+    if (!eventKey && !goalId) {
+      continue;
+    }
+    if (!eventKey || !goalId) {
+      return { payload: null, error: `Строка #${index + 1}: заполните и ключ события, и ID цели` };
+    }
+    if (!ANALYTICS_GOAL_KEY_REGEX.test(eventKey)) {
+      return {
+        payload: null,
+        error: `Строка #${index + 1}: ключ события должен содержать только буквы, цифры и "_" (2-64 символа)`,
+      };
+    }
+    if (keySet.has(eventKey)) {
+      return { payload: null, error: `Строка #${index + 1}: дублирующийся ключ события "${eventKey}"` };
+    }
+
+    keySet.add(eventKey);
+    payload[eventKey] = goalId;
+  }
+
+  if (Object.keys(payload).length === 0) {
+    return { payload: null, error: "Добавьте хотя бы одну цель в карту событий" };
+  }
+
+  return { payload, error: null };
+};
+
+const addAnalyticsGoalRow = () => {
+  analyticsGoalRows.value.push({
+    event_key: "",
+    goal_id: "",
+  });
+};
+
+const removeAnalyticsGoalRow = (index) => {
+  analyticsGoalRows.value.splice(index, 1);
+  if (analyticsGoalRows.value.length === 0) {
+    analyticsGoalRows.value.push({
+      event_key: "",
+      goal_id: "",
+    });
+  }
+};
+
+const restoreDefaultAnalyticsGoals = () => {
+  analyticsGoalRows.value = mapAnalyticsGoalsToRows(DEFAULT_ANALYTICS_GOALS);
+};
+
 const applySettingsResponse = (data) => {
   const settings = data?.settings || {};
   setActiveCurrencyCode(settings.site_currency || "RUB");
   const primitiveItems = (data?.items || []).filter((item) => item.group !== "Интеграции" && primitiveTypes.has(item.type));
-  moduleItems.value = primitiveItems.filter((item) => !MAP_SETTING_KEYS.has(item.key) && !APPEARANCE_SETTING_KEYS.has(item.key));
+  moduleItems.value = primitiveItems.filter(
+    (item) => !MAP_SETTING_KEYS.has(item.key) && !APPEARANCE_SETTING_KEYS.has(item.key) && !ANALYTICS_SETTING_KEYS.has(item.key),
+  );
   mapItems.value = primitiveItems.filter((item) => MAP_SETTING_KEYS.has(item.key));
   appearanceItems.value = primitiveItems.filter((item) => APPEARANCE_SETTING_KEYS.has(item.key));
+  analyticsItems.value = primitiveItems.filter((item) => ANALYTICS_SETTING_KEYS.has(item.key));
   hydrateForm(moduleItems.value, moduleForm);
   hydrateForm(mapItems.value, mapForm);
   hydrateForm(appearanceItems.value, appearanceForm);
+  hydrateForm(analyticsItems.value, analyticsForm);
+  analyticsGoalRows.value = mapAnalyticsGoalsToRows(settings.yandex_metrika_goals);
   startMessageForms.value = {
     telegram: normalizeTelegramForm(settings.telegram_start_message),
     max: normalizeMaxStartForm(settings.max_start_message),
@@ -1142,6 +1371,7 @@ const groupedModuleSettings = computed(() => groupSettings(moduleItems.value));
 const moduleGroups = computed(() => groupedModuleSettings.value);
 const mapGroups = computed(() => groupSettings(mapItems.value));
 const appearanceGroups = computed(() => groupSettings(appearanceItems.value));
+const analyticsGroups = computed(() => groupSettings(analyticsItems.value));
 const telegramActiveImagesCount = computed(() => activeStartForm.value.images.filter((image) => image.is_active !== false).length);
 const telegramPreviewImageUrl = computed(() => {
   return activeStartForm.value.images.find((image) => image.is_active !== false)?.url || activeStartForm.value.images[0]?.url || "";
@@ -1241,6 +1471,53 @@ const saveAppearanceSettings = async () => {
     showErrorNotification(message);
   } finally {
     moduleSaving.value = false;
+  }
+};
+
+const saveAnalyticsSettings = async () => {
+  if (!canManageSettings.value) return;
+  moduleSaving.value = true;
+  try {
+    const { payload: parsedGoals, error: goalsError } = buildAnalyticsGoalsPayload();
+    if (goalsError) {
+      showErrorNotification(goalsError);
+      return;
+    }
+    const payload = {};
+    for (const [key, value] of Object.entries(analyticsForm.value)) {
+      payload[key] = value;
+    }
+    payload.yandex_metrika_goals = parsedGoals;
+
+    const response = await api.put("/api/settings/admin", { settings: payload });
+    applySettingsResponse(response.data);
+    showSuccessNotification("Настройки аналитики сохранены");
+  } catch (error) {
+    devError("Failed to save analytics settings:", error);
+    const message =
+      error.response?.data?.errors?.yandex_metrika_counter_id ||
+      error.response?.data?.errors?.yandex_metrika_goals ||
+      error.response?.data?.errors?.settings ||
+      "Ошибка при сохранении настроек аналитики";
+    showErrorNotification(message);
+  } finally {
+    moduleSaving.value = false;
+  }
+};
+
+const testAnalyticsSettings = async () => {
+  if (!canManageSettings.value) return;
+  analyticsTesting.value = true;
+  try {
+    const { data } = await api.post("/api/settings/admin/metrika/test");
+    const counterId = String(data?.data?.counter_id || "");
+    const goalsCount = Number(data?.data?.goals_count || 0);
+    showSuccessNotification(`Метрика готова: счетчик ${counterId}, целей ${goalsCount}`);
+  } catch (error) {
+    devError("Failed to test metrika settings:", error);
+    showErrorNotification(error.response?.data?.error || "Не удалось проверить настройки Метрики");
+  } finally {
+    analyticsTesting.value = false;
   }
 };
 

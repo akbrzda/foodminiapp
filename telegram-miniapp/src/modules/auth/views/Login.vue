@@ -20,6 +20,7 @@ import { ref, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { useAuthStore } from "@/modules/auth/stores/auth.js";
 import { getPlatformBridge } from "@/shared/platform/index.js";
+import { trackGoalByKey } from "@/shared/services/metrika.js";
 import { devError } from "@/shared/utils/logger.js";
 const router = useRouter();
 const authStore = useAuthStore();
@@ -59,14 +60,21 @@ async function handleLogin() {
       if (loginResult?.errorCode === "AUTH_PHONE_REQUIRED") {
         error.value = "Для регистрации нужен номер телефона. Разрешите доступ к контактам в MAX и повторите вход.";
       }
+      trackGoalByKey("login_failed", {
+        code: String(loginResult?.errorCode || "unknown"),
+      });
       bridge.hapticFeedback("error");
       return;
     }
 
+    trackGoalByKey("login_success");
     bridge.hapticFeedback("success");
     router.push("/");
   } catch (err) {
     error.value = err.message || "Ошибка авторизации";
+    trackGoalByKey("login_failed", {
+      code: "exception",
+    });
     getPlatformBridge().hapticFeedback("error");
     devError("Ошибка входа:", err);
   } finally {

@@ -1,5 +1,6 @@
 import { defineStore } from "pinia";
 import { LOCAL_STORAGE_KEYS } from "@/shared/constants/storage-keys.js";
+import { trackGoalByKey } from "@/shared/services/metrika.js";
 import { readLocalJson, writeLocalJson } from "@/shared/services/storage/web-storage.js";
 import { devError } from "@/shared/utils/logger.js";
 
@@ -98,6 +99,18 @@ export const useCartStore = defineStore("cart", {
         });
       }
       this.saveToLocalStorage();
+      const trackedItemId = Number(item?.id);
+      const goalParams = {
+        quantity: Number(item?.quantity || 1),
+        cart_items_count: this.itemsCount,
+        cart_total: Math.round(this.totalPrice),
+      };
+      if (Number.isFinite(trackedItemId) && trackedItemId > 0) {
+        goalParams.item_id = trackedItemId;
+      }
+      trackGoalByKey("add_to_cart", {
+        ...goalParams,
+      });
     },
     removeItem(index) {
       this.items.splice(index, 1);

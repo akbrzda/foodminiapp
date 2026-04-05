@@ -156,6 +156,7 @@ import { useMenuStore } from "@/modules/menu/stores/menu.js";
 import { useSettingsStore } from "@/modules/settings/stores/settings.js";
 import { useKeyboardHandler } from "@/shared/composables/useKeyboardHandler";
 import { hapticFeedback, showAlert } from "@/shared/services/telegram.js";
+import { trackGoalByKey } from "@/shared/services/metrika.js";
 import { bonusesAPI, addressesAPI, citiesAPI, menuAPI } from "@/shared/api/endpoints.js";
 import { formatPrice, formatPriceWithCurrency, normalizeImageUrl } from "@/shared/utils/format";
 import { formatWeight, formatWeightValue } from "@/shared/utils/weight";
@@ -356,6 +357,11 @@ function checkout() {
     return;
   }
   hapticFeedback("medium");
+  trackGoalByKey("begin_checkout", {
+    order_type: isDelivery.value ? "delivery" : "pickup",
+    items_count: cartStore.itemsCount,
+    total: Math.round(finalCartTotal.value),
+  });
   router.push("/checkout");
 }
 async function loadUpsell() {

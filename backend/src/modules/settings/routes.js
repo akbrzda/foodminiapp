@@ -1,7 +1,7 @@
 import express from "express";
 import axios from "axios";
 import { authenticateToken, requirePermission } from "../../middleware/auth.js";
-import { getSystemSettings, getSettingsList, updateSystemSettings } from "../../utils/settings.js";
+import { METRIKA_DEFAULT_GOALS, getSystemSettings, getSettingsList, updateSystemSettings } from "../../utils/settings.js";
 import { logger } from "../../utils/logger.js";
 import { sendTelegramStartMessage } from "../../utils/telegram.js";
 import { addTelegramNotification } from "../../queues/config.js";
@@ -75,6 +75,13 @@ const PUBLIC_SETTINGS_ALLOWLIST = new Set([
   "iiko_enabled",
   "premiumbonus_enabled",
   "integration_mode",
+  "yandex_metrika_enabled",
+  "yandex_metrika_counter_id",
+  "yandex_metrika_webvisor_enabled",
+  "yandex_metrika_clickmap_enabled",
+  "yandex_metrika_track_links_enabled",
+  "yandex_metrika_accurate_bounce_enabled",
+  "yandex_metrika_goals",
 ]);
 
 const filterPublicSettings = (settings) => {
@@ -215,6 +222,46 @@ router.post("/admin/maps/test", authenticateToken, requirePermission("system.set
         details: upstreamError ? `${error.message}: ${upstreamError}` : error.message,
       });
     }
+    return next(error);
+  }
+});
+
+router.post("/admin/metrika/test", authenticateToken, requirePermission("system.settings.manage"), async (req, res, next) => {
+  try {
+    const settings = await getSystemSettings();
+    const enabled = settings?.yandex_metrika_enabled === true;
+    const counterId = String(settings?.yandex_metrika_counter_id || "").trim();
+    const goals =
+      settings?.yandex_metrika_goals && typeof settings.yandex_metrika_goals === "object" && !Array.isArray(settings.yandex_metrika_goals)
+        ? settings.yandex_metrika_goals
+        : METRIKA_DEFAULT_GOALS;
+
+    if (!enabled) {
+      return res.status(400).json({
+        success: false,
+        error: "Интеграция Яндекс Метрики выключена",
+      });
+    }
+    if (!/^\d{3,20}$/.test(counterId)) {
+      return res.status(400).json({
+        success: false,
+        error: "Не задан корректный yandex_metrika_counter_id",
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        enabled,
+        counter_id: counterId,
+        goals_count: Object.keys(goals).length,
+        webvisor_enabled: settings?.yandex_metrika_webvisor_enabled === true,
+        clickmap_enabled: settings?.yandex_metrika_clickmap_enabled !== false,
+        track_links_enabled: settings?.yandex_metrika_track_links_enabled !== false,
+        accurate_bounce_enabled: settings?.yandex_metrika_accurate_bounce_enabled !== false,
+      },
+    });
+  } catch (error) {
     return next(error);
   }
 });
