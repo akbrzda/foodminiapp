@@ -10,6 +10,8 @@
     "worker": "node src/workers/index.js",
     "init-db": "node src/scripts/init-db.js",
     "migrate": "node src/scripts/migrate.js",
+    "migrate:platform-core": "node src/scripts/migrate-platform-core.js",
+    "provision-tenant": "node src/scripts/provision-tenant.js",
     "test": "node --import ./tests/bootstrap.js --test",
     "lint": "eslint src tests --ext .js",
     "typecheck": "find src tests -type f -name \"*.js\" -print0 | xargs -0 -n1 node --check"

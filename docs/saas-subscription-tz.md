@@ -1,325 +1,322 @@
-# ТЗ: доработка FoodMiniApp для запуска SaaS-подписки
+# ТЗ: трансформация FoodMiniApp в SaaS (platform_core + database-per-tenant)
 
 ## 1. Цель документа
 
-Подготовить реалистичный план трансформации текущего FoodMiniApp (single-brand/single-instance) в SaaS-платформу для нескольких клиентов (ресторанных сетей/брендов) с подписочной моделью оплаты.
+Зафиксировать реалистичный план перевода текущего FoodMiniApp (single-tenant) в SaaS-платформу с:
 
-Документ включает:
-- результаты аудита текущей архитектуры;
-- целевую SaaS-архитектуру;
-- обязательные изменения по backend/admin/miniapp/bot/infra;
-- риски и блокеры;
-- вопросы для уточнения бизнес-модели;
-- поэтапный roadmap внедрения.
+- отдельной `platform_core` БД;
+- отдельной БД на каждого клиента (`tenant_<slug>_db`);
+- подписочной моделью (trial, биллинг, лимиты, dunning);
+- разделением ролей platform-level и tenant-level.
 
-## 2. Текущее состояние (As-Is)
-
-## 2.1 Архитектурный профиль
-
-Проект фактически построен как **одна инсталляция под один бренд**:
-- единый backend + единая БД + единый Redis;
-- единые Telegram/MAX токены;
-- единый набор системных настроек;
-- единый контур деплоя на фиксированные домены.
-
-## 2.2 Фактическое состояние проекта на сегодня
-
-1. Проект функционально зрелый как продукт для одного бренда:
-- есть рабочие контуры backend/admin/miniapp/bot;
-- есть модули заказов, меню, доставки, лояльности, рассылок, stories, интеграций;
-- есть базовые quality gates (lint/typecheck/test) и деплой через GitHub Actions.
-
-2. Проект архитектурно не завершен как SaaS-платформа:
-- отсутствует уровень платформы (control-plane);
-- отсутствует модель арендаторов и подписок;
-- отсутствует tenant-изоляция данных, прав и интеграций.
-
-3. Инфраструктурно проект ориентирован на single-tenant эксплуатацию:
-- один production-контур с фиксированными доменами;
-- конфигурация и секреты не разделены по клиентам;
-- CI/CD не учитывает мультиарендный rollout.
-
-## 2.3 Подтвержденные ограничения для SaaS
-
-1. **Нет сущности арендатора (tenant/account/workspace) в БД**.
-2. **Нет tenant-контекста в JWT/сессии/API/WebSocket**.
-3. **Системные настройки и интеграции глобальные** (не разделяются по клиентам).
-4. **Глобальные очереди и ключи кэша** без tenant-префиксов.
-5. **Сильная привязка к текущему бренду/доменам** в env, CORS, WS origin и CI/CD.
-6. **Нет биллинга SaaS** (планы, подписки, инвойсы, лимиты, trial, статус аккаунта).
-7. **Нет control-plane** (кабинета владельца SaaS/суперадмина платформы).
-
-## 2.4 Недочеты текущего проекта для SaaS-модели
-
-### 2.4.1 Архитектурные недочеты
-
-- Нет доменной декомпозиции на platform-level и tenant-level.
-- Нет стандартного механизма tenant resolution (domain/header/token).
-- Нет обязательного tenant-scoping на уровне repository/service/middleware.
-- Нет политики изоляции tenant-данных на уровне кэша, ws и очередей.
-
-### 2.4.2 Данные и безопасность
-
-- Таблицы бизнес-домена не содержат `tenant_id`.
-- Глобальные unique-ограничения конфликтуют с мультиарендностью (`email`, `phone`, `telegram_id`, `tag` и т.д.).
-- Секреты интеграций и системные настройки потенциально доступны вне tenant-контекста.
-- Нет security regression-пакета на проверку cross-tenant утечек.
-
-### 2.4.3 Продуктовые недочеты
-
-- Нет модулей SaaS-биллинга (тарифы, лимиты, invoices, events).
-- Нет self-service onboarding для нового клиента.
-- Нет управления жизненным циклом подписки (trial, grace, suspend, cancel).
-- Нет UX-слоя для управления тарифом и ограничениями в админке.
-
-### 2.4.4 Операционные недочеты
-
-- Нет tenant-aware observability (метрики, логи, алерты в разрезе клиента).
-- Нет формализованной стратегии tenant-aware backup/restore.
-- CI/CD и доменная схема не готовы к массовому подключению клиентов.
-- В репозитории отсутствует актуальный `docker-compose.yml`, несмотря на упоминание в документации.
-
-## 2.5 Технический вывод
-
-Текущая модель готова к масштабированию по нагрузке, но **не готова к мультиарендности по данным, доступам и биллингу**.
-
-## 3. Целевая модель SaaS (To-Be)
-
-## 3.1 Роль платформы
-
-FoodMiniApp становится платформой, где каждый клиент (tenant):
-- имеет свой изолированный набор данных;
-- управляет своими филиалами, меню, пользователями, интеграциями;
-- оплачивает тариф по подписке;
-- получает ограничения/возможности согласно плану.
-
-## 3.2 Рекомендуемая стратегия мультиарендности
-
-Рекомендуется начать с модели:
-- **Shared DB + Shared Schema + `tenant_id` во всех бизнес-таблицах**.
-
-Почему:
-- минимальные операционные затраты на MVP SaaS;
-- быстрее миграция текущего кода;
-- проще централизованный мониторинг и сопровождение.
-
-Альтернатива `database-per-tenant` возможна позже (для enterprise), но сейчас дорогая и потребует глубокой перестройки SQL-слоя.
-
-## 3.3 Модель ролей (платформа + клиент)
-
-Нужны два уровня доступа:
-- **Platform-level**: `platform_owner`, `platform_support`, `platform_finance`.
-- **Tenant-level**: текущие `ceo/admin/manager` (но внутри конкретного tenant).
-
-## 4. Обязательные изменения по системе
-
-## 4.1 Backend и БД
-
-### 4.1.1 Новые платформенные таблицы
-
-Добавить:
-- `tenants` (аккаунт клиента);
-- `tenant_domains` (admin/app/bot домены и маппинг);
-- `plans` (тарифы);
-- `tenant_subscriptions` (подписки, trial, статус, период);
-- `billing_invoices` (инвойсы);
-- `billing_events` (webhook/события оплаты);
-- `tenant_features` (включенные фичи/лимиты);
-- `tenant_members` (привязка админов к tenant, если отделяем от `admin_users`).
-
-### 4.1.2 Tenant-изоляция данных
-
-Добавить `tenant_id` (NOT NULL, индекс) во все доменные таблицы:
-- пользователи, заказы, города/филиалы, меню, лояльность, рассылки, stories, интеграции, системные настройки, логи.
-
-Критично:
-- все SELECT/UPDATE/DELETE должны фильтроваться по `tenant_id`;
-- уникальные индексы пересобрать в составные (`tenant_id + business_key`).
-
-### 4.1.3 Аутентификация и авторизация
-
-Доработать JWT payload:
-- добавить `tenant_id` и `tenant_role` (для tenant-level);
-- отдельно payload для platform-level.
-
-Доработать middleware:
-- `resolveTenantContext` (из домена, заголовка, subdomain, токена);
-- `requireTenantAccess`;
-- блокировка доступа при статусах подписки (`past_due`, `canceled`, `suspended`).
-
-### 4.1.4 Настройки и интеграции
-
-Сделать настройки tenant-специфичными:
-- вместо глобального `system_settings` — tenant scope;
-- ключи интеграций iiko/PremiumBonus/Yandex хранить по tenant.
-
-## 4.2 Admin Panel
-
-Нужно разделить интерфейс:
-- **Platform Console** (управление клиентами и биллингом);
-- **Tenant Admin** (существующая админка, но строго в контексте tenant).
-
-Что добавить в Tenant Admin:
-- экран тарифа/подписки/лимитов;
-- блокировка действий при превышении лимитов;
-- онбординг (первые шаги: филиалы, интеграции, меню, роли).
-
-## 4.3 Telegram MiniApp
-
-- Маршрутизация tenant-контекста (домен/subdomain/параметр запуска);
-- безопасный выбор tenant до любых бизнес-запросов;
-- поддержка white-label параметров (название, логотип, цвета, тексты);
-- проверка статуса подписки tenant перед созданием заказа.
-
-## 4.4 Bot Service
-
-- перейти от одного токена к модели tenant-bot-credentials;
-- роутинг входящих событий к нужному tenant;
-- шаблоны сообщений и кампании только в пределах tenant;
-- внутренние API bot ↔ backend должны передавать `tenant_id`.
-
-## 4.5 Очереди, Redis, WebSocket
-
-- имена очередей/джобов с tenant-префиксами или обязательным `tenant_id` в payload;
-- Redis-ключи кэша и rate-limit — только с tenant namespace;
-- WS-комнаты в формате `tenant-{id}:...`;
-- запрет cross-tenant broadcast.
-
-## 4.6 Инфраструктура и деплой
-
-Минимум для SaaS:
-- central ingress/router для tenant domain mapping;
-- секреты и конфиги по tenant (через vault/secret-manager);
-- разделение окружений (dev/stage/prod) + миграции без даунтайма;
-- стратегия backup/restore с tenant-aware восстановлением.
-
-## 5. Подписочная модель (Billing)
-
-## 5.1 Статусы подписки
-
-Поддержать статусы:
-- `trialing`
-- `active`
-- `past_due`
-- `canceled`
-- `suspended`
-
-## 5.2 Ограничения тарифов
-
-Примеры лимитов:
-- max филиалов;
-- max админ-пользователей;
-- max ежемесячных заказов;
-- доступ к модулям (broadcasts, stories, advanced analytics, integrations).
-
-## 5.3 Контроль ограничений
-
-- hard-limit на критичных операциях (создание филиала/пользователя/кампании);
-- soft-limit с уведомлениями (80/90/100%).
-
-## 5.4 Инвойсинг
-
-Обязательные сущности:
-- период биллинга;
-- сумма/валюта/налоги;
-- статус оплаты;
-- id внешнего платежа;
-- журнал событий (webhooks).
-
-## 6. Что будет мешать реализации (главные блокеры)
-
-1. **Глобальная модель данных без tenant_id** — самый большой объем работ.
-2. **Глобальные уникальные ключи** (`phone`, `telegram_id`, `email`, `tag`) — конфликт мультиарендности.
-3. **Глобальный settings/integrations слой** — риск утечки секретов между клиентами.
-4. **Single-bot модель** — невозможно корректно обслуживать независимые бренды без роутинга/изолированных токенов.
-5. **Текущий CI/CD рассчитан на один прод-контур и фиксированные домены**.
-6. **Недостаточное покрытие тестами tenant-изоляции** (сейчас нет e2e сценариев cross-tenant безопасности).
-7. **Нет отдельного контура управления SaaS (control-plane)**.
-
-## 7. Вопросы для уточнения перед реализацией
-
-## 7.1 Продукт и коммерция
-
-1. Кто целевой клиент: одиночный ресторан, сеть, франшиза?
-2. Нужен ли white-label (брендирование домена/дизайна/bot-аккаунта)?
-3. Модель тарифа: фикс/usage-based/hybrid?
-4. Нужен ли trial и на каких условиях?
-5. Что происходит при просрочке оплаты: read-only или полная блокировка?
-
-## 7.2 Юридические и финансы
-
-1. Какие юрисдикции и валюты будут поддержаны на старте?
-2. Нужна ли фискализация/НДС/локальные налоговые требования?
-3. Требуются ли SLA/договорные отчеты для B2B клиентов?
-
-## 7.3 Технические
-
-1. Допускается ли shared DB на старте, или сразу нужна физическая изоляция?
-2. Нужна ли миграция существующего текущего бренда в tenant #1 без даунтайма?
-3. Нужна ли поддержка нескольких ботов (по одному на tenant)?
-4. Какие внешние billing-провайдеры допустимы (безопасность/комиссия/регион)?
-5. Требуется ли API для партнеров (public API + API keys per tenant)?
-
-## 8. Рекомендованный roadmap внедрения
-
-## Phase 0 (1–2 недели): Discovery + дизайн
-- финализация SaaS-модели и тарифов;
-- ERD новых таблиц;
-- аудит всех таблиц/индексов для `tenant_id`;
-- threat-model tenant-изоляции.
-
-## Phase 1 (2–4 недели): Tenant Foundation
-- миграции БД: `tenants`, `plans`, `tenant_subscriptions`, `tenant_features`;
-- добавление `tenant_id` в критичные таблицы;
-- middleware tenant context + tenant-scoped auth;
-- backfill данных текущего клиента в `tenant_id=1`.
-
-## Phase 2 (2–4 недели): Billing Core
-- подписки, статусы, лимиты, grace period;
-- обработка billing events/webhooks;
-- tenant billing dashboard в админке.
-
-## Phase 3 (2–3 недели): Multi-tenant UX
-- onboarding tenant;
-- разделение Platform Console / Tenant Admin;
-- проверка всех CRUD на tenant-изоляцию.
-
-## Phase 4 (2–3 недели): Bot + Integrations Isolation
-- tenant-aware bot routing;
-- tenant-aware integration credentials;
-- tenant-aware queues/caches/ws.
-
-## Phase 5 (1–2 недели): Hardening
-- e2e тесты cross-tenant security;
-- rate-limit и audit log по tenant;
-- observability: метрики per tenant (errors, latency, usage, billing).
-
-## 9. Критерии приемки (Definition of Done)
-
-1. Ни один запрос tenant A не может прочитать/изменить данные tenant B.
-2. Все ключевые таблицы имеют `tenant_id`, индексы и tenant-scoped unique constraints.
-3. Подписка реально управляет доступом и лимитами.
-4. Tenant может пройти self-service onboarding без ручного вмешательства разработчика.
-5. Bot, WS, очереди и кэш работают без cross-tenant пересечений.
-6. CI/CD поддерживает стабильный релиз SaaS-версии и откат.
-
-## 10. Нефункциональные требования
-
-- Безопасность: обязательный аудит tenant-изоляции, ротация секретов.
-- Производительность: p95 API < 400ms для основных операций.
-- Надежность: backup БД + проверенный restore.
-- Наблюдаемость: логи/метрики/алерты в разрезе tenant.
-
-## 11. Предлагаемый старт внедрения (практический)
-
-1. Зафиксировать архитектурное решение: `shared DB + tenant_id`.
-2. Создать минимальный vertical slice:
-   - `tenants` + `tenant_subscriptions`;
-   - tenant-context middleware;
-   - tenant-scoped `/api/settings` и `/api/orders`.
-3. Провести security regression на 10–15 критичных endpoint.
-4. После успешного vertical slice масштабировать tenant-слой на остальные модули.
+Документ обновлен под сценарий **database-per-tenant**.
 
 ---
 
-Документ является стартовой версией ТЗ и требует уточнения после ответов на раздел 7.
+## 2. Текущее состояние проекта (As-Is)
+
+### 2.1 Что уже есть
+
+- Монорепо: `backend`, `admin-panel`, `telegram-miniapp`, `bot`.
+- Рабочие домены: заказы, меню, доставка, лояльность, рассылки, stories, интеграции.
+- Базовые quality gates и deploy через GitHub Actions.
+
+### 2.2 Что подтверждает single-tenant модель
+
+1. **Нет tenant-сущностей в схеме БД** (`tenants`, `subscriptions`, `messenger_configs`, `tenant_usage_stats` отсутствуют).
+2. **Глобальные unique-ключи** (`users.phone`, `users.telegram_id`, `admin_users.email`, `subscription_campaigns.tag`).
+3. **Глобальный слой настроек** через `system_settings` и единый Redis-cache key `settings`.
+4. **Auth/JWT без tenant-контекста** (`tenant_id`, `tenant_role` отсутствуют).
+5. **Bot и MiniApp опираются на глобальные env-токены** (`TELEGRAM_BOT_TOKEN`, `MAX_BOT_TOKEN`).
+6. **CORS/WS/deploy привязаны к текущим доменам** `*.panda.akbrzda.ru`.
+7. **Очереди и Redis-ключи не tenant-namespaced** как системное правило.
+8. **Нет тестов на cross-tenant изоляцию**.
+
+### 2.3 Технический вывод
+
+Проект зрелый функционально, но архитектурно не готов к безопасной мультиарендности. Для SaaS требуется выделенный platform-layer и изоляция tenant-данных на уровне отдельных БД.
+
+---
+
+## 3. Архитектурное решение (To-Be)
+
+## 3.1 Модель хранения
+
+Принятое решение:
+
+- **`platform_core`**: метаданные платформы, клиенты, тарифы, подписки, транзакции, конфиги мессенджеров, usage-агрегации, platform admins.
+- **`tenant_<slug>_db`**: бизнес-данные конкретного клиента (users/orders/menu/loyalty/broadcast/stories/integrations и т.д.).
+
+## 3.2 Tenant resolution
+
+Основной источник tenant-контекста: `Host/Subdomain`.
+
+- `owner.example.com` → platform console.
+- `<slug>.example.com` → tenant scope.
+
+Дополнительно:
+
+- `X-Tenant-Slug` допускается только от доверенного ingress.
+- `slug` используется как **уникальный текстовый** внешний идентификатор tenant; числовой `id` — внутренний технический ключ.
+- контракт `slug`: lowercase, латиница/цифры/дефис, без пробелов (рекомендуемый regex: `^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])$`).
+- `platform_core.tenants.slug` обязателен как `UNIQUE NOT NULL`.
+
+## 3.3 Подключение к БД
+
+Backend не формирует DB name из пользовательского ввода.
+Всегда цепочка:
+`request host -> slug -> platform_core.tenants -> tenant_id, db_name -> pooled tenant connection`.
+
+Правило нейминга:
+- `db_name = tenant_<slug>_db` (пример: `tenant_pandapizza_db`);
+- `platform_core.tenants.db_name` хранится как `UNIQUE NOT NULL`.
+
+Обязателен менеджер пулов:
+
+- lazy init;
+- LRU/idle eviction;
+- ограничение одновременных пулов;
+- health-check и reconnect policy.
+
+---
+
+## 4. Биллинг и управление клиентами
+
+## 4.1 Platform core таблицы (MVP)
+
+Минимально обязательные:
+
+- `tenants`
+- `platform_admins`
+- `subscription_plans`
+- `subscriptions`
+- `billing_transactions`
+- `messenger_configs`
+- `tenant_usage_stats`
+- `tenant_db_migrations` (статус миграций per tenant)
+- `billing_events` (webhook/event log)
+
+Для `tenants` обязательно:
+- `slug VARCHAR(...) UNIQUE NOT NULL`;
+- `db_name VARCHAR(...) UNIQUE NOT NULL`;
+- единая функция нормализации slug используется в API, owner UI и provisioning job.
+
+## 4.2 Статусы подписки и dunning
+
+Рекомендуемые статусы:
+
+- `trial`
+- `active`
+- `past_due`
+- `suspended`
+- `cancelled`
+- `deleted` (для tenant lifecycle)
+
+Dunning flow:
+
+- Day 0: billing attempt
+- Day 3: retry #2
+- Day 7: retry #3
+- Day 10: `suspended`
+- Day 30: `cancelled` + подготовка к финальному удалению
+
+## 4.3 Лимиты
+
+Лимиты проверяются на critical write-операциях:
+
+- создание пользователей;
+- создание материалов/сущностей контента;
+- другие ограничиваемые сущности тарифа.
+
+Проверка лимитов должна опираться на:
+
+- `subscriptions + subscription_plans` в `platform_core`;
+- фактические счетчики из `tenant_usage_stats` и/или live count в tenant БД.
+
+---
+
+## 5. Мессенджеры (Telegram/Max)
+
+## 5.1 Принцип
+
+Один backend + множество tenant-ботов.
+
+- Каждый tenant хранит собственные credentials в `platform_core.messenger_configs`.
+- Токены шифруются (AES/KMS) и не возвращаются в UI в открытом виде.
+- Валидация initData выполняется токеном конкретного tenant.
+
+## 5.2 URL MiniApp
+
+Генерация для UI:
+
+- `https://app.<slug>.example.com/platform=telegram`
+- `https://app.<slug>.example.com/platform=max`
+
+В проде tenant определяется прежде всего по домену/ingress context.
+
+---
+
+## 6. Что нужно изменить в текущем проекте
+
+## 6.1 Backend
+
+1. Ввести `platform_core` connection + tenant DB resolver.
+2. Развести platform routes и tenant routes.
+3. Перевести текущие бизнес-модули на tenant DB connection factory.
+4. Вынести auth в 2 контура:
+   - platform auth (owner/support/finance);
+   - tenant auth (ceo/admin/manager внутри tenant).
+5. Ввести subscription/limits middleware на tenant routes.
+6. Сделать tenant-aware audit logging.
+
+## 6.2 Admin Panel
+
+Разделить UI:
+
+- **Platform Console** (`owner.*`) — клиенты, тарифы, транзакции, мониторинг.
+- **Tenant Admin** (`<slug>.*`) — текущая операционная админка клиента.
+
+Добавить:
+
+- onboarding wizard;
+- billing screen;
+- integrations screen с bot token workflow;
+- лимитные предупреждения 80/90/100%.
+
+## 6.3 Telegram MiniApp
+
+- Ранний tenant bootstrap до любых бизнес-запросов.
+- Безопасный tenant context guard.
+- White-label настройки из tenant-конфига.
+- Блокировка write-операций при `suspended/cancelled`.
+
+## 6.4 Bot
+
+- Роутинг входящих событий по tenant.
+- Отказ от single-token сервиса.
+- Внутренние bot ↔ backend API должны явно передавать tenant context.
+
+## 6.5 Redis / Queue / WS
+
+- Стандартизировать namespace: `tenant:{id}:...`.
+- Исключить глобальные комнаты WS вроде `admin-broadcasts` без tenant scope.
+- Исключить глобальные queue names/payload без tenant_id.
+
+## 6.6 Infra / CI-CD
+
+- Перейти от фиксированных `panda.*` путей к multi-domain ingress модели.
+- Добавить release strategy для platform + tenant-safe migrations.
+- Добавить tenant backup/restore runbooks.
+- Добавить staging rehearsal миграции существующего клиента в `tenant_<slug>_db` (например, `tenant_pandapizza_db`).
+
+---
+
+## 7. Основные риски и как снижать
+
+1. **Взрыв сложности миграций per tenant**
+   - Ввести migration orchestrator и таблицу `tenant_db_migrations`.
+2. **Рост числа DB-подключений**
+   - Реализовать pool manager (LRU, idle eviction).
+3. **Кросс-tenant утечки через кэш/WS/бота**
+   - Ввести обязательные namespace-конвенции и security tests.
+4. **Смешение продуктовой "подписки на канал" и SaaS billing subscription**
+   - Явно разделить доменные модели и API.
+5. **Операционные ошибки при удалении tenant**
+   - Только асинхронный защищенный job, 30-day grace, audit.
+
+---
+
+## 8. Обновленный roadmap (под текущий проект)
+
+## Phase 0 (1–2 недели): Architecture Lock
+
+Результат:
+
+- ADR по `platform_core + database-per-tenant`.
+- ERD platform_core.
+- Tenant DB bootstrap/migration design.
+- Threat model (auth, ws, redis, bot, callbacks).
+- Definition of Ready по billing/legal/payment.
+
+## Phase 1 (2–3 недели): Platform Core Foundation
+
+Результат:
+
+- Подняты platform_core таблицы.
+- Реализован tenant resolver (host/slug).
+- Реализован tenant DB connection manager.
+- Базовые platform auth + roles (`platform_owner/support/finance`).
+- Provisioning API: create tenant + create tenant DB + run tenant migrations.
+
+## Phase 2 (2–3 недели): Tenant Auth + Bootstrap
+
+Результат:
+
+- Tenant-aware auth для admin/miniapp.
+- JWT/session claims с tenant context.
+- Миграция текущего бренда в `tenant_<slug>_db` (staging -> prod rehearsal).
+- Tenant-scoped `/api/settings`, `/api/orders` vertical slice.
+
+## Phase 3 (2 недели): Billing MVP
+
+Результат:
+
+- subscription plans, subscriptions, billing transactions, billing events.
+- Trial lifecycle + basic dunning.
+- Middleware блокировки при `past_due/suspended/cancelled`.
+- Billing dashboard (минимум) в Platform Console.
+
+## Phase 4 (2 недели): Messenger & Integrations
+
+Результат:
+
+- `messenger_configs` (encrypted token storage).
+- UI flow подключения Telegram/Max токена.
+- Tenant-specific initData verification.
+- Tenant-aware bot routing.
+
+## Phase 5 (2–3 недели): Isolation Hardening
+
+Результат:
+
+- Tenant namespace для Redis/Queue/WS.
+- Устранение global room/key/queue паттернов.
+- E2E security regression (cross-tenant attempts).
+- Audit logs per tenant + platform.
+
+## Phase 6 (1–2 недели): Owner Console + Ops
+
+Результат:
+
+- Owner dashboard (MRR/ARR/churn/basic usage).
+- Client detail page + SSO impersonation with audit.
+- Soft-delete + grace-period + permanent deletion worker.
+- Backup/restore runbook per tenant.
+
+Итого: **10–15 недель** для production-ready SaaS MVP (с учетом текущего кода и миграционных рисков).
+
+---
+
+## 9. Definition of Done
+
+1. Tenant A не может читать/менять данные tenant B ни через API, ни через WS, ни через bot callbacks.
+2. Все tenant-данные физически хранятся в отдельных БД.
+3. Подписка реально ограничивает доступ и лимиты.
+4. Новый клиент проходит self-service onboarding без ручного вмешательства разработчика.
+5. Platform owner управляет клиентами, планами, платежами и видит usage.
+6. Есть проверенный restore конкретного tenant и безопасный delete lifecycle.
+7. CI/CD поддерживает откат и tenant-safe миграции.
+
+---
+
+## 10. Следующие практические шаги (сразу после утверждения)
+
+1. Утвердить ADR и naming conventions (`platform_core`, `tenant_<slug>_db`).
+2. Подготовить SQL DDL для platform_core.
+3. Сделать прототип tenant DB manager в backend.
+4. Выкатить vertical slice: tenant-aware `settings + orders`.
+5. Добавить security test pack на cross-tenant сценарии.
+
+---
+
+Документ актуализирован под новый сценарий multi-tenancy: **database-per-tenant**.

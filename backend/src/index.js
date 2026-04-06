@@ -36,6 +36,13 @@ import {
   adminRouter as integrationsAdminRoutes,
   webhooksRouter as integrationsWebhooksRoutes,
 } from "./modules/integrations/index.js";
+import {
+  attachTenantContext,
+  router as tenancyRoutes,
+  tenantDbManager,
+  closePlatformCorePool,
+} from "./modules/tenancy/index.js";
+import { tenancyConfig } from "./config/tenancy.js";
 import WSServer from "./websocket/server.js";
 import { registerWsServer } from "./websocket/runtime.js";
 import { startWorkers, stopWorkers } from "./workers/index.js";
@@ -54,6 +61,30 @@ const runtimeReadiness = {
   redis: false,
   workers: false,
   startup: false,
+};
+let tenantPoolCleanupTimer = null;
+
+const startTenantPoolCleanup = () => {
+  if (!tenancyConfig.runtimeEnabled || tenantPoolCleanupTimer) return;
+  tenantPoolCleanupTimer = setInterval(async () => {
+    try {
+      await tenantDbManager.cleanupIdlePools();
+    } catch (error) {
+      await logger.system.warn("Tenant pool cleanup failed", {
+        error: error?.message || "unknown",
+      });
+    }
+  }, tenancyConfig.cleanupIntervalMs);
+
+  if (typeof tenantPoolCleanupTimer.unref === "function") {
+    tenantPoolCleanupTimer.unref();
+  }
+};
+
+const stopTenantPoolCleanup = () => {
+  if (!tenantPoolCleanupTimer) return;
+  clearInterval(tenantPoolCleanupTimer);
+  tenantPoolCleanupTimer = null;
 };
 
 const resolveTrustProxySetting = () => {
@@ -216,6 +247,7 @@ app.use(
   })
 );
 app.use(express.urlencoded({ extended: true, charset: "utf-8", limit: "2mb" }));
+app.use(attachTenantContext);
 
 // Глобальный rate limiter
 app.use("/api/", apiLimiter);
@@ -287,6 +319,7 @@ app.use("/api/campaign", subscriptionCampaignsRoutes);
 app.use("/api/stories", storiesRoutes);
 app.use("/api/admin/integrations", integrationsAdminRoutes);
 app.use("/api/webhooks/iiko", integrationsWebhooksRoutes);
+app.use("/api/internal", tenancyRoutes);
 app.use(notFoundHandler);
 app.use(errorHandler);
 const server = http.createServer(app);
@@ -319,6 +352,7 @@ const bootstrap = async () => {
     if (runWorkersInline) {
       await startWorkers();
     }
+    startTenantPoolCleanup();
     runtimeReadiness.workers = true;
 
     await listenServer();
@@ -334,6 +368,8 @@ const bootstrap = async () => {
         `Failed to stop workers after startup error: ${stopError.message}`
       );
     }
+    stopTenantPoolCleanup();
+    await Promise.allSettled([tenantDbManager.closeAll(), closePlatformCorePool()]);
     process.exit(1);
   }
 };
@@ -344,6 +380,8 @@ process.on("SIGTERM", async () => {
   if (runWorkersInline) {
     await stopWorkers();
   }
+  stopTenantPoolCleanup();
+  await Promise.allSettled([tenantDbManager.closeAll(), closePlatformCorePool()]);
   server.close(() => {
     process.exit(0);
   });
@@ -353,6 +391,8 @@ process.on("SIGINT", async () => {
   if (runWorkersInline) {
     await stopWorkers();
   }
+  stopTenantPoolCleanup();
+  await Promise.allSettled([tenantDbManager.closeAll(), closePlatformCorePool()]);
   server.close(() => {
     process.exit(0);
   });
