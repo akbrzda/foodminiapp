@@ -2,7 +2,10 @@
   <div class="space-y-5">
     <Card>
       <CardContent>
-        <PageHeader title="Лояльность" description="Управление уровнями и массовым начислением бонусов">
+        <PageHeader
+          title="Лояльность"
+          description="Управление уровнями и массовым начислением бонусов"
+        >
           <template #actions>
             <div class="header-actions">
               <Button
@@ -78,11 +81,16 @@
             <div class="rounded-lg border border-border/60 bg-muted/20 p-3 text-sm">
               <div class="font-medium">Режим лояльности: {{ modeLabel }}</div>
               <div class="text-xs text-muted-foreground">
-                При внешнем режиме отображаются локальные уровни, а расчёт начисления/списания/переходов берётся из PremiumBonus.
+                При внешнем режиме отображаются локальные уровни, а расчёт
+                начисления/списания/переходов берётся из PremiumBonus.
               </div>
             </div>
-            <div v-if="pbGroups.length" class="rounded-lg border border-border/60 bg-muted/20 p-3 text-xs text-muted-foreground">
-              В PremiumBonus найдено групп: {{ pbGroups.length }}. Используйте кнопку «Подставить из PB» для быстрого маппинга.
+            <div
+              v-if="pbGroups.length"
+              class="rounded-lg border border-border/60 bg-muted/20 p-3 text-xs text-muted-foreground"
+            >
+              В PremiumBonus найдено групп: {{ pbGroups.length }}. Используйте кнопку «Подставить из
+              PB» для быстрого маппинга.
             </div>
           </CardContent>
         </Card>
@@ -138,7 +146,13 @@
                     <Link :size="14" />
                     Подставить из PB
                   </Button>
-                  <Button v-if="canManageLoyaltyLevels" type="button" size="sm" variant="outline" @click="removeLevel(index)">
+                  <Button
+                    v-if="canManageLoyaltyLevels"
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    @click="removeLevel(index)"
+                  >
                     <Trash2 :size="14" />
                     {{ level.id ? "Отключить" : "Удалить" }}
                   </Button>
@@ -156,19 +170,36 @@
                 <Field>
                   <FieldLabel>Порог суммы оплат</FieldLabel>
                   <FieldContent>
-                    <Input v-model.number="level.threshold_amount" type="number" min="0" step="0.01" />
+                    <Input
+                      v-model.number="level.threshold_amount"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                    />
                   </FieldContent>
                 </Field>
                 <Field>
                   <FieldLabel>Начисление, %</FieldLabel>
                   <FieldContent>
-                    <Input v-model.number="level.earn_percentage" type="number" min="0" max="100" step="1" />
+                    <Input
+                      v-model.number="level.earn_percentage"
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="1"
+                    />
                   </FieldContent>
                 </Field>
                 <Field>
                   <FieldLabel>Макс. списание, %</FieldLabel>
                   <FieldContent>
-                    <Input v-model.number="level.max_spend_percentage" type="number" min="0" max="100" step="1" />
+                    <Input
+                      v-model.number="level.max_spend_percentage"
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="1"
+                    />
                   </FieldContent>
                 </Field>
                 <Field>
@@ -200,7 +231,10 @@
                 <Field>
                   <FieldLabel>PB Group Name</FieldLabel>
                   <FieldContent>
-                    <Input v-model="level.pb_group_name" placeholder="Название группы в PremiumBonus" />
+                    <Input
+                      v-model="level.pb_group_name"
+                      placeholder="Название группы в PremiumBonus"
+                    />
                   </FieldContent>
                 </Field>
               </div>
@@ -208,7 +242,9 @@
           </Card>
 
           <Card v-if="!levels.length">
-            <CardContent class="py-8 text-center text-sm text-muted-foreground">Уровни не найдены. Добавьте первый уровень.</CardContent>
+            <CardContent class="py-8 text-center text-sm text-muted-foreground"
+              >Уровни не найдены. Добавьте первый уровень.</CardContent
+            >
           </Card>
         </div>
       </TabsContent>
@@ -227,9 +263,15 @@
             <CardContent class="space-y-3 pt-6">
               <div class="flex items-center justify-between gap-3">
                 <div class="text-sm font-semibold">Блок #{{ index + 1 }}</div>
-                <Button v-if="canManageLoyaltyLevels" type="button" size="sm" variant="outline" @click="removeInfoSection(index)">
-                  <Trash2 :size="14" />
-                  Удалить
+
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  v-if="canManageLoyaltyLevels"
+                  @click="removeInfoSection(index)"
+                >
+                  <Trash2 :size="16" class="text-red-600" />
                 </Button>
               </div>
               <Field>
@@ -241,7 +283,12 @@
               <Field>
                 <FieldLabel>Описание *</FieldLabel>
                 <FieldContent>
-                  <textarea v-model="section.description" rows="4" class="mini-field w-full" placeholder="Описание блока" />
+                  <textarea
+                    v-model="section.description"
+                    rows="4"
+                    class="flex min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring d disabled:opacity-50"
+                    placeholder="Описание блока"
+                  />
                 </FieldContent>
               </Field>
             </CardContent>
@@ -276,7 +323,13 @@ import CardTitle from "@/shared/components/ui/card/CardTitle.vue";
 import Skeleton from "@/shared/components/ui/skeleton/Skeleton.vue";
 import { Field, FieldContent, FieldLabel } from "@/shared/components/ui/field";
 import Input from "@/shared/components/ui/input/Input.vue";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/shared/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
 import { useAuthStore } from "@/shared/stores/auth.js";
 import { useQueryTab } from "@/shared/composables/useQueryTab.js";
@@ -284,7 +337,9 @@ import LoyaltyBulkAccrualsTab from "@/modules/system/components/LoyaltyBulkAccru
 
 const { showErrorNotification, showSuccessNotification } = useNotifications();
 const authStore = useAuthStore();
-const canManageLoyaltyLevels = computed(() => authStore.hasPermission("system.loyalty_levels.manage"));
+const canManageLoyaltyLevels = computed(() =>
+  authStore.hasPermission("system.loyalty_levels.manage")
+);
 
 const loading = ref(false);
 const saving = ref(false);
@@ -321,7 +376,10 @@ const normalizeLevel = (level = {}, index = 0) => ({
   name: String(level.name || "").trim(),
   threshold_amount: toNumber(level.threshold_amount, 0),
   earn_percentage: Math.max(0, Math.min(100, Math.floor(toNumber(level.earn_percentage, 0)))),
-  max_spend_percentage: Math.max(0, Math.min(100, Math.floor(toNumber(level.max_spend_percentage, 0)))),
+  max_spend_percentage: Math.max(
+    0,
+    Math.min(100, Math.floor(toNumber(level.max_spend_percentage, 0)))
+  ),
   is_enabled: level.is_enabled !== false,
   sort_order: Math.floor(toNumber(level.sort_order, (index + 1) * 10)),
   pb_group_id: String(level.pb_group_id || "").trim(),
@@ -341,7 +399,9 @@ const loadLevels = async () => {
   loading.value = true;
   try {
     const response = await api.get("/api/admin/loyalty/levels");
-    levels.value = (Array.isArray(response.data?.levels) ? response.data.levels : []).map((level, index) => normalizeLevel(level, index));
+    levels.value = (Array.isArray(response.data?.levels) ? response.data.levels : []).map(
+      (level, index) => normalizeLevel(level, index)
+    );
     pbGroups.value = Array.isArray(response.data?.pb_groups) ? response.data.pb_groups : [];
     mode.value = response.data?.mode || {
       premiumbonus_enabled: false,
@@ -360,7 +420,9 @@ const loadInfoSections = async () => {
     const sections = Array.isArray(response.data?.sections) ? response.data.sections : [];
     infoSections.value = sections.map((section, index) => createInfoSection(section, index));
   } catch (error) {
-    showErrorNotification(error?.response?.data?.error || "Не удалось загрузить информационные блоки");
+    showErrorNotification(
+      error?.response?.data?.error || "Не удалось загрузить информационные блоки"
+    );
   } finally {
     infoLoading.value = false;
   }
@@ -389,7 +451,11 @@ const saveInfoSections = async () => {
     infoSections.value = sections.map((section, index) => createInfoSection(section, index));
     showSuccessNotification("Информационные блоки сохранены");
   } catch (error) {
-    showErrorNotification(error?.response?.data?.errors?.loyalty_info_sections || error?.response?.data?.error || "Не удалось сохранить информационные блоки");
+    showErrorNotification(
+      error?.response?.data?.errors?.loyalty_info_sections ||
+        error?.response?.data?.error ||
+        "Не удалось сохранить информационные блоки"
+    );
   } finally {
     infoSaving.value = false;
   }
@@ -410,8 +476,8 @@ const addLevel = () => {
         pb_group_id: "",
         pb_group_name: "",
       },
-      levels.value.length,
-    ),
+      levels.value.length
+    )
   );
 };
 
@@ -446,8 +512,14 @@ const moveLevel = (index, direction) => {
 };
 
 const findUnusedPbGroup = () => {
-  const usedIds = new Set(levels.value.map((level) => String(level.pb_group_id || "").trim()).filter(Boolean));
-  return pbGroups.value.find((group) => !usedIds.has(String(group.id || "").trim())) || pbGroups.value[0] || null;
+  const usedIds = new Set(
+    levels.value.map((level) => String(level.pb_group_id || "").trim()).filter(Boolean)
+  );
+  return (
+    pbGroups.value.find((group) => !usedIds.has(String(group.id || "").trim())) ||
+    pbGroups.value[0] ||
+    null
+  );
 };
 
 const applyNextPbGroup = (level) => {
@@ -465,7 +537,10 @@ const saveLevels = async () => {
     name: String(level.name || "").trim(),
     threshold_amount: Math.max(0, toNumber(level.threshold_amount, 0)),
     earn_percentage: Math.max(0, Math.min(100, Math.floor(toNumber(level.earn_percentage, 0)))),
-    max_spend_percentage: Math.max(0, Math.min(100, Math.floor(toNumber(level.max_spend_percentage, 0)))),
+    max_spend_percentage: Math.max(
+      0,
+      Math.min(100, Math.floor(toNumber(level.max_spend_percentage, 0)))
+    ),
     is_enabled: level.is_enabled !== false,
     sort_order: Math.floor(toNumber(level.sort_order, (index + 1) * 10)),
     pb_group_id: String(level.pb_group_id || "").trim(),
@@ -480,7 +555,9 @@ const saveLevels = async () => {
   saving.value = true;
   try {
     const response = await api.put("/api/admin/loyalty/levels", { levels: payload });
-    levels.value = (Array.isArray(response.data?.levels) ? response.data.levels : []).map((level, index) => normalizeLevel(level, index));
+    levels.value = (Array.isArray(response.data?.levels) ? response.data.levels : []).map(
+      (level, index) => normalizeLevel(level, index)
+    );
     showSuccessNotification("Уровни лояльности сохранены");
   } catch (error) {
     showErrorNotification(error?.response?.data?.error || "Не удалось сохранить уровни");

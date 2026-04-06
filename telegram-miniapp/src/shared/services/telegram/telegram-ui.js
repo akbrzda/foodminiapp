@@ -1,14 +1,13 @@
 import { devError } from "@/shared/utils/logger.js";
 import {
   getWebApp,
-  isDesktop,
   isVersionAtLeast,
   warnMissingWebAppContext,
 } from "@/shared/services/telegram/telegram-client.js";
 
 export const showBackButton = (handler) => {
   const webApp = getWebApp();
-  if (!webApp || isDesktop()) {
+  if (!webApp) {
     return () => {};
   }
 

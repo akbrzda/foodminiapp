@@ -14,7 +14,11 @@
       </div>
       <div class="section skeleton-block">
         <div class="skeleton skeleton-title"></div>
-        <div v-for="index in 4" :key="`info-skeleton-${index}`" class="skeleton skeleton-line skeleton-w-70"></div>
+        <div
+          v-for="index in 4"
+          :key="`info-skeleton-${index}`"
+          class="skeleton skeleton-line skeleton-w-70"
+        ></div>
       </div>
       <div class="section skeleton-block">
         <div class="skeleton skeleton-title"></div>
@@ -43,14 +47,21 @@
                 {{ item.item_name }}
                 <span v-if="item.variant_name" class="variant">({{ item.variant_name }})</span>
               </div>
-              <div class="item-qty">× {{ item.quantity }} • {{ formatPriceWithCurrency(item.item_price, settingsStore.currencyCode) }}</div>
+              <div class="item-qty">
+                × {{ item.quantity }} •
+                {{ formatPriceWithCurrency(item.item_price, settingsStore.currencyCode) }}
+              </div>
               <div v-if="item.modifiers && item.modifiers.length > 0" class="item-modifiers">
                 <div v-for="mod in item.modifiers" :key="mod.id" class="modifier">
-                  + {{ mod.modifier_name }} (+{{ formatPriceWithCurrency(mod.modifier_price, settingsStore.currencyCode) }})
+                  + {{ mod.modifier_name }} (+{{
+                    formatPriceWithCurrency(mod.modifier_price, settingsStore.currencyCode)
+                  }})
                 </div>
               </div>
             </div>
-            <div class="item-price">{{ formatPriceWithCurrency(item.subtotal, settingsStore.currencyCode) }}</div>
+            <div class="item-price">
+              {{ formatPriceWithCurrency(item.subtotal, settingsStore.currencyCode) }}
+            </div>
           </div>
         </div>
         <div v-else class="empty-state">Заказ пуст</div>
@@ -79,7 +90,9 @@
         </div>
         <div class="total-row" v-if="order.delivery_cost > 0">
           <span>Доставка</span>
-          <span>{{ formatPriceWithCurrency(order.delivery_cost, settingsStore.currencyCode) }}</span>
+          <span>{{
+            formatPriceWithCurrency(order.delivery_cost, settingsStore.currencyCode)
+          }}</span>
         </div>
         <div class="total-row" v-if="order.bonus_spent > 0">
           <span>Списано бонусов</span>
@@ -102,7 +115,12 @@
         <h3>Оценка заказа</h3>
         <div v-if="hasSubmittedRating" class="rating-summary">
           <div class="rating-stars readonly">
-            <Star v-for="index in 5" :key="`saved-star-${index}`" :size="20" :class="['star-icon', { active: index <= (order.user_rating || 0) }]" />
+            <Star
+              v-for="index in 5"
+              :key="`saved-star-${index}`"
+              :size="20"
+              :class="['star-icon', { active: index <= (order.user_rating || 0) }]"
+            />
           </div>
           <div class="rating-value">Ваша оценка: {{ order.user_rating }} из 5</div>
           <div v-if="order.user_rating_comment" class="rating-comment">
@@ -129,12 +147,18 @@
             maxlength="1000"
             placeholder="Комментарий (необязательно)"
           />
-          <button class="submit-rating-btn" :disabled="ratingSubmitting || ratingForm.rating < 1" @click="submitOrderRating">
+          <button
+            class="submit-rating-btn"
+            :disabled="ratingSubmitting || ratingForm.rating < 1"
+            @click="submitOrderRating"
+          >
             {{ ratingSubmitting ? "Отправка..." : "Отправить оценку" }}
           </button>
           <div v-if="ratingError" class="rating-error">{{ ratingError }}</div>
         </div>
-        <div v-else class="rating-locked">Оценку можно поставить только в течение 24 часов после закрытия заказа.</div>
+        <div v-else class="rating-locked">
+          Оценку можно поставить только в течение 24 часов после закрытия заказа.
+        </div>
 
         <div v-if="hasSubmittedRating" class="nps-block">
           <template v-if="npsStatus.shouldShow">
@@ -159,7 +183,11 @@
               maxlength="1000"
               placeholder="Комментарий (необязательно)"
             />
-            <button class="submit-rating-btn" :disabled="npsSubmitting || npsForm.score === null" @click="submitNps">
+            <button
+              class="submit-rating-btn"
+              :disabled="npsSubmitting || npsForm.score === null"
+              @click="submitNps"
+            >
               {{ npsSubmitting ? "Отправка..." : "Отправить NPS" }}
             </button>
             <div v-if="npsError" class="rating-error">{{ npsError }}</div>
@@ -170,10 +198,14 @@
             <div v-if="npsStatus.comment" class="rating-comment">
               {{ npsStatus.comment }}
             </div>
-            <div v-if="npsStatus.nextAvailableAt" class="nps-next-date">Следующую NPS-оценку можно поставить после {{ formatDate(npsStatus.nextAvailableAt) }}</div>
+            <div v-if="npsStatus.nextAvailableAt" class="nps-next-date">
+              Следующую NPS-оценку можно поставить после {{ formatDate(npsStatus.nextAvailableAt) }}
+            </div>
           </template>
           <template v-else-if="npsStatus.nextAvailableAt">
-            <div class="nps-next-date">Следующую NPS-оценку можно поставить после {{ formatDate(npsStatus.nextAvailableAt) }}</div>
+            <div class="nps-next-date">
+              Следующую NPS-оценку можно поставить после {{ formatDate(npsStatus.nextAvailableAt) }}
+            </div>
           </template>
         </div>
       </div>
@@ -320,7 +352,11 @@ function setRating(value) {
 }
 async function submitOrderRating() {
   if (!order.value || !canRateOrder.value || ratingSubmitting.value) return;
-  if (!Number.isInteger(ratingForm.value.rating) || ratingForm.value.rating < 1 || ratingForm.value.rating > 5) {
+  if (
+    !Number.isInteger(ratingForm.value.rating) ||
+    ratingForm.value.rating < 1 ||
+    ratingForm.value.rating > 5
+  ) {
     ratingError.value = "Выберите оценку от 1 до 5";
     hapticFeedback("error");
     return;
@@ -379,7 +415,11 @@ function setNpsScore(value) {
 }
 async function submitNps() {
   if (npsSubmitting.value || !hasSubmittedRating.value || !npsStatus.value.shouldShow) return;
-  if (!Number.isInteger(npsForm.value.score) || npsForm.value.score < 0 || npsForm.value.score > 10) {
+  if (
+    !Number.isInteger(npsForm.value.score) ||
+    npsForm.value.score < 0 ||
+    npsForm.value.score > 10
+  ) {
     npsError.value = "Выберите оценку от 0 до 10";
     hapticFeedback("error");
     return;
@@ -451,7 +491,9 @@ function formatDate(dateString) {
 }
 function formatDeliveryAddress(orderData) {
   if (!orderData) return "";
-  const parts = [orderData.delivery_street, orderData.delivery_house].map((value) => (value ? String(value).trim() : "")).filter(Boolean);
+  const parts = [orderData.delivery_street, orderData.delivery_house]
+    .map((value) => (value ? String(value).trim() : ""))
+    .filter(Boolean);
   return parts.join(", ");
 }
 </script>
@@ -652,7 +694,6 @@ function formatDeliveryAddress(orderData) {
   margin-bottom: 0;
 }
 .actions {
-  padding: 0 16px;
   margin-top: 8px;
 }
 .rating-form {

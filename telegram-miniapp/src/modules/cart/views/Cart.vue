@@ -13,17 +13,24 @@
             </div>
             <div class="item-info">
               <h3>
-                {{ item.name }} <span class="variant-text" v-if="item.variant_name">{{ item.variant_name }}</span>
+                {{ item.name }}
+                <span class="variant-text" v-if="item.variant_name">{{ item.variant_name }}</span>
               </h3>
               <div class="modifiers" v-if="getModifierSummary(item).length">
                 <div class="modifier">{{ getModifierSummary(item).join(", ") }}</div>
               </div>
-              <div class="price">{{ formatPriceWithCurrency(getItemTotalPrice(item), settingsStore.currencyCode) }}</div>
+              <div class="price">
+                {{ formatPriceWithCurrency(getItemTotalPrice(item), settingsStore.currencyCode) }}
+              </div>
             </div>
             <div class="quantity-controls">
-              <button aria-label="Уменьшить количество" @click="decreaseQuantity(index)">-</button>
+              <button aria-label="Уменьшить количество" @click="decreaseQuantity(index)">
+                <Minus :size="16" />
+              </button>
               <span>{{ item.quantity }}</span>
-              <button aria-label="Увеличить количество" @click="increaseQuantity(index)">+</button>
+              <button aria-label="Увеличить количество" @click="increaseQuantity(index)">
+                <Plus :size="16" />
+              </button>
             </div>
           </div>
         </div>
@@ -35,20 +42,39 @@
             </label>
             <div class="bonus-title">
               Списать {{ formatPrice(displayBonusToUse) }} бонусов
-              <button class="bonus-info-icon" type="button" @click="toggleBonusInfo" aria-label="Информация о списании">!</button>
+              <button
+                class="bonus-info-icon"
+                type="button"
+                @click="toggleBonusInfo"
+                aria-label="Информация о списании"
+              >
+                !
+              </button>
             </div>
           </div>
           <div v-if="showBonusInfo" class="bonus-tooltip">
-            У вас {{ formatPrice(bonusBalance) }} бонусов, можно списать до {{ maxRedeemPercentLabel }}% от суммы заказа.
+            У вас {{ formatPrice(bonusBalance) }} бонусов, можно списать до
+            {{ maxRedeemPercentLabel }}% от суммы заказа.
           </div>
 
-          <div class="bonus-hint" v-if="maxBonusToUse === 0">Добавьте товары, чтобы использовать бонусы</div>
-          <button class="bonus-action" type="button" @click="enableBonusUsage" :disabled="maxBonusToUse === 0">Списать частично</button>
+          <div class="bonus-hint" v-if="maxBonusToUse === 0">
+            Добавьте товары, чтобы использовать бонусы
+          </div>
+          <button
+            class="bonus-action"
+            type="button"
+            @click="enableBonusUsage"
+            :disabled="maxBonusToUse === 0"
+          >
+            Списать частично
+          </button>
         </div>
         <div class="summary">
           <div class="summary-row">
             <span>Товары ({{ cartStore.itemsCount }})</span>
-            <span>{{ formatPriceWithCurrency(cartStore.totalPrice, settingsStore.currencyCode) }}</span>
+            <span>{{
+              formatPriceWithCurrency(cartStore.totalPrice, settingsStore.currencyCode)
+            }}</span>
           </div>
           <div class="summary-row" v-if="isDelivery">
             <span>Доставка</span>
@@ -56,21 +82,26 @@
           </div>
           <div class="summary-row bonus-discount" v-if="appliedBonusToUse > 0">
             <span>Бонусы</span>
-            <span class="discount">-{{ formatPriceWithCurrency(appliedBonusToUse, settingsStore.currencyCode) }}</span>
+            <span class="discount"
+              >-{{ formatPriceWithCurrency(appliedBonusToUse, settingsStore.currencyCode) }}</span
+            >
           </div>
           <div class="summary-row total">
             <span>Итого</span>
             <span>{{ formatPriceWithCurrency(finalCartTotal, settingsStore.currencyCode) }}</span>
           </div>
           <div v-if="isDelivery && !isMinOrderReached" class="summary-warning">
-            Минимальная сумма заказа: {{ formatPriceWithCurrency(minOrderAmount, settingsStore.currencyCode) }}
+            Минимальная сумма заказа:
+            {{ formatPriceWithCurrency(minOrderAmount, settingsStore.currencyCode) }}
           </div>
         </div>
         <div class="delivery-tariff-widget" v-if="isDelivery && deliveryTariffs.length >= 2">
           <div class="tariff-title">Стоимость доставки</div>
           <div v-if="deliveryCost === 0" class="tariff-subtitle">У вас бесплатная доставка</div>
           <div v-else class="tariff-subtitle">
-            Добавьте еще на {{ formatPriceWithCurrency(nextThreshold?.delta || 0, settingsStore.currencyCode) }}, чтобы снизить стоимость доставки
+            Добавьте еще на
+            {{ formatPriceWithCurrency(nextThreshold?.delta || 0, settingsStore.currencyCode) }},
+            чтобы снизить стоимость доставки
           </div>
           <div class="tariff-pills">
             <div
@@ -79,7 +110,9 @@
               class="tariff-pill"
               :class="{ free: tariff.delivery_cost === 0, current: isCurrentTariff(tariff) }"
             >
-              <span>{{ formatPriceWithCurrency(tariff.delivery_cost, settingsStore.currencyCode) }}</span>
+              <span>{{
+                formatPriceWithCurrency(tariff.delivery_cost, settingsStore.currencyCode)
+              }}</span>
             </div>
           </div>
         </div>
@@ -94,10 +127,18 @@
         <div class="upsell-section" v-if="cartStore.items.length > 0">
           <div class="upsell-title">Рекомендуем</div>
           <div v-if="isUpsellLoading" class="upsell-carousel">
-            <div v-for="index in 5" :key="`upsell-skeleton-${index}`" class="upsell-card upsell-card-skeleton"></div>
+            <div
+              v-for="index in 5"
+              :key="`upsell-skeleton-${index}`"
+              class="upsell-card upsell-card-skeleton"
+            ></div>
           </div>
           <div v-else-if="upsellItems.length > 0" class="upsell-carousel">
-            <div v-for="item in upsellItems" :key="`${item.id}-${item.variant_id || 0}`" class="upsell-card">
+            <div
+              v-for="item in upsellItems"
+              :key="`${item.id}-${item.variant_id || 0}`"
+              class="upsell-card"
+            >
               <div class="upsell-image" v-if="item.image_url">
                 <img :src="normalizeImageUrl(item.image_url)" :alt="item.name" />
               </div>
@@ -117,12 +158,18 @@
       <div class="bonus-modal">
         <div class="bonus-modal-header">
           <div class="bonus-modal-title">У вас {{ formatPrice(bonusBalance) }} бонусов</div>
-          <button class="bonus-modal-close" type="button" @click="closePartialModal" aria-label="Закрыть">
+          <button
+            class="bonus-modal-close"
+            type="button"
+            @click="closePartialModal"
+            aria-label="Закрыть"
+          >
             <X :size="18" />
           </button>
         </div>
         <div class="bonus-modal-subtitle">
-          Доступно к списанию до {{ maxRedeemPercentLabel }}% от {{ formatPriceWithCurrency(cartStore.totalPrice, settingsStore.currencyCode) }}.
+          Доступно к списанию до {{ maxRedeemPercentLabel }}% от
+          {{ formatPriceWithCurrency(cartStore.totalPrice, settingsStore.currencyCode) }}.
         </div>
         <FloatingField
           v-model="partialBonusInput"
@@ -137,9 +184,18 @@
         <div class="bonus-modal-actions">
           <button class="bonus-preset" type="button" @click="applyPreset(0.25)">25%</button>
           <button class="bonus-preset" type="button" @click="applyPreset(0.5)">50%</button>
-          <button class="bonus-preset active" type="button" @click="applyPreset(1)">Максимум</button>
+          <button class="bonus-preset active" type="button" @click="applyPreset(1)">
+            Максимум
+          </button>
         </div>
-        <input type="range" :min="0" :max="maxBonusToUse" v-model="partialBonusInput" class="bonus-slider" @input="hapticFeedback('selection')" />
+        <input
+          type="range"
+          :min="0"
+          :max="maxBonusToUse"
+          v-model="partialBonusInput"
+          class="bonus-slider"
+          @input="hapticFeedback('selection')"
+        />
         <button class="bonus-confirm" type="button" @click="confirmPartialBonus">Списать</button>
       </div>
     </div>
@@ -147,7 +203,7 @@
 </template>
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
-import { X } from "lucide-vue-next";
+import { X, Minus, Plus } from "lucide-vue-next";
 import { useRouter } from "vue-router";
 import { useCartStore } from "@/modules/cart/stores/cart.js";
 import { useLoyaltyStore } from "@/modules/loyalty/stores/loyalty.js";
@@ -160,7 +216,12 @@ import { trackGoalByKey } from "@/shared/services/metrika.js";
 import { bonusesAPI, addressesAPI, citiesAPI, menuAPI } from "@/shared/api/endpoints.js";
 import { formatPrice, formatPriceWithCurrency, normalizeImageUrl } from "@/shared/utils/format";
 import { formatWeight, formatWeightValue } from "@/shared/utils/weight";
-import { calculateDeliveryCost, getThresholds, normalizeTariffs, findTariffForAmount } from "@/shared/utils/deliveryTariffs";
+import {
+  calculateDeliveryCost,
+  getThresholds,
+  normalizeTariffs,
+  findTariffForAmount,
+} from "@/shared/utils/deliveryTariffs";
 import { getBranchOpenState } from "@/shared/utils/workingHours";
 import { devError } from "@/shared/utils/logger.js";
 import FloatingField from "@/shared/components/FloatingField.vue";
@@ -193,7 +254,11 @@ const branchOpenState = computed(() => {
     if (!locationStore.selectedBranch) {
       return { isOpen: true, reason: "" };
     }
-    return getBranchOpenState(locationStore.selectedBranch.working_hours || locationStore.selectedBranch.work_hours, timeZone, "pickup");
+    return getBranchOpenState(
+      locationStore.selectedBranch.working_hours || locationStore.selectedBranch.work_hours,
+      timeZone,
+      "pickup"
+    );
   }
   if (locationStore.deliveryType === "delivery") {
     const branchId = locationStore.deliveryZone?.branch_id;
@@ -201,7 +266,8 @@ const branchOpenState = computed(() => {
       return { isOpen: true, reason: "" };
     }
     const branchFromList = locationStore.branches.find((item) => item.id === branchId);
-    const branchFallback = locationStore.selectedBranch?.id === branchId ? locationStore.selectedBranch : null;
+    const branchFallback =
+      locationStore.selectedBranch?.id === branchId ? locationStore.selectedBranch : null;
     const branch = branchFromList || branchFallback;
     if (!branch) {
       return { isOpen: false, reason: "Филиал закрыт" };
@@ -222,7 +288,8 @@ const bonusToUse = computed({
 const bonusEligibleSubtotal = computed(() => {
   return cartStore.items.reduce((sum, cartItem) => {
     const menuItem = menuStore.getItemById?.(cartItem.id);
-    const bonusSpendAllowed = menuItem?.bonus_spend_allowed !== false && menuItem?.bonus_spend_allowed !== 0;
+    const bonusSpendAllowed =
+      menuItem?.bonus_spend_allowed !== false && menuItem?.bonus_spend_allowed !== 0;
     if (!bonusSpendAllowed) return sum;
     return sum + (Number(cartItem.price) || 0) * (Number(cartItem.quantity) || 1);
   }, 0);
@@ -233,7 +300,11 @@ const maxBonusByEligibleItems = computed(() => {
 });
 const maxBonusToUse = computed(() => {
   if (!bonusesEnabled.value) return 0;
-  return Math.min(bonusBalance.value, Math.floor(maxUsableFromApi.value), maxBonusByEligibleItems.value);
+  return Math.min(
+    bonusBalance.value,
+    Math.floor(maxUsableFromApi.value),
+    maxBonusByEligibleItems.value
+  );
 });
 const appliedBonusToUse = computed(() => {
   if (!bonusesEnabled.value) return 0;
@@ -252,8 +323,12 @@ const finalCartTotal = computed(() => {
 const maxRedeemPercentLabel = computed(() => Math.round(loyaltyStore.maxRedeemPercent * 100));
 const isDelivery = computed(() => locationStore.deliveryType === "delivery");
 const deliveryTariffs = computed(() => locationStore.deliveryZone?.tariffs || []);
-const effectiveSubtotal = computed(() => Math.max(0, cartStore.totalPrice - appliedBonusToUse.value));
-const hasDeliveryTariffs = computed(() => Array.isArray(deliveryTariffs.value) && deliveryTariffs.value.length > 0);
+const effectiveSubtotal = computed(() =>
+  Math.max(0, cartStore.totalPrice - appliedBonusToUse.value)
+);
+const hasDeliveryTariffs = computed(
+  () => Array.isArray(deliveryTariffs.value) && deliveryTariffs.value.length > 0
+);
 const fallbackDeliveryCost = computed(() => {
   const raw = Number(locationStore.deliveryZone?.delivery_cost);
   return Number.isFinite(raw) && raw >= 0 ? raw : 0;
@@ -270,17 +345,26 @@ const minOrderAmount = computed(() => {
   const raw = Number(locationStore.deliveryZone?.min_order_amount);
   return Number.isFinite(raw) && raw >= 0 ? raw : 0;
 });
-const isMinOrderReached = computed(() => !isDelivery.value || hasDeliveryTariffs.value || effectiveSubtotal.value >= minOrderAmount.value);
+const isMinOrderReached = computed(
+  () =>
+    !isDelivery.value || hasDeliveryTariffs.value || effectiveSubtotal.value >= minOrderAmount.value
+);
 const thresholds = computed(() => getThresholds(deliveryTariffs.value, effectiveSubtotal.value));
 const nextThreshold = computed(() => (thresholds.value.length > 0 ? thresholds.value[0] : null));
 const normalizedTariffs = computed(() => normalizeTariffs(deliveryTariffs.value));
-const currentTariff = computed(() => findTariffForAmount(deliveryTariffs.value, effectiveSubtotal.value));
+const currentTariff = computed(() =>
+  findTariffForAmount(deliveryTariffs.value, effectiveSubtotal.value)
+);
 const isCurrentTariff = (tariff) => {
   if (!tariff || !currentTariff.value) return false;
   const current = currentTariff.value;
   const currentTo = current.amount_to ?? null;
   const targetTo = tariff.amount_to ?? null;
-  return current.amount_from === tariff.amount_from && currentTo === targetTo && current.delivery_cost === tariff.delivery_cost;
+  return (
+    current.amount_from === tariff.amount_from &&
+    currentTo === targetTo &&
+    current.delivery_cost === tariff.delivery_cost
+  );
 };
 const bonusChangeRequested = ref(false);
 onMounted(async () => {
@@ -292,12 +376,17 @@ onMounted(async () => {
   }
   // Обновляем баланс при возвращении в приложение, чтобы не использовать старые данные
   document.addEventListener("visibilitychange", handleVisibilityChange);
-  if (isDelivery.value && !locationStore.deliveryZone && locationStore.deliveryCoords && locationStore.selectedCity?.id) {
+  if (
+    isDelivery.value &&
+    !locationStore.deliveryZone &&
+    locationStore.deliveryCoords &&
+    locationStore.selectedCity?.id
+  ) {
     try {
       const checkResponse = await addressesAPI.checkDeliveryZone(
         locationStore.deliveryCoords.lat,
         locationStore.deliveryCoords.lng,
-        locationStore.selectedCity.id,
+        locationStore.selectedCity.id
       );
       if (checkResponse.data?.available && checkResponse.data?.polygon) {
         const zone = { ...checkResponse.data.polygon, tariffs: checkResponse.data.tariffs || [] };
@@ -529,11 +618,17 @@ function onBonusToggle() {
 }
 async function ensureTariffs() {
   if (!isDelivery.value) return;
-  if (!locationStore.deliveryZone || !locationStore.deliveryCoords || !locationStore.selectedCity?.id) return;
+  if (
+    !locationStore.deliveryZone ||
+    !locationStore.deliveryCoords ||
+    !locationStore.selectedCity?.id
+  )
+    return;
   if (
     Array.isArray(locationStore.deliveryZone.tariffs) &&
     (locationStore.deliveryZone.tariffs.length > 0 ||
-      (Number.isFinite(Number(locationStore.deliveryZone.min_order_amount)) && Number.isFinite(Number(locationStore.deliveryZone.delivery_cost))))
+      (Number.isFinite(Number(locationStore.deliveryZone.min_order_amount)) &&
+        Number.isFinite(Number(locationStore.deliveryZone.delivery_cost))))
   ) {
     return;
   }
@@ -542,7 +637,7 @@ async function ensureTariffs() {
       locationStore.deliveryCoords.lat,
       locationStore.deliveryCoords.lng,
       locationStore.selectedCity.id,
-      cartStore.totalPrice,
+      cartStore.totalPrice
     );
     if (response.data?.available && response.data?.polygon) {
       const zone = { ...response.data.polygon, tariffs: response.data.tariffs || [] };
@@ -578,7 +673,7 @@ watch(
     if (!newValue) {
       bonusToUse.value = 0;
     }
-  },
+  }
 );
 watch(
   () => maxBonusToUse.value,
@@ -586,7 +681,7 @@ watch(
     if (bonusToUse.value > newMax) {
       bonusToUse.value = newMax;
     }
-  },
+  }
 );
 watch(
   () => bonusesEnabled.value,
@@ -596,7 +691,7 @@ watch(
     bonusBalance.value = 0;
     maxUsableFromApi.value = 0;
     showPartialModal.value = false;
-  },
+  }
 );
 watch(
   () => appliedBonusToUse.value,
@@ -604,15 +699,19 @@ watch(
     if (!bonusChangeRequested.value || !isDelivery.value) return;
     const beforeAmount = Math.max(0, cartStore.totalPrice - prevValue);
     const afterAmount = Math.max(0, cartStore.totalPrice - nextValue);
-    const beforeCost = hasDeliveryTariffs.value ? calculateDeliveryCost(deliveryTariffs.value, beforeAmount) : fallbackDeliveryCost.value;
-    const afterCost = hasDeliveryTariffs.value ? calculateDeliveryCost(deliveryTariffs.value, afterAmount) : fallbackDeliveryCost.value;
+    const beforeCost = hasDeliveryTariffs.value
+      ? calculateDeliveryCost(deliveryTariffs.value, beforeAmount)
+      : fallbackDeliveryCost.value;
+    const afterCost = hasDeliveryTariffs.value
+      ? calculateDeliveryCost(deliveryTariffs.value, afterAmount)
+      : fallbackDeliveryCost.value;
     if (afterCost > beforeCost) {
       showAlert(
-        `Внимание! После списания бонусов стоимость доставки изменится с ${formatPriceWithCurrency(beforeCost, settingsStore.currencyCode)} на ${formatPriceWithCurrency(afterCost, settingsStore.currencyCode)}`,
+        `Внимание! После списания бонусов стоимость доставки изменится с ${formatPriceWithCurrency(beforeCost, settingsStore.currencyCode)} на ${formatPriceWithCurrency(afterCost, settingsStore.currencyCode)}`
       );
     }
     bonusChangeRequested.value = false;
-  },
+  }
 );
 
 watch(
@@ -622,7 +721,7 @@ watch(
       cartStore.refreshPricesFromMenu(items);
     }
   },
-  { deep: true },
+  { deep: true }
 );
 
 watch(
@@ -634,20 +733,25 @@ watch(
     await loadUpsell();
     await ensureTariffs();
   },
-  { deep: true },
+  { deep: true }
 );
 watch(
-  () => [locationStore.selectedCity?.id, locationStore.selectedBranch?.id, locationStore.deliveryType, locationStore.deliveryZone?.branch_id],
+  () => [
+    locationStore.selectedCity?.id,
+    locationStore.selectedBranch?.id,
+    locationStore.deliveryType,
+    locationStore.deliveryZone?.branch_id,
+  ],
   async () => {
     await loadUpsell();
-  },
+  }
 );
 watch(
   () => [isDelivery.value, locationStore.deliveryZone?.branch_id, locationStore.selectedCity?.id],
   async () => {
     await ensureDeliveryBranch();
   },
-  { immediate: true },
+  { immediate: true }
 );
 </script>
 <style scoped>
@@ -749,7 +853,12 @@ watch(
 }
 .upsell-card-skeleton {
   height: 232px;
-  background: linear-gradient(90deg, var(--color-background-secondary), #f3f4f7, var(--color-background-secondary));
+  background: linear-gradient(
+    90deg,
+    var(--color-background-secondary),
+    #f3f4f7,
+    var(--color-background-secondary)
+  );
   background-size: 200% 100%;
   animation: upsell-skeleton 1.2s ease-in-out infinite;
 }
@@ -821,11 +930,10 @@ watch(
 .quantity-controls {
   display: flex;
   align-items: center;
-  gap: 12px;
 }
 .quantity-controls button {
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius-sm);
   background: var(--color-background);
@@ -833,6 +941,9 @@ watch(
   color: var(--color-text-primary);
   cursor: pointer;
   transition: background-color var(--transition-duration) var(--transition-easing);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .quantity-controls button:hover {
   background: var(--color-background-secondary);

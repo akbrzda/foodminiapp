@@ -1,9 +1,7 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-/* ============================================
-   Дизайн-система Miniapp Panda
-   ============================================ */
+
 :root {
   /* Цветовая палитра */
   --color-primary: #fddc04;
@@ -20,7 +18,9 @@
   --color-badge-yellow: #ffd200;
   --color-border: #e0e0e0;
   /* Типографика */
-  --font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  --font-family:
+    -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, Oxygen, Ubuntu,
+    Cantarell, sans-serif;
   --line-height: 1.4;
   --font-size-h1: 28px;
   --font-size-h2: 20px;
@@ -65,12 +65,18 @@ body.desktop {
 
 html.fullscreen,
 body.fullscreen {
-  --app-safe-top-offset: max(env(safe-area-inset-top, 0px), var(--tg-content-safe-area-inset-top, 0px));
+  --app-safe-top-offset: max(
+    env(safe-area-inset-top, 0px),
+    var(--tg-content-safe-area-inset-top, 0px)
+  );
 }
 
 html.fullsize,
 body.fullsize {
-  --app-safe-bottom-offset: max(env(safe-area-inset-bottom, 0px), var(--tg-safe-area-inset-bottom, 0px));
+  --app-safe-bottom-offset: max(
+    env(safe-area-inset-bottom, 0px),
+    var(--tg-safe-area-inset-bottom, 0px)
+  );
 }
 body {
   margin: 0;
@@ -362,7 +368,12 @@ input[type="number"]::-webkit-inner-spin-button {
   position: absolute;
   inset: 0;
   transform: translateX(-100%);
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0));
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0),
+    rgba(255, 255, 255, 0.72),
+    rgba(255, 255, 255, 0)
+  );
   animation: skeleton-shimmer 1.2s infinite;
 }
 .skeleton-line {

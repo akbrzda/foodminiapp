@@ -5,10 +5,20 @@
       <div v-if="!ordersEnabled" class="order-disabled">{{ orderDisabledReason }}</div>
       <template v-else>
         <div class="location-tabs" v-if="deliveryEnabled || pickupEnabled">
-          <button v-if="deliveryEnabled" @click="setDeliveryType('delivery')" class="pill-tab" :class="{ active: locationStore.isDelivery }">
+          <button
+            v-if="deliveryEnabled"
+            @click="setDeliveryType('delivery')"
+            class="pill-tab"
+            :class="{ active: locationStore.isDelivery }"
+          >
             Доставка
           </button>
-          <button v-if="pickupEnabled" @click="setDeliveryType('pickup')" class="pill-tab" :class="{ active: locationStore.isPickup }">
+          <button
+            v-if="pickupEnabled"
+            @click="setDeliveryType('pickup')"
+            class="pill-tab"
+            :class="{ active: locationStore.isPickup }"
+          >
             Самовывоз
           </button>
         </div>
@@ -21,7 +31,12 @@
     </div>
     <div v-if="activeOrders.length > 0" class="active-orders-container">
       <div class="active-orders" :class="{ 'has-scroll': activeOrders.length > 1 }">
-        <div v-for="order in activeOrders" :key="order.id" class="active-order" @click="router.push(`/order/${order.id}`)">
+        <div
+          v-for="order in activeOrders"
+          :key="order.id"
+          class="active-order"
+          @click="router.push(`/order/${order.id}`)"
+        >
           <div class="order-status">
             <div class="order-type-icon">
               <Truck v-if="order.order_type === 'delivery'" :size="20" />
@@ -30,7 +45,10 @@
             <div class="status-indicator" :class="getStatusClass(order.status)"></div>
             <div class="order-info">
               <div class="order-title">{{ getStatusText(order.status, order.order_type) }}</div>
-              <div class="order-subtitle">Заказ #{{ order.order_number }} • {{ formatPriceWithCurrency(order.total, settingsStore.currencyCode) }}</div>
+              <div class="order-subtitle">
+                Заказ #{{ order.order_number }} •
+                {{ formatPriceWithCurrency(order.total, settingsStore.currencyCode) }}
+              </div>
             </div>
           </div>
           <ChevronRight :size="20" />
@@ -62,6 +80,16 @@
           </button>
         </div>
       </div>
+      <button
+        v-if="showScrollTopButton"
+        class="scroll-top-btn"
+        :class="{ 'hidden-on-keyboard': isKeyboardOpen }"
+        type="button"
+        aria-label="Наверх"
+        @click="scrollToTop"
+      >
+        <ChevronUp :size="18" />
+      </button>
       <div class="menu-content menu-skeleton" v-if="menuStore.loading">
         <div class="category-section">
           <div class="skeleton skeleton-title"></div>
@@ -87,9 +115,17 @@
         </div>
       </div>
       <div class="menu-content" v-else-if="menuStore.categories.length">
-        <div v-for="category in menuStore.categories" :key="category.id" :id="`category-${category.id}`" class="category-section">
+        <div
+          v-for="category in menuStore.categories"
+          :key="category.id"
+          :id="`category-${category.id}`"
+          class="category-section"
+        >
           <h2 class="category-title">{{ category.name }}</h2>
-          <div v-if="getAvailableTagsByCategory(category.id).length > 0" class="tags-filter category-tags-filter">
+          <div
+            v-if="getAvailableTagsByCategory(category.id).length > 0"
+            class="tags-filter category-tags-filter"
+          >
             <button
               v-for="tag in getAvailableTagsByCategory(category.id)"
               :key="tag.id"
@@ -104,7 +140,11 @@
             <div
               v-for="item in getItemsByCategory(category.id)"
               :key="item.id"
-              :class="['item-card', `item-card-${effectiveMenuCardsLayout}`, { disabled: isItemUnavailable(item) || !canOrder }]"
+              :class="[
+                'item-card',
+                `item-card-${effectiveMenuCardsLayout}`,
+                { disabled: isItemUnavailable(item) || !canOrder },
+              ]"
               @click="handleItemCardClick(item)"
             >
               <div class="item-image" v-if="item.image_url">
@@ -113,14 +153,31 @@
               <div class="item-info">
                 <div class="item-text">
                   <h3>{{ item.name }}</h3>
-                  <p class="item-weight" v-if="getDisplayWeight(item)">{{ getDisplayWeight(item) }}</p>
-                  <p v-if="effectiveMenuCardsLayout !== 'vertical' && hasItemDescription(item)" class="description">{{ item.description }}</p>
-                  <div class="item-badges" v-if="menuBadgesEnabled && item.badges && item.badges.length > 0">
-                    <span v-for="badge in item.badges" :key="badge.code" class="item-badge" :class="`item-badge-${badge.code}`">
+                  <p class="item-weight" v-if="getDisplayWeight(item)">
+                    {{ getDisplayWeight(item) }}
+                  </p>
+                  <p
+                    v-if="effectiveMenuCardsLayout !== 'vertical' && hasItemDescription(item)"
+                    class="description"
+                  >
+                    {{ item.description }}
+                  </p>
+                  <div
+                    class="item-badges"
+                    v-if="menuBadgesEnabled && item.badges && item.badges.length > 0"
+                  >
+                    <span
+                      v-for="badge in item.badges"
+                      :key="badge.code"
+                      class="item-badge"
+                      :class="`item-badge-${badge.code}`"
+                    >
                       {{ badge.label }}
                     </span>
                   </div>
-                  <div v-if="isItemUnavailable(item)" class="item-unavailable">Временно недоступно</div>
+                  <div v-if="isItemUnavailable(item)" class="item-unavailable">
+                    Временно недоступно
+                  </div>
                 </div>
                 <div class="item-footer">
                   <button
@@ -132,12 +189,22 @@
                     {{ getAddButtonLabel(item) }}
                   </button>
                   <div v-else class="quantity-controls">
-                    <button class="qty-btn" aria-label="Уменьшить количество" :disabled="!canOrder" @click.stop="decreaseItemQuantity(item)">
-                      −
+                    <button
+                      class="qty-btn"
+                      aria-label="Уменьшить количество"
+                      :disabled="!canOrder"
+                      @click.stop="decreaseItemQuantity(item)"
+                    >
+                      <Minus :size="16" />
                     </button>
                     <span class="qty-value">{{ getCartItem(item).quantity }}</span>
-                    <button class="qty-btn" aria-label="Увеличить количество" :disabled="!canOrder" @click.stop="increaseItemQuantity(item)">
-                      +
+                    <button
+                      class="qty-btn"
+                      aria-label="Увеличить количество"
+                      :disabled="!canOrder"
+                      @click.stop="increaseItemQuantity(item)"
+                    >
+                      <Plus :size="16" />
                     </button>
                   </div>
                 </div>
@@ -161,14 +228,16 @@
         </span>
         <span class="cart-text">В корзину</span>
       </span>
-      <span class="cart-total">{{ formatPriceWithCurrency(cartTotalWithDelivery, settingsStore.currencyCode) }}</span>
+      <span class="cart-total">{{
+        formatPriceWithCurrency(cartTotalWithDelivery, settingsStore.currencyCode)
+      }}</span>
     </button>
   </div>
 </template>
 <script setup>
 import { ref, computed, onMounted, watch, onUnmounted, nextTick } from "vue";
 import { useRouter, useRoute } from "vue-router";
-import { ChevronRight, ShoppingCart, Store, Truck } from "lucide-vue-next";
+import { ChevronRight, ChevronUp, Plus, ShoppingCart, Store, Truck, Minus } from "lucide-vue-next";
 import { useAuthStore } from "@/modules/auth/stores/auth.js";
 import { useLocationStore } from "@/modules/location/stores/location.js";
 import { useCartStore } from "@/modules/cart/stores/cart.js";
@@ -198,6 +267,7 @@ const categoryRefs = ref({});
 const showMenu = ref(false);
 const activeCategory = ref(null);
 const isScrolling = ref(false);
+const showScrollTopButton = ref(false);
 const activeOrders = ref([]);
 const selectedTagsByCategory = ref({});
 let observer = null;
@@ -239,10 +309,14 @@ const actionButtonText = computed(() => {
   if (!ordersEnabled.value) return "Заказы недоступны";
   if (!deliveryEnabled.value && !pickupEnabled.value) return "Нет доступных способов";
   if (locationStore.isDelivery) {
-    return locationStore.deliveryAddress ? truncateText(locationStore.deliveryAddress, 48) : "Укажите адрес";
+    return locationStore.deliveryAddress
+      ? truncateText(locationStore.deliveryAddress, 48)
+      : "Укажите адрес";
   }
   if (locationStore.isPickup) {
-    return locationStore.selectedBranch ? truncateText(locationStore.selectedBranch.name, 22) : "Выбрать филиал";
+    return locationStore.selectedBranch
+      ? truncateText(locationStore.selectedBranch.name, 22)
+      : "Выбрать филиал";
   }
   return "Укажите адрес";
 });
@@ -271,7 +345,7 @@ watch(
   () => [ordersEnabled.value, deliveryEnabled.value, pickupEnabled.value],
   () => {
     resolveDeliveryType();
-  },
+  }
 );
 watch(
   () => locationStore.selectedCity,
@@ -279,7 +353,7 @@ watch(
     if (newCity) {
       await loadMenu();
     }
-  },
+  }
 );
 watch(
   () => authStore.isAuthenticated,
@@ -290,7 +364,7 @@ watch(
     }
     await loadActiveOrder();
     setupOrderStatusListener();
-  },
+  }
 );
 watch(
   () => [locationStore.deliveryType, locationStore.selectedBranch?.id],
@@ -298,13 +372,13 @@ watch(
     if (locationStore.selectedCity) {
       await loadMenu();
     }
-  },
+  }
 );
 watch(
   () => [route.query.category_id, route.query.story_nav],
   () => {
     applyCategoryFromStoryQuery();
-  },
+  }
 );
 onUnmounted(() => {
   if (observer) {
@@ -314,6 +388,7 @@ onUnmounted(() => {
     window.removeEventListener("scroll", activeCategoryScrollHandler);
     activeCategoryScrollHandler = null;
   }
+  showScrollTopButton.value = false;
   if (orderStatusHandler) {
     wsService.off("order-status-updated", orderStatusHandler);
   }
@@ -331,13 +406,15 @@ watch(
     if (!categoryId) return;
     await nextTick();
     scrollCategoryIntoView(categoryId);
-  },
+  }
 );
 async function loadActiveOrder() {
   try {
     const response = await ordersAPI.getMyOrders();
     const orders = response.data.orders || [];
-    const active = orders.filter((order) => order.status !== "completed" && order.status !== "cancelled");
+    const active = orders.filter(
+      (order) => order.status !== "completed" && order.status !== "cancelled"
+    );
     activeOrders.value = active;
   } catch (error) {
     devError("Не удалось загрузить активный заказ:", error);
@@ -359,7 +436,11 @@ function setupOrderStatusListener() {
         return;
       }
       const updated = { ...activeOrders.value[index], status: data.newStatus };
-      activeOrders.value = [...activeOrders.value.slice(0, index), updated, ...activeOrders.value.slice(index + 1)];
+      activeOrders.value = [
+        ...activeOrders.value.slice(0, index),
+        updated,
+        ...activeOrders.value.slice(index + 1),
+      ];
       loadActiveOrder();
     };
     wsService.on("order-status-updated", orderStatusHandler);
@@ -470,7 +551,10 @@ async function loadMenuInternal({ force = false } = {}) {
   }
   try {
     menuStore.setLoading(true);
-    const menuResponse = await menuAPI.getMenu(locationStore.selectedCity.id, { fulfillmentType, branchId });
+    const menuResponse = await menuAPI.getMenu(locationStore.selectedCity.id, {
+      fulfillmentType,
+      branchId,
+    });
     const categories = menuResponse.data.categories || [];
     menuStore.setCategories(categories);
     const allItems = categories.flatMap((category) => category.items || []);
@@ -517,18 +601,27 @@ function getItemsByCategory(categoryId) {
   const items = menuStore.getItemsByCategory(categoryId);
   const selectedTagIds = getSelectedTagIdsByCategory(categoryId);
   if (selectedTagIds.length === 0) return items;
-  return items.filter((item) => item.tags && item.tags.some((tag) => selectedTagIds.includes(String(tag.id))));
+  return items.filter(
+    (item) => item.tags && item.tags.some((tag) => selectedTagIds.includes(String(tag.id)))
+  );
 }
 function hasItemDescription(item) {
   return String(item?.description || "").trim().length > 0;
 }
 function hasRequiredOptions(item) {
-  return (item.variants && item.variants.length > 0) || (item.modifier_groups && item.modifier_groups.some((group) => group.is_required));
+  return (
+    (item.variants && item.variants.length > 0) ||
+    (item.modifier_groups && item.modifier_groups.some((group) => group.is_required))
+  );
 }
 function getCartItem(item) {
   if (!hasRequiredOptions(item)) {
     return cartStore.items.find((cartItem) => {
-      return cartItem.id === item.id && !cartItem.variant_id && (!cartItem.modifiers || cartItem.modifiers.length === 0);
+      return (
+        cartItem.id === item.id &&
+        !cartItem.variant_id &&
+        (!cartItem.modifiers || cartItem.modifiers.length === 0)
+      );
     });
   }
   return null;
@@ -565,7 +658,9 @@ function getAddButtonLabel(item) {
 function getDisplayWeight(item) {
   if (!item) return "";
   if (item.variants && item.variants.length > 0) {
-    const sorted = [...item.variants].sort((a, b) => (parseFloat(a.price) || 0) - (parseFloat(b.price) || 0));
+    const sorted = [...item.variants].sort(
+      (a, b) => (parseFloat(a.price) || 0) - (parseFloat(b.price) || 0)
+    );
     const cheapest = sorted[0];
     const variantWeight = formatWeightValue(cheapest?.weight_value, cheapest?.weight_unit);
     if (variantWeight) return variantWeight;
@@ -606,6 +701,7 @@ function setupIntersectionObserver() {
   }
 
   const updateActiveCategoryByScroll = () => {
+    showScrollTopButton.value = window.scrollY > 220;
     if (isScrolling.value || menuStore.categories.length === 0) return;
 
     const stickyEl = document.querySelector(".categories-sticky");
@@ -632,6 +728,13 @@ function setupIntersectionObserver() {
   activeCategoryScrollHandler = updateActiveCategoryByScroll;
   window.addEventListener("scroll", activeCategoryScrollHandler, { passive: true });
   updateActiveCategoryByScroll();
+}
+function scrollToTop() {
+  hapticFeedback("light");
+  window.scrollTo({
+    top: 0,
+    behavior: "smooth",
+  });
 }
 function scrollToCategory(categoryId) {
   hapticFeedback("light");
@@ -660,7 +763,9 @@ function scrollToCategory(categoryId) {
 function getItemPrice(item) {
   if (item.variants && item.variants.length > 0) {
     const prices = item.variants
-      .filter((variant) => !variant.in_stop_list && variant.price !== null && variant.price !== undefined)
+      .filter(
+        (variant) => !variant.in_stop_list && variant.price !== null && variant.price !== undefined
+      )
       .map((variant) => parseFloat(variant.price) || 0);
     if (prices.length === 0) {
       return formatPriceWithCurrency(item.price || 0, settingsStore.currencyCode);
@@ -721,7 +826,9 @@ function toggleTag(categoryId, tagId) {
 function isItemUnavailable(item) {
   if (item.in_stop_list) return true;
   if (item.variants && item.variants.length > 0) {
-    return item.variants.every((variant) => variant.in_stop_list || variant.price === null || variant.price === undefined);
+    return item.variants.every(
+      (variant) => variant.in_stop_list || variant.price === null || variant.price === undefined
+    );
   }
   return false;
 }
@@ -1010,6 +1117,34 @@ function goToCart() {
   z-index: 90;
   background: var(--color-background);
   border-bottom: 1px solid var(--color-border);
+}
+.scroll-top-btn {
+  position: fixed;
+  top: 72px;
+  right: 8px;
+  z-index: 95;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 70%);
+  backdrop-filter: blur(15px);
+  color: var(--color-text-primary);
+  box-shadow: var(--shadow-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition:
+    opacity var(--transition-duration) var(--transition-easing),
+    transform var(--transition-duration) var(--transition-easing),
+    background-color var(--transition-duration) var(--transition-easing);
+}
+.scroll-top-btn:hover {
+  background: var(--color-background-secondary);
+}
+.scroll-top-btn:active {
+  transform: scale(0.96);
 }
 .categories {
   display: flex;
@@ -1310,7 +1445,8 @@ function goToCart() {
 .quantity-controls {
   display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: center;
+  gap: 6px;
   background: var(--color-primary);
   border-radius: var(--border-radius-md);
   padding: 4px;
@@ -1350,7 +1486,7 @@ function goToCart() {
   position: fixed;
   left: 12px;
   right: 12px;
-  bottom: 40px;
+  bottom: 24px;
   z-index: 120;
   display: flex;
   align-items: center;
@@ -1358,7 +1494,7 @@ function goToCart() {
   gap: 12px;
   padding: 12px;
   border: none;
-  border-radius: var(--border-radius-md);
+  border-radius: var(--border-radius-xl);
   background: var(--color-primary);
   color: var(--color-text-primary);
   cursor: pointer;
