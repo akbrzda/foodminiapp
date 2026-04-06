@@ -1,5 +1,4 @@
 import axios from "axios";
-import db from "../../../config/database.js";
 import {
   calculateEarnedBonuses,
   validateBonusUsage,
@@ -9,17 +8,18 @@ import {
 } from "../../loyalty/services/loyaltyService.js";
 import { logger } from "../../../utils/logger.js";
 import { addTelegramNotification } from "../../../queues/config.js";
-import { getSystemSettings } from "../../../utils/settings.js";
+import { getSettingsByRequest } from "../../settings/settings-runtime.js";
 import { findTariffForAmount } from "../../polygons/utils/deliveryTariffs.js";
 import { checkBranchIsOpen } from "../../../utils/workingHours.js";
 import { notifyNewOrder } from "../../../websocket/runtime.js";
 import ordersAdapter from "../../integrations/adapters/ordersAdapter.js";
 import loyaltyAdapter from "../../integrations/adapters/loyaltyAdapter.js";
 import { encryptAddress } from "../../../utils/encryption.js";
+import { getOrdersDbByRequest } from "../orders-db.runtime.js";
 
 // Вспомогательные функции
-const getTariffsByPolygonId = async (polygonId) => {
-  const [rows] = await db.query(
+const getTariffsByPolygonId = async (dbConn, polygonId) => {
+  const [rows] = await dbConn.query(
     `SELECT id, polygon_id, amount_from, amount_to, delivery_cost
      FROM delivery_tariffs
      WHERE polygon_id = ?
@@ -35,8 +35,8 @@ const getTariffsByPolygonId = async (polygonId) => {
   }));
 };
 
-const getPolygonDeliverySettings = async (polygonId) => {
-  const [rows] = await db.query(
+const getPolygonDeliverySettings = async (dbConn, polygonId) => {
+  const [rows] = await dbConn.query(
     `SELECT id, min_order_amount, delivery_cost
      FROM delivery_polygons
      WHERE id = ?
@@ -51,12 +51,12 @@ const getPolygonDeliverySettings = async (polygonId) => {
   };
 };
 
-const resolveDeliveryCost = async (polygonId, amount) => {
-  const polygonSettings = await getPolygonDeliverySettings(polygonId);
+const resolveDeliveryCost = async (dbConn, polygonId, amount) => {
+  const polygonSettings = await getPolygonDeliverySettings(dbConn, polygonId);
   if (!polygonSettings) {
     throw new Error("Polygon not found");
   }
-  const tariffs = await getTariffsByPolygonId(polygonId);
+  const tariffs = await getTariffsByPolygonId(dbConn, polygonId);
   if (tariffs.length === 0) {
     return {
       deliveryCost: polygonSettings.delivery_cost,
@@ -162,7 +162,7 @@ const resolveInternalApiBaseUrl = (req) => {
   return `${protocol}://${host}`;
 };
 
-const calculateOrderCost = async (items, { cityId, fulfillmentType, bonusToUse }) => {
+const calculateOrderCost = async (dbConn, items, { cityId, fulfillmentType, bonusToUse }) => {
   let subtotal = 0;
   let bonusSpendBaseSubtotal = 0;
   let bonusEarnBaseSubtotal = 0;
@@ -176,7 +176,7 @@ const calculateOrderCost = async (items, { cityId, fulfillmentType, bonusToUse }
     }
 
     // Получение товара
-    const [menuItems] = await db.query(
+    const [menuItems] = await dbConn.query(
       "SELECT id, name, price, weight, weight_unit, is_active, bonus_spend_allowed, bonus_earn_allowed FROM menu_items WHERE id = ? AND is_active = TRUE",
       [item_id],
     );
@@ -191,7 +191,7 @@ const calculateOrderCost = async (items, { cityId, fulfillmentType, bonusToUse }
 
     // Проверка городских цен
     if (cityId) {
-      const [cityAvailability] = await db.query(
+      const [cityAvailability] = await dbConn.query(
         `SELECT is_active
          FROM menu_item_cities
          WHERE item_id = ? AND city_id = ?
@@ -202,7 +202,7 @@ const calculateOrderCost = async (items, { cityId, fulfillmentType, bonusToUse }
         throw new Error(`Item ${item_id} is not available in this city`);
       }
 
-      const [cityPrices] = await db.query(
+      const [cityPrices] = await dbConn.query(
         `SELECT price
          FROM menu_item_prices
          WHERE item_id = ? AND city_id = ? AND fulfillment_type = ?
@@ -217,7 +217,7 @@ const calculateOrderCost = async (items, { cityId, fulfillmentType, bonusToUse }
 
     // Проверка варианта
     if (variant_id) {
-      const [variants] = await db.query("SELECT id, name, price, is_active FROM item_variants WHERE id = ? AND item_id = ?", [variant_id, item_id]);
+      const [variants] = await dbConn.query("SELECT id, name, price, is_active FROM item_variants WHERE id = ? AND item_id = ?", [variant_id, item_id]);
 
       if (variants.length === 0 || !variants[0].is_active) {
         throw new Error(`Variant ${variant_id} not found or inactive`);
@@ -228,7 +228,7 @@ const calculateOrderCost = async (items, { cityId, fulfillmentType, bonusToUse }
       itemBasePrice = parseFloat(variant.price);
 
       if (cityId) {
-        const [cityVariantPrices] = await db.query(
+        const [cityVariantPrices] = await dbConn.query(
           `SELECT price
            FROM menu_variant_prices
            WHERE variant_id = ? AND city_id = ? AND fulfillment_type = ?
@@ -248,7 +248,7 @@ const calculateOrderCost = async (items, { cityId, fulfillmentType, bonusToUse }
 
     if (modifiers && Array.isArray(modifiers) && modifiers.length > 0) {
       for (const modId of modifiers) {
-        const [newModifiers] = await db.query(
+        const [newModifiers] = await dbConn.query(
           "SELECT m.id, m.name, m.price, m.weight, m.weight_unit, m.is_active, m.group_id, mg.type, mg.is_required FROM modifiers m JOIN modifier_groups mg ON m.group_id = mg.id WHERE m.id = ? AND m.is_active = TRUE",
           [modId],
         );
@@ -261,7 +261,7 @@ const calculateOrderCost = async (items, { cityId, fulfillmentType, bonusToUse }
         let modifierPrice = parseFloat(modifier.price);
 
         if (cityId) {
-          const [cityModifierPrices] = await db.query(
+          const [cityModifierPrices] = await dbConn.query(
             `SELECT price, is_active
              FROM menu_modifier_prices
              WHERE modifier_id = ? AND city_id = ?
@@ -278,7 +278,7 @@ const calculateOrderCost = async (items, { cityId, fulfillmentType, bonusToUse }
         }
 
         if (variant_id) {
-          const [variantPrices] = await db.query(
+          const [variantPrices] = await dbConn.query(
             `SELECT price
              FROM menu_modifier_variant_prices
              WHERE modifier_id = ? AND variant_id = ?
@@ -347,7 +347,8 @@ const calculateOrderCost = async (items, { cityId, fulfillmentType, bonusToUse }
  * Создание нового заказа
  */
 export const createOrder = async (req, res, next) => {
-  const connection = await db.getConnection();
+  const ordersDb = await getOrdersDbByRequest(req);
+  const connection = await ordersDb.getConnection();
 
   try {
     await connection.beginTransaction();
@@ -392,13 +393,13 @@ export const createOrder = async (req, res, next) => {
       });
     }
 
-    const settings = await getSystemSettings();
+    const settings = await getSettingsByRequest(req);
     const useLocalBonuses = settings.bonuses_enabled && !settings.premiumbonus_enabled;
-    const loyaltyLevels = await getLoyaltyLevelsFromDb();
+    const loyaltyLevels = await getLoyaltyLevelsFromDb(ordersDb);
     let loyaltyLevel = 1;
 
     if (useLocalBonuses) {
-      const [userData] = await db.query("SELECT current_loyalty_level_id FROM users WHERE id = ?", [req.user.id]);
+      const [userData] = await ordersDb.query("SELECT current_loyalty_level_id FROM users WHERE id = ?", [req.user.id]);
       loyaltyLevel = userData[0]?.current_loyalty_level_id || 1;
     }
 
@@ -570,7 +571,7 @@ export const createOrder = async (req, res, next) => {
     const pbSyncStatus = pbPurchasesExternal ? "pending" : "synced";
 
     // Расчет стоимости заказа
-    let { subtotal, bonusSpendBaseSubtotal, bonusEarnBaseSubtotal, bonusUsed, total, validatedItems } = await calculateOrderCost(items, {
+    let { subtotal, bonusSpendBaseSubtotal, bonusEarnBaseSubtotal, bonusUsed, total, validatedItems } = await calculateOrderCost(ordersDb, items, {
       cityId: city_id,
       fulfillmentType,
       bonusToUse: effectiveBonusToUse,
@@ -578,7 +579,13 @@ export const createOrder = async (req, res, next) => {
 
     // Валидация бонусов
     if (useLocalBonuses && effectiveBonusToUse > 0) {
-      const bonusValidation = await validateBonusUsage(req.user.id, effectiveBonusToUse, bonusSpendBaseSubtotal, maxUsePercent);
+      const bonusValidation = await validateBonusUsage(
+        req.user.id,
+        effectiveBonusToUse,
+        bonusSpendBaseSubtotal,
+        maxUsePercent,
+        ordersDb
+      );
       if (!bonusValidation.valid) {
         await connection.rollback();
         return res.status(400).json({ error: bonusValidation.error });
@@ -588,7 +595,7 @@ export const createOrder = async (req, res, next) => {
     // Расчет стоимости доставки
     if (order_type === "delivery" && deliveryPolygon) {
       const amountForTariff = Math.floor(total);
-      const { deliveryCost: resolvedCost, minOrderAmount, isTariffMode } = await resolveDeliveryCost(deliveryPolygon.id, amountForTariff);
+      const { deliveryCost: resolvedCost, minOrderAmount, isTariffMode } = await resolveDeliveryCost(ordersDb, deliveryPolygon.id, amountForTariff);
       if (!isTariffMode && amountForTariff < minOrderAmount) {
         await connection.rollback();
         return res.status(400).json({
@@ -795,22 +802,22 @@ export const createOrder = async (req, res, next) => {
     await connection.commit();
 
     // Получение созданного заказа
-    const [orders] = await db.query(`SELECT * FROM orders WHERE id = ?`, [orderId]);
+    const [orders] = await ordersDb.query(`SELECT * FROM orders WHERE id = ?`, [orderId]);
     const order = orders[0];
 
     if (order?.branch_id) {
-      const [branchCoords] = await db.query("SELECT latitude, longitude FROM branches WHERE id = ?", [order.branch_id]);
+      const [branchCoords] = await ordersDb.query("SELECT latitude, longitude FROM branches WHERE id = ?", [order.branch_id]);
       order.branch_latitude = branchCoords[0]?.latitude || null;
       order.branch_longitude = branchCoords[0]?.longitude || null;
     }
 
     if (order?.delivery_address_id) {
-      const [deliveryCoords] = await db.query("SELECT latitude, longitude FROM delivery_addresses WHERE id = ?", [order.delivery_address_id]);
+      const [deliveryCoords] = await ordersDb.query("SELECT latitude, longitude FROM delivery_addresses WHERE id = ?", [order.delivery_address_id]);
       order.delivery_latitude = deliveryCoords[0]?.latitude || null;
       order.delivery_longitude = deliveryCoords[0]?.longitude || null;
     }
 
-    const [orderItems] = await db.query(
+    const [orderItems] = await ordersDb.query(
       `SELECT oi.*, 
         (SELECT JSON_ARRAYAGG(
           JSON_OBJECT('modifier_id', oim.modifier_id, 'modifier_name', oim.modifier_name, 'modifier_price', oim.modifier_price)
@@ -841,7 +848,7 @@ export const createOrder = async (req, res, next) => {
       let branchMeta = null;
       let userMeta = null;
       if (telegramBranchId) {
-        const [branchRows] = await db.query(
+        const [branchRows] = await ordersDb.query(
           `SELECT b.id AS branch_id, b.city_id, b.name AS branch_name, b.address AS branch_address, b.phone AS branch_phone,
                   c.name AS city_name, c.timezone AS city_timezone
            FROM branches b
@@ -852,7 +859,7 @@ export const createOrder = async (req, res, next) => {
         );
         branchMeta = branchRows?.[0] || null;
       }
-      const [userRows] = await db.query(
+      const [userRows] = await ordersDb.query(
         `SELECT u.id, u.first_name, u.last_name, u.phone, u.telegram_id
          FROM users u
          WHERE u.id = ?

@@ -1,11 +1,12 @@
 import express from "express";
 import axios from "axios";
 import { authenticateToken, requirePermission } from "../../middleware/auth.js";
-import { METRIKA_DEFAULT_GOALS, getSystemSettings, getSettingsList, updateSystemSettings } from "../../utils/settings.js";
+import { METRIKA_DEFAULT_GOALS, getSettingsList } from "../../utils/settings.js";
 import { logger } from "../../utils/logger.js";
 import { sendTelegramStartMessage } from "../../utils/telegram.js";
 import { addTelegramNotification } from "../../queues/config.js";
 import { sendMaxNotificationMessageViaBot } from "../../utils/botService.js";
+import { getSettingsByRequest, updateSettingsByRequest } from "./settings-runtime.js";
 
 const router = express.Router();
 const SUPPORTED_NOTIFICATION_PLATFORMS = new Set(["telegram", "max"]);
@@ -130,7 +131,7 @@ const parseBotServiceErrorDetails = (error) => {
 
 router.get("/", async (req, res, next) => {
   try {
-    const settings = await getSystemSettings();
+    const settings = await getSettingsByRequest(req);
     res.json({ settings: filterPublicSettings(settings) });
   } catch (error) {
     next(error);
@@ -139,7 +140,7 @@ router.get("/", async (req, res, next) => {
 
 router.get("/maps-public", async (req, res, next) => {
   try {
-    const settings = await getSystemSettings();
+    const settings = await getSettingsByRequest(req);
     res.json({
       success: true,
       data: buildMapsPublicPayload(settings),
@@ -151,7 +152,7 @@ router.get("/maps-public", async (req, res, next) => {
 
 router.get("/admin", authenticateToken, requirePermission("system.settings.manage"), async (req, res, next) => {
   try {
-    const settings = await getSystemSettings();
+    const settings = await getSettingsByRequest(req);
     res.json({
       settings,
       items: getSettingsList(settings),
@@ -163,7 +164,7 @@ router.get("/admin", authenticateToken, requirePermission("system.settings.manag
 
 router.post("/admin/maps/test", authenticateToken, requirePermission("system.settings.manage"), async (req, res, next) => {
   try {
-    const settings = await getSystemSettings();
+    const settings = await getSettingsByRequest(req);
     const geocoderKey = String(settings?.yandex_js_api_key || "").trim();
     const suggestKey = String(settings?.yandex_suggest_api_key || "").trim();
     const language = String(settings?.maps_default_language || "ru_RU").trim() || "ru_RU";
@@ -228,7 +229,7 @@ router.post("/admin/maps/test", authenticateToken, requirePermission("system.set
 
 router.post("/admin/metrika/test", authenticateToken, requirePermission("system.settings.manage"), async (req, res, next) => {
   try {
-    const settings = await getSystemSettings();
+    const settings = await getSettingsByRequest(req);
     const enabled = settings?.yandex_metrika_enabled === true;
     const counterId = String(settings?.yandex_metrika_counter_id || "").trim();
     const goals =
@@ -269,7 +270,7 @@ router.post("/admin/metrika/test", authenticateToken, requirePermission("system.
 router.put("/admin", authenticateToken, requirePermission("system.settings.manage"), async (req, res, next) => {
   try {
     const { settings: patch } = req.body || {};
-    const { updated, errors } = await updateSystemSettings(patch);
+    const { updated, errors } = await updateSettingsByRequest(req, patch);
 
     if (errors) {
       return res.status(400).json({ errors });
@@ -277,7 +278,7 @@ router.put("/admin", authenticateToken, requirePermission("system.settings.manag
 
     await logger.admin.action(req.user?.id, "update_settings", "settings", null, JSON.stringify(updated), req);
 
-    const settings = await getSystemSettings();
+    const settings = await getSettingsByRequest(req);
     res.json({ settings, items: getSettingsList(settings) });
   } catch (error) {
     next(error);
@@ -298,7 +299,7 @@ router.post("/admin/start-message/test", authenticateToken, requirePermission("s
       return res.status(400).json({ error: `Укажите корректный ${fieldName}` });
     }
 
-    const settings = await getSystemSettings();
+    const settings = await getSettingsByRequest(req);
     if (platform === "telegram") {
       const sent = await sendTelegramStartMessage(externalId, settings);
       if (!sent) {
@@ -350,7 +351,7 @@ router.post("/admin/orders-notification/test", authenticateToken, requirePermiss
       cityId = parsedCityId;
     }
 
-    const settings = await getSystemSettings();
+    const settings = await getSettingsByRequest(req);
     const requestedPlatform = req.body?.platform ? resolvePlatform(req.body?.platform, null) : null;
     if (req.body?.platform && !requestedPlatform) {
       return res.status(400).json({ error: "Платформа должна быть telegram или max" });

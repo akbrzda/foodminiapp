@@ -1,7 +1,7 @@
-import db from "../../../config/database.js";
 import { addTelegramNotification } from "../../../queues/config.js";
 import { getRatingWindowDeadline, isOrderRatingWindowOpen } from "../services/orderRatingReminderService.js";
 import { getUserNpsStatus } from "../../users/services/npsService.js";
+import { getOrdersDbByRequest } from "../orders-db.runtime.js";
 
 const ORDER_RATING_COMMENT_MAX_LENGTH = 1000;
 
@@ -43,6 +43,7 @@ const resolveNpsPrompt = async (userId) => {
  */
 export const getUserOrders = async (req, res, next) => {
   try {
+    const ordersDb = await getOrdersDbByRequest(req);
     const { status, limit = 20, offset = 0 } = req.query;
     let query = `
       SELECT o.*, 
@@ -70,7 +71,7 @@ export const getUserOrders = async (req, res, next) => {
     query += " ORDER BY o.created_at DESC LIMIT ? OFFSET ?";
     params.push(parseInt(limit), parseInt(offset));
 
-    const [orders] = await db.query(query, params);
+    const [orders] = await ordersDb.query(query, params);
     res.json({ orders });
   } catch (error) {
     next(error);
@@ -82,9 +83,10 @@ export const getUserOrders = async (req, res, next) => {
  */
 export const getUserOrderById = async (req, res, next) => {
   try {
+    const ordersDb = await getOrdersDbByRequest(req);
     const orderId = req.params.id;
 
-    const [orders] = await db.query(
+    const [orders] = await ordersDb.query(
       `SELECT o.*,
         (SELECT COALESCE(SUM(lt.amount), 0) FROM loyalty_transactions lt WHERE lt.order_id = o.id AND lt.type = 'earn') as bonuses_earned,
         r.rating as user_rating,
@@ -106,12 +108,12 @@ export const getUserOrderById = async (req, res, next) => {
     const order = orders[0];
 
     // Получение товаров заказа
-    const [items] = await db.query(`SELECT * FROM order_items WHERE order_id = ?`, [orderId]);
+    const [items] = await ordersDb.query(`SELECT * FROM order_items WHERE order_id = ?`, [orderId]);
     const itemIds = items.map((item) => item.id).filter(Boolean);
     let modifiersByItemId = new Map();
 
     if (itemIds.length > 0) {
-      const [modifierRows] = await db.query(`SELECT * FROM order_item_modifiers WHERE order_item_id IN (?)`, [itemIds]);
+      const [modifierRows] = await ordersDb.query(`SELECT * FROM order_item_modifiers WHERE order_item_id IN (?)`, [itemIds]);
       modifiersByItemId = modifierRows.reduce((acc, modifier) => {
         if (!acc.has(modifier.order_item_id)) {
           acc.set(modifier.order_item_id, []);
@@ -128,7 +130,7 @@ export const getUserOrderById = async (req, res, next) => {
     order.items = items;
 
     // История статусов
-    const [statusHistory] = await db.query(
+    const [statusHistory] = await ordersDb.query(
       `SELECT osh.id, osh.old_status, osh.new_status, osh.changed_by_type, osh.changed_at,
         au.first_name as admin_first_name, au.last_name as admin_last_name
        FROM order_status_history osh
@@ -141,7 +143,7 @@ export const getUserOrderById = async (req, res, next) => {
     order.status_history = statusHistory || [];
 
     // Информация о бонусах
-    const [spendRows] = await db.query("SELECT status, amount FROM loyalty_transactions WHERE order_id = ? AND type = 'spend'", [orderId]);
+    const [spendRows] = await ordersDb.query("SELECT status, amount FROM loyalty_transactions WHERE order_id = ? AND type = 'spend'", [orderId]);
 
     if (spendRows.length > 0) {
       const hasPending = spendRows.some((row) => row.status === "pending");
@@ -155,7 +157,7 @@ export const getUserOrderById = async (req, res, next) => {
       order.bonus_spend_amount = 0;
     }
 
-    const [earnRows] = await db.query(
+    const [earnRows] = await ordersDb.query(
       "SELECT amount, expires_at, status FROM loyalty_transactions WHERE order_id = ? AND type = 'earn' ORDER BY created_at DESC LIMIT 1",
       [orderId],
     );
@@ -193,12 +195,13 @@ export const getUserOrderById = async (req, res, next) => {
  */
 export const getUserOrderRating = async (req, res, next) => {
   try {
+    const ordersDb = await getOrdersDbByRequest(req);
     const orderId = toPositiveInteger(req.params.id);
     if (!orderId) {
       return res.status(400).json({ error: "Некорректный order_id" });
     }
 
-    const [orderRows] = await db.query(
+    const [orderRows] = await ordersDb.query(
       "SELECT id, status, completed_at FROM orders WHERE id = ? AND user_id = ? LIMIT 1",
       [orderId, req.user.id],
     );
@@ -207,7 +210,7 @@ export const getUserOrderRating = async (req, res, next) => {
       return res.status(404).json({ error: "Order not found" });
     }
 
-    const [ratingRows] = await db.query(
+    const [ratingRows] = await ordersDb.query(
       "SELECT rating, comment, created_at FROM order_ratings WHERE order_id = ? AND user_id = ? LIMIT 1",
       [orderId, req.user.id],
     );
@@ -230,7 +233,8 @@ export const getUserOrderRating = async (req, res, next) => {
  * Выставление оценки по заказу текущего пользователя
  */
 export const createUserOrderRating = async (req, res, next) => {
-  const connection = await db.getConnection();
+  const ordersDb = await getOrdersDbByRequest(req);
+  const connection = await ordersDb.getConnection();
   try {
     const orderId = toPositiveInteger(req.params.id);
     if (!orderId) {
@@ -341,20 +345,21 @@ export const createUserOrderRating = async (req, res, next) => {
  */
 export const repeatOrder = async (req, res, next) => {
   try {
+    const ordersDb = await getOrdersDbByRequest(req);
     const orderId = req.params.id;
 
-    const [orders] = await db.query(`SELECT * FROM orders WHERE id = ? AND user_id = ?`, [orderId, req.user.id]);
+    const [orders] = await ordersDb.query(`SELECT * FROM orders WHERE id = ? AND user_id = ?`, [orderId, req.user.id]);
 
     if (orders.length === 0) {
       return res.status(404).json({ error: "Order not found" });
     }
 
-    const [items] = await db.query(`SELECT * FROM order_items WHERE order_id = ?`, [orderId]);
+    const [items] = await ordersDb.query(`SELECT * FROM order_items WHERE order_id = ?`, [orderId]);
     const itemIds = items.map((item) => item.id).filter(Boolean);
     let modifierIdsByItemId = new Map();
 
     if (itemIds.length > 0) {
-      const [modifierRows] = await db.query(`SELECT order_item_id, modifier_id FROM order_item_modifiers WHERE order_item_id IN (?)`, [itemIds]);
+      const [modifierRows] = await ordersDb.query(`SELECT order_item_id, modifier_id FROM order_item_modifiers WHERE order_item_id IN (?)`, [itemIds]);
       modifierIdsByItemId = modifierRows.reduce((acc, modifier) => {
         if (!acc.has(modifier.order_item_id)) {
           acc.set(modifier.order_item_id, []);

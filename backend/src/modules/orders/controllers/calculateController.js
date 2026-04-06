@@ -1,14 +1,14 @@
-import db from "../../../config/database.js";
 import { findTariffForAmount } from "../../polygons/utils/deliveryTariffs.js";
 import { validateBonusUsage, getLoyaltyLevelsFromDb, getRedeemPercentForLevel } from "../../loyalty/services/loyaltyService.js";
 import { logger } from "../../../utils/logger.js";
 import { badRequest, notFound } from "../../../utils/errors.js";
 import loyaltyAdapter from "../../integrations/adapters/loyaltyAdapter.js";
-import { getSystemSettings } from "../../../utils/settings.js";
+import { getOrdersDbByRequest } from "../orders-db.runtime.js";
+import { getSettingsByRequest } from "../../settings/settings-runtime.js";
 
 // Вспомогательные функции
-const getTariffsByPolygonId = async (polygonId) => {
-  const [rows] = await db.query(
+const getTariffsByPolygonId = async (dbConn, polygonId) => {
+  const [rows] = await dbConn.query(
     `SELECT id, polygon_id, amount_from, amount_to, delivery_cost
      FROM delivery_tariffs
      WHERE polygon_id = ?
@@ -24,8 +24,8 @@ const getTariffsByPolygonId = async (polygonId) => {
   }));
 };
 
-const getPolygonDeliverySettings = async (polygonId) => {
-  const [rows] = await db.query(
+const getPolygonDeliverySettings = async (dbConn, polygonId) => {
+  const [rows] = await dbConn.query(
     `SELECT id, min_order_amount, delivery_cost
      FROM delivery_polygons
      WHERE id = ?
@@ -40,12 +40,12 @@ const getPolygonDeliverySettings = async (polygonId) => {
   };
 };
 
-const resolveDeliveryCost = async (polygonId, amount) => {
-  const polygonSettings = await getPolygonDeliverySettings(polygonId);
+const resolveDeliveryCost = async (dbConn, polygonId, amount) => {
+  const polygonSettings = await getPolygonDeliverySettings(dbConn, polygonId);
   if (!polygonSettings) {
     throw notFound("Polygon not found");
   }
-  const tariffs = await getTariffsByPolygonId(polygonId);
+  const tariffs = await getTariffsByPolygonId(dbConn, polygonId);
   if (tariffs.length === 0) {
     return {
       deliveryCost: polygonSettings.delivery_cost,
@@ -63,6 +63,7 @@ const resolveDeliveryCost = async (polygonId, amount) => {
  */
 export const calculateOrder = async (req, res, next) => {
   try {
+    const ordersDb = await getOrdersDbByRequest(req);
     const { items, bonus_to_use = 0, city_id, polygon_id } = req.body;
     const normalizedBonusToUse = Math.max(0, Math.floor(Number(bonus_to_use) || 0));
 
@@ -86,7 +87,7 @@ export const calculateOrder = async (req, res, next) => {
       }
 
       // Получение товара
-      const [menuItems] = await db.query(
+      const [menuItems] = await ordersDb.query(
         "SELECT id, name, price, weight, weight_unit, is_active, bonus_spend_allowed FROM menu_items WHERE id = ? AND is_active = TRUE",
         [item_id],
       );
@@ -101,7 +102,7 @@ export const calculateOrder = async (req, res, next) => {
 
       // Проверка городских цен
       if (cityId) {
-        const [cityAvailability] = await db.query(
+        const [cityAvailability] = await ordersDb.query(
           `SELECT is_active
            FROM menu_item_cities
            WHERE item_id = ? AND city_id = ?
@@ -112,7 +113,7 @@ export const calculateOrder = async (req, res, next) => {
           return res.status(400).json({ error: `Item ${item_id} is not available in this city` });
         }
 
-        const [cityPrices] = await db.query(
+        const [cityPrices] = await ordersDb.query(
           `SELECT price
            FROM menu_item_prices
            WHERE item_id = ? AND city_id = ? AND fulfillment_type = 'delivery'
@@ -127,7 +128,7 @@ export const calculateOrder = async (req, res, next) => {
 
       // Проверка варианта
       if (variant_id) {
-        const [variants] = await db.query("SELECT id, name, price, is_active FROM item_variants WHERE id = ? AND item_id = ?", [variant_id, item_id]);
+        const [variants] = await ordersDb.query("SELECT id, name, price, is_active FROM item_variants WHERE id = ? AND item_id = ?", [variant_id, item_id]);
 
         if (variants.length === 0 || !variants[0].is_active) {
           return res.status(400).json({ error: `Variant ${variant_id} not found or inactive` });
@@ -138,7 +139,7 @@ export const calculateOrder = async (req, res, next) => {
         itemBasePrice = parseFloat(variant.price);
 
         if (cityId) {
-          const [cityVariantPrices] = await db.query(
+          const [cityVariantPrices] = await ordersDb.query(
             `SELECT price
              FROM menu_variant_prices
              WHERE variant_id = ? AND city_id = ? AND fulfillment_type = 'delivery'
@@ -158,7 +159,7 @@ export const calculateOrder = async (req, res, next) => {
 
       if (modifiers && Array.isArray(modifiers) && modifiers.length > 0) {
         for (const modId of modifiers) {
-          const [newModifiers] = await db.query(
+          const [newModifiers] = await ordersDb.query(
             "SELECT m.id, m.name, m.price, m.weight, m.weight_unit, m.is_active, m.group_id, mg.type, mg.is_required FROM modifiers m JOIN modifier_groups mg ON m.group_id = mg.id WHERE m.id = ? AND m.is_active = TRUE",
             [modId],
           );
@@ -171,7 +172,7 @@ export const calculateOrder = async (req, res, next) => {
           let modifierPrice = parseFloat(modifier.price);
 
           if (cityId) {
-            const [cityModifierPrices] = await db.query(
+            const [cityModifierPrices] = await ordersDb.query(
               `SELECT price, is_active
                FROM menu_modifier_prices
                WHERE modifier_id = ? AND city_id = ?
@@ -188,7 +189,7 @@ export const calculateOrder = async (req, res, next) => {
           }
 
           if (variant_id) {
-            const [variantPrices] = await db.query(
+            const [variantPrices] = await ordersDb.query(
               `SELECT price
                FROM menu_modifier_variant_prices
                WHERE modifier_id = ? AND variant_id = ?
@@ -234,7 +235,7 @@ export const calculateOrder = async (req, res, next) => {
       });
     }
 
-    const settings = await getSystemSettings();
+    const settings = await getSettingsByRequest(req);
     const pbExternalLoyalty =
       settings.premiumbonus_enabled && settings.premiumbonus_auto_sync_enabled !== false && settings?.integration_mode?.loyalty === "external";
 
@@ -250,7 +251,7 @@ export const calculateOrder = async (req, res, next) => {
           return res.status(400).json({ error: `Максимально доступно к списанию по PremiumBonus: ${Math.floor(pbMaxUsable)} бонусов` });
         }
       } else {
-        const [userRows] = await db.query("SELECT current_loyalty_level_id FROM users WHERE id = ?", [userId]);
+        const [userRows] = await ordersDb.query("SELECT current_loyalty_level_id FROM users WHERE id = ?", [userId]);
 
         if (userRows.length === 0) {
           return res.status(404).json({ error: "User not found" });
@@ -259,7 +260,13 @@ export const calculateOrder = async (req, res, next) => {
         const loyaltyLevelId = userRows[0]?.current_loyalty_level_id || 1;
         const loyaltyLevels = await getLoyaltyLevelsFromDb();
         const maxUsePercent = getRedeemPercentForLevel(loyaltyLevelId, loyaltyLevels);
-        const bonusValidation = await validateBonusUsage(userId, normalizedBonusToUse, bonusSpendBaseSubtotal, maxUsePercent);
+        const bonusValidation = await validateBonusUsage(
+          userId,
+          normalizedBonusToUse,
+          bonusSpendBaseSubtotal,
+          maxUsePercent,
+          ordersDb
+        );
         if (!bonusValidation.valid) {
           return res.status(400).json({
             error: bonusValidation.error,
@@ -277,7 +284,7 @@ export const calculateOrder = async (req, res, next) => {
     let deliveryTariffs = [];
 
     if (polygon_id) {
-      const result = await resolveDeliveryCost(polygon_id, total);
+      const result = await resolveDeliveryCost(ordersDb, polygon_id, total);
       if (!result.isTariffMode && total < result.minOrderAmount) {
         throw badRequest(`Минимальная сумма заказа для этой зоны: ${result.minOrderAmount}`);
       }
