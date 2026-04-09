@@ -1,6 +1,14 @@
 import db from "../../../config/database.js";
-import { getSettingsList, getSystemSettings, updateSystemSettings } from "../../../utils/settings.js";
-import { getIikoClientOrNull, getIntegrationSettings, getPremiumBonusClientOrNull } from "./integrationConfigService.js";
+import {
+  getSettingsList,
+  getSystemSettings,
+  updateSystemSettings,
+} from "../../../utils/settings.js";
+import {
+  getIikoClientOrNull,
+  getIntegrationSettings,
+  getPremiumBonusClientOrNull,
+} from "./integrationConfigService.js";
 import { getSyncLogs } from "../repositories/syncLogRepository.js";
 import menuAdapter from "../adapters/menuAdapter.js";
 import iikoPriceCategoriesService from "./iikoPriceCategoriesService.js";
@@ -59,7 +67,7 @@ async function deactivateRemovedIikoCategories(categoryIds = []) {
      SET is_active = 0, iiko_synced_at = NOW()
      WHERE iiko_category_id IN (${placeholders})
        AND is_active = 1`,
-    normalizedCategoryIds,
+    normalizedCategoryIds
   );
 
   await db.query(
@@ -68,7 +76,7 @@ async function deactivateRemovedIikoCategories(categoryIds = []) {
      SET mcc.is_active = 0
      WHERE mc.iiko_category_id IN (${placeholders})
        AND mcc.is_active = 1`,
-    normalizedCategoryIds,
+    normalizedCategoryIds
   );
 
   return Number(updateResult?.affectedRows || 0);
@@ -108,14 +116,18 @@ export async function getIikoNomenclatureOverview(options = {}) {
   try {
     const menusPayload = await client.getExternalMenus({ useConfiguredOrganization: false });
     externalMenusRaw = Array.isArray(menusPayload?.externalMenus) ? menusPayload.externalMenus : [];
-    priceCategoriesRaw = Array.isArray(menusPayload?.priceCategories) ? menusPayload.priceCategories : [];
+    priceCategoriesRaw = Array.isArray(menusPayload?.priceCategories)
+      ? menusPayload.priceCategories
+      : [];
   } catch (error) {
     externalMenusRaw = [];
     priceCategoriesRaw = [];
     warnings.externalMenus = error?.message || "Не удалось получить список внешних меню iiko";
   }
-  const selectedExternalMenuId = externalMenuIdOverride || String(settings.iikoExternalMenuId || "").trim();
-  const selectedPriceCategoryId = priceCategoryIdOverride || String(settings.iikoPriceCategoryId || "").trim();
+  const selectedExternalMenuId =
+    externalMenuIdOverride || String(settings.iikoExternalMenuId || "").trim();
+  const selectedPriceCategoryId =
+    priceCategoryIdOverride || String(settings.iikoPriceCategoryId || "").trim();
 
   let externalMenuItemIds = null;
   let externalMenuCategories = null;
@@ -131,12 +143,19 @@ export async function getIikoNomenclatureOverview(options = {}) {
       const categories = [];
       const itemCategories = Array.isArray(menuById?.itemCategories) ? menuById.itemCategories : [];
       for (const itemCategory of itemCategories) {
-        const categoryId = normalizeIikoId(itemCategory?.id || itemCategory?.itemCategoryId || itemCategory?.iikoGroupId);
-        const categoryName = normalizeDisplayName(itemCategory?.name || itemCategory?.title, "Категория");
+        const categoryId = normalizeIikoId(
+          itemCategory?.id || itemCategory?.itemCategoryId || itemCategory?.iikoGroupId
+        );
+        const categoryName = normalizeDisplayName(
+          itemCategory?.name || itemCategory?.title,
+          "Категория"
+        );
         const categoryItems = Array.isArray(itemCategory?.items) ? itemCategory.items : [];
         let categoryProductsCount = 0;
         for (const categoryItem of categoryItems) {
-          const itemId = normalizeIikoId(categoryItem?.itemId || categoryItem?.id || categoryItem?.productId);
+          const itemId = normalizeIikoId(
+            categoryItem?.itemId || categoryItem?.id || categoryItem?.productId
+          );
           if (!itemId) continue;
           itemIds.add(itemId);
           categoryProductsCount += 1;
@@ -154,7 +173,8 @@ export async function getIikoNomenclatureOverview(options = {}) {
       externalMenuItemIds = itemIds;
       externalMenuCategories = categories;
     } catch (error) {
-      warnings.externalMenuById = error?.message || "Не удалось получить состав выбранного внешнего меню";
+      warnings.externalMenuById =
+        error?.message || "Не удалось получить состав выбранного внешнего меню";
       externalMenuItemIds = new Set();
       externalMenuCategories = [];
     }
@@ -171,8 +191,13 @@ export async function getIikoNomenclatureOverview(options = {}) {
     .sort((a, b) => a.name.localeCompare(b.name, "ru"));
   const priceCategories = (Array.isArray(priceCategoriesRaw) ? priceCategoriesRaw : [])
     .map((category) => ({
-      id: String(category?.id || category?.priceCategoryId || category?.price_category_id || "").trim(),
-      name: normalizeDisplayName(category?.name || category?.caption || category?.title, "Категория цен"),
+      id: String(
+        category?.id || category?.priceCategoryId || category?.price_category_id || ""
+      ).trim(),
+      name: normalizeDisplayName(
+        category?.name || category?.caption || category?.title,
+        "Категория цен"
+      ),
     }))
     .filter((category) => Boolean(category.id))
     .sort((a, b) => a.name.localeCompare(b.name, "ru"));
@@ -272,20 +297,26 @@ export async function getIikoOrderPaymentMappingOptions() {
     }
     current.is_default = current.is_default || mapped.is_default;
   }
-  const orderTypes = Array.from(orderTypesById.values()).sort((a, b) => a.name.localeCompare(b.name, "ru"));
+  const orderTypes = Array.from(orderTypesById.values()).sort((a, b) =>
+    a.name.localeCompare(b.name, "ru")
+  );
 
   const paymentTypesById = new Map();
   for (const row of Array.isArray(paymentTypesRaw) ? paymentTypesRaw : []) {
     const terminalGroupIds = Array.isArray(row?.terminalGroups)
       ? row.terminalGroups
-          .map((group) => String(group?.id || group?.terminalGroupId || group?.terminal_group_id || "").trim())
+          .map((group) =>
+            String(group?.id || group?.terminalGroupId || group?.terminal_group_id || "").trim()
+          )
           .filter(Boolean)
       : [];
     const mapped = {
       id: String(row?.id || "").trim(),
       name: normalizeDisplayName(row?.name || row?.caption || row?.title, "Способ оплаты"),
       payment_type_kind: String(row?.paymentTypeKind || row?.payment_type_kind || "").trim(),
-      payment_processing_type: String(row?.paymentProcessingType || row?.payment_processing_type || "").trim(),
+      payment_processing_type: String(
+        row?.paymentProcessingType || row?.payment_processing_type || ""
+      ).trim(),
       terminal_group_ids: terminalGroupIds,
       is_deleted: row?.isDeleted === true || row?.deleted === true,
     };
@@ -301,7 +332,9 @@ export async function getIikoOrderPaymentMappingOptions() {
       }
     }
   }
-  const paymentTypes = Array.from(paymentTypesById.values()).sort((a, b) => a.name.localeCompare(b.name, "ru"));
+  const paymentTypes = Array.from(paymentTypesById.values()).sort((a, b) =>
+    a.name.localeCompare(b.name, "ru")
+  );
 
   const discountTypesById = new Map();
   for (const row of Array.isArray(discountTypesRaw) ? discountTypesRaw : []) {
@@ -328,7 +361,9 @@ export async function getIikoOrderPaymentMappingOptions() {
       current.organization_ids.push(mapped.organization_id);
     }
   }
-  const discountTypes = Array.from(discountTypesById.values()).sort((a, b) => a.name.localeCompare(b.name, "ru"));
+  const discountTypes = Array.from(discountTypesById.values()).sort((a, b) =>
+    a.name.localeCompare(b.name, "ru")
+  );
 
   return {
     orderTypes,
@@ -346,12 +381,18 @@ export async function getIikoOrderPaymentMappingOptions() {
 export async function updateAdminIntegrationSettings(patch) {
   const previousSettings = await getSystemSettings();
   const nextPatch = { ...(patch || {}) };
-  const hasExternalMenuIdPatch = Object.prototype.hasOwnProperty.call(nextPatch, "iiko_external_menu_id");
+  const hasExternalMenuIdPatch = Object.prototype.hasOwnProperty.call(
+    nextPatch,
+    "iiko_external_menu_id"
+  );
   if (hasExternalMenuIdPatch) {
     const previousExternalMenuId = String(previousSettings?.iiko_external_menu_id || "").trim();
     const nextExternalMenuId = String(nextPatch?.iiko_external_menu_id || "").trim();
     const externalMenuChanged = previousExternalMenuId !== nextExternalMenuId;
-    const hasCategoryIdsPatch = Object.prototype.hasOwnProperty.call(nextPatch, "iiko_sync_category_ids");
+    const hasCategoryIdsPatch = Object.prototype.hasOwnProperty.call(
+      nextPatch,
+      "iiko_sync_category_ids"
+    );
     // При смене внешнего меню старые ID категорий становятся нерелевантны
     // и могут приводить к частичному sync/дублям. Сбрасываем фильтр.
     if (externalMenuChanged && !hasCategoryIdsPatch) {
@@ -363,7 +404,9 @@ export async function updateAdminIntegrationSettings(patch) {
   const normalizedIikoEnabled =
     nextPatch.iiko_enabled === true ||
     nextPatch.iiko_enabled === 1 ||
-    String(nextPatch.iiko_enabled || "").trim().toLowerCase() === "true";
+    String(nextPatch.iiko_enabled || "")
+      .trim()
+      .toLowerCase() === "true";
 
   if (hasIikoEnabledPatch && normalizedIikoEnabled) {
     const previousIntegrationMode =
@@ -383,11 +426,16 @@ export async function updateAdminIntegrationSettings(patch) {
     };
   }
 
-  const hasPremiumBonusEnabledPatch = Object.prototype.hasOwnProperty.call(nextPatch, "premiumbonus_enabled");
+  const hasPremiumBonusEnabledPatch = Object.prototype.hasOwnProperty.call(
+    nextPatch,
+    "premiumbonus_enabled"
+  );
   const normalizedPremiumBonusEnabled =
     nextPatch.premiumbonus_enabled === true ||
     nextPatch.premiumbonus_enabled === 1 ||
-    String(nextPatch.premiumbonus_enabled || "").trim().toLowerCase() === "true";
+    String(nextPatch.premiumbonus_enabled || "")
+      .trim()
+      .toLowerCase() === "true";
 
   if (hasPremiumBonusEnabledPatch && normalizedPremiumBonusEnabled) {
     const previousIntegrationMode =
@@ -418,7 +466,10 @@ export async function updateAdminIntegrationSettings(patch) {
 
   let deactivatedCategoriesCount = 0;
   if (Object.prototype.hasOwnProperty.call(updated, "iiko_sync_category_ids")) {
-    const removedCategoryIds = getRemovedCategoryIds(previousSettings.iiko_sync_category_ids, updated.iiko_sync_category_ids);
+    const removedCategoryIds = getRemovedCategoryIds(
+      previousSettings.iiko_sync_category_ids,
+      updated.iiko_sync_category_ids
+    );
     deactivatedCategoriesCount = await deactivateRemovedIikoCategories(removedCategoryIds);
   }
 
@@ -501,10 +552,12 @@ export async function testIikoConnection() {
     const normalizedMessage = String(message).toLowerCase();
 
     if (status === 401) {
-      message = "401 Unauthorized от iiko. Проверьте iiko_api_url (без /api/1), iiko_api_key и доступы ключа.";
+      message =
+        "401 Unauthorized от iiko. Проверьте iiko_api_url (без /api/1), iiko_api_key и доступы ключа.";
     }
     if (normalizedMessage.includes("apilogin has been blocked")) {
-      message = "ApiLogin iiko заблокирован. Разблокируйте или перевыпустите ключ в iiko и сохраните новый токен.";
+      message =
+        "ApiLogin iiko заблокирован. Разблокируйте или перевыпустите ключ в iiko и сохраните новый токен.";
     }
 
     return {
@@ -566,7 +619,7 @@ export async function getIntegrationSyncStatus() {
       SUM(CASE WHEN iiko_sync_status = 'pending' THEN 1 ELSE 0 END) as pending,
       SUM(CASE WHEN iiko_sync_status = 'error' THEN 1 ELSE 0 END) as error,
       SUM(CASE WHEN iiko_sync_status = 'failed' THEN 1 ELSE 0 END) as failed
-     FROM orders`,
+     FROM orders`
   );
 
   const [pbClientRows] = await db.query(
@@ -575,7 +628,7 @@ export async function getIntegrationSyncStatus() {
       SUM(CASE WHEN pb_sync_status = 'pending' THEN 1 ELSE 0 END) as pending,
       SUM(CASE WHEN pb_sync_status = 'error' THEN 1 ELSE 0 END) as error,
       SUM(CASE WHEN pb_sync_status = 'failed' THEN 1 ELSE 0 END) as failed
-     FROM users`,
+     FROM users`
   );
 
   const [pbOrderRows] = await db.query(
@@ -584,7 +637,7 @@ export async function getIntegrationSyncStatus() {
       SUM(CASE WHEN pb_sync_status = 'pending' THEN 1 ELSE 0 END) as pending,
       SUM(CASE WHEN pb_sync_status = 'error' THEN 1 ELSE 0 END) as error,
       SUM(CASE WHEN pb_sync_status = 'failed' THEN 1 ELSE 0 END) as failed
-     FROM orders`,
+     FROM orders`
   );
 
   return {
@@ -625,7 +678,7 @@ export async function getIntegrationQueuesStatus() {
           total: 0,
         },
       };
-    }),
+    })
   );
 
   return {

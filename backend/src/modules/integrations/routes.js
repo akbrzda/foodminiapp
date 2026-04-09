@@ -38,35 +38,45 @@ const hasPermission = (req, permissionCode) => {
   return false;
 };
 
-router.post("/iiko/sync-stoplist", authenticateToken, requirePermission("system.integrations.manage", "menu.stop_list.manage"), async (req, res, next) => {
-  try {
-    const result = await syncIikoStopListNow({ branchId: req.body?.branch_id || null });
-    if (!result.accepted) {
-      return res.status(400).json(result);
+router.post(
+  "/iiko/sync-stoplist",
+  authenticateToken,
+  requirePermission("system.integrations.manage", "menu.stop_list.manage"),
+  async (req, res, next) => {
+    try {
+      const result = await syncIikoStopListNow({ branchId: req.body?.branch_id || null });
+      if (!result.accepted) {
+        return res.status(400).json(result);
+      }
+      return res.json(result);
+    } catch (error) {
+      next(error);
     }
-    return res.json(result);
-  } catch (error) {
-    next(error);
   }
-});
+);
 
-router.get("/sync-logs", authenticateToken, requirePermission("system.integrations.manage", "menu.stop_list.manage"), async (req, res, next) => {
-  try {
-    const canManageIntegrations = hasPermission(req, "system.integrations.manage");
-    const query = { ...(req.query || {}) };
+router.get(
+  "/sync-logs",
+  authenticateToken,
+  requirePermission("system.integrations.manage", "menu.stop_list.manage"),
+  async (req, res, next) => {
+    try {
+      const canManageIntegrations = hasPermission(req, "system.integrations.manage");
+      const query = { ...(req.query || {}) };
 
-    if (!canManageIntegrations) {
-      query.integrationType = "iiko";
-      query.module = "stoplist";
-      query.limit = Number(query.limit) > 0 ? query.limit : 20;
+      if (!canManageIntegrations) {
+        query.integrationType = "iiko";
+        query.module = "stoplist";
+        query.limit = Number(query.limit) > 0 ? query.limit : 20;
+      }
+
+      const result = await listIntegrationSyncLogs(query);
+      return res.json(result);
+    } catch (error) {
+      next(error);
     }
-
-    const result = await listIntegrationSyncLogs(query);
-    return res.json(result);
-  } catch (error) {
-    next(error);
   }
-});
+);
 
 router.use(authenticateToken, requirePermission("system.integrations.manage"));
 
@@ -108,7 +118,14 @@ router.put("/settings", async (req, res, next) => {
       return res.status(400).json({ errors: result.errors });
     }
 
-    await logger.admin.action(req.user?.id, "update_integrations_settings", "settings", null, JSON.stringify(result.updated), req);
+    await logger.admin.action(
+      req.user?.id,
+      "update_integrations_settings",
+      "settings",
+      null,
+      JSON.stringify(result.updated),
+      req
+    );
     return res.json(result);
   } catch (error) {
     next(error);
