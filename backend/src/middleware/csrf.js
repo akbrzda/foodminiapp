@@ -53,9 +53,6 @@ export const createCsrfProtection = ({ isOriginAllowed }) => {
     if (isSafeMethod) {
       return next();
     }
-
-    // CSRF релевантен только для cookie-based сессий.
-    // Не блокируем machine-to-machine и webhook запросы без auth cookie.
     if (!hasAuthCookies) {
       return next();
     }
