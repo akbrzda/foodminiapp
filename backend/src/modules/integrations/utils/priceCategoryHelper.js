@@ -39,6 +39,7 @@ export async function getCategoriesToSync(iikoClient, mapping) {
     }
 
     const priceCategories = await iikoClient.getAvailablePriceCategories();
+    console.log('Available price categories from iiko:', priceCategories);
     if (!Array.isArray(priceCategories) || priceCategories.length === 0) {
       console.warn("Не получены категории цен от iiko");
       return null;
@@ -63,7 +64,9 @@ export async function getCategoriesToSync(iikoClient, mapping) {
       categoryMap.get(categoryId).fulfillmentTypes.push(fulfillmentType);
     }
 
-    return Array.from(categoryMap.values());
+    const result = Array.from(categoryMap.values());
+    console.log('Categories to sync:', result);
+    return result;
   } catch (error) {
     console.error("Ошибка получения категорий цен для синхронизации:", error);
     return null;

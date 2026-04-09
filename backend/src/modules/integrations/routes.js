@@ -18,6 +18,7 @@ import {
   runIikoOnboarding,
   syncIikoMenuNow,
   syncIikoStopListNow,
+  syncIikoPriceCategoriesNow,
   testIikoConnection,
   testPremiumBonusConnection,
   updateAdminIntegrationSettings,
@@ -150,6 +151,17 @@ router.post("/iiko/sync-menu", async (req, res, next) => {
   }
 });
 
+router.post("/iiko/sync-price-categories", async (req, res, next) => {
+  try {
+    const result = await syncIikoPriceCategoriesNow();
+    if (!result.accepted) {
+      return res.status(400).json(result);
+    }
+    return res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
 
 router.get("/iiko/sync-status", async (req, res, next) => {
   try {

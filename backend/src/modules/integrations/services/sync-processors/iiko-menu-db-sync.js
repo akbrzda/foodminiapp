@@ -32,6 +32,10 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
   const client = await getIikoClientOrNull();
   if (!client) throw new Error("Клиент iiko недоступен");
   const integrationSettings = await getIntegrationSettings();
+
+  // Синхронизировать доступные категории цен из iiko
+  await iikoPriceCategoriesService.fetchAvailablePriceCategories(client);
+
   const selectedCategoryIds = new Set(
     (integrationSettings.iikoSyncCategoryIds || []).map((id) => String(id).trim()).filter(Boolean)
   );

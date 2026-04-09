@@ -3,6 +3,7 @@ import { getSettingsList, getSystemSettings, updateSystemSettings } from "../../
 import { getIikoClientOrNull, getIntegrationSettings, getPremiumBonusClientOrNull } from "./integrationConfigService.js";
 import { getSyncLogs } from "../repositories/syncLogRepository.js";
 import menuAdapter from "../adapters/menuAdapter.js";
+import iikoPriceCategoriesService from "./iikoPriceCategoriesService.js";
 import { retryFailedSyncs } from "./syncProcessors.js";
 import {
   ensureIikoReadinessSeed,
@@ -540,6 +541,20 @@ export async function syncIikoMenuNow({ cityId = null } = {}) {
 
 export async function syncIikoStopListNow({ branchId = null } = {}) {
   return menuAdapter.triggerStopListSync({ reason: "manual", branchId });
+}
+
+export async function syncIikoPriceCategoriesNow() {
+  const client = await getIikoClientOrNull();
+  if (!client) {
+    return { accepted: false, reason: "Клиент iiko недоступен" };
+  }
+
+  try {
+    const categories = await iikoPriceCategoriesService.fetchAvailablePriceCategories(client);
+    return { accepted: true, categoriesCount: categories.length };
+  } catch (error) {
+    return { accepted: false, reason: error.message };
+  }
 }
 
 export async function getIntegrationSyncStatus() {

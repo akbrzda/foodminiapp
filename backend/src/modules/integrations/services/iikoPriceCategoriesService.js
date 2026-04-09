@@ -1,4 +1,4 @@
-import db from "../../../../config/database.js";
+import db from "../../../../src/config/database.js";
 
 /**
  * Сервис для управления категориями цен из iiko CloudAPI

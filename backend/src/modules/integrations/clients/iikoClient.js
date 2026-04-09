@@ -587,21 +587,39 @@ export function createIikoClient({ apiUrl, apiLogin, apiKey, organizationId }) {
     async getAvailablePriceCategories(payload = {}) {
       try {
         const { data } = await requestWithRetry(
-          () => withAuthorizedRequest((client) => client.post("/api/2/menu")),
+          () => withAuthorizedRequest((client) => client.get("/api/1/price_categories")),
           { retries: 2, baseDelayMs: 1200 }
         );
 
-        if (!Array.isArray(data?.priceCategories)) {
+        if (!Array.isArray(data)) {
           return [];
         }
 
-        return data.priceCategories.map((category) => ({
-          id: category?.id || category?.priceId || "",
+        return data.map((category) => ({
+          id: category?.id || category?.externalId || "",
           name: category?.name || "",
           active: category?.isActive !== false,
         }));
       } catch (error) {
-        throw normalizeIntegrationError(error, "Ошибка получения категорий цен iiko");
+        // Fallback to old method if new endpoint fails
+        try {
+          const { data } = await requestWithRetry(
+            () => withAuthorizedRequest((client) => client.post("/api/2/menu")),
+            { retries: 2, baseDelayMs: 1200 }
+          );
+
+          if (!Array.isArray(data?.priceCategories)) {
+            return [];
+          }
+
+          return data.priceCategories.map((category) => ({
+            id: category?.id || category?.priceId || "",
+            name: category?.name || "",
+            active: category?.isActive !== false,
+          }));
+        } catch (fallbackError) {
+          throw normalizeIntegrationError(error, "Ошибка получения категорий цен iiko");
+        }
       }
     },
 

@@ -78,7 +78,8 @@ const mapLevels = (rows) => {
   return levels;
 };
 
-const getSortedLevels = (levelsMap) => Object.values(levelsMap).sort((a, b) => a.threshold - b.threshold);
+const getSortedLevels = (levelsMap) =>
+  Object.values(levelsMap).sort((a, b) => a.threshold - b.threshold);
 
 const getCurrentLevel = (totalSpent, sortedLevels) => {
   let current = sortedLevels[0] || null;
@@ -170,14 +171,22 @@ export async function getTotalSpentForPeriod(userId, periodDays, connection = nu
   return getTotalSpentForPeriodRepo(userId, periodDays, { connection });
 }
 
-export function getRedeemPercentForLevel(levelId = 1, levels = DEFAULT_LOYALTY_LEVELS, fallback = 0.25) {
+export function getRedeemPercentForLevel(
+  levelId = 1,
+  levels = DEFAULT_LOYALTY_LEVELS,
+  fallback = 0.25
+) {
   const level = levels[levelId];
   const value = level?.maxSpendPercent;
   if (!Number.isFinite(value)) return fallback;
   return value;
 }
 
-export function calculateEarnedBonuses(baseAmount, loyaltyLevel = 1, levels = DEFAULT_LOYALTY_LEVELS) {
+export function calculateEarnedBonuses(
+  baseAmount,
+  loyaltyLevel = 1,
+  levels = DEFAULT_LOYALTY_LEVELS
+) {
   const level = levels[loyaltyLevel] || levels[1];
   return Math.floor(baseAmount * level.earnRate);
 }
@@ -186,7 +195,13 @@ export function calculateMaxUsableBonuses(orderSubtotal, maxUsePercent = 0.25) {
   return Math.floor(orderSubtotal * maxUsePercent);
 }
 
-export async function validateBonusUsage(userId, bonusToUse, orderSubtotal, maxUsePercent = 0.25, connection = null) {
+export async function validateBonusUsage(
+  userId,
+  bonusToUse,
+  orderSubtotal,
+  maxUsePercent = 0.25,
+  connection = null
+) {
   if (!bonusToUse || bonusToUse <= 0) {
     return { valid: true, amount: 0 };
   }
@@ -324,8 +339,17 @@ export async function getAdminUserLoyalty(userId) {
   };
 }
 
-export async function applyManualBonusAdjustment({ userId, delta, description, connection = null, adminId = null }) {
-  const snapshot = await getUserLoyaltySnapshot(userId, { connection, forUpdate: Boolean(connection) });
+export async function applyManualBonusAdjustment({
+  userId,
+  delta,
+  description,
+  connection = null,
+  adminId = null,
+}) {
+  const snapshot = await getUserLoyaltySnapshot(userId, {
+    connection,
+    forUpdate: Boolean(connection),
+  });
   if (!snapshot) {
     throw new Error("User not found");
   }
@@ -351,7 +375,7 @@ export async function applyManualBonusAdjustment({ userId, delta, description, c
       description: description || "Ручная корректировка",
       admin_id: adminId,
     },
-    { connection },
+    { connection }
   );
   await logLoyaltyEvent(
     {
@@ -361,7 +385,7 @@ export async function applyManualBonusAdjustment({ userId, delta, description, c
       newValue: String(newBalance),
       metadata: { amount: toInt(delta), transaction_id: txId },
     },
-    { connection },
+    { connection }
   );
   await invalidateBonusCache(userId);
   return { balance: newBalance, transaction_id: txId };
@@ -369,7 +393,11 @@ export async function applyManualBonusAdjustment({ userId, delta, description, c
 
 async function consumeEarnAmounts(userId, amount, connection = null) {
   if (amount <= 0) return [];
-  const earns = await getEarnTransactions(userId, { onlyActive: true, connection, forUpdate: Boolean(connection) });
+  const earns = await getEarnTransactions(userId, {
+    onlyActive: true,
+    connection,
+    forUpdate: Boolean(connection),
+  });
   let remaining = amount;
   const allocations = [];
   for (const earn of earns) {
@@ -392,7 +420,7 @@ async function consumeEarnAmounts(userId, amount, connection = null) {
         status: "completed",
         description: "Техническая синхронизация бонусного пула",
       },
-      { connection },
+      { connection }
     );
     await updateTransactionRemaining(syncTxId, 0, { connection });
     allocations.push({ earnId: syncTxId, amount: remaining });
@@ -403,7 +431,11 @@ async function consumeEarnAmounts(userId, amount, connection = null) {
 
 async function restoreEarnAmounts(userId, amount, connection = null) {
   if (amount <= 0) return;
-  const earns = await getEarnTransactions(userId, { onlyActive: false, connection, forUpdate: Boolean(connection) });
+  const earns = await getEarnTransactions(userId, {
+    onlyActive: false,
+    connection,
+    forUpdate: Boolean(connection),
+  });
   let remaining = amount;
   for (const earn of earns) {
     if (remaining <= 0) break;
@@ -424,7 +456,7 @@ async function restoreEarnAmounts(userId, amount, connection = null) {
         status: "completed",
         description: "Восстановление бонусов",
       },
-      { connection },
+      { connection }
     );
   }
 }
@@ -444,21 +476,35 @@ export async function reconcileOrphanOrderBonuses(userId, externalConnection = n
       return null;
     }
 
-    const transactions = await getOrphanOrderLoyaltyTransactions(userId, { connection, forUpdate: true });
+    const transactions = await getOrphanOrderLoyaltyTransactions(userId, {
+      connection,
+      forUpdate: true,
+    });
     if (!transactions.length) {
       if (ownConnection) await connection.commit();
       return null;
     }
 
-    const spentAmount = transactions.filter((tx) => tx.type === "spend").reduce((sum, tx) => sum + (parseFloat(tx.amount) || 0), 0);
-    const earnedAmount = transactions.filter((tx) => tx.type === "earn").reduce((sum, tx) => sum + (parseFloat(tx.amount) || 0), 0);
+    const spentAmount = transactions
+      .filter((tx) => tx.type === "spend")
+      .reduce((sum, tx) => sum + (parseFloat(tx.amount) || 0), 0);
+    const earnedAmount = transactions
+      .filter((tx) => tx.type === "earn")
+      .reduce((sum, tx) => sum + (parseFloat(tx.amount) || 0), 0);
 
     for (const tx of transactions) {
       if (tx.type === "spend" && tx.related_transaction_id) {
-        const related = await getTransactionById(tx.related_transaction_id, { connection, forUpdate: true });
+        const related = await getTransactionById(tx.related_transaction_id, {
+          connection,
+          forUpdate: true,
+        });
         if (related) {
           const currentRemaining = parseFloat(related.remaining_amount) || 0;
-          await updateTransactionRemaining(related.id, currentRemaining + (parseFloat(tx.amount) || 0), { connection });
+          await updateTransactionRemaining(
+            related.id,
+            currentRemaining + (parseFloat(tx.amount) || 0),
+            { connection }
+          );
         }
       }
 
@@ -505,7 +551,9 @@ export async function checkLevelUp(userId, levels = null, connection = null) {
   const snapshot = await getUserLoyaltySnapshot(userId, { connection });
   if (!snapshot) return null;
   const currentLevelId = snapshot.current_loyalty_level_id || 1;
-  const totalSpent = await getTotalSpentForPeriodRepo(userId, LOYALTY_LEVEL_PERIOD_DAYS, { connection });
+  const totalSpent = await getTotalSpentForPeriodRepo(userId, LOYALTY_LEVEL_PERIOD_DAYS, {
+    connection,
+  });
   const sortedLevels = Object.values(activeLevels).sort((a, b) => b.threshold - a.threshold);
   let newLevelId = sortedLevels.length ? sortedLevels[sortedLevels.length - 1].id : 1;
   for (const level of sortedLevels) {
@@ -525,7 +573,7 @@ export async function checkLevelUp(userId, levels = null, connection = null) {
         reason: "threshold_reached",
         thresholdSum: totalSpent,
       },
-      { connection },
+      { connection }
     );
     await logLoyaltyEvent(
       {
@@ -535,7 +583,7 @@ export async function checkLevelUp(userId, levels = null, connection = null) {
         newValue: String(newLevelId),
         metadata: { total_spent: totalSpent },
       },
-      { connection },
+      { connection }
     );
     await notifyWsLevelUp(userId, newLevelId, activeLevels[newLevelId]?.name);
     return {
@@ -555,7 +603,10 @@ export async function spendBonuses(order, connection = null) {
   if (existingTotal > 0) {
     return { amount: Number(existingTotal) };
   }
-  const snapshot = await getUserLoyaltySnapshot(order.user_id, { connection, forUpdate: Boolean(connection) });
+  const snapshot = await getUserLoyaltySnapshot(order.user_id, {
+    connection,
+    forUpdate: Boolean(connection),
+  });
   if (!snapshot) {
     throw new Error("User not found");
   }
@@ -578,7 +629,7 @@ export async function spendBonuses(order, connection = null) {
         related_transaction_id: allocation.earnId,
         description: "Списание бонусов",
       },
-      { connection },
+      { connection }
     );
     transactionIds.push(txId);
   }
@@ -598,7 +649,9 @@ export async function earnBonuses(order, connection = null, levels = DEFAULT_LOY
   }
 
   if (lockedOrder.bonus_earn_locked) {
-    logInfo(`Начисление за заказ ${order.id} уже заблокировано, пропуск дублирования`, { orderId: order.id });
+    logInfo(`Начисление за заказ ${order.id} уже заблокировано, пропуск дублирования`, {
+      orderId: order.id,
+    });
     return null;
   }
 
@@ -608,7 +661,10 @@ export async function earnBonuses(order, connection = null, levels = DEFAULT_LOY
     return null;
   }
 
-  const snapshot = await getUserLoyaltySnapshot(order.user_id, { connection, forUpdate: Boolean(connection) });
+  const snapshot = await getUserLoyaltySnapshot(order.user_id, {
+    connection,
+    forUpdate: Boolean(connection),
+  });
   if (!snapshot) {
     throw new Error("Пользователь не найден");
   }
@@ -639,7 +695,7 @@ export async function earnBonuses(order, connection = null, levels = DEFAULT_LOY
       expires_at: expiresAt,
       status: "completed",
     },
-    { connection },
+    { connection }
   );
 
   const levelUp = await checkLevelUp(order.user_id, levels, connection);
@@ -654,7 +710,7 @@ export async function earnBonuses(order, connection = null, levels = DEFAULT_LOY
       newValue: String(newBalance),
       metadata: { amount: toInt(amount), base_amount: baseAmount, level_id: loyaltyLevelId },
     },
-    { connection },
+    { connection }
   );
 
   await notifyWsBonusUpdate(order.user_id, newBalance, {
@@ -672,11 +728,18 @@ export async function earnBonuses(order, connection = null, levels = DEFAULT_LOY
   };
 }
 
-export async function removeEarnedBonuses(order, connection = null, levels = DEFAULT_LOYALTY_LEVELS) {
+export async function removeEarnedBonuses(
+  order,
+  connection = null,
+  levels = DEFAULT_LOYALTY_LEVELS
+) {
   const earnTx = await getLoyaltyTransaction(order.id, "earn", { connection });
   if (!earnTx) return null;
 
-  const snapshot = await getUserLoyaltySnapshot(order.user_id, { connection, forUpdate: Boolean(connection) });
+  const snapshot = await getUserLoyaltySnapshot(order.user_id, {
+    connection,
+    forUpdate: Boolean(connection),
+  });
   if (!snapshot) {
     throw new Error("Пользователь не найден");
   }
@@ -696,7 +759,7 @@ export async function removeEarnedBonuses(order, connection = null, levels = DEF
       description: "Отмена начисления при смене статуса",
       related_transaction_id: earnTx.id,
     },
-    { connection },
+    { connection }
   );
 
   if (newBalance < 0) {
@@ -709,7 +772,7 @@ export async function removeEarnedBonuses(order, connection = null, levels = DEF
         newValue: String(newBalance),
         metadata: { earned: earnedAmount },
       },
-      { connection },
+      { connection }
     );
   }
 
@@ -724,7 +787,7 @@ export async function removeEarnedBonuses(order, connection = null, levels = DEF
       newValue: String(newBalance),
       metadata: { adjustment_id: adjustmentId, amount: toInt(earnedAmount) },
     },
-    { connection },
+    { connection }
   );
 
   await invalidateBonusCache(order.user_id);
@@ -743,7 +806,10 @@ export async function redeliveryEarnBonuses(order, connection = null) {
   const savedAmount = parseFloat(lockedOrder.bonus_earn_amount);
   if (savedAmount <= 0) return null;
 
-  const snapshot = await getUserLoyaltySnapshot(order.user_id, { connection, forUpdate: Boolean(connection) });
+  const snapshot = await getUserLoyaltySnapshot(order.user_id, {
+    connection,
+    forUpdate: Boolean(connection),
+  });
   if (!snapshot) {
     throw new Error("Пользователь не найден");
   }
@@ -766,7 +832,7 @@ export async function redeliveryEarnBonuses(order, connection = null) {
       status: "completed",
       description: "Повторное начисление при повторной доставке",
     },
-    { connection },
+    { connection }
   );
 
   await logLoyaltyEvent(
@@ -778,7 +844,7 @@ export async function redeliveryEarnBonuses(order, connection = null) {
       newValue: String(newBalance),
       metadata: { amount: toInt(savedAmount), transaction_id: txId },
     },
-    { connection },
+    { connection }
   );
 
   await invalidateBonusCache(order.user_id);
@@ -795,8 +861,15 @@ export async function redeliveryEarnBonuses(order, connection = null) {
   };
 }
 
-export async function cancelOrderBonuses(order, connection = null, levels = DEFAULT_LOYALTY_LEVELS) {
-  const snapshot = await getUserLoyaltySnapshot(order.user_id, { connection, forUpdate: Boolean(connection) });
+export async function cancelOrderBonuses(
+  order,
+  connection = null,
+  levels = DEFAULT_LOYALTY_LEVELS
+) {
+  const snapshot = await getUserLoyaltySnapshot(order.user_id, {
+    connection,
+    forUpdate: Boolean(connection),
+  });
   if (!snapshot) {
     throw new Error("User not found");
   }
@@ -809,10 +882,17 @@ export async function cancelOrderBonuses(order, connection = null, levels = DEFA
   if (spentAmount.length > 0) {
     for (const tx of spentAmount) {
       if (tx.related_transaction_id) {
-        const related = await getTransactionById(tx.related_transaction_id, { connection, forUpdate: true });
+        const related = await getTransactionById(tx.related_transaction_id, {
+          connection,
+          forUpdate: true,
+        });
         if (related) {
           const currentRemaining = parseFloat(related.remaining_amount) || 0;
-          await updateTransactionRemaining(related.id, currentRemaining + (parseFloat(tx.amount) || 0), { connection });
+          await updateTransactionRemaining(
+            related.id,
+            currentRemaining + (parseFloat(tx.amount) || 0),
+            { connection }
+          );
         }
       }
       await updateTransactionStatus(tx.id, "cancelled", { connection });
@@ -841,7 +921,7 @@ export async function cancelOrderBonuses(order, connection = null, levels = DEFA
         newValue: String(newBalance),
         metadata: { spent: spentTotal, earned: earnedTotal },
       },
-      { connection },
+      { connection }
     );
   }
 
@@ -860,7 +940,10 @@ export async function grantRegistrationBonus(userId, connection = null) {
   if (!user || !String(user.phone || "").trim()) {
     return null;
   }
-  const snapshot = await getUserLoyaltySnapshot(userId, { connection, forUpdate: Boolean(connection) });
+  const snapshot = await getUserLoyaltySnapshot(userId, {
+    connection,
+    forUpdate: Boolean(connection),
+  });
   if (!snapshot) {
     throw new Error("User not found");
   }
@@ -881,7 +964,7 @@ export async function grantRegistrationBonus(userId, connection = null) {
       reason: "registration",
       thresholdSum: 0,
     },
-    { connection },
+    { connection }
   );
   const txId = await insertLoyaltyTransaction(
     {
@@ -893,7 +976,7 @@ export async function grantRegistrationBonus(userId, connection = null) {
       status: "completed",
       description: "Бонус за регистрацию",
     },
-    { connection },
+    { connection }
   );
   await logLoyaltyEvent(
     {
@@ -903,7 +986,7 @@ export async function grantRegistrationBonus(userId, connection = null) {
       newValue: String(newBalance),
       metadata: { amount, transaction_id: txId },
     },
-    { connection },
+    { connection }
   );
   await invalidateBonusCache(userId);
   return { id: txId, amount, balance_after: newBalance };
@@ -915,9 +998,16 @@ export async function expireBonusesForUser(userId, connection) {
     return { expiredTotal: 0, balance: null };
   }
 
-  const earns = await getEarnTransactions(userId, { onlyActive: false, connection, forUpdate: true });
+  const earns = await getEarnTransactions(userId, {
+    onlyActive: false,
+    connection,
+    forUpdate: true,
+  });
   const expiredEarns = earns.filter(
-    (earn) => earn.expires_at && new Date(earn.expires_at) <= new Date() && (parseFloat(earn.remaining_amount) || 0) > 0,
+    (earn) =>
+      earn.expires_at &&
+      new Date(earn.expires_at) <= new Date() &&
+      (parseFloat(earn.remaining_amount) || 0) > 0
   );
 
   let expiredTotal = 0;
@@ -926,12 +1016,17 @@ export async function expireBonusesForUser(userId, connection) {
     if (amount <= 0) continue;
     expiredTotal += amount;
     await updateTransactionRemaining(earn.id, 0, { connection });
-    await insertExpireTransaction({ userId, amount, relatedId: earn.id, expiresAt: earn.expires_at }, { connection });
+    await insertExpireTransaction(
+      { userId, amount, relatedId: earn.id, expiresAt: earn.expires_at },
+      { connection }
+    );
   }
 
-  if (expiredTotal > 0) {
-    const currentBalance = parseFloat(snapshot.loyalty_balance) || 0;
-    const newBalance = currentBalance - expiredTotal;
+  const currentBalance = parseFloat(snapshot.loyalty_balance) || 0;
+  const actualExpired = Math.min(expiredTotal, currentBalance);
+
+  if (actualExpired > 0) {
+    const newBalance = currentBalance - actualExpired;
     await updateUserBalance(userId, newBalance, { connection });
     await invalidateBonusCache(userId);
     await logLoyaltyEvent(
@@ -940,11 +1035,11 @@ export async function expireBonusesForUser(userId, connection) {
         userId,
         oldValue: String(currentBalance),
         newValue: String(newBalance),
-        metadata: { amount: expiredTotal },
+        metadata: { amount: actualExpired },
       },
-      { connection },
+      { connection }
     );
-    return { expiredTotal, balance: newBalance };
+    return { expiredTotal: actualExpired, balance: newBalance };
   }
 
   return { expiredTotal: 0, balance: parseFloat(snapshot.loyalty_balance) || 0 };
@@ -986,7 +1081,11 @@ export async function issueBirthdayBonuses() {
       userId: user.id,
       oldValue: String(currentBalance),
       newValue: String(newBalance),
-      metadata: { amount: Math.floor(amount), transaction_id: txId, target_date: targetDate.toISOString().slice(0, 10) },
+      metadata: {
+        amount: Math.floor(amount),
+        transaction_id: txId,
+        target_date: targetDate.toISOString().slice(0, 10),
+      },
     });
   }
 }
