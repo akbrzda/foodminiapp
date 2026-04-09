@@ -3,6 +3,11 @@ import redis from "../../../config/redis.js";
 import logger from "../../../utils/logger.js";
 import { getIntegrationSettings } from "../../integrations/services/integrationConfigService.js";
 import { getDynamicUpsell } from "../services/upsellService.js";
+import {
+  getItemPriceByFulfillmentType,
+  getVariantPriceByFulfillmentType,
+  getPriceCategoryMappingForContext,
+} from "../services/priceService.js";
 
 const MENU_CACHE_TTL = 300;
 const MENU_CACHE_VERSION = "v2";
@@ -19,7 +24,9 @@ const buildSourceScope = (integrationSettings) => {
   // после синка iiko локальные позиции сохраняют внешние идентификаторы и
   // должны оставаться видимыми при отключенной интеграции.
   const categoryFilter = "";
-  const itemFilter = useIikoSource ? "AND (COALESCE(NULLIF(TRIM(mi.iiko_item_id), ''), NULL) IS NOT NULL OR mi.item_type = 'combo')" : "";
+  const itemFilter = useIikoSource
+    ? "AND (COALESCE(NULLIF(TRIM(mi.iiko_item_id), ''), NULL) IS NOT NULL OR mi.item_type = 'combo')"
+    : "";
 
   return {
     source: useIikoSource ? "iiko" : "local",
@@ -35,7 +42,9 @@ function buildItemBadges(item, soldCount = 0) {
   const createdAt = item?.created_at ? new Date(item.created_at) : null;
   const now = new Date();
   const isNewAuto =
-    createdAt instanceof Date && !Number.isNaN(createdAt.getTime()) && now.getTime() - createdAt.getTime() <= NEW_BADGE_DAYS * 24 * 60 * 60 * 1000;
+    createdAt instanceof Date &&
+    !Number.isNaN(createdAt.getTime()) &&
+    now.getTime() - createdAt.getTime() <= NEW_BADGE_DAYS * 24 * 60 * 60 * 1000;
   const isHitAuto = Number(soldCount) >= HIT_BADGE_SALES_THRESHOLD;
   const hasManualNew = item?.is_new !== null && item?.is_new !== undefined;
   const hasManualHit = item?.is_hit !== null && item?.is_hit !== undefined;
@@ -98,7 +107,7 @@ async function getCompletedSalesByItemIds(itemIds = []) {
      WHERE oi.item_id IN (${normalizedIds.map(() => "?").join(",")})
        AND o.status = 'completed'
      GROUP BY oi.item_id`,
-    normalizedIds,
+    normalizedIds
   );
 
   return new Map(rows.map((row) => [Number(row.item_id), Number(row.sold_count) || 0]));
@@ -127,8 +136,12 @@ async function attachVariantPricesToModifiers(modifierGroups = [], variants = []
   const allModifiers = modifierGroups.flatMap((group) => group.modifiers || []);
   if (allModifiers.length === 0) return;
 
-  const modifierIds = [...new Set(allModifiers.map((modifier) => Number(modifier.id)).filter(Number.isFinite))];
-  const variantIds = [...new Set((variants || []).map((variant) => Number(variant.id)).filter(Number.isFinite))];
+  const modifierIds = [
+    ...new Set(allModifiers.map((modifier) => Number(modifier.id)).filter(Number.isFinite)),
+  ];
+  const variantIds = [
+    ...new Set((variants || []).map((variant) => Number(variant.id)).filter(Number.isFinite)),
+  ];
 
   for (const modifier of allModifiers) {
     modifier.variant_prices = [];
@@ -140,7 +153,7 @@ async function attachVariantPricesToModifiers(modifierGroups = [], variants = []
      FROM menu_modifier_variant_prices
      WHERE modifier_id IN (${modifierIds.map(() => "?").join(",")})
        AND variant_id IN (${variantIds.map(() => "?").join(",")})`,
-    [...modifierIds, ...variantIds],
+    [...modifierIds, ...variantIds]
   );
 
   const pricesMap = new Map();
@@ -161,7 +174,10 @@ async function attachVariantPricesToModifiers(modifierGroups = [], variants = []
   }
 }
 
-async function resolveComboComponentsWithAvailability(itemId, { cityId = null, branchId = null, fulfillmentType = "delivery" } = {}) {
+async function resolveComboComponentsWithAvailability(
+  itemId,
+  { cityId = null, branchId = null, fulfillmentType = "delivery" } = {}
+) {
   const [components] = await db.query(
     `SELECT mcc.id,
             mcc.combo_item_id,
@@ -180,7 +196,7 @@ async function resolveComboComponentsWithAvailability(itemId, { cityId = null, b
      JOIN item_variants iv ON iv.id = mcc.component_variant_id
      WHERE mcc.combo_item_id = ?
      ORDER BY mcc.sort_order, mcc.id`,
-    [itemId],
+    [itemId]
   );
 
   if (!Array.isArray(components) || components.length === 0) {
@@ -203,9 +219,10 @@ async function resolveComboComponentsWithAvailability(itemId, { cityId = null, b
          FROM menu_item_cities
          WHERE item_id = ? AND city_id = ?
          LIMIT 1`,
-        [componentItemId, cityId],
+        [componentItemId, cityId]
       );
-      componentCityAvailable = cityAvailabilityRows.length > 0 && Boolean(cityAvailabilityRows[0].is_active);
+      componentCityAvailable =
+        cityAvailabilityRows.length > 0 && Boolean(cityAvailabilityRows[0].is_active);
 
       const [variantPriceRows] = await db.query(
         `SELECT price
@@ -214,7 +231,7 @@ async function resolveComboComponentsWithAvailability(itemId, { cityId = null, b
            AND city_id = ?
            AND fulfillment_type = ?
          LIMIT 1`,
-        [componentVariantId, cityId, fulfillmentType],
+        [componentVariantId, cityId, fulfillmentType]
       );
       if (variantPriceRows.length > 0) {
         componentPrice = Number(variantPriceRows[0].price) || 0;
@@ -231,7 +248,7 @@ async function resolveComboComponentsWithAvailability(itemId, { cityId = null, b
            AND (remove_at IS NULL OR remove_at > NOW())
            AND (fulfillment_types IS NULL OR JSON_CONTAINS(fulfillment_types, JSON_QUOTE(?)))
          LIMIT 1`,
-        [branchId, componentItemId, fulfillmentType],
+        [branchId, componentItemId, fulfillmentType]
       );
       const [variantStopRows] = await db.query(
         `SELECT id
@@ -242,14 +259,16 @@ async function resolveComboComponentsWithAvailability(itemId, { cityId = null, b
            AND (remove_at IS NULL OR remove_at > NOW())
            AND (fulfillment_types IS NULL OR JSON_CONTAINS(fulfillment_types, JSON_QUOTE(?)))
          LIMIT 1`,
-        [branchId, componentVariantId, fulfillmentType],
+        [branchId, componentVariantId, fulfillmentType]
       );
       componentInStopList = itemStopRows.length > 0 || variantStopRows.length > 0;
     }
 
-    const componentIsActive = Boolean(component.component_item_is_active) && Boolean(component.component_variant_is_active);
+    const componentIsActive =
+      Boolean(component.component_item_is_active) && Boolean(component.component_variant_is_active);
     const componentHasPrice = Number.isFinite(componentPrice) && componentPrice > 0;
-    const componentIsAvailable = componentIsActive && componentCityAvailable && componentHasPrice && !componentInStopList;
+    const componentIsAvailable =
+      componentIsActive && componentCityAvailable && componentHasPrice && !componentInStopList;
     if (!componentIsAvailable) {
       isAvailable = false;
     }
@@ -285,7 +304,10 @@ export const getMenu = async (req, res, next) => {
     const cityId = Number(city_id);
     const integration = await getIntegrationSettings();
     const sourceScope = buildSourceScope(integration);
-    const cacheKeyParts = [`menu:${MENU_CACHE_VERSION}:city:${city_id}`, `mode:${sourceScope.source}`];
+    const cacheKeyParts = [
+      `menu:${MENU_CACHE_VERSION}:city:${city_id}`,
+      `mode:${sourceScope.source}`,
+    ];
     if (branch_id) cacheKeyParts.push(`branch:${branch_id}`);
     if (fulfillment_type) cacheKeyParts.push(`fulfillment:${fulfillment_type}`);
     const cacheKey = cacheKeyParts.join(":");
@@ -307,7 +329,7 @@ export const getMenu = async (req, res, next) => {
          AND mcc.is_active = TRUE
          ${sourceScope.categoryFilter}
        ORDER BY mc.sort_order, mc.name`,
-      [city_id],
+      [city_id]
     );
 
     const filteredCategories = [];
@@ -333,7 +355,7 @@ export const getMenu = async (req, res, next) => {
            AND micities.is_active = TRUE
            ${sourceScope.itemFilter}
          ORDER BY mic.sort_order, mi.sort_order, mi.name`,
-        [category.id, city_id],
+        [category.id, city_id]
       );
 
       const salesByItemId = await getCompletedSalesByItemIds(items.map((item) => item.id));
@@ -347,33 +369,31 @@ export const getMenu = async (req, res, next) => {
            JOIN menu_item_tags mit ON mit.tag_id = t.id
            WHERE mit.item_id = ?
            ORDER BY t.name`,
-          [item.id],
+          [item.id]
         );
         item.tags = tags;
         item.badges = buildItemBadges(item, salesByItemId.get(Number(item.id)) || 0);
 
-        // Получение цены товара
+        // Получение цены товара с учетом категории цены
         const fallbackLegacyPrice = hasPositivePrice(item.legacy_price) ? item.legacy_price : null;
+        const priceCategoryMapping = await getPriceCategoryMappingForContext();
+
         if (fulfillment_type) {
-          const [prices] = await db.query(
-            `SELECT price FROM menu_item_prices
-             WHERE item_id = ?
-               AND city_id = ?
-               AND fulfillment_type = ?
-             LIMIT 1`,
-            [item.id, city_id, fulfillment_type],
-          );
-          item.price = prices.length > 0 ? prices[0].price : fallbackLegacyPrice;
+          item.price =
+            (await getItemPriceByFulfillmentType(
+              item.id,
+              city_id,
+              fulfillment_type,
+              priceCategoryMapping
+            )) || fallbackLegacyPrice;
         } else {
-          const [prices] = await db.query(
-            `SELECT price FROM menu_item_prices
-             WHERE item_id = ?
-               AND city_id = ?
-               AND fulfillment_type = 'delivery'
-             LIMIT 1`,
-            [item.id, city_id],
-          );
-          item.price = prices.length > 0 ? prices[0].price : fallbackLegacyPrice;
+          item.price =
+            (await getItemPriceByFulfillmentType(
+              item.id,
+              city_id,
+              "delivery",
+              priceCategoryMapping
+            )) || fallbackLegacyPrice;
         }
 
         // Проверка стоп-листа для товара
@@ -390,7 +410,9 @@ export const getMenu = async (req, res, next) => {
                  AND entity_type = 'item'
                  AND entity_id = ?
                  AND (remove_at IS NULL OR remove_at > NOW())`;
-          const params = fulfillment_type ? [branch_id, item.id, fulfillment_type] : [branch_id, item.id];
+          const params = fulfillment_type
+            ? [branch_id, item.id, fulfillment_type]
+            : [branch_id, item.id];
           const [stopList] = await db.query(stopListQuery, params);
           item.in_stop_list = stopList.length > 0;
         } else {
@@ -406,7 +428,7 @@ export const getMenu = async (req, res, next) => {
            FROM item_variants iv
            WHERE iv.item_id = ? AND iv.is_active = TRUE
            ORDER BY iv.sort_order, iv.name`,
-          [item.id],
+          [item.id]
         );
 
         for (const variant of variants) {
@@ -418,7 +440,7 @@ export const getMenu = async (req, res, next) => {
                  AND city_id = ?
                  AND fulfillment_type = ?
                LIMIT 1`,
-              [variant.id, city_id, fulfillment_type],
+              [variant.id, city_id, fulfillment_type]
             );
             variant.price = variantPrices.length > 0 ? variantPrices[0].price : null;
           } else {
@@ -428,7 +450,7 @@ export const getMenu = async (req, res, next) => {
                  AND city_id = ?
                  AND fulfillment_type = 'delivery'
                LIMIT 1`,
-              [variant.id, city_id],
+              [variant.id, city_id]
             );
             variant.price = variantPrices.length > 0 ? variantPrices[0].price : null;
           }
@@ -447,7 +469,9 @@ export const getMenu = async (req, res, next) => {
                    AND entity_type = 'variant'
                    AND entity_id = ?
                    AND (remove_at IS NULL OR remove_at > NOW())`;
-            const params = fulfillment_type ? [branch_id, variant.id, fulfillment_type] : [branch_id, variant.id];
+            const params = fulfillment_type
+              ? [branch_id, variant.id, fulfillment_type]
+              : [branch_id, variant.id];
             const [stopList] = await db.query(stopListQuery, params);
             variant.in_stop_list = stopList.length > 0;
           } else {
@@ -464,11 +488,14 @@ export const getMenu = async (req, res, next) => {
            JOIN item_modifier_groups img ON mg.id = img.modifier_group_id
            WHERE img.item_id = ? AND mg.is_active = TRUE
            ORDER BY mg.sort_order, mg.is_required DESC, mg.name`,
-          [item.id],
+          [item.id]
         );
 
         // Получение отключенных модификаторов для товара
-        const [disabledModifiers] = await db.query(`SELECT modifier_id FROM menu_item_disabled_modifiers WHERE item_id = ?`, [item.id]);
+        const [disabledModifiers] = await db.query(
+          `SELECT modifier_id FROM menu_item_disabled_modifiers WHERE item_id = ?`,
+          [item.id]
+        );
         const disabledIds = disabledModifiers.map((dm) => dm.modifier_id);
 
         for (const group of modifierGroups) {
@@ -478,7 +505,7 @@ export const getMenu = async (req, res, next) => {
              FROM modifiers m
              WHERE m.group_id = ? AND m.is_active = TRUE
              ORDER BY m.sort_order, m.name`,
-            [group.id],
+            [group.id]
           );
 
           const activeModifiers = modifiers.filter((mod) => !disabledIds.includes(mod.id));
@@ -492,7 +519,7 @@ export const getMenu = async (req, res, next) => {
                FROM menu_modifier_prices
                WHERE city_id = ?
                  AND modifier_id IN (${modifierIds.map(() => "?").join(",")})`,
-              [cityId, ...modifierIds],
+              [cityId, ...modifierIds]
             );
 
             const pricesByModifier = new Map(cityPrices.map((row) => [row.modifier_id, row]));
@@ -524,7 +551,9 @@ export const getMenu = async (req, res, next) => {
                      AND entity_type = 'modifier'
                      AND entity_id = ?
                      AND (remove_at IS NULL OR remove_at > NOW())`;
-              const params = fulfillment_type ? [branch_id, modifier.id, fulfillment_type] : [branch_id, modifier.id];
+              const params = fulfillment_type
+                ? [branch_id, modifier.id, fulfillment_type]
+                : [branch_id, modifier.id];
               const [stopList] = await db.query(stopListQuery, params);
               modifier.in_stop_list = stopList.length > 0;
             } else {
@@ -605,7 +634,7 @@ export const getCategories = async (req, res, next) => {
          AND mcc.is_active = TRUE
          ${sourceScope.categoryFilter}
        ORDER BY mc.sort_order, mc.name`,
-      [city_id],
+      [city_id]
     );
 
     res.json({ categories });
@@ -627,7 +656,7 @@ export const getCategoryById = async (req, res, next) => {
        FROM menu_categories mc
        WHERE mc.id = ? AND mc.is_active = TRUE
          ${sourceScope.categoryFilter}`,
-      [categoryId],
+      [categoryId]
     );
 
     if (categories.length === 0) {
@@ -655,7 +684,7 @@ export const getCategoryItems = async (req, res, next) => {
        WHERE mic.category_id = ? AND mi.is_active = TRUE
          ${sourceScope.itemFilter}
        ORDER BY mic.sort_order, mi.sort_order, mi.name`,
-      [categoryId],
+      [categoryId]
     );
 
     for (const item of items) {
@@ -665,7 +694,7 @@ export const getCategoryItems = async (req, res, next) => {
          FROM item_variants
          WHERE item_id = ? AND is_active = TRUE
          ORDER BY sort_order, name`,
-        [item.id],
+        [item.id]
       );
       item.variants = variants;
 
@@ -676,7 +705,7 @@ export const getCategoryItems = async (req, res, next) => {
          JOIN item_modifier_groups img ON mg.id = img.modifier_group_id
          WHERE img.item_id = ? AND mg.is_active = TRUE
          ORDER BY mg.sort_order, mg.name`,
-        [item.id],
+        [item.id]
       );
 
       for (const group of modifierGroups) {
@@ -685,7 +714,7 @@ export const getCategoryItems = async (req, res, next) => {
            FROM modifiers
            WHERE group_id = ? AND is_active = TRUE
            ORDER BY sort_order, name`,
-          [group.id],
+          [group.id]
         );
         group.modifiers = modifiers;
       }
@@ -731,7 +760,7 @@ export const getItemById = async (req, res, next) => {
        FROM menu_items mi
        WHERE mi.id = ? AND mi.is_active = TRUE
          ${sourceScope.itemFilter}`,
-      [itemId],
+      [itemId]
     );
 
     if (items.length === 0) {
@@ -764,7 +793,7 @@ export const getItemById = async (req, res, next) => {
            AND city_id = ?
            AND fulfillment_type = ?
          LIMIT 1`,
-        [itemId, city_id, fulfillmentType],
+        [itemId, city_id, fulfillmentType]
       );
       const fallbackLegacyPrice = hasPositivePrice(item.price) ? item.price : null;
       item.price = prices.length > 0 ? prices[0].price : fallbackLegacyPrice;
@@ -780,7 +809,7 @@ export const getItemById = async (req, res, next) => {
            AND (remove_at IS NULL OR remove_at > NOW())
            AND (fulfillment_types IS NULL OR JSON_CONTAINS(fulfillment_types, JSON_QUOTE(?)))
          LIMIT 1`,
-        [branch_id, itemId, fulfillmentType],
+        [branch_id, itemId, fulfillmentType]
       );
       item.in_stop_list = stopList.length > 0;
     } else {
@@ -793,7 +822,7 @@ export const getItemById = async (req, res, next) => {
        FROM item_variants
        WHERE item_id = ? AND is_active = TRUE
        ORDER BY sort_order, name`,
-      [itemId],
+      [itemId]
     );
 
     if (city_id) {
@@ -804,7 +833,7 @@ export const getItemById = async (req, res, next) => {
              AND city_id = ?
              AND fulfillment_type = ?
            LIMIT 1`,
-          [variant.id, city_id, fulfillmentType],
+          [variant.id, city_id, fulfillmentType]
         );
         variant.price = variantPrices.length > 0 ? variantPrices[0].price : null;
       }
@@ -821,7 +850,7 @@ export const getItemById = async (req, res, next) => {
              AND (remove_at IS NULL OR remove_at > NOW())
              AND (fulfillment_types IS NULL OR JSON_CONTAINS(fulfillment_types, JSON_QUOTE(?)))
            LIMIT 1`,
-          [branch_id, variant.id, fulfillmentType],
+          [branch_id, variant.id, fulfillmentType]
         );
         variant.in_stop_list = stopList.length > 0;
       } else {
@@ -847,7 +876,7 @@ export const getItemById = async (req, res, next) => {
        JOIN item_modifier_groups img ON mg.id = img.modifier_group_id
        WHERE img.item_id = ? AND mg.is_active = TRUE
        ORDER BY mg.sort_order, mg.name`,
-      [itemId],
+      [itemId]
     );
 
     for (const group of modifierGroups) {
@@ -856,7 +885,7 @@ export const getItemById = async (req, res, next) => {
          FROM modifiers
          WHERE group_id = ? AND is_active = TRUE
          ORDER BY sort_order, name`,
-        [group.id],
+        [group.id]
       );
 
       if (city_id && modifiers.length > 0) {
@@ -866,7 +895,7 @@ export const getItemById = async (req, res, next) => {
            FROM menu_modifier_prices
            WHERE city_id = ?
              AND modifier_id IN (${modifierIds.map(() => "?").join(",")})`,
-          [city_id, ...modifierIds],
+          [city_id, ...modifierIds]
         );
 
         const pricesByModifier = new Map(cityPrices.map((row) => [row.modifier_id, row]));
@@ -930,7 +959,7 @@ export const getItemModifiers = async (req, res, next) => {
          AND m.is_active = TRUE
          AND midm.id IS NULL
        ORDER BY m.sort_order, m.name`,
-      [itemId, itemId],
+      [itemId, itemId]
     );
 
     res.json({ modifiers });
@@ -949,7 +978,7 @@ export const getItemVariants = async (req, res, next) => {
        FROM item_variants
        WHERE item_id = ? AND is_active = TRUE
        ORDER BY sort_order, name`,
-      [itemId],
+      [itemId]
     );
 
     res.json({ variants });
@@ -967,7 +996,7 @@ export const getModifierGroups = async (req, res, next) => {
        FROM modifier_groups
        WHERE is_active = TRUE
        ORDER BY sort_order, name`,
-      [],
+      []
     );
 
     for (const group of groups) {
@@ -976,7 +1005,7 @@ export const getModifierGroups = async (req, res, next) => {
          FROM modifiers
          WHERE group_id = ? AND is_active = TRUE
          ORDER BY sort_order, name`,
-        [group.id],
+        [group.id]
       );
       group.modifiers = modifiers;
     }
@@ -997,7 +1026,7 @@ export const getModifierGroupById = async (req, res, next) => {
               is_active, created_at, updated_at
        FROM modifier_groups
        WHERE id = ? AND is_active = TRUE`,
-      [groupId],
+      [groupId]
     );
 
     if (groups.length === 0) {
@@ -1011,7 +1040,7 @@ export const getModifierGroupById = async (req, res, next) => {
        FROM modifiers
        WHERE group_id = ? AND is_active = TRUE
        ORDER BY sort_order, name`,
-      [groupId],
+      [groupId]
     );
     group.modifiers = modifiers;
 
@@ -1031,7 +1060,7 @@ export const getGroupModifiers = async (req, res, next) => {
        FROM modifiers
        WHERE group_id = ? AND is_active = TRUE
        ORDER BY sort_order, name`,
-      [groupId],
+      [groupId]
     );
 
     res.json({ modifiers });

@@ -1,11 +1,14 @@
 import db from "../../../../config/database.js";
 import { getIikoClientOrNull, getIntegrationSettings } from "../integrationConfigService.js";
 import { INTEGRATION_MODULE, INTEGRATION_TYPE } from "../../constants.js";
-import {
-  finishIntegrationEvent,
-  startIntegrationEvent,
-} from "../integrationLoggerService.js";
+import { finishIntegrationEvent, startIntegrationEvent } from "../integrationLoggerService.js";
 import { notifyMenuUpdated } from "../../../../websocket/runtime.js";
+import iikoPriceCategoriesService from "../iikoPriceCategoriesService.js";
+import {
+  getPriceCategoryMapping,
+  getCategoriesToSync,
+  mergeMenuPayloadsByCategories,
+} from "../../utils/priceCategoryHelper.js";
 import {
   calcServingNutrition,
   extractIikoItemCategoryIds,
@@ -55,17 +58,80 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
   });
 
   try {
+    // Получаем маппинг категорий цен
+    const priceCategoryMapping = getPriceCategoryMapping(integrationSettings);
+    const hasMultiplePriceCategories = Object.keys(priceCategoryMapping).length > 0;
+
     let externalMenuPayload = null;
     let externalMenuItemIds = new Set();
     const externalMenuCategoryIdsByItemId = new Map();
     let externalCategoriesRaw = [];
     let externalItemsRaw = [];
+    const itemPriceCategoryMap = new Map(); // itemId -> { categoryId, name, fulfillmentTypes[] }
 
-    externalMenuPayload = await client.getMenuById({
-      externalMenuId,
-      priceCategoryId: priceCategoryId || undefined,
-      useConfiguredOrganization: false,
-    });
+    if (hasMultiplePriceCategories) {
+      // НОВАЯ ЛОГИКА: Получить меню для каждой категории цен
+      const categoriesToSync = await getCategoriesToSync(client, priceCategoryMapping);
+
+      if (categoriesToSync && categoriesToSync.length > 0) {
+        // Получить меню для каждой категории
+        const menuPayloads = [];
+        for (const category of categoriesToSync) {
+          try {
+            const payload = await client.getMenuById({
+              externalMenuId,
+              priceCategoryId: category.id,
+              useConfiguredOrganization: false,
+            });
+            menuPayloads.push({
+              categoryId: category.id,
+              name: category.name,
+              payload,
+              fulfillmentTypes: category.fulfillmentTypes,
+            });
+          } catch (error) {
+            console.warn(`Ошибка получения меню для категории ${category.id}: ${error.message}`);
+          }
+        }
+
+        if (menuPayloads.length === 0) {
+          throw new Error("Не удалось получить меню ни для одной категории цен");
+        }
+
+        // Слить данные из разных категорий
+        const { items: mergedItems } = mergeMenuPayloadsByCategories(menuPayloads);
+
+        // Использовать первый payload для категорий блюд (они одинаковые для всех категорий цен)
+        externalMenuPayload = menuPayloads[0].payload;
+
+        // Заполнить маппинг категорий цен для каждого блюда
+        for (const [itemId, itemData] of mergedItems) {
+          if (itemData.categories.length > 0) {
+            // Берем первую категорию (обычно есть только одна, но может быть несколько)
+            const cat = itemData.categories[0];
+            itemPriceCategoryMap.set(itemId, {
+              categoryId: cat.id,
+              categoryName: cat.name,
+              fulfillmentTypes: cat.fulfillmentTypes,
+            });
+          }
+        }
+      } else {
+        // Fallback на старую логику если категории не получены
+        externalMenuPayload = await client.getMenuById({
+          externalMenuId,
+          priceCategoryId: priceCategoryId || undefined,
+          useConfiguredOrganization: false,
+        });
+      }
+    } else {
+      // СТАРАЯ ЛОГИКА: Получить меню с одной категорией цен
+      externalMenuPayload = await client.getMenuById({
+        externalMenuId,
+        priceCategoryId: priceCategoryId || undefined,
+        useConfiguredOrganization: false,
+      });
+    }
 
     const menuCategories = Array.isArray(externalMenuPayload?.itemCategories)
       ? externalMenuPayload.itemCategories
@@ -527,12 +593,30 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
             );
             continue;
           }
+
+          // Получаем информацию о категории цены для этого блюда
+          const priceCategoryInfo = itemPriceCategoryMap.get(iikoItemId);
+          const priceCategoryId = priceCategoryInfo?.categoryId || null;
+          const priceCategoryName = priceCategoryInfo?.categoryName || null;
+
           for (const fulfillmentType of ["delivery", "pickup"]) {
             await connection.query(
-              `INSERT INTO menu_item_prices (item_id, city_id, fulfillment_type, price)
-             VALUES (?, ?, ?, ?)
-             ON DUPLICATE KEY UPDATE price = VALUES(price)`,
-              [localItemId, targetCityId, fulfillmentType, cityItemPrice]
+              `INSERT INTO menu_item_prices 
+               (item_id, city_id, fulfillment_type, price, price_category_id, price_category_name, iiko_synced_at)
+             VALUES (?, ?, ?, ?, ?, ?, NOW())
+             ON DUPLICATE KEY UPDATE 
+               price = VALUES(price), 
+               price_category_id = VALUES(price_category_id), 
+               price_category_name = VALUES(price_category_name),
+               iiko_synced_at = NOW()`,
+              [
+                localItemId,
+                targetCityId,
+                fulfillmentType,
+                cityItemPrice,
+                priceCategoryId,
+                priceCategoryName,
+              ]
             );
           }
         }
@@ -780,12 +864,30 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
               );
               continue;
             }
+
+            // Получаем информацию о категории цены для этого блюда
+            const priceCategoryInfo = itemPriceCategoryMap.get(iikoItemId);
+            const priceCategoryId = priceCategoryInfo?.categoryId || null;
+            const priceCategoryName = priceCategoryInfo?.categoryName || null;
+
             for (const fulfillmentType of ["delivery", "pickup"]) {
               await connection.query(
-                `INSERT INTO menu_variant_prices (variant_id, city_id, fulfillment_type, price)
-               VALUES (?, ?, ?, ?)
-               ON DUPLICATE KEY UPDATE price = VALUES(price)`,
-                [variantRow.id, targetCityId, fulfillmentType, cityVariantPrice]
+                `INSERT INTO menu_variant_prices 
+                 (variant_id, city_id, fulfillment_type, price, price_category_id, price_category_name, iiko_synced_at)
+               VALUES (?, ?, ?, ?, ?, ?, NOW())
+               ON DUPLICATE KEY UPDATE 
+                 price = VALUES(price), 
+                 price_category_id = VALUES(price_category_id), 
+                 price_category_name = VALUES(price_category_name),
+                 iiko_synced_at = NOW()`,
+                [
+                  variantRow.id,
+                  targetCityId,
+                  fulfillmentType,
+                  cityVariantPrice,
+                  priceCategoryId,
+                  priceCategoryName,
+                ]
               );
             }
           }

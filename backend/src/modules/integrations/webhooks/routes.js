@@ -1,7 +1,12 @@
 import express from "express";
 import crypto from "crypto";
 import db from "../../../config/database.js";
-import { IIKO_STATUS_MAP_TO_LOCAL, INTEGRATION_MODULE, INTEGRATION_TYPE, SYNC_STATUS } from "../constants.js";
+import {
+  IIKO_STATUS_MAP_TO_LOCAL,
+  INTEGRATION_MODULE,
+  INTEGRATION_TYPE,
+  SYNC_STATUS,
+} from "../constants.js";
 import { getIntegrationSettings } from "../services/integrationConfigService.js";
 import { logIntegrationEvent } from "../services/integrationLoggerService.js";
 import ordersAdapter from "../adapters/ordersAdapter.js";
@@ -30,7 +35,10 @@ function stripSignaturePrefixes(value) {
   const raw = String(value || "").trim();
   if (!raw) return "";
   const withoutBearer = raw.toLowerCase().startsWith("bearer ") ? raw.slice(7).trim() : raw;
-  const normalized = withoutBearer.replace(/^hmac-sha256=/i, "").replace(/^sha256=/i, "").trim();
+  const normalized = withoutBearer
+    .replace(/^hmac-sha256=/i, "")
+    .replace(/^sha256=/i, "")
+    .trim();
   return normalized;
 }
 
@@ -77,7 +85,10 @@ function isValidWebhookSignature(req, secret) {
 
   const rawBody = getWebhookRawBody(req);
   const expectedHex = crypto.createHmac("sha256", normalizedSecret).update(rawBody).digest("hex");
-  const expectedBase64 = crypto.createHmac("sha256", normalizedSecret).update(rawBody).digest("base64");
+  const expectedBase64 = crypto
+    .createHmac("sha256", normalizedSecret)
+    .update(rawBody)
+    .digest("base64");
   const expectedCandidates = [expectedHex, expectedBase64];
 
   const candidates = [
@@ -89,7 +100,9 @@ function isValidWebhookSignature(req, secret) {
     .map(stripSignaturePrefixes)
     .filter(Boolean);
 
-  return candidates.some((candidate) => expectedCandidates.some((expected) => timingSafeEqualString(candidate, expected)));
+  return candidates.some((candidate) =>
+    expectedCandidates.some((expected) => timingSafeEqualString(candidate, expected))
+  );
 }
 
 async function rejectInvalidSignature({ req, module, path }) {
@@ -142,7 +155,10 @@ async function processLocalBonusStatusChange(order, oldStatus, newStatus) {
   }
 
   if (newStatus === "completed" && oldStatus !== "completed" && orderData.total > 0) {
-    await db.query("UPDATE loyalty_transactions SET status = 'completed' WHERE order_id = ? AND type = 'spend' AND status = 'pending'", [order.id]);
+    await db.query(
+      "UPDATE loyalty_transactions SET status = 'completed' WHERE order_id = ? AND type = 'spend' AND status = 'pending'",
+      [order.id]
+    );
     if (orderData.bonus_earn_amount > 0) {
       await redeliveryEarnBonuses(orderData, null, loyaltyLevels);
     } else {
@@ -164,18 +180,31 @@ function detectWebhookPayloadKind(payload = {}) {
     .trim()
     .toLowerCase();
   if (eventType === "stoplistupdate") return "stoplist";
-  if (eventType === "deliveryorderupdate" || eventType === "deliveryordererror") return "order-status";
+  if (eventType === "deliveryorderupdate" || eventType === "deliveryordererror")
+    return "order-status";
 
   const eventInfoPayload = extractEventInfoPayload(payload);
   const hasStopListUpdates =
-    Array.isArray(payload?.terminalGroupsStopListsUpdates) || Array.isArray(eventInfoPayload?.terminalGroupsStopListsUpdates);
+    Array.isArray(payload?.terminalGroupsStopListsUpdates) ||
+    Array.isArray(payload?.terminal_groups_stop_lists_updates) ||
+    Array.isArray(payload?.terminalGroupStopLists) ||
+    Array.isArray(payload?.terminal_group_stop_lists) ||
+    Array.isArray(eventInfoPayload?.terminalGroupsStopListsUpdates) ||
+    Array.isArray(eventInfoPayload?.terminal_groups_stop_lists_updates);
   if (hasStopListUpdates) return "stoplist";
 
-  const orderInfoPayload = payload?.orderInfo && typeof payload.orderInfo === "object" ? payload.orderInfo : eventInfoPayload;
-  const orderPayload = orderInfoPayload?.order && typeof orderInfoPayload.order === "object" ? orderInfoPayload.order : {};
+  const orderInfoPayload =
+    payload?.orderInfo && typeof payload.orderInfo === "object"
+      ? payload.orderInfo
+      : eventInfoPayload;
+  const orderPayload =
+    orderInfoPayload?.order && typeof orderInfoPayload.order === "object"
+      ? orderInfoPayload.order
+      : {};
   const hasOrderHints =
-    Boolean(payload?.status || payload?.order_status || orderInfoPayload?.status || orderPayload?.status) ||
-    Boolean(payload?.order_id || payload?.id || orderInfoPayload?.id || orderPayload?.id);
+    Boolean(
+      payload?.status || payload?.order_status || orderInfoPayload?.status || orderPayload?.status
+    ) || Boolean(payload?.order_id || payload?.id || orderInfoPayload?.id || orderPayload?.id);
   if (hasOrderHints) return "order-status";
 
   return "unknown";
@@ -183,19 +212,39 @@ function detectWebhookPayloadKind(payload = {}) {
 
 async function processOrderStatusWebhookPayload(payload = {}, options = {}) {
   const eventInfoPayload = extractEventInfoPayload(payload);
-  const orderInfoPayload = payload?.orderInfo && typeof payload.orderInfo === "object" ? payload.orderInfo : eventInfoPayload;
-  const orderPayload = orderInfoPayload?.order && typeof orderInfoPayload.order === "object" ? orderInfoPayload.order : {};
-  const iikoOrderId = payload.order_id || payload.id || orderInfoPayload.id || orderPayload.id || null;
+  const orderInfoPayload =
+    payload?.orderInfo && typeof payload.orderInfo === "object"
+      ? payload.orderInfo
+      : eventInfoPayload;
+  const orderPayload =
+    orderInfoPayload?.order && typeof orderInfoPayload.order === "object"
+      ? orderInfoPayload.order
+      : {};
+  const iikoOrderId =
+    payload.order_id || payload.id || orderInfoPayload.id || orderPayload.id || null;
   const externalNumber =
-    payload.external_number || payload.externalNumber || orderInfoPayload.externalNumber || orderPayload.externalNumber || orderPayload.number || null;
-  const iikoStatus = payload.status || payload.order_status || orderInfoPayload.status || orderPayload.status || null;
+    payload.external_number ||
+    payload.externalNumber ||
+    orderInfoPayload.externalNumber ||
+    orderPayload.externalNumber ||
+    orderPayload.number ||
+    null;
+  const iikoStatus =
+    payload.status ||
+    payload.order_status ||
+    orderInfoPayload.status ||
+    orderPayload.status ||
+    null;
   const allowOrderNumberFallback = options.allowOrderNumberFallback === true;
 
   if (!iikoOrderId || !iikoStatus) {
     return { ok: false, statusCode: 400, error: "order_id и status обязательны" };
   }
 
-  const mappedStatus = IIKO_STATUS_MAP_TO_LOCAL[iikoStatus] || IIKO_STATUS_MAP_TO_LOCAL[String(iikoStatus).toLowerCase()] || null;
+  const mappedStatus =
+    IIKO_STATUS_MAP_TO_LOCAL[iikoStatus] ||
+    IIKO_STATUS_MAP_TO_LOCAL[String(iikoStatus).toLowerCase()] ||
+    null;
   let orders = [];
   if (iikoOrderId) {
     const [rows] = await db.query(
@@ -203,7 +252,7 @@ async function processOrderStatusWebhookPayload(payload = {}, options = {}) {
        FROM orders
        WHERE iiko_order_id = ?
        LIMIT 1`,
-      [String(iikoOrderId)],
+      [String(iikoOrderId)]
     );
     orders = rows;
   }
@@ -215,7 +264,7 @@ async function processOrderStatusWebhookPayload(payload = {}, options = {}) {
        WHERE order_number = ?
        ORDER BY created_at DESC
        LIMIT 1`,
-      [String(externalNumber)],
+      [String(externalNumber)]
     );
     orders = rows;
   }
@@ -244,15 +293,13 @@ async function processOrderStatusWebhookPayload(payload = {}, options = {}) {
         : oldStatus === "completed" && mappedStatus !== "completed"
           ? null
           : order.completed_at || null;
-    await db.query("UPDATE orders SET status = ?, completed_at = ?, iiko_sync_status = ?, updated_at = NOW() WHERE id = ?", [
-      mappedStatus,
-      nextCompletedAt,
-      SYNC_STATUS.SYNCED,
-      order.id,
-    ]);
+    await db.query(
+      "UPDATE orders SET status = ?, completed_at = ?, iiko_sync_status = ?, updated_at = NOW() WHERE id = ?",
+      [mappedStatus, nextCompletedAt, SYNC_STATUS.SYNCED, order.id]
+    );
     await db.query(
       "UPDATE orders SET pb_sync_status = 'pending', pb_sync_error = NULL, pb_sync_attempts = 0, pb_last_sync_at = NOW() WHERE id = ?",
-      [order.id],
+      [order.id]
     );
     try {
       await processLocalBonusStatusChange(order, oldStatus, mappedStatus);
@@ -270,9 +317,18 @@ async function processOrderStatusWebhookPayload(payload = {}, options = {}) {
       });
     }
 
-    const [freshRows] = await db.query("SELECT pb_purchase_id FROM orders WHERE id = ? LIMIT 1", [order.id]);
+    const [freshRows] = await db.query("SELECT pb_purchase_id FROM orders WHERE id = ? LIMIT 1", [
+      order.id,
+    ]);
     const hasPbPurchaseId = String(freshRows[0]?.pb_purchase_id || "").trim().length > 0;
-    const pbAction = mappedStatus === "cancelled" ? (hasPbPurchaseId ? "cancel" : "create") : hasPbPurchaseId ? "status" : "create";
+    const pbAction =
+      mappedStatus === "cancelled"
+        ? hasPbPurchaseId
+          ? "cancel"
+          : "create"
+        : hasPbPurchaseId
+          ? "status"
+          : "create";
     try {
       await ordersAdapter.enqueuePurchaseSync(order.id, pbAction, { source: "iiko-webhook" });
     } catch (pbSyncError) {
@@ -317,11 +373,21 @@ async function processStopListWebhookPayload(payload = {}) {
   const eventInfoPayload = extractEventInfoPayload(payload);
   const updates = Array.isArray(payload?.terminalGroupsStopListsUpdates)
     ? payload.terminalGroupsStopListsUpdates
-    : Array.isArray(eventInfoPayload?.terminalGroupsStopListsUpdates)
-      ? eventInfoPayload.terminalGroupsStopListsUpdates
-      : [];
+    : Array.isArray(payload?.terminal_groups_stop_lists_updates)
+      ? payload.terminal_groups_stop_lists_updates
+      : Array.isArray(payload?.terminalGroupStopLists)
+        ? payload.terminalGroupStopLists
+        : Array.isArray(payload?.terminal_group_stop_lists)
+          ? payload.terminal_group_stop_lists
+          : Array.isArray(eventInfoPayload?.terminalGroupsStopListsUpdates)
+            ? eventInfoPayload.terminalGroupsStopListsUpdates
+            : Array.isArray(eventInfoPayload?.terminal_groups_stop_lists_updates)
+              ? eventInfoPayload.terminal_groups_stop_lists_updates
+              : [];
   const terminalGroupIds = updates
-    .map((update) => String(update?.id || update?.terminalGroupId || update?.terminal_group_id || "").trim())
+    .map((update) =>
+      String(update?.id || update?.terminalGroupId || update?.terminal_group_id || "").trim()
+    )
     .filter(Boolean);
 
   const targetBranchIds = [];
@@ -331,7 +397,7 @@ async function processStopListWebhookPayload(payload = {}) {
       `SELECT id
        FROM branches
        WHERE iiko_terminal_group_id IN (${placeholders})`,
-      terminalGroupIds,
+      terminalGroupIds
     );
     for (const row of branchRows) {
       const branchId = Number(row.id);
@@ -379,11 +445,20 @@ async function processStopListWebhookPayload(payload = {}) {
       sync_results: syncResults,
     },
     errorMessage:
-      failedResults.length === 0 ? null : failedResults.map((result) => result.error || "Не удалось применить webhook стоп-листа").join("; "),
+      failedResults.length === 0
+        ? null
+        : failedResults
+            .map((result) => result.error || "Не удалось применить webhook стоп-листа")
+            .join("; "),
   });
 
   if (successResults.length === 0) {
-    return { ok: false, statusCode: 400, error: "Не удалось применить webhook стоп-листа", results: syncResults };
+    return {
+      ok: false,
+      statusCode: 400,
+      error: "Не удалось применить webhook стоп-листа",
+      results: syncResults,
+    };
   }
 
   return {
@@ -430,7 +505,13 @@ router.post("/event", async (req, res, next) => {
         continue;
       }
 
-      results.push({ index, kind: "unknown", ok: false, statusCode: 202, error: "Неподдерживаемый тип события webhook" });
+      results.push({
+        index,
+        kind: "unknown",
+        ok: false,
+        statusCode: 202,
+        error: "Неподдерживаемый тип события webhook",
+      });
     }
 
     const processed = results.filter((row) => row.kind !== "unknown").length;
@@ -464,16 +545,28 @@ router.post("/order-status", async (req, res, next) => {
     }
 
     if (!isValidWebhookSignature(req, settings.iikoWebhookSecret)) {
-      await rejectInvalidSignature({ req, module: INTEGRATION_MODULE.ORDERS, path: "/order-status" });
+      await rejectInvalidSignature({
+        req,
+        module: INTEGRATION_MODULE.ORDERS,
+        path: "/order-status",
+      });
       return res.status(401).json({ error: "Неверная подпись webhook" });
     }
     const result = await processOrderStatusWebhookPayload(req.body || {}, {
       allowOrderNumberFallback: settings.iikoAllowOrderNumberFallback,
     });
     if (!result.ok) {
-      return res.status(result.statusCode || 400).json({ ok: false, error: result.error, jobs: result.jobs || [] });
+      return res
+        .status(result.statusCode || 400)
+        .json({ ok: false, error: result.error, jobs: result.jobs || [] });
     }
-    return res.status(result.statusCode || 200).json({ ok: true, order_id: result.orderId || null, mapped_status: result.mappedStatus || null });
+    return res
+      .status(result.statusCode || 200)
+      .json({
+        ok: true,
+        order_id: result.orderId || null,
+        mapped_status: result.mappedStatus || null,
+      });
   } catch (error) {
     next(error);
   }
@@ -497,7 +590,9 @@ router.post("/stoplist", async (req, res, next) => {
     }
     const result = await processStopListWebhookPayload(req.body || {});
     if (!result.ok) {
-      return res.status(result.statusCode || 400).json({ ok: false, error: result.error, results: result.results || [] });
+      return res
+        .status(result.statusCode || 400)
+        .json({ ok: false, error: result.error, results: result.results || [] });
     }
     return res.status(result.statusCode || 200).json({ ok: true, results: result.results || [] });
   } catch (error) {
