@@ -186,11 +186,11 @@ export function calculateMaxUsableBonuses(orderSubtotal, maxUsePercent = 0.25) {
   return Math.floor(orderSubtotal * maxUsePercent);
 }
 
-export async function validateBonusUsage(userId, bonusToUse, orderSubtotal, maxUsePercent = 0.25) {
+export async function validateBonusUsage(userId, bonusToUse, orderSubtotal, maxUsePercent = 0.25, connection = null) {
   if (!bonusToUse || bonusToUse <= 0) {
     return { valid: true, amount: 0 };
   }
-  const snapshot = await getUserLoyaltySnapshot(userId);
+  const snapshot = await getUserLoyaltySnapshot(userId, { connection });
   if (!snapshot) {
     return { valid: false, error: "User not found" };
   }

@@ -38,6 +38,8 @@ import {
 } from "./modules/integrations/index.js";
 import {
   attachTenantContext,
+  requireActiveTenant,
+  logTenantAccess,
   router as tenancyRoutes,
   tenantDbManager,
   closePlatformCorePool,
@@ -305,11 +307,11 @@ app.use("/api/auth", authRoutes);
 app.use("/api/cities", deliveryRoutes);
 app.use("/api/users", usersRoutes);
 app.use("/api/menu", menuRoutes);
-app.use("/api/orders", ordersRoutes);
+app.use("/api/orders", requireActiveTenant, logTenantAccess("orders"), ordersRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/polygons", polygonsRoutes);
 app.use("/api/client/loyalty", loyaltyClientRoutes);
-app.use("/api/settings", settingsRoutes);
+app.use("/api/settings", requireActiveTenant, logTenantAccess("settings"), settingsRoutes);
 app.use("/api/admin/loyalty", loyaltyAdminRoutes);
 app.use("/api/logs", logsRoutes);
 app.use("/api/analytics", analyticsRoutes);

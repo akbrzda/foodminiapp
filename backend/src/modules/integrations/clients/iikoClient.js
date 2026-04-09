@@ -62,7 +62,8 @@ export function createIikoClient({ apiUrl, apiLogin, apiKey, organizationId }) {
       for (const requestPayload of requestPayloads) {
         try {
           const { data } = await plainClient.post("/api/1/access_token", requestPayload);
-          const token = data?.token || data?.access_token || (typeof data === "string" ? data : null);
+          const token =
+            data?.token || data?.access_token || (typeof data === "string" ? data : null);
           if (!token) {
             throw new Error("iiko не вернул access token");
           }
@@ -126,8 +127,10 @@ export function createIikoClient({ apiUrl, apiLogin, apiKey, organizationId }) {
     };
 
     if (Array.isArray(payload)) return flattenTerminalGroups(payload);
-    if (Array.isArray(payload?.terminalGroups)) return flattenTerminalGroups(payload.terminalGroups);
-    if (Array.isArray(payload?.terminal_groups)) return flattenTerminalGroups(payload.terminal_groups);
+    if (Array.isArray(payload?.terminalGroups))
+      return flattenTerminalGroups(payload.terminalGroups);
+    if (Array.isArray(payload?.terminal_groups))
+      return flattenTerminalGroups(payload.terminal_groups);
     if (Array.isArray(payload?.items)) return flattenTerminalGroups(payload.items);
 
     if (Array.isArray(payload?.organizations)) {
@@ -181,7 +184,8 @@ export function createIikoClient({ apiUrl, apiLogin, apiKey, organizationId }) {
           if (!item || typeof item !== "object") continue;
           result.push({
             ...item,
-            organizationId: item.organizationId || row.organizationId || row.organization_id || null,
+            organizationId:
+              item.organizationId || row.organizationId || row.organization_id || null,
           });
         }
       }
@@ -246,14 +250,17 @@ export function createIikoClient({ apiUrl, apiLogin, apiKey, organizationId }) {
     return [];
   };
 
-  const normalizeOrganizationId = (org) => org?.id || org?.organizationId || org?.organization_id || null;
+  const normalizeOrganizationId = (org) =>
+    org?.id || org?.organizationId || org?.organization_id || null;
 
   const getOrganizations = async ({ forceRefresh = false } = {}) => {
     if (!forceRefresh && Array.isArray(organizationsCache) && organizationsCache.length > 0) {
       return organizationsCache;
     }
 
-    const { data } = await withAuthorizedRequest((client) => client.post("/api/1/organizations", {}));
+    const { data } = await withAuthorizedRequest((client) =>
+      client.post("/api/1/organizations", {})
+    );
     organizationsCache = extractOrganizations(data);
     return organizationsCache;
   };
@@ -299,7 +306,7 @@ export function createIikoClient({ apiUrl, apiLogin, apiKey, organizationId }) {
                 client.post("/api/1/nomenclature", {
                   organizationId: orgId,
                   startRevision,
-                }),
+                })
               );
             } catch (error) {
               const status = error?.response?.status || null;
@@ -310,12 +317,14 @@ export function createIikoClient({ apiUrl, apiLogin, apiKey, organizationId }) {
               throw error;
             }
           },
-          { retries: 3, baseDelayMs: 1500 },
+          { retries: 3, baseDelayMs: 1500 }
         );
         stats.push({
           organizationId: orgId,
           groups: Array.isArray(data?.groups) ? data.groups.length : 0,
-          productCategories: Array.isArray(data?.productCategories) ? data.productCategories.length : 0,
+          productCategories: Array.isArray(data?.productCategories)
+            ? data.productCategories.length
+            : 0,
           products: Array.isArray(data?.products) ? data.products.length : 0,
           revision: data?.revision ?? null,
         });
@@ -324,7 +333,11 @@ export function createIikoClient({ apiUrl, apiLogin, apiKey, organizationId }) {
         errors.push({
           organizationId: orgId,
           status: error?.response?.status || error?.status || null,
-          message: error?.response?.data?.errorDescription || error?.response?.data?.error || error?.message || "Ошибка запроса",
+          message:
+            error?.response?.data?.errorDescription ||
+            error?.response?.data?.error ||
+            error?.message ||
+            "Ошибка запроса",
         });
       }
 
@@ -351,10 +364,12 @@ export function createIikoClient({ apiUrl, apiLogin, apiKey, organizationId }) {
     for (const response of responses) {
       if (Array.isArray(response?.categories)) categories.push(...response.categories);
       if (Array.isArray(response?.items)) items.push(...response.items);
-      if (Array.isArray(response?.modifier_groups)) modifierGroups.push(...response.modifier_groups);
+      if (Array.isArray(response?.modifier_groups))
+        modifierGroups.push(...response.modifier_groups);
       if (Array.isArray(response?.modifiers)) modifiers.push(...response.modifiers);
       if (Array.isArray(response?.groups)) categories.push(...response.groups);
-      if (Array.isArray(response?.productCategories)) categories.push(...response.productCategories);
+      if (Array.isArray(response?.productCategories))
+        categories.push(...response.productCategories);
       if (Array.isArray(response?.products)) items.push(...response.products);
     }
 
@@ -377,7 +392,9 @@ export function createIikoClient({ apiUrl, apiLogin, apiKey, organizationId }) {
   return {
     async ping() {
       try {
-        const { data } = await withAuthorizedRequest((client) => client.post("/api/1/organizations", {}));
+        const { data } = await withAuthorizedRequest((client) =>
+          client.post("/api/1/organizations", {})
+        );
         return data;
       } catch (error) {
         throw normalizeIntegrationError(error, "Ошибка подключения к iiko");
@@ -387,14 +404,17 @@ export function createIikoClient({ apiUrl, apiLogin, apiKey, organizationId }) {
     async getNomenclature(options = {}) {
       try {
         const organizations = await getOrganizations();
-        const allOrganizationIds = organizations.map((org) => normalizeOrganizationId(org)).filter(Boolean);
+        const allOrganizationIds = organizations
+          .map((org) => normalizeOrganizationId(org))
+          .filter(Boolean);
         if (!allOrganizationIds.length) {
           throw new Error("Не найдено доступных организаций iiko");
         }
 
         const useConfiguredOrganization = options?.useConfiguredOrganization !== false;
         const selectedOrganizationIds = await getOrganizationIds({ useConfiguredOrganization });
-        const primaryIds = selectedOrganizationIds.length > 0 ? selectedOrganizationIds : allOrganizationIds;
+        const primaryIds =
+          selectedOrganizationIds.length > 0 ? selectedOrganizationIds : allOrganizationIds;
         const hasExplicitOrganizationSelection =
           String(organizationId || "")
             .split(",")
@@ -402,9 +422,16 @@ export function createIikoClient({ apiUrl, apiLogin, apiKey, organizationId }) {
             .filter(Boolean).length > 0;
 
         const lastRevisions = options?.lastRevisions || {};
-        let { responses, errors, stats } = await fetchNomenclatureForOrganizations(primaryIds, lastRevisions);
+        let { responses, errors, stats } = await fetchNomenclatureForOrganizations(
+          primaryIds,
+          lastRevisions
+        );
         let merged = mergeNomenclatureResponses(responses);
-        let mergedItemsCount = Array.isArray(merged?.items) ? merged.items.length : Array.isArray(merged?.products) ? merged.products.length : 0;
+        let mergedItemsCount = Array.isArray(merged?.items)
+          ? merged.items.length
+          : Array.isArray(merged?.products)
+            ? merged.products.length
+            : 0;
 
         // Если в выбранных организациях нет продуктов, пробуем все доступные.
         if (
@@ -415,19 +442,29 @@ export function createIikoClient({ apiUrl, apiLogin, apiKey, organizationId }) {
         ) {
           const remainingIds = allOrganizationIds.filter((id) => !primaryIds.includes(id));
           if (remainingIds.length > 0) {
-            const fallbackResult = await fetchNomenclatureForOrganizations(remainingIds, lastRevisions);
+            const fallbackResult = await fetchNomenclatureForOrganizations(
+              remainingIds,
+              lastRevisions
+            );
             responses = [...responses, ...fallbackResult.responses];
             errors = [...errors, ...fallbackResult.errors];
             stats = [...stats, ...fallbackResult.stats];
             merged = mergeNomenclatureResponses(responses);
-            mergedItemsCount = Array.isArray(merged?.items) ? merged.items.length : Array.isArray(merged?.products) ? merged.products.length : 0;
+            mergedItemsCount = Array.isArray(merged?.items)
+              ? merged.items.length
+              : Array.isArray(merged?.products)
+                ? merged.products.length
+                : 0;
           }
         }
 
         if (!responses.length) {
           const firstError = errors[0];
           const message =
-            firstError?.message || (firstError?.status ? `iiko вернул ошибку ${firstError.status}` : "Не удалось получить номенклатуру iiko");
+            firstError?.message ||
+            (firstError?.status
+              ? `iiko вернул ошибку ${firstError.status}`
+              : "Не удалось получить номенклатуру iiko");
           throw new Error(message);
         }
 
@@ -457,7 +494,7 @@ export function createIikoClient({ apiUrl, apiLogin, apiKey, organizationId }) {
                 client.post("/api/1/nomenclature", {
                   organizationId: orgId,
                   startRevision,
-                }),
+                })
               );
             } catch (error) {
               if ((error?.response?.status || null) === 429) {
@@ -467,7 +504,7 @@ export function createIikoClient({ apiUrl, apiLogin, apiKey, organizationId }) {
               throw error;
             }
           },
-          { retries: 2, baseDelayMs: 1500 },
+          { retries: 2, baseDelayMs: 1500 }
         );
         return data;
       } catch (error) {
@@ -477,10 +514,13 @@ export function createIikoClient({ apiUrl, apiLogin, apiKey, organizationId }) {
 
     async getExternalMenus(payload = {}) {
       try {
-        const { data } = await requestWithRetry(() => withAuthorizedRequest((client) => client.post("/api/2/menu")), {
-          retries: 2,
-          baseDelayMs: 1200,
-        });
+        const { data } = await requestWithRetry(
+          () => withAuthorizedRequest((client) => client.post("/api/2/menu")),
+          {
+            retries: 2,
+            baseDelayMs: 1200,
+          }
+        );
         return {
           externalMenus: extractExternalMenus(data),
           priceCategories: extractPriceCategories(data),
@@ -492,7 +532,9 @@ export function createIikoClient({ apiUrl, apiLogin, apiKey, organizationId }) {
 
     async getMenuById(payload = {}) {
       try {
-        const externalMenuId = String(payload.externalMenuId || payload.external_menu_id || "").trim();
+        const externalMenuId = String(
+          payload.externalMenuId || payload.external_menu_id || ""
+        ).trim();
         if (!externalMenuId) {
           throw new Error("Не передан externalMenuId");
         }
@@ -513,7 +555,9 @@ export function createIikoClient({ apiUrl, apiLogin, apiKey, organizationId }) {
           language: String(payload?.language || "ru").trim() || "ru",
         };
 
-        const priceCategoryId = String(payload?.priceCategoryId || payload?.price_category_id || "").trim();
+        const priceCategoryId = String(
+          payload?.priceCategoryId || payload?.price_category_id || ""
+        ).trim();
         if (priceCategoryId) {
           requestPayload.priceCategoryId = priceCategoryId;
         }
@@ -521,7 +565,9 @@ export function createIikoClient({ apiUrl, apiLogin, apiKey, organizationId }) {
         const { data } = await requestWithRetry(
           async (attempt) => {
             try {
-              return await withAuthorizedRequest((client) => client.post("/api/2/menu/by_id", requestPayload));
+              return await withAuthorizedRequest((client) =>
+                client.post("/api/2/menu/by_id", requestPayload)
+              );
             } catch (error) {
               if ((error?.response?.status || null) === 429) {
                 const retryDelayMs = Math.min(6000, 1200 * 2 ** attempt);
@@ -530,11 +576,32 @@ export function createIikoClient({ apiUrl, apiLogin, apiKey, organizationId }) {
               throw error;
             }
           },
-          { retries: 2, baseDelayMs: 1200 },
+          { retries: 2, baseDelayMs: 1200 }
         );
         return data;
       } catch (error) {
         throw normalizeIntegrationError(error, "Ошибка получения внешнего меню iiko по ID");
+      }
+    },
+
+    async getAvailablePriceCategories(payload = {}) {
+      try {
+        const { data } = await requestWithRetry(
+          () => withAuthorizedRequest((client) => client.post("/api/2/menu")),
+          { retries: 2, baseDelayMs: 1200 }
+        );
+
+        if (!Array.isArray(data?.priceCategories)) {
+          return [];
+        }
+
+        return data.priceCategories.map((category) => ({
+          id: category?.id || category?.priceId || "",
+          name: category?.name || "",
+          active: category?.isActive !== false,
+        }));
+      } catch (error) {
+        throw normalizeIntegrationError(error, "Ошибка получения категорий цен iiko");
       }
     },
 
@@ -548,9 +615,12 @@ export function createIikoClient({ apiUrl, apiLogin, apiKey, organizationId }) {
           organizationIds,
           ...payload,
         };
-        const { data } = await requestWithRetry(() => withAuthorizedRequest((client) => client.post("/api/1/stop_lists", requestPayload)), {
-          retries: 2,
-        });
+        const { data } = await requestWithRetry(
+          () => withAuthorizedRequest((client) => client.post("/api/1/stop_lists", requestPayload)),
+          {
+            retries: 2,
+          }
+        );
         return data;
       } catch (error) {
         throw normalizeIntegrationError(error, "Ошибка получения стоп-листа iiko");
@@ -564,8 +634,9 @@ export function createIikoClient({ apiUrl, apiLogin, apiKey, organizationId }) {
           requestPayload.organizationId = await getPrimaryOrganizationId();
         }
         const { data } = await requestWithRetry(
-          () => withAuthorizedRequest((client) => client.post("/api/1/stop_lists/add", requestPayload)),
-          { retries: 2 },
+          () =>
+            withAuthorizedRequest((client) => client.post("/api/1/stop_lists/add", requestPayload)),
+          { retries: 2 }
         );
         return data;
       } catch (error) {
@@ -580,8 +651,11 @@ export function createIikoClient({ apiUrl, apiLogin, apiKey, organizationId }) {
           requestPayload.organizationId = await getPrimaryOrganizationId();
         }
         const { data } = await requestWithRetry(
-          () => withAuthorizedRequest((client) => client.post("/api/1/stop_lists/remove", requestPayload)),
-          { retries: 2 },
+          () =>
+            withAuthorizedRequest((client) =>
+              client.post("/api/1/stop_lists/remove", requestPayload)
+            ),
+          { retries: 2 }
         );
         return data;
       } catch (error) {
@@ -600,8 +674,11 @@ export function createIikoClient({ apiUrl, apiLogin, apiKey, organizationId }) {
           ...payload,
         };
         const { data } = await requestWithRetry(
-          () => withAuthorizedRequest((client) => client.post("/api/1/delivery_restrictions", requestPayload)),
-          { retries: 2 },
+          () =>
+            withAuthorizedRequest((client) =>
+              client.post("/api/1/delivery_restrictions", requestPayload)
+            ),
+          { retries: 2 }
         );
         return data;
       } catch (error) {
@@ -615,9 +692,15 @@ export function createIikoClient({ apiUrl, apiLogin, apiKey, organizationId }) {
         if (!requestPayload.organizationId) {
           requestPayload.organizationId = await getPrimaryOrganizationId();
         }
-        const { data } = await requestWithRetry(() => withAuthorizedRequest((client) => client.post("/api/1/deliveries/create", requestPayload)), {
-          retries: 2,
-        });
+        const { data } = await requestWithRetry(
+          () =>
+            withAuthorizedRequest((client) =>
+              client.post("/api/1/deliveries/create", requestPayload)
+            ),
+          {
+            retries: 2,
+          }
+        );
         return data;
       } catch (error) {
         throw normalizeIntegrationError(error, "Ошибка отправки заказа в iiko");
@@ -630,9 +713,15 @@ export function createIikoClient({ apiUrl, apiLogin, apiKey, organizationId }) {
         if (!requestPayload.organizationId) {
           requestPayload.organizationId = await getPrimaryOrganizationId();
         }
-        const { data } = await requestWithRetry(() => withAuthorizedRequest((client) => client.post("/api/1/deliveries/by_id", requestPayload)), {
-          retries: 1,
-        });
+        const { data } = await requestWithRetry(
+          () =>
+            withAuthorizedRequest((client) =>
+              client.post("/api/1/deliveries/by_id", requestPayload)
+            ),
+          {
+            retries: 1,
+          }
+        );
         return data;
       } catch (error) {
         throw normalizeIntegrationError(error, "Ошибка получения статуса заказа iiko");
@@ -646,8 +735,11 @@ export function createIikoClient({ apiUrl, apiLogin, apiKey, organizationId }) {
           requestPayload.organizationId = await getPrimaryOrganizationId();
         }
         const { data } = await requestWithRetry(
-          () => withAuthorizedRequest((client) => client.post("/api/1/commands/status", requestPayload)),
-          { retries: 2, baseDelayMs: 1000 },
+          () =>
+            withAuthorizedRequest((client) =>
+              client.post("/api/1/commands/status", requestPayload)
+            ),
+          { retries: 2, baseDelayMs: 1000 }
         );
         return data;
       } catch (error) {
@@ -678,9 +770,15 @@ export function createIikoClient({ apiUrl, apiLogin, apiKey, organizationId }) {
           ...payload,
         };
 
-        const { data } = await requestWithRetry(() => withAuthorizedRequest((client) => client.post("/api/1/terminal_groups", requestPayload)), {
-          retries: 2,
-        });
+        const { data } = await requestWithRetry(
+          () =>
+            withAuthorizedRequest((client) =>
+              client.post("/api/1/terminal_groups", requestPayload)
+            ),
+          {
+            retries: 2,
+          }
+        );
         return extractTerminalGroups(data);
       } catch (error) {
         throw normalizeIntegrationError(error, "Ошибка получения списка филиалов iiko");
@@ -702,9 +800,9 @@ export function createIikoClient({ apiUrl, apiLogin, apiKey, organizationId }) {
             withAuthorizedRequest((client) =>
               client.post("/api/1/deliveries/order_types", {
                 organizationIds,
-              }),
+              })
             ),
-          { retries: 2, baseDelayMs: 1200 },
+          { retries: 2, baseDelayMs: 1200 }
         );
         return extractOrderTypes(data);
       } catch (error) {
@@ -727,9 +825,9 @@ export function createIikoClient({ apiUrl, apiLogin, apiKey, organizationId }) {
             withAuthorizedRequest((client) =>
               client.post("/api/1/payment_types", {
                 organizationIds,
-              }),
+              })
             ),
-          { retries: 2, baseDelayMs: 1200 },
+          { retries: 2, baseDelayMs: 1200 }
         );
         return extractPaymentTypes(data);
       } catch (error) {
@@ -752,9 +850,9 @@ export function createIikoClient({ apiUrl, apiLogin, apiKey, organizationId }) {
             withAuthorizedRequest((client) =>
               client.post("/api/1/discounts", {
                 organizationIds,
-              }),
+              })
             ),
-          { retries: 2, baseDelayMs: 1200 },
+          { retries: 2, baseDelayMs: 1200 }
         );
         return extractDiscountTypes(data);
       } catch (error) {
@@ -779,9 +877,9 @@ export function createIikoClient({ apiUrl, apiLogin, apiKey, organizationId }) {
               client.post("/api/1/cities", {
                 organizationIds,
                 includeDeleted: Boolean(payload?.includeDeleted),
-              }),
+              })
             ),
-          { retries: 2, baseDelayMs: 1200 },
+          { retries: 2, baseDelayMs: 1200 }
         );
 
         return extractAddressCities(data);
@@ -807,9 +905,9 @@ export function createIikoClient({ apiUrl, apiLogin, apiKey, organizationId }) {
                 organizationId: organizationIdToUse,
                 cityId,
                 includeDeleted: Boolean(payload?.includeDeleted),
-              }),
+              })
             ),
-          { retries: 2, baseDelayMs: 1200 },
+          { retries: 2, baseDelayMs: 1200 }
         );
 
         return extractAddressStreets(data);

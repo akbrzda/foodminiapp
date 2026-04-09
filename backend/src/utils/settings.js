@@ -1003,9 +1003,18 @@ const validateMaxNewOrderNotification = (value) => {
   };
 };
 
-export const getSystemSettings = async () => {
+const resolveSettingsRuntime = (options = {}) => {
+  const dbConn = options?.dbConn || db;
+  const redisClient = options?.redisClient || redis;
+  const cacheKey = String(options?.cacheKey || SETTINGS_CACHE_KEY).trim() || SETTINGS_CACHE_KEY;
+  const cacheTtl = Number.parseInt(options?.cacheTtl || SETTINGS_CACHE_TTL, 10) || SETTINGS_CACHE_TTL;
+  return { dbConn, redisClient, cacheKey, cacheTtl };
+};
+
+export const getSystemSettings = async (options = {}) => {
+  const runtime = resolveSettingsRuntime(options);
   try {
-    const cached = await redis.get(SETTINGS_CACHE_KEY);
+    const cached = await runtime.redisClient.get(runtime.cacheKey);
     if (cached) {
       return JSON.parse(cached);
     }
@@ -1013,7 +1022,7 @@ export const getSystemSettings = async () => {
     console.error("Failed to read settings cache:", error);
   }
 
-  const [rows] = await db.query("SELECT `key`, value FROM system_settings");
+  const [rows] = await runtime.dbConn.query("SELECT `key`, value FROM system_settings");
   const settings = {};
   const legacyEncryptionUpdates = [];
 
@@ -1046,7 +1055,7 @@ export const getSystemSettings = async () => {
   }
 
   if (legacyEncryptionUpdates.length > 0) {
-    const connection = await db.getConnection();
+    const connection = await runtime.dbConn.getConnection();
     try {
       await connection.beginTransaction();
       for (const [key, encryptedValue, description] of legacyEncryptionUpdates) {
@@ -1067,7 +1076,7 @@ export const getSystemSettings = async () => {
   }
 
   try {
-    await redis.set(SETTINGS_CACHE_KEY, JSON.stringify(settings), "EX", SETTINGS_CACHE_TTL);
+    await runtime.redisClient.set(runtime.cacheKey, JSON.stringify(settings), "EX", runtime.cacheTtl);
   } catch (error) {
     console.error("Failed to write settings cache:", error);
   }
@@ -1085,7 +1094,8 @@ export const getSettingsList = (settings) =>
     type: meta.type,
   }));
 
-export const updateSystemSettings = async (patch) => {
+export const updateSystemSettings = async (patch, options = {}) => {
+  const runtime = resolveSettingsRuntime(options);
   if (!patch || typeof patch !== "object") {
     return { updated: {}, errors: { settings: "Некорректный формат настроек" } };
   }
@@ -1227,7 +1237,7 @@ export const updateSystemSettings = async (patch) => {
     return { updated: {}, errors: { settings: "Нет данных для обновления" } };
   }
 
-  const connection = await db.getConnection();
+  const connection = await runtime.dbConn.getConnection();
   try {
     await connection.beginTransaction();
     for (const [key, value] of Object.entries(updates)) {
@@ -1252,7 +1262,7 @@ export const updateSystemSettings = async (patch) => {
   }
 
   try {
-    await redis.del(SETTINGS_CACHE_KEY);
+    await runtime.redisClient.del(runtime.cacheKey);
   } catch (error) {
     console.error("Failed to clear settings cache:", error);
   }

@@ -1,4 +1,3 @@
-import db from "../../../config/database.js";
 import { logger } from "../../../utils/logger.js";
 import {
   earnBonuses,
@@ -7,12 +6,13 @@ import {
   redeliveryEarnBonuses,
   getLoyaltyLevelsFromDb,
 } from "../../loyalty/services/loyaltyService.js";
-import { getSystemSettings } from "../../../utils/settings.js";
+import { getSettingsByRequest } from "../../settings/settings-runtime.js";
 import { notifyOrderStatusUpdate } from "../../../websocket/runtime.js";
 import { addTelegramNotification } from "../../../queues/config.js";
 import ordersAdapter from "../../integrations/adapters/ordersAdapter.js";
 import { sendOrderStatusNotification } from "../../notifications/services/userNotificationService.js";
 import { scheduleOrderRatingReminder } from "../services/orderRatingReminderService.js";
+import { getOrdersDbByRequest } from "../orders-db.runtime.js";
 
 // Вспомогательные функции для работы с временными зонами
 const getTimeZoneOffset = (date, timeZone) => {
@@ -95,6 +95,7 @@ const getShiftWindowUtc = (timeZone, nowOrDate = new Date()) => {
  */
 export const getAdminOrders = async (req, res, next) => {
   try {
+    const ordersDb = await getOrdersDbByRequest(req);
     const { city_id, status, order_type, date_from, date_to, search, limit = 50, offset = 0 } = req.query;
 
     let query = `
@@ -155,7 +156,7 @@ export const getAdminOrders = async (req, res, next) => {
     query += " ORDER BY o.created_at ASC, o.id ASC LIMIT ? OFFSET ?";
     params.push(parseInt(limit), parseInt(offset));
 
-    const [orders] = await db.query(query, params);
+    const [orders] = await ordersDb.query(query, params);
     res.json({ orders });
   } catch (error) {
     next(error);
@@ -167,13 +168,14 @@ export const getAdminOrders = async (req, res, next) => {
  */
 export const getShiftOrders = async (req, res, next) => {
   try {
+    const ordersDb = await getOrdersDbByRequest(req);
     const { branch_id, order_type, search } = req.query;
 
     if (!branch_id) {
       return res.status(400).json({ error: "branch_id is required" });
     }
 
-    const [branches] = await db.query(
+    const [branches] = await ordersDb.query(
       `SELECT b.id, b.city_id, c.timezone
        FROM branches b
        JOIN cities c ON b.city_id = c.id
@@ -249,13 +251,13 @@ export const getShiftOrders = async (req, res, next) => {
 
     query += " ORDER BY o.created_at DESC";
 
-    const [orders] = await db.query(query, params);
+    const [orders] = await ordersDb.query(query, params);
 
     const orderIds = orders.map((order) => order.id);
     const itemsByOrder = new Map();
 
     if (orderIds.length > 0) {
-      const [items] = await db.query(
+      const [items] = await ordersDb.query(
         `SELECT oi.*, oim.modifier_id, oim.modifier_name, oim.modifier_price, oim.modifier_weight, oim.modifier_weight_unit, oim.order_item_id
          FROM order_items oi
          LEFT JOIN order_item_modifiers oim ON oim.order_item_id = oi.id
@@ -310,6 +312,7 @@ export const getShiftOrders = async (req, res, next) => {
  */
 export const getOrdersCount = async (req, res, next) => {
   try {
+    const ordersDb = await getOrdersDbByRequest(req);
     const { city_id, status, order_type, date_from, date_to, search } = req.query;
 
     let query = `
@@ -356,7 +359,7 @@ export const getOrdersCount = async (req, res, next) => {
       params.push(`%${search}%`, `%${search}%`);
     }
 
-    const [rows] = await db.query(query, params);
+    const [rows] = await ordersDb.query(query, params);
     res.json({ total: rows[0]?.total || 0 });
   } catch (error) {
     next(error);
@@ -368,9 +371,10 @@ export const getOrdersCount = async (req, res, next) => {
  */
 export const getAdminOrderById = async (req, res, next) => {
   try {
+    const ordersDb = await getOrdersDbByRequest(req);
     const orderId = req.params.id;
 
-    const [orders] = await db.query(
+    const [orders] = await ordersDb.query(
       `SELECT o.*, 
         (SELECT COALESCE(SUM(lt.amount), 0) FROM loyalty_transactions lt WHERE lt.order_id = o.id AND lt.type = 'earn') as bonuses_earned,
         r.rating as user_rating,
@@ -406,12 +410,12 @@ export const getAdminOrderById = async (req, res, next) => {
       return res.status(403).json({ error: "You do not have access to this city" });
     }
 
-    const [items] = await db.query(`SELECT * FROM order_items WHERE order_id = ?`, [orderId]);
+    const [items] = await ordersDb.query(`SELECT * FROM order_items WHERE order_id = ?`, [orderId]);
     const itemIds = items.map((item) => item.id).filter(Boolean);
     let modifiersByItemId = new Map();
 
     if (itemIds.length > 0) {
-      const [modifierRows] = await db.query(`SELECT * FROM order_item_modifiers WHERE order_item_id IN (?)`, [itemIds]);
+      const [modifierRows] = await ordersDb.query(`SELECT * FROM order_item_modifiers WHERE order_item_id IN (?)`, [itemIds]);
       modifiersByItemId = modifierRows.reduce((acc, modifier) => {
         if (!acc.has(modifier.order_item_id)) {
           acc.set(modifier.order_item_id, []);
@@ -427,7 +431,7 @@ export const getAdminOrderById = async (req, res, next) => {
 
     order.items = items;
 
-    const [statusHistory] = await db.query(
+    const [statusHistory] = await ordersDb.query(
       `SELECT osh.id, osh.old_status, osh.new_status, osh.changed_by_type, osh.changed_at,
         au.first_name as admin_first_name, au.last_name as admin_last_name
        FROM order_status_history osh
@@ -440,7 +444,7 @@ export const getAdminOrderById = async (req, res, next) => {
     order.status_history = statusHistory || [];
 
     // Информация о бонусах
-    const [spendRows] = await db.query("SELECT status, amount FROM loyalty_transactions WHERE order_id = ? AND type = 'spend'", [orderId]);
+    const [spendRows] = await ordersDb.query("SELECT status, amount FROM loyalty_transactions WHERE order_id = ? AND type = 'spend'", [orderId]);
 
     if (spendRows.length > 0) {
       const hasPending = spendRows.some((row) => row.status === "pending");
@@ -454,7 +458,7 @@ export const getAdminOrderById = async (req, res, next) => {
       order.bonus_spend_amount = 0;
     }
 
-    const [earnRows] = await db.query(
+    const [earnRows] = await ordersDb.query(
       "SELECT amount, expires_at, status FROM loyalty_transactions WHERE order_id = ? AND type = 'earn' ORDER BY created_at DESC LIMIT 1",
       [orderId],
     );
@@ -478,6 +482,7 @@ export const getAdminOrderById = async (req, res, next) => {
  */
 export const updateOrderStatus = async (req, res, next, forcedStatus = null) => {
   try {
+    const ordersDb = await getOrdersDbByRequest(req);
     const orderId = req.params.id;
     const status = forcedStatus || req.body.status;
 
@@ -489,7 +494,7 @@ export const updateOrderStatus = async (req, res, next, forcedStatus = null) => 
       });
     }
 
-    const [orders] = await db.query("SELECT city_id, order_type FROM orders WHERE id = ?", [orderId]);
+    const [orders] = await ordersDb.query("SELECT city_id, order_type FROM orders WHERE id = ?", [orderId]);
 
     if (orders.length === 0) {
       return res.status(404).json({ error: "Order not found" });
@@ -501,7 +506,7 @@ export const updateOrderStatus = async (req, res, next, forcedStatus = null) => 
       });
     }
 
-    const [oldOrderData] = await db.query(
+    const [oldOrderData] = await ordersDb.query(
       "SELECT status, user_id, total, subtotal, delivery_cost, bonus_spent, order_number, order_type, bonus_earn_amount, branch_id FROM orders WHERE id = ?",
       [orderId],
     );
@@ -534,9 +539,9 @@ export const updateOrderStatus = async (req, res, next, forcedStatus = null) => 
       });
     }
 
-    const settings = await getSystemSettings();
+    const settings = await getSettingsByRequest(req);
     const useLocalBonuses = settings.bonuses_enabled && !settings.premiumbonus_enabled;
-    const loyaltyLevels = await getLoyaltyLevelsFromDb();
+    const loyaltyLevels = await getLoyaltyLevelsFromDb(ordersDb);
 
     const orderData = {
       id: orderId,
@@ -553,7 +558,7 @@ export const updateOrderStatus = async (req, res, next, forcedStatus = null) => 
     const updateStatusWithRetry = async (attempts = 3) => {
       for (let attempt = 1; attempt <= attempts; attempt += 1) {
         try {
-          const [result] = await db.query("UPDATE orders SET status = ?, completed_at = ? WHERE id = ? AND status = ?", [
+          const [result] = await ordersDb.query("UPDATE orders SET status = ?, completed_at = ? WHERE id = ? AND status = ?", [
             status,
             status === "completed" ? new Date() : null,
             orderId,
@@ -578,19 +583,19 @@ export const updateOrderStatus = async (req, res, next, forcedStatus = null) => 
     const updated = await updateStatusWithRetry();
 
     if (!updated) {
-      const [currentOrders] = await db.query("SELECT * FROM orders WHERE id = ?", [orderId]);
+      const [currentOrders] = await ordersDb.query("SELECT * FROM orders WHERE id = ?", [orderId]);
       return res.status(409).json({ error: "Заказ уже обновлен", order: currentOrders[0] || null });
     }
 
     // История статусов
     if (oldStatus !== status) {
-      await db.query(
+      await ordersDb.query(
         "INSERT INTO order_status_history (order_id, old_status, new_status, changed_by_type, changed_by_admin_id) VALUES (?, ?, ?, 'admin', ?)",
         [orderId, oldStatus, status, req.user?.id || null],
       );
     }
 
-    const [updatedOrders] = await db.query("SELECT * FROM orders WHERE id = ?", [orderId]);
+    const [updatedOrders] = await ordersDb.query("SELECT * FROM orders WHERE id = ?", [orderId]);
 
     await logger.order.statusChanged(orderId, oldStatus, status, req.user.id);
 
@@ -670,7 +675,7 @@ export const updateOrderStatus = async (req, res, next, forcedStatus = null) => 
         }
 
         if (status === "completed" && oldStatus !== "completed" && orderTotal > 0) {
-          await db.query("UPDATE loyalty_transactions SET status = 'completed' WHERE order_id = ? AND type = 'spend' AND status = 'pending'", [
+          await ordersDb.query("UPDATE loyalty_transactions SET status = 'completed' WHERE order_id = ? AND type = 'spend' AND status = 'pending'", [
             orderId,
           ]);
 
@@ -699,7 +704,7 @@ export const updateOrderStatus = async (req, res, next, forcedStatus = null) => 
     const pbPurchasesExternal =
       settings.premiumbonus_enabled && settings.premiumbonus_auto_sync_enabled !== false && settings?.integration_mode?.loyalty === "external";
     if (pbPurchasesExternal && oldStatus !== status) {
-      await db.query(
+      await ordersDb.query(
         "UPDATE orders SET pb_sync_status = 'pending', pb_sync_error = NULL, pb_sync_attempts = 0, pb_last_sync_at = NOW() WHERE id = ?",
         [orderId],
       );
@@ -736,6 +741,7 @@ export const updateOrderStatus = async (req, res, next, forcedStatus = null) => 
  */
 export const getOrderRatings = async (req, res, next) => {
   try {
+    const ordersDb = await getOrdersDbByRequest(req);
     const { city_id, branch_id, rating, date_from, date_to, search, limit = 50, offset = 0 } = req.query;
 
     const safeLimit = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 200);
@@ -785,7 +791,7 @@ export const getOrderRatings = async (req, res, next) => {
 
     const whereClause = where.join(" AND ");
 
-    const [rows] = await db.query(
+    const [rows] = await ordersDb.query(
       `SELECT r.id, r.rating, r.comment, r.created_at, r.updated_at,
               o.id as order_id, o.order_number, o.order_type, o.completed_at,
               c.id as city_id, c.name as city_name,
@@ -802,7 +808,7 @@ export const getOrderRatings = async (req, res, next) => {
       [...params, safeLimit, safeOffset],
     );
 
-    const [countRows] = await db.query(
+    const [countRows] = await ordersDb.query(
       `SELECT COUNT(*) as total
        FROM order_ratings r
        JOIN orders o ON o.id = r.order_id
@@ -827,6 +833,7 @@ export const getOrderRatings = async (req, res, next) => {
  */
 export const getOrdersStats = async (req, res, next) => {
   try {
+    const ordersDb = await getOrdersDbByRequest(req);
     const { city_id, date_from, date_to } = req.query;
 
     let whereClause = "WHERE 1=1";
@@ -850,7 +857,7 @@ export const getOrdersStats = async (req, res, next) => {
       params.push(date_to);
     }
 
-    const [totalStats] = await db.query(
+    const [totalStats] = await ordersDb.query(
       `SELECT 
         COUNT(*) as total_orders,
         SUM(total) as total_revenue,
@@ -859,14 +866,14 @@ export const getOrdersStats = async (req, res, next) => {
       params,
     );
 
-    const [statusStats] = await db.query(
+    const [statusStats] = await ordersDb.query(
       `SELECT status, COUNT(*) as count
        FROM orders ${whereClause}
        GROUP BY status`,
       params,
     );
 
-    const [typeStats] = await db.query(
+    const [typeStats] = await ordersDb.query(
       `SELECT order_type, COUNT(*) as count
        FROM orders ${whereClause}
        GROUP BY order_type`,
@@ -889,13 +896,14 @@ export const getOrdersStats = async (req, res, next) => {
 export const deleteAdminOrder = async (req, res, next) => {
   let connection = null;
   try {
+    const ordersDb = await getOrdersDbByRequest(req);
     const orderId = Number(req.params.id);
 
     if (!Number.isInteger(orderId) || orderId <= 0) {
       return res.status(400).json({ error: "Некорректный ID заказа" });
     }
 
-    connection = await db.getConnection();
+    connection = await ordersDb.getConnection();
     await connection.beginTransaction();
 
     const [orders] = await connection.query(
@@ -908,7 +916,7 @@ export const deleteAdminOrder = async (req, res, next) => {
     }
 
     const order = orders[0];
-    const settings = await getSystemSettings();
+    const settings = await getSettingsByRequest(req);
     const useLocalBonuses = settings.bonuses_enabled && !settings.premiumbonus_enabled;
 
     if (useLocalBonuses) {

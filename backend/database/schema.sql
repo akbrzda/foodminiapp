@@ -468,6 +468,20 @@ CREATE TABLE `menu_modifier_prices` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Цены модификаторов по городам';
 
 
+CREATE TABLE `iiko_price_categories` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `iiko_category_id` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL UNIQUE COMMENT 'ID категории цен из iiko',
+  `name` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'Название категории (например: "Доставка", "Самовывоз")',
+  `description` text COLLATE utf8mb4_unicode_ci,
+  `is_active` tinyint(1) DEFAULT '1',
+  `last_synced_at` timestamp NULL DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_iiko_category_id` (`iiko_category_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Кэш доступных категорий цен из iiko';
+
+
 CREATE TABLE `orders` (
   `id` int NOT NULL AUTO_INCREMENT,
   `order_number` varchar(4) COLLATE utf8mb4_unicode_ci NOT NULL,
@@ -481,6 +495,7 @@ CREATE TABLE `orders` (
   `iiko_sync_error` text COLLATE utf8mb4_unicode_ci,
   `iiko_sync_attempts` int NOT NULL DEFAULT '0',
   `iiko_last_sync_at` timestamp NULL DEFAULT NULL,
+  `price_category_id` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'ID категории цен, использованной при создании заказа',
   `pb_purchase_id` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `pb_sync_status` enum('pending','synced','error','failed') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'pending',
   `pb_sync_error` text COLLATE utf8mb4_unicode_ci,
@@ -524,6 +539,7 @@ CREATE TABLE `orders` (
   KEY `idx_created_at` (`created_at`),
   KEY `idx_bonus_earn_locked` (`bonus_earn_locked`),
   KEY `idx_user_status_created` (`user_id`,`status`,`created_at`),
+  KEY `idx_price_category_id` (`price_category_id`),
   CONSTRAINT `chk_bonus_spent` CHECK (`bonus_spent` >= 0 AND `bonus_spent` <= `subtotal`),
   CONSTRAINT `orders_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
   CONSTRAINT `orders_ibfk_2` FOREIGN KEY (`city_id`) REFERENCES `cities` (`id`) ON DELETE CASCADE,
@@ -793,17 +809,22 @@ CREATE TABLE `menu_item_prices` (
   `item_id` int NOT NULL,
   `city_id` int NOT NULL COMMENT 'ID города',
   `fulfillment_type` enum('delivery','pickup','dine_in') COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'Способ получения: доставка, самовывоз, зал',
+  `price_category_id` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'ID категории цен из iiko (например: "delivery", "pickup")',
+  `price_category_name` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'Название категории цен (например: "Доставка")',
   `price` decimal(10,2) NOT NULL,
+  `iiko_synced_at` timestamp NULL DEFAULT NULL COMMENT 'Последняя синхронизация с iiko',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `unique_item_city_fulfillment` (`item_id`,`city_id`,`fulfillment_type`),
+  UNIQUE KEY `unique_item_city_fulfillment_category` (`item_id`,`city_id`,`fulfillment_type`,`price_category_id`),
   KEY `idx_item` (`item_id`),
   KEY `idx_city` (`city_id`),
   KEY `idx_fulfillment` (`fulfillment_type`),
+  KEY `idx_price_category_id` (`price_category_id`),
+  KEY `idx_item_city_category` (`item_id`, `city_id`, `price_category_id`),
   CONSTRAINT `menu_item_prices_ibfk_1` FOREIGN KEY (`item_id`) REFERENCES `menu_items` (`id`) ON DELETE CASCADE,
   CONSTRAINT `menu_item_prices_ibfk_2` FOREIGN KEY (`city_id`) REFERENCES `cities` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Цены блюд по городам и способам получения';
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Цены блюд по городам, способам получения и категориям цен из iiko';
 
 
 CREATE TABLE `menu_item_tags` (
@@ -1109,17 +1130,22 @@ CREATE TABLE `menu_variant_prices` (
   `variant_id` int NOT NULL,
   `city_id` int NOT NULL COMMENT 'ID города',
   `fulfillment_type` enum('delivery','pickup','dine_in') COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'Способ получения: доставка, самовывоз, зал',
+  `price_category_id` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'ID категории цен из iiko',
+  `price_category_name` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'Название категории цен',
   `price` decimal(10,2) NOT NULL,
+  `iiko_synced_at` timestamp NULL DEFAULT NULL COMMENT 'Последняя синхронизация с iiko',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `unique_variant_city_fulfillment` (`variant_id`,`city_id`,`fulfillment_type`),
+  UNIQUE KEY `unique_variant_city_fulfillment_category` (`variant_id`,`city_id`,`fulfillment_type`,`price_category_id`),
   KEY `idx_variant` (`variant_id`),
   KEY `idx_city` (`city_id`),
   KEY `idx_fulfillment` (`fulfillment_type`),
+  KEY `idx_price_category_id` (`price_category_id`),
+  KEY `idx_variant_city_category` (`variant_id`, `city_id`, `price_category_id`),
   CONSTRAINT `menu_variant_prices_ibfk_1` FOREIGN KEY (`variant_id`) REFERENCES `item_variants` (`id`) ON DELETE CASCADE,
   CONSTRAINT `menu_variant_prices_ibfk_2` FOREIGN KEY (`city_id`) REFERENCES `cities` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=95 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Цены вариаций по городам и способам получения';
+) ENGINE=InnoDB AUTO_INCREMENT=95 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Цены вариаций по городам, способам получения и категориям цен из iiko';
 
 
 CREATE TABLE `order_items` (

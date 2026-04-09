@@ -1,18 +1,7 @@
-import {
-  getIikoClientOrNull,
-  getIntegrationSettings,
-} from "../integrationConfigService.js";
-import {
-  INTEGRATION_MODULE,
-  INTEGRATION_TYPE,
-  SYNC_STATUS,
-} from "../../constants.js";
+import { getIikoClientOrNull, getIntegrationSettings } from "../integrationConfigService.js";
+import { INTEGRATION_MODULE, INTEGRATION_TYPE, SYNC_STATUS } from "../../constants.js";
 import { logIntegrationEvent } from "../integrationLoggerService.js";
-import {
-  loadOrderWithItems,
-  markOrderIikoSync,
-  nextSyncState,
-} from "./state.repository.js";
+import { loadOrderWithItems, markOrderIikoSync, nextSyncState } from "./state.repository.js";
 import {
   ensureIikoOrderVisible,
   isExistingIikoOrderVisible,
@@ -23,6 +12,7 @@ import {
   resolveOrderTypePayload,
   resolvePaymentPayload,
 } from "./iiko-order.helpers.js";
+import { getPriceCategoryMapping } from "../../utils/priceCategoryHelper.js";
 
 export async function processIikoOrderSync(orderId, source = "queue") {
   void source;
@@ -202,6 +192,13 @@ export async function processIikoOrderSync(orderId, source = "queue") {
     }
     const completeBefore = resolveCompleteBefore(order);
 
+    // Получить категорию цены для типа заказа
+    const priceCategoryMapping = getPriceCategoryMapping(integrationSettings);
+    const orderFulfillmentType = String(order.order_service_type || order.order_type || "delivery")
+      .toLowerCase()
+      .trim();
+    const priceCategoryId = priceCategoryMapping?.[orderFulfillmentType] || null;
+
     const payload = {
       organizationId: resolvedOrganizationId,
       terminalGroupId: resolvedTerminalGroupId,
@@ -211,6 +208,7 @@ export async function processIikoOrderSync(orderId, source = "queue") {
         ...resolvedOrderTypePayload,
         ...(completeBefore ? { completeBefore } : {}),
         ...(deliveryPoint ? { deliveryPoint } : {}),
+        ...(priceCategoryId ? { priceCategoryId } : {}),
         comment: resolveCommentWithCashChange(order),
         sourceKey: "foodminiapp",
         items: iikoItems,

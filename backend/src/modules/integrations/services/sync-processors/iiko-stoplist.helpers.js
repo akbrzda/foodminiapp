@@ -35,10 +35,17 @@ export function buildStopListEntryMap(data, targetBranches, autoReason) {
 
   const resolveTopLevelContainers = (payload = {}) => {
     if (Array.isArray(payload?.terminalGroupStopLists)) return payload.terminalGroupStopLists;
-    if (Array.isArray(payload?.terminalGroupsStopListsUpdates)) return payload.terminalGroupsStopListsUpdates;
+    if (Array.isArray(payload?.terminal_group_stop_lists)) return payload.terminal_group_stop_lists;
+    if (Array.isArray(payload?.terminalGroupsStopListsUpdates))
+      return payload.terminalGroupsStopListsUpdates;
+    if (Array.isArray(payload?.terminal_groups_stop_lists_updates))
+      return payload.terminal_groups_stop_lists_updates;
     if (Array.isArray(payload?.stopLists)) return payload.stopLists;
     if (Array.isArray(payload?.organizationStopLists)) return payload.organizationStopLists;
-    if (Array.isArray(payload?.eventInfo?.terminalGroupsStopListsUpdates)) return payload.eventInfo.terminalGroupsStopListsUpdates;
+    if (Array.isArray(payload?.eventInfo?.terminalGroupsStopListsUpdates))
+      return payload.eventInfo.terminalGroupsStopListsUpdates;
+    if (Array.isArray(payload?.eventInfo?.terminal_groups_stop_lists_updates))
+      return payload.eventInfo.terminal_groups_stop_lists_updates;
     return [];
   };
 
@@ -172,9 +179,18 @@ export async function resolveStopListEntityMaps(db, allExternalIds = []) {
 
   const placeholders = allExternalIds.map(() => "?").join(",");
   const [[itemRows], [variantRows], [modifierRows]] = await Promise.all([
-    db.query(`SELECT id, iiko_item_id FROM menu_items WHERE iiko_item_id IN (${placeholders})`, allExternalIds),
-    db.query(`SELECT id, iiko_variant_id FROM item_variants WHERE iiko_variant_id IN (${placeholders})`, allExternalIds),
-    db.query(`SELECT id, iiko_modifier_id FROM modifiers WHERE iiko_modifier_id IN (${placeholders})`, allExternalIds),
+    db.query(
+      `SELECT id, iiko_item_id FROM menu_items WHERE iiko_item_id IN (${placeholders})`,
+      allExternalIds
+    ),
+    db.query(
+      `SELECT id, iiko_variant_id FROM item_variants WHERE iiko_variant_id IN (${placeholders})`,
+      allExternalIds
+    ),
+    db.query(
+      `SELECT id, iiko_modifier_id FROM modifiers WHERE iiko_modifier_id IN (${placeholders})`,
+      allExternalIds
+    ),
   ]);
 
   for (const row of itemRows) {
