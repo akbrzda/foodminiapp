@@ -34,7 +34,9 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
   const integrationSettings = await getIntegrationSettings();
 
   // Синхронизировать доступные категории цен из iiko
-  await iikoPriceCategoriesService.fetchAvailablePriceCategories(client);
+  const availablePriceCategories = await iikoPriceCategoriesService.fetchAvailablePriceCategories(
+    client
+  );
 
   const selectedCategoryIds = new Set(
     (integrationSettings.iikoSyncCategoryIds || []).map((id) => String(id).trim()).filter(Boolean)
@@ -62,9 +64,29 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
   });
 
   try {
+    const resolveFallbackPriceCategoryId = () => {
+      if (priceCategoryId) return priceCategoryId;
+      const categories = Array.isArray(availablePriceCategories) ? availablePriceCategories : [];
+      if (categories.length === 0) return "";
+
+      const normalizedBaseId = "00000000-0000-0000-0000-000000000000";
+      const baseCategory = categories.find(
+        (category) => normalizeIikoId(category?.id) === normalizedBaseId
+      );
+      if (baseCategory) return normalizedBaseId;
+
+      const firstActive = categories.find((category) => category?.active !== false);
+      return normalizeIikoId(firstActive?.id || categories[0]?.id);
+    };
+
     // Получаем маппинг категорий цен
     const priceCategoryMapping = getPriceCategoryMapping(integrationSettings);
     const hasMultiplePriceCategories = Object.keys(priceCategoryMapping).length > 0;
+    const fallbackPriceCategoryId = resolveFallbackPriceCategoryId();
+    const fallbackPriceCategoryName =
+      (Array.isArray(availablePriceCategories) ? availablePriceCategories : []).find(
+        (category) => normalizeIikoId(category?.id) === fallbackPriceCategoryId
+      )?.name || null;
 
     let externalMenuPayload = null;
     let externalMenuItemIds = new Set();
@@ -191,7 +213,7 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
         // Fallback на старую логику если категории не получены
         externalMenuPayload = await client.getMenuById({
           externalMenuId,
-          priceCategoryId: priceCategoryId || undefined,
+          priceCategoryId: fallbackPriceCategoryId || undefined,
           useConfiguredOrganization: false,
         });
       }
@@ -199,7 +221,7 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
       // СТАРАЯ ЛОГИКА: Получить меню с одной категорией цен
       externalMenuPayload = await client.getMenuById({
         externalMenuId,
-        priceCategoryId: priceCategoryId || undefined,
+        priceCategoryId: fallbackPriceCategoryId || undefined,
         useConfiguredOrganization: false,
       });
     }
@@ -664,12 +686,12 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
               itemPriceEntry?.categoryId ||
               mappedPriceCategoryId ||
               priceCategoryInfo?.categoryId ||
-              null;
+              (!hasMultiplePriceCategories ? fallbackPriceCategoryId || "" : "");
             const priceCategoryName =
               itemPriceEntry?.categoryName ||
               (priceCategoryId ? priceCategoryNameById.get(priceCategoryId) || null : null) ||
               priceCategoryInfo?.categoryName ||
-              null;
+              (!hasMultiplePriceCategories ? fallbackPriceCategoryName : null);
             const cityItemPrice = hasMultiplePriceCategories
               ? resolveIikoPriceFromRows(priceRows, preferredOrganizationIds)
               : directPrice ?? resolveIikoPriceFromRows(priceRows, preferredOrganizationIds);
@@ -950,12 +972,12 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
                 variantPriceEntry?.categoryId ||
                 mappedPriceCategoryId ||
                 priceCategoryInfo?.categoryId ||
-                null;
+                (!hasMultiplePriceCategories ? fallbackPriceCategoryId || "" : "");
               const priceCategoryName =
                 variantPriceEntry?.categoryName ||
                 (priceCategoryId ? priceCategoryNameById.get(priceCategoryId) || null : null) ||
                 priceCategoryInfo?.categoryName ||
-                null;
+                (!hasMultiplePriceCategories ? fallbackPriceCategoryName : null);
               const cityVariantPrice = resolveIikoPriceFromRows(priceRows, preferredOrganizationIds);
               if (cityVariantPrice === null) {
                 await connection.query(

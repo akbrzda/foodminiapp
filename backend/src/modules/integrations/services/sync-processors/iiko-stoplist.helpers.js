@@ -35,7 +35,27 @@ export function buildStopListEntryMap(data, targetBranches, autoReason) {
   };
 
   const resolveTopLevelContainers = (payload = {}) => {
+    if (Array.isArray(payload)) {
+      const result = [];
+      for (const chunk of payload) {
+        if (!chunk || typeof chunk !== "object") continue;
+        const nested = resolveTopLevelContainers(chunk);
+        if (nested.length > 0) {
+          result.push(...nested);
+          continue;
+        }
+
+        const fallbackItems = resolveContainerItems(chunk);
+        if (fallbackItems.length > 0) {
+          result.push(chunk);
+        }
+      }
+      return result;
+    }
+
     if (Array.isArray(payload?.terminalGroupStopLists)) return payload.terminalGroupStopLists;
+    if (Array.isArray(payload?.terminalGroupStopListsUpdates))
+      return payload.terminalGroupStopListsUpdates;
     if (Array.isArray(payload?.terminal_group_stop_lists)) return payload.terminal_group_stop_lists;
     if (Array.isArray(payload?.terminalGroupsStopListsUpdates))
       return payload.terminalGroupsStopListsUpdates;
@@ -45,8 +65,17 @@ export function buildStopListEntryMap(data, targetBranches, autoReason) {
     if (Array.isArray(payload?.organizationStopLists)) return payload.organizationStopLists;
     if (Array.isArray(payload?.eventInfo?.terminalGroupsStopListsUpdates))
       return payload.eventInfo.terminalGroupsStopListsUpdates;
+    if (Array.isArray(payload?.eventInfo?.terminalGroupStopListsUpdates))
+      return payload.eventInfo.terminalGroupStopListsUpdates;
     if (Array.isArray(payload?.eventInfo?.terminal_groups_stop_lists_updates))
       return payload.eventInfo.terminal_groups_stop_lists_updates;
+    if (Array.isArray(payload?.eventInfo?.terminalGroupStopLists))
+      return payload.eventInfo.terminalGroupStopLists;
+    if (Array.isArray(payload?.eventInfo?.terminal_group_stop_lists))
+      return payload.eventInfo.terminal_group_stop_lists;
+    if (Array.isArray(payload?.eventInfo?.stopLists)) return payload.eventInfo.stopLists;
+    if (Array.isArray(payload?.eventInfo?.organizationStopLists))
+      return payload.eventInfo.organizationStopLists;
     return [];
   };
 

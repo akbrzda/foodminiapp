@@ -13,7 +13,11 @@ export class IikoPriceCategoriesService {
   async fetchAvailablePriceCategories(iikoClient) {
     try {
       const response = await iikoClient.getAvailablePriceCategories();
-      const categories = Array.isArray(response?.priceCategories) ? response.priceCategories : [];
+      const categories = Array.isArray(response)
+        ? response
+        : Array.isArray(response?.priceCategories)
+          ? response.priceCategories
+          : [];
 
       // Сохранить/обновить категории в БД
       for (const category of categories) {
@@ -145,6 +149,7 @@ export class IikoPriceCategoriesService {
     priceCategoryName,
     price
   ) {
+    const normalizedPriceCategoryId = String(priceCategoryId || "").trim();
     await db.query(
       `INSERT INTO menu_item_prices (item_id, city_id, fulfillment_type, price_category_id, price_category_name, price, iiko_synced_at)
        VALUES (?, ?, ?, ?, ?, ?, NOW())
@@ -152,7 +157,7 @@ export class IikoPriceCategoriesService {
          price = VALUES(price),
          price_category_name = VALUES(price_category_name),
          iiko_synced_at = NOW()`,
-      [itemId, cityId, fulfillmentType, priceCategoryId, priceCategoryName, price]
+      [itemId, cityId, fulfillmentType, normalizedPriceCategoryId, priceCategoryName, price]
     );
   }
 
@@ -174,6 +179,7 @@ export class IikoPriceCategoriesService {
     priceCategoryName,
     price
   ) {
+    const normalizedPriceCategoryId = String(priceCategoryId || "").trim();
     await db.query(
       `INSERT INTO menu_variant_prices (variant_id, city_id, fulfillment_type, price_category_id, price_category_name, price, iiko_synced_at)
        VALUES (?, ?, ?, ?, ?, ?, NOW())
@@ -181,7 +187,7 @@ export class IikoPriceCategoriesService {
          price = VALUES(price),
          price_category_name = VALUES(price_category_name),
          iiko_synced_at = NOW()`,
-      [variantId, cityId, fulfillmentType, priceCategoryId, priceCategoryName, price]
+      [variantId, cityId, fulfillmentType, normalizedPriceCategoryId, priceCategoryName, price]
     );
   }
 
