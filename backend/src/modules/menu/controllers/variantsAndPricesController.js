@@ -1,6 +1,7 @@
 import db from "../../../config/database.js";
 import logger from "../../../utils/logger.js";
 import { notifyMenuUpdated } from "../../../websocket/runtime.js";
+import { getPriceCategoryMappingForContext } from "../services/priceService.js";
 
 // Вспомогательные функции
 async function getItemCityIds(itemId) {
@@ -27,6 +28,62 @@ async function invalidateAllMenuCache() {
     logger.error("Failed to invalidate all menu cache", { error });
   }
 }
+
+const normalizePriceCategoryId = (value) => String(value || "").trim();
+
+const pickPreferredPriceRows = (rows = [], priceCategoryMapping = null) => {
+  const mapping = priceCategoryMapping && typeof priceCategoryMapping === "object" ? priceCategoryMapping : {};
+  const grouped = new Map();
+
+  const getPriority = (row) => {
+    const fulfillmentType = String(row?.fulfillment_type || "").trim();
+    const targetCategoryId = normalizePriceCategoryId(mapping?.[fulfillmentType] || "");
+    const rowCategoryId = normalizePriceCategoryId(row?.price_category_id || "");
+
+    if (targetCategoryId) {
+      if (rowCategoryId === targetCategoryId) return 3;
+      if (!rowCategoryId) return 1;
+      return 2;
+    }
+
+    if (!rowCategoryId) return 1;
+    return 2;
+  };
+
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const key = `${row.city_id}:${row.fulfillment_type}`;
+    const current = grouped.get(key);
+    if (!current) {
+      grouped.set(key, row);
+      continue;
+    }
+
+    const currentPriority = getPriority(current);
+    const nextPriority = getPriority(row);
+    if (nextPriority > currentPriority) {
+      grouped.set(key, row);
+      continue;
+    }
+    if (nextPriority < currentPriority) continue;
+
+    const currentUpdatedAt = new Date(current.updated_at || 0).getTime();
+    const nextUpdatedAt = new Date(row.updated_at || 0).getTime();
+    if (nextUpdatedAt > currentUpdatedAt) {
+      grouped.set(key, row);
+      continue;
+    }
+    if (nextUpdatedAt === currentUpdatedAt && Number(row.id || 0) > Number(current.id || 0)) {
+      grouped.set(key, row);
+    }
+  }
+
+  return [...grouped.values()].sort((a, b) => {
+    const cityA = Number(a.city_id || 0);
+    const cityB = Number(b.city_id || 0);
+    if (cityA !== cityB) return cityA - cityB;
+    return String(a.fulfillment_type || "").localeCompare(String(b.fulfillment_type || ""));
+  });
+};
 
 // PUT /admin/variants/:id - Обновление варианта
 export const updateVariant = async (req, res, next) => {
@@ -141,13 +198,24 @@ export const updateVariant = async (req, res, next) => {
 
     // Обновление цен варианта
     if (Array.isArray(prices) && prices.length > 0) {
+      const priceCategoryMapping = await getPriceCategoryMappingForContext();
       for (const priceItem of prices) {
         if (!priceItem.fulfillment_type || priceItem.price === undefined || priceItem.city_id === undefined || priceItem.city_id === null) continue;
+        const priceCategoryId = normalizePriceCategoryId(
+          priceCategoryMapping?.[priceItem.fulfillment_type] || ""
+        );
+        if (!priceCategoryId) continue;
         await db.query(
-          `INSERT INTO menu_variant_prices (variant_id, city_id, fulfillment_type, price)
-           VALUES (?, ?, ?, ?)
+          `INSERT INTO menu_variant_prices (variant_id, city_id, fulfillment_type, price_category_id, price)
+           VALUES (?, ?, ?, ?, ?)
            ON DUPLICATE KEY UPDATE price = VALUES(price)`,
-          [variantId, priceItem.city_id, priceItem.fulfillment_type, priceItem.price],
+          [
+            variantId,
+            priceItem.city_id,
+            priceItem.fulfillment_type,
+            priceCategoryId,
+            priceItem.price,
+          ],
         );
       }
     }
@@ -239,17 +307,18 @@ export const getAdminVariants = async (req, res, next) => {
 export const getItemPrices = async (req, res, next) => {
   try {
     const itemId = req.params.itemId;
+    const priceCategoryMapping = await getPriceCategoryMappingForContext();
 
     const [prices] = await db.query(
-      `SELECT mip.id, mip.city_id, c.name as city_name, mip.fulfillment_type, mip.price, mip.created_at, mip.updated_at
+      `SELECT mip.id, mip.city_id, c.name as city_name, mip.fulfillment_type, mip.price, mip.price_category_id, mip.price_category_name, mip.created_at, mip.updated_at
        FROM menu_item_prices mip
        LEFT JOIN cities c ON c.id = mip.city_id
        WHERE mip.item_id = ?
-       ORDER BY mip.city_id, mip.fulfillment_type`,
+       ORDER BY mip.city_id, mip.fulfillment_type, mip.updated_at DESC, mip.id DESC`,
       [itemId],
     );
 
-    res.json({ prices });
+    res.json({ prices: pickPreferredPriceRows(prices, priceCategoryMapping) });
   } catch (error) {
     next(error);
   }
@@ -260,6 +329,8 @@ export const createItemPrice = async (req, res, next) => {
   try {
     const itemId = req.params.itemId;
     const { city_id, fulfillment_type, price } = req.body;
+    const priceCategoryMapping = await getPriceCategoryMappingForContext();
+    const priceCategoryId = normalizePriceCategoryId(priceCategoryMapping?.[fulfillment_type] || "");
 
     if (!fulfillment_type || price === undefined || city_id === undefined || city_id === null) {
       return res.status(400).json({ error: "city_id, fulfillment_type and price are required" });
@@ -267,6 +338,9 @@ export const createItemPrice = async (req, res, next) => {
 
     if (!["delivery", "pickup"].includes(fulfillment_type)) {
       return res.status(400).json({ error: "Invalid fulfillment_type" });
+    }
+    if (!priceCategoryId) {
+      return res.status(400).json({ error: "Price category mapping is required for fulfillment_type" });
     }
 
     const [items] = await db.query("SELECT id FROM menu_items WHERE id = ?", [itemId]);
@@ -280,12 +354,11 @@ export const createItemPrice = async (req, res, next) => {
     }
 
     await db.query(
-      `INSERT INTO menu_item_prices (item_id, city_id, fulfillment_type, price)
-       VALUES (?, ?, ?, ?)
+      `INSERT INTO menu_item_prices (item_id, city_id, fulfillment_type, price_category_id, price)
+       VALUES (?, ?, ?, ?, ?)
        ON DUPLICATE KEY UPDATE price = VALUES(price)`,
-      [itemId, city_id, fulfillment_type, price],
+      [itemId, city_id, fulfillment_type, priceCategoryId, price],
     );
-
     await invalidateAllMenuCache();
 
     res.json({ message: "Price saved successfully" });
@@ -312,17 +385,18 @@ export const deleteItemPrice = async (req, res, next) => {
 export const getVariantPrices = async (req, res, next) => {
   try {
     const variantId = req.params.variantId;
+    const priceCategoryMapping = await getPriceCategoryMappingForContext();
 
     const [prices] = await db.query(
-      `SELECT mvp.id, mvp.city_id, c.name as city_name, mvp.fulfillment_type, mvp.price, mvp.created_at, mvp.updated_at
+      `SELECT mvp.id, mvp.city_id, c.name as city_name, mvp.fulfillment_type, mvp.price, mvp.price_category_id, mvp.price_category_name, mvp.created_at, mvp.updated_at
        FROM menu_variant_prices mvp
        LEFT JOIN cities c ON c.id = mvp.city_id
        WHERE mvp.variant_id = ?
-       ORDER BY mvp.city_id, mvp.fulfillment_type`,
+       ORDER BY mvp.city_id, mvp.fulfillment_type, mvp.updated_at DESC, mvp.id DESC`,
       [variantId],
     );
 
-    res.json({ prices });
+    res.json({ prices: pickPreferredPriceRows(prices, priceCategoryMapping) });
   } catch (error) {
     next(error);
   }
@@ -333,6 +407,8 @@ export const createVariantPrice = async (req, res, next) => {
   try {
     const variantId = req.params.variantId;
     const { city_id, fulfillment_type, price } = req.body;
+    const priceCategoryMapping = await getPriceCategoryMappingForContext();
+    const priceCategoryId = normalizePriceCategoryId(priceCategoryMapping?.[fulfillment_type] || "");
 
     if (!fulfillment_type || price === undefined || city_id === undefined || city_id === null) {
       return res.status(400).json({ error: "city_id, fulfillment_type and price are required" });
@@ -340,6 +416,9 @@ export const createVariantPrice = async (req, res, next) => {
 
     if (!["delivery", "pickup"].includes(fulfillment_type)) {
       return res.status(400).json({ error: "Invalid fulfillment_type" });
+    }
+    if (!priceCategoryId) {
+      return res.status(400).json({ error: "Price category mapping is required for fulfillment_type" });
     }
 
     const [variants] = await db.query("SELECT id FROM item_variants WHERE id = ?", [variantId]);
@@ -353,12 +432,11 @@ export const createVariantPrice = async (req, res, next) => {
     }
 
     await db.query(
-      `INSERT INTO menu_variant_prices (variant_id, city_id, fulfillment_type, price)
-       VALUES (?, ?, ?, ?)
+      `INSERT INTO menu_variant_prices (variant_id, city_id, fulfillment_type, price_category_id, price)
+       VALUES (?, ?, ?, ?, ?)
        ON DUPLICATE KEY UPDATE price = VALUES(price)`,
-      [variantId, city_id, fulfillment_type, price],
+      [variantId, city_id, fulfillment_type, priceCategoryId, price],
     );
-
     await invalidateAllMenuCache();
 
     res.json({ message: "Variant price saved successfully" });
@@ -373,6 +451,7 @@ export const updateVariantPrices = async (req, res, next) => {
   try {
     const variantId = req.params.variantId;
     const { prices } = req.body;
+    const priceCategoryMapping = await getPriceCategoryMappingForContext();
 
     if (!Array.isArray(prices)) {
       return res.status(400).json({ error: "prices must be an array" });
@@ -384,9 +463,6 @@ export const updateVariantPrices = async (req, res, next) => {
     }
 
     await connection.beginTransaction();
-
-    // Удаление старых цен и вставка новых
-    await connection.query("DELETE FROM menu_variant_prices WHERE variant_id = ?", [variantId]);
 
     for (const priceItem of prices) {
       const { city_id, fulfillment_type, price } = priceItem || {};
@@ -402,11 +478,17 @@ export const updateVariantPrices = async (req, res, next) => {
         await connection.rollback();
         return res.status(400).json({ error: "city_id is required for each price" });
       }
+      const priceCategoryId = normalizePriceCategoryId(priceCategoryMapping?.[fulfillment_type] || "");
+      if (!priceCategoryId) {
+        await connection.rollback();
+        return res.status(400).json({ error: "Price category mapping is required for fulfillment_type" });
+      }
 
       await connection.query(
-        `INSERT INTO menu_variant_prices (variant_id, city_id, fulfillment_type, price)
-         VALUES (?, ?, ?, ?)`,
-        [variantId, city_id, fulfillment_type, price],
+        `INSERT INTO menu_variant_prices (variant_id, city_id, fulfillment_type, price_category_id, price)
+         VALUES (?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE price = VALUES(price)`,
+        [variantId, city_id, fulfillment_type, priceCategoryId, price],
       );
     }
 

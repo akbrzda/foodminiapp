@@ -64,29 +64,20 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
   });
 
   try {
-    const resolveFallbackPriceCategoryId = () => {
-      if (priceCategoryId) return priceCategoryId;
-      const categories = Array.isArray(availablePriceCategories) ? availablePriceCategories : [];
-      if (categories.length === 0) return "";
-
-      const normalizedBaseId = "00000000-0000-0000-0000-000000000000";
-      const baseCategory = categories.find(
-        (category) => normalizeIikoId(category?.id) === normalizedBaseId
-      );
-      if (baseCategory) return normalizedBaseId;
-
-      const firstActive = categories.find((category) => category?.active !== false);
-      return normalizeIikoId(firstActive?.id || categories[0]?.id);
-    };
-
     // Получаем маппинг категорий цен
     const priceCategoryMapping = getPriceCategoryMapping(integrationSettings);
     const hasMultiplePriceCategories = Object.keys(priceCategoryMapping).length > 0;
-    const fallbackPriceCategoryId = resolveFallbackPriceCategoryId();
-    const fallbackPriceCategoryName =
+    const selectedSinglePriceCategoryId = normalizeIikoId(priceCategoryId);
+    const selectedSinglePriceCategoryName =
       (Array.isArray(availablePriceCategories) ? availablePriceCategories : []).find(
-        (category) => normalizeIikoId(category?.id) === fallbackPriceCategoryId
+        (category) => normalizeIikoId(category?.id) === selectedSinglePriceCategoryId
       )?.name || null;
+
+    if (!hasMultiplePriceCategories && !selectedSinglePriceCategoryId) {
+      throw new Error(
+        "Не настроены категории цен: укажите iiko_price_category_id или заполните iiko_order_type_mapping.price_category_id"
+      );
+    }
 
     let externalMenuPayload = null;
     let externalMenuItemIds = new Set();
@@ -210,18 +201,13 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
           }
         }
       } else {
-        // Fallback на старую логику если категории не получены
-        externalMenuPayload = await client.getMenuById({
-          externalMenuId,
-          priceCategoryId: fallbackPriceCategoryId || undefined,
-          useConfiguredOrganization: false,
-        });
+        throw new Error("Не удалось получить категории цен из маппинга iiko_order_type_mapping");
       }
     } else {
-      // СТАРАЯ ЛОГИКА: Получить меню с одной категорией цен
+      // Режим одной категории цен: строго по iiko_price_category_id.
       externalMenuPayload = await client.getMenuById({
         externalMenuId,
-        priceCategoryId: fallbackPriceCategoryId || undefined,
+        priceCategoryId: selectedSinglePriceCategoryId,
         useConfiguredOrganization: false,
       });
     }
@@ -686,12 +672,12 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
               itemPriceEntry?.categoryId ||
               mappedPriceCategoryId ||
               priceCategoryInfo?.categoryId ||
-              (!hasMultiplePriceCategories ? fallbackPriceCategoryId || "" : "");
+              (!hasMultiplePriceCategories ? selectedSinglePriceCategoryId : "");
             const priceCategoryName =
               itemPriceEntry?.categoryName ||
               (priceCategoryId ? priceCategoryNameById.get(priceCategoryId) || null : null) ||
               priceCategoryInfo?.categoryName ||
-              (!hasMultiplePriceCategories ? fallbackPriceCategoryName : null);
+              (!hasMultiplePriceCategories ? selectedSinglePriceCategoryName : null);
             const cityItemPrice = hasMultiplePriceCategories
               ? resolveIikoPriceFromRows(priceRows, preferredOrganizationIds)
               : directPrice ?? resolveIikoPriceFromRows(priceRows, preferredOrganizationIds);
@@ -972,12 +958,12 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
                 variantPriceEntry?.categoryId ||
                 mappedPriceCategoryId ||
                 priceCategoryInfo?.categoryId ||
-                (!hasMultiplePriceCategories ? fallbackPriceCategoryId || "" : "");
+                (!hasMultiplePriceCategories ? selectedSinglePriceCategoryId : "");
               const priceCategoryName =
                 variantPriceEntry?.categoryName ||
                 (priceCategoryId ? priceCategoryNameById.get(priceCategoryId) || null : null) ||
                 priceCategoryInfo?.categoryName ||
-                (!hasMultiplePriceCategories ? fallbackPriceCategoryName : null);
+                (!hasMultiplePriceCategories ? selectedSinglePriceCategoryName : null);
               const cityVariantPrice = resolveIikoPriceFromRows(priceRows, preferredOrganizationIds);
               if (cityVariantPrice === null) {
                 await connection.query(

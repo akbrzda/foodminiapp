@@ -200,20 +200,18 @@ export class IikoPriceCategoriesService {
    * @returns {Promise<number|null>} цена или null
    */
   async getItemPrice(itemId, cityId, fulfillmentType, priceCategoryId = null) {
+    const normalizedPriceCategoryId = String(priceCategoryId || "").trim();
+    if (!normalizedPriceCategoryId) return null;
+
     let query = `
       SELECT price FROM menu_item_prices
       WHERE item_id = ? AND city_id = ? AND fulfillment_type = ?
     `;
     const params = [itemId, cityId, fulfillmentType];
 
-    if (priceCategoryId) {
-      query += ` AND price_category_id = ?`;
-      params.push(priceCategoryId);
-      query += ` LIMIT 1`;
-    } else {
-      // Если категория не указана, получить первую найденную цену
-      query += ` ORDER BY price_category_id DESC LIMIT 1`;
-    }
+    query += ` AND price_category_id = ?`;
+    params.push(normalizedPriceCategoryId);
+    query += ` LIMIT 1`;
 
     const [result] = await db.query(query, params);
     return result && result.length > 0 ? result[0].price : null;
@@ -228,19 +226,18 @@ export class IikoPriceCategoriesService {
    * @returns {Promise<number|null>} цена или null
    */
   async getVariantPrice(variantId, cityId, fulfillmentType, priceCategoryId = null) {
+    const normalizedPriceCategoryId = String(priceCategoryId || "").trim();
+    if (!normalizedPriceCategoryId) return null;
+
     let query = `
       SELECT price FROM menu_variant_prices
       WHERE variant_id = ? AND city_id = ? AND fulfillment_type = ?
     `;
     const params = [variantId, cityId, fulfillmentType];
 
-    if (priceCategoryId) {
-      query += ` AND price_category_id = ?`;
-      params.push(priceCategoryId);
-      query += ` LIMIT 1`;
-    } else {
-      query += ` ORDER BY price_category_id DESC LIMIT 1`;
-    }
+    query += ` AND price_category_id = ?`;
+    params.push(normalizedPriceCategoryId);
+    query += ` LIMIT 1`;
 
     const [result] = await db.query(query, params);
     return result && result.length > 0 ? result[0].price : null;

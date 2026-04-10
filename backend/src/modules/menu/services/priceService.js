@@ -33,34 +33,21 @@ export async function getItemPriceByFulfillmentType(
 
   const priceCategoryId = getPriceCategoryIdForFulfillment(fulfillmentType, priceCategoryMapping);
 
-  if (priceCategoryId) {
-    // Получить цену для конкретной категории
-    const [prices] = await db.query(
-      `SELECT price FROM menu_item_prices
-       WHERE item_id = ?
-         AND city_id = ?
-         AND fulfillment_type = ?
-         AND price_category_id = ?
-       LIMIT 1`,
-      [itemId, cityId, fulfillmentType, priceCategoryId]
-    );
-    if (prices.length > 0) {
-      return prices[0].price;
-    }
-  } else {
-    // Получить цену без категории (для обратной совместимости)
-    const [prices] = await db.query(
-      `SELECT price FROM menu_item_prices
-       WHERE item_id = ?
-         AND city_id = ?
-         AND fulfillment_type = ?
-         AND (price_category_id IS NULL OR price_category_id = '')
-       LIMIT 1`,
-      [itemId, cityId, fulfillmentType]
-    );
-    if (prices.length > 0) {
-      return prices[0].price;
-    }
+  if (!priceCategoryId) {
+    return null;
+  }
+
+  const [prices] = await db.query(
+    `SELECT price FROM menu_item_prices
+     WHERE item_id = ?
+       AND city_id = ?
+       AND fulfillment_type = ?
+       AND price_category_id = ?
+     LIMIT 1`,
+    [itemId, cityId, fulfillmentType, priceCategoryId]
+  );
+  if (prices.length > 0) {
+    return prices[0].price;
   }
 
   return null;
@@ -86,34 +73,21 @@ export async function getVariantPriceByFulfillmentType(
 
   const priceCategoryId = getPriceCategoryIdForFulfillment(fulfillmentType, priceCategoryMapping);
 
-  if (priceCategoryId) {
-    // Получить цену для конкретной категории
-    const [prices] = await db.query(
-      `SELECT price FROM menu_variant_prices
-       WHERE variant_id = ?
-         AND city_id = ?
-         AND fulfillment_type = ?
-         AND price_category_id = ?
-       LIMIT 1`,
-      [variantId, cityId, fulfillmentType, priceCategoryId]
-    );
-    if (prices.length > 0) {
-      return prices[0].price;
-    }
-  } else {
-    // Получить цену без категории (для обратной совместимости)
-    const [prices] = await db.query(
-      `SELECT price FROM menu_variant_prices
-       WHERE variant_id = ?
-         AND city_id = ?
-         AND fulfillment_type = ?
-         AND (price_category_id IS NULL OR price_category_id = '')
-       LIMIT 1`,
-      [variantId, cityId, fulfillmentType]
-    );
-    if (prices.length > 0) {
-      return prices[0].price;
-    }
+  if (!priceCategoryId) {
+    return null;
+  }
+
+  const [prices] = await db.query(
+    `SELECT price FROM menu_variant_prices
+     WHERE variant_id = ?
+       AND city_id = ?
+       AND fulfillment_type = ?
+       AND price_category_id = ?
+     LIMIT 1`,
+    [variantId, cityId, fulfillmentType, priceCategoryId]
+  );
+  if (prices.length > 0) {
+    return prices[0].price;
   }
 
   return null;
