@@ -95,10 +95,17 @@ function isValidWebhookSignature(req, secret) {
     ...normalizeHeaderValues(req.headers.authorization),
     ...normalizeHeaderValues(req.headers["x-iiko-signature"]),
     ...normalizeHeaderValues(req.headers["x-webhook-signature"]),
+    ...normalizeHeaderValues(req.headers["x-signature"]),
+    ...normalizeHeaderValues(req.headers.signature),
     ...normalizeHeaderValues(req.headers["x-api-key"]),
   ]
     .map(stripSignaturePrefixes)
     .filter(Boolean);
+
+  const matchesRawSecret = candidates.some((candidate) =>
+    timingSafeEqualString(candidate, normalizedSecret)
+  );
+  if (matchesRawSecret) return true;
 
   return candidates.some((candidate) =>
     expectedCandidates.some((expected) => timingSafeEqualString(candidate, expected))

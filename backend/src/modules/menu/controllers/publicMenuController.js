@@ -176,7 +176,7 @@ async function attachVariantPricesToModifiers(modifierGroups = [], variants = []
 
 async function resolveComboComponentsWithAvailability(
   itemId,
-  { cityId = null, branchId = null, fulfillmentType = "delivery" } = {}
+  { cityId = null, branchId = null, fulfillmentType = "delivery", priceCategoryMapping = null } = {}
 ) {
   const [components] = await db.query(
     `SELECT mcc.id,
@@ -224,17 +224,14 @@ async function resolveComboComponentsWithAvailability(
       componentCityAvailable =
         cityAvailabilityRows.length > 0 && Boolean(cityAvailabilityRows[0].is_active);
 
-      const [variantPriceRows] = await db.query(
-        `SELECT price
-         FROM menu_variant_prices
-         WHERE variant_id = ?
-           AND city_id = ?
-           AND fulfillment_type = ?
-         LIMIT 1`,
-        [componentVariantId, cityId, fulfillmentType]
+      const resolvedComponentPrice = await getVariantPriceByFulfillmentType(
+        componentVariantId,
+        cityId,
+        fulfillmentType,
+        priceCategoryMapping
       );
-      if (variantPriceRows.length > 0) {
-        componentPrice = Number(variantPriceRows[0].price) || 0;
+      if (resolvedComponentPrice !== null) {
+        componentPrice = Number(resolvedComponentPrice) || 0;
       }
     }
 
@@ -304,6 +301,7 @@ export const getMenu = async (req, res, next) => {
     const cityId = Number(city_id);
     const integration = await getIntegrationSettings();
     const sourceScope = buildSourceScope(integration);
+    const priceCategoryMapping = await getPriceCategoryMappingForContext();
     const cacheKeyParts = [
       `menu:${MENU_CACHE_VERSION}:city:${city_id}`,
       `mode:${sourceScope.source}`,
@@ -376,8 +374,6 @@ export const getMenu = async (req, res, next) => {
 
         // Получение цены товара с учетом категории цены
         const fallbackLegacyPrice = hasPositivePrice(item.legacy_price) ? item.legacy_price : null;
-        const priceCategoryMapping = await getPriceCategoryMappingForContext();
-
         if (fulfillment_type) {
           item.price =
             (await getItemPriceByFulfillmentType(
@@ -422,7 +418,7 @@ export const getMenu = async (req, res, next) => {
         // Получение вариантов товара
         const [variants] = await db.query(
           `SELECT iv.id, iv.item_id, iv.name, iv.image_url, iv.weight_value, iv.weight_unit, 
-                  iv.sort_order, iv.is_active,
+                  iv.sort_order, iv.is_active, iv.price AS legacy_price,
                   iv.calories_per_100g, iv.proteins_per_100g, iv.fats_per_100g, iv.carbs_per_100g,
                   iv.calories_per_serving, iv.proteins_per_serving, iv.fats_per_serving, iv.carbs_per_serving
            FROM item_variants iv
@@ -432,28 +428,16 @@ export const getMenu = async (req, res, next) => {
         );
 
         for (const variant of variants) {
-          // Получение цены варианта
-          if (fulfillment_type) {
-            const [variantPrices] = await db.query(
-              `SELECT price FROM menu_variant_prices
-               WHERE variant_id = ?
-                 AND city_id = ?
-                 AND fulfillment_type = ?
-               LIMIT 1`,
-              [variant.id, city_id, fulfillment_type]
-            );
-            variant.price = variantPrices.length > 0 ? variantPrices[0].price : null;
-          } else {
-            const [variantPrices] = await db.query(
-              `SELECT price FROM menu_variant_prices
-               WHERE variant_id = ?
-                 AND city_id = ?
-                 AND fulfillment_type = 'delivery'
-               LIMIT 1`,
-              [variant.id, city_id]
-            );
-            variant.price = variantPrices.length > 0 ? variantPrices[0].price : null;
-          }
+          const fallbackLegacyVariantPrice = hasPositivePrice(variant.legacy_price)
+            ? variant.legacy_price
+            : null;
+          variant.price =
+            (await getVariantPriceByFulfillmentType(
+              variant.id,
+              city_id,
+              fulfillment_type || "delivery",
+              priceCategoryMapping
+            )) || fallbackLegacyVariantPrice;
 
           // Проверка стоп-листа для варианта
           if (branch_id) {
@@ -577,6 +561,7 @@ export const getMenu = async (req, res, next) => {
             cityId,
             branchId: branch_id ? Number(branch_id) : null,
             fulfillmentType: fulfillment_type || "delivery",
+            priceCategoryMapping,
           });
           item.combo_components = comboPayload.components;
           if (!comboPayload.isAvailable) {
@@ -737,6 +722,7 @@ export const getItemById = async (req, res, next) => {
     const fulfillmentType = fulfillment_type || "delivery";
     const integration = await getIntegrationSettings();
     const sourceScope = buildSourceScope(integration);
+    const priceCategoryMapping = await getPriceCategoryMappingForContext();
 
     const [items] = await db.query(
       `SELECT mi.id,
@@ -787,16 +773,14 @@ export const getItemById = async (req, res, next) => {
 
     // Получение цены товара по городу
     if (city_id) {
-      const [prices] = await db.query(
-        `SELECT price FROM menu_item_prices
-         WHERE item_id = ?
-           AND city_id = ?
-           AND fulfillment_type = ?
-         LIMIT 1`,
-        [itemId, city_id, fulfillmentType]
-      );
       const fallbackLegacyPrice = hasPositivePrice(item.price) ? item.price : null;
-      item.price = prices.length > 0 ? prices[0].price : fallbackLegacyPrice;
+      item.price =
+        (await getItemPriceByFulfillmentType(
+          itemId,
+          city_id,
+          fulfillmentType,
+          priceCategoryMapping
+        )) || fallbackLegacyPrice;
     }
 
     if (branch_id) {
@@ -818,7 +802,7 @@ export const getItemById = async (req, res, next) => {
 
     // Получение вариантов
     const [variants] = await db.query(
-      `SELECT id, item_id, name, price, image_url, weight_value, weight_unit, sort_order, is_active
+      `SELECT id, item_id, name, price AS legacy_price, image_url, weight_value, weight_unit, sort_order, is_active
        FROM item_variants
        WHERE item_id = ? AND is_active = TRUE
        ORDER BY sort_order, name`,
@@ -827,15 +811,16 @@ export const getItemById = async (req, res, next) => {
 
     if (city_id) {
       for (const variant of variants) {
-        const [variantPrices] = await db.query(
-          `SELECT price FROM menu_variant_prices
-           WHERE variant_id = ?
-             AND city_id = ?
-             AND fulfillment_type = ?
-           LIMIT 1`,
-          [variant.id, city_id, fulfillmentType]
-        );
-        variant.price = variantPrices.length > 0 ? variantPrices[0].price : null;
+        const fallbackLegacyVariantPrice = hasPositivePrice(variant.legacy_price)
+          ? variant.legacy_price
+          : null;
+        variant.price =
+          (await getVariantPriceByFulfillmentType(
+            variant.id,
+            city_id,
+            fulfillmentType,
+            priceCategoryMapping
+          )) || fallbackLegacyVariantPrice;
       }
     }
 
@@ -924,6 +909,7 @@ export const getItemById = async (req, res, next) => {
         cityId: city_id ? Number(city_id) : null,
         branchId: branch_id ? Number(branch_id) : null,
         fulfillmentType,
+        priceCategoryMapping,
       });
       comboComponents = comboPayload.components;
       if (!comboPayload.isAvailable) {

@@ -241,7 +241,8 @@ app.use(hppMiddleware);
 app.use(
   express.json({
     charset: "utf-8",
-    limit: "10kb",
+    // webhook от iiko может содержать массивы стоп-листа заметно больше обычных API payload
+    limit: "1mb",
     strict: false,
     verify: (req, _res, buffer) => {
       req.rawBody = buffer?.length ? buffer.toString("utf8") : "";

@@ -72,10 +72,22 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
     let externalCategoriesRaw = [];
     let externalItemsRaw = [];
     const itemPriceCategoryMap = new Map(); // itemId -> { categoryId, name, fulfillmentTypes[] }
+    const itemPriceRowsByFulfillment = new Map(); // `${itemId}::${fulfillment}` -> { prices, categoryId, categoryName }
+    const variantPriceRowsByFulfillment = new Map(); // `${variantId}::${fulfillment}` -> { prices, categoryId, categoryName }
+    const priceCategoryNameById = new Map();
+    const priceFulfillmentTypes = ["delivery", "pickup"];
+    const buildPriceLookupKey = (entityId, fulfillmentType) =>
+      `${String(entityId || "").trim()}::${String(fulfillmentType || "").trim()}`;
 
     if (hasMultiplePriceCategories) {
       // НОВАЯ ЛОГИКА: Получить меню для каждой категории цен
       const categoriesToSync = await getCategoriesToSync(client, priceCategoryMapping);
+      const normalizedCategoriesToSync = Array.isArray(categoriesToSync) ? categoriesToSync : [];
+      for (const category of normalizedCategoriesToSync) {
+        const normalizedCategoryId = normalizeIikoId(category?.id);
+        if (!normalizedCategoryId) continue;
+        priceCategoryNameById.set(normalizedCategoryId, String(category?.name || "").trim());
+      }
 
       if (categoriesToSync && categoriesToSync.length > 0) {
         // Получить меню для каждой категории
@@ -100,6 +112,61 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
 
         if (menuPayloads.length === 0) {
           throw new Error("Не удалось получить меню ни для одной категории цен");
+        }
+
+        for (const payloadEntry of menuPayloads) {
+          const normalizedCategoryId = normalizeIikoId(payloadEntry?.categoryId);
+          const categoryName = String(payloadEntry?.name || "").trim() || null;
+          const fulfillmentTypes = Array.isArray(payloadEntry?.fulfillmentTypes)
+            ? payloadEntry.fulfillmentTypes.map((value) => String(value || "").trim()).filter(Boolean)
+            : [];
+          if (!normalizedCategoryId || fulfillmentTypes.length === 0) continue;
+
+          const itemCategories = Array.isArray(payloadEntry?.payload?.itemCategories)
+            ? payloadEntry.payload.itemCategories
+            : [];
+          for (const itemCategory of itemCategories) {
+            const menuItems = Array.isArray(itemCategory?.items) ? itemCategory.items : [];
+            for (const menuItem of menuItems) {
+              const iikoItemId = normalizeIikoId(
+                menuItem?.itemId || menuItem?.id || menuItem?.productId
+              );
+              if (!iikoItemId) continue;
+
+              const itemSizes = Array.isArray(menuItem?.itemSizes) ? menuItem.itemSizes : [];
+              const primarySize = itemSizes[0] || null;
+              const itemPrices = Array.isArray(primarySize?.prices) ? primarySize.prices : [];
+
+              for (const fulfillmentType of fulfillmentTypes) {
+                const itemPriceKey = buildPriceLookupKey(iikoItemId, fulfillmentType);
+                if (!itemPriceRowsByFulfillment.has(itemPriceKey) && itemPrices.length > 0) {
+                  itemPriceRowsByFulfillment.set(itemPriceKey, {
+                    prices: itemPrices,
+                    categoryId: normalizedCategoryId,
+                    categoryName,
+                  });
+                }
+              }
+
+              for (const size of itemSizes) {
+                const sizeId = normalizeIikoId(size?.sizeId || size?.id);
+                if (!sizeId) continue;
+                const iikoVariantId = `${iikoItemId}_${sizeId}`;
+                const variantPrices = Array.isArray(size?.prices) ? size.prices : [];
+                if (variantPrices.length === 0) continue;
+
+                for (const fulfillmentType of fulfillmentTypes) {
+                  const variantPriceKey = buildPriceLookupKey(iikoVariantId, fulfillmentType);
+                  if (variantPriceRowsByFulfillment.has(variantPriceKey)) continue;
+                  variantPriceRowsByFulfillment.set(variantPriceKey, {
+                    prices: variantPrices,
+                    categoryId: normalizedCategoryId,
+                    categoryName,
+                  });
+                }
+              }
+            }
+          }
         }
 
         // Слить данные из разных категорий
@@ -584,26 +651,39 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
         }
         for (const targetCityId of targetCityIds) {
           const preferredOrganizationIds = cityOrganizationIds.get(Number(targetCityId)) || [];
-          const cityItemPrice =
-            directPrice ??
-            resolveIikoPriceFromRows(sizePricesRaw[0]?.prices || [], preferredOrganizationIds);
-          if (cityItemPrice === null) {
-            await connection.query(
-              `DELETE FROM menu_item_prices
-             WHERE item_id = ?
-               AND city_id = ?
-               AND fulfillment_type IN ('delivery', 'pickup')`,
-              [localItemId, targetCityId]
-            );
-            continue;
-          }
-
-          // Получаем информацию о категории цены для этого блюда
           const priceCategoryInfo = itemPriceCategoryMap.get(iikoItemId);
-          const priceCategoryId = priceCategoryInfo?.categoryId || null;
-          const priceCategoryName = priceCategoryInfo?.categoryName || null;
+          for (const fulfillmentType of priceFulfillmentTypes) {
+            const mappedPriceCategoryId = normalizeIikoId(priceCategoryMapping?.[fulfillmentType]);
+            const itemPriceEntry = hasMultiplePriceCategories
+              ? itemPriceRowsByFulfillment.get(buildPriceLookupKey(iikoItemId, fulfillmentType))
+              : null;
+            const priceRows = hasMultiplePriceCategories
+              ? itemPriceEntry?.prices || []
+              : sizePricesRaw[0]?.prices || [];
+            const priceCategoryId =
+              itemPriceEntry?.categoryId ||
+              mappedPriceCategoryId ||
+              priceCategoryInfo?.categoryId ||
+              null;
+            const priceCategoryName =
+              itemPriceEntry?.categoryName ||
+              (priceCategoryId ? priceCategoryNameById.get(priceCategoryId) || null : null) ||
+              priceCategoryInfo?.categoryName ||
+              null;
+            const cityItemPrice = hasMultiplePriceCategories
+              ? resolveIikoPriceFromRows(priceRows, preferredOrganizationIds)
+              : directPrice ?? resolveIikoPriceFromRows(priceRows, preferredOrganizationIds);
+            if (cityItemPrice === null) {
+              await connection.query(
+                `DELETE FROM menu_item_prices
+                 WHERE item_id = ?
+                   AND city_id = ?
+                   AND fulfillment_type = ?`,
+                [localItemId, targetCityId, fulfillmentType]
+              );
+              continue;
+            }
 
-          for (const fulfillmentType of ["delivery", "pickup"]) {
             await connection.query(
               `INSERT INTO menu_item_prices 
                (item_id, city_id, fulfillment_type, price, price_category_id, price_category_name, iiko_synced_at)
@@ -823,6 +903,7 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
             localVariantIdByIikoVariantId.set(iikoVariantId, Number(localVariantId));
             syncedVariantRows.push({
               id: Number(localVariantId),
+              iikoVariantId,
               price: variantPrice,
               isActive: variantActive,
               prices: Array.isArray(variant.prices) ? variant.prices : [],
@@ -854,27 +935,39 @@ export async function processIikoMenuSync(reason = "manual", cityId = null) {
         for (const variantRow of syncedVariantRows) {
           for (const targetCityId of targetCityIds) {
             const preferredOrganizationIds = cityOrganizationIds.get(Number(targetCityId)) || [];
-            const cityVariantPrice = resolveIikoPriceFromRows(
-              variantRow.prices || [],
-              preferredOrganizationIds
-            );
-            if (cityVariantPrice === null) {
-              await connection.query(
-                `DELETE FROM menu_variant_prices
-               WHERE variant_id = ?
-                 AND city_id = ?
-                 AND fulfillment_type IN ('delivery', 'pickup')`,
-                [variantRow.id, targetCityId]
-              );
-              continue;
-            }
-
-            // Получаем информацию о категории цены для этого блюда
             const priceCategoryInfo = itemPriceCategoryMap.get(iikoItemId);
-            const priceCategoryId = priceCategoryInfo?.categoryId || null;
-            const priceCategoryName = priceCategoryInfo?.categoryName || null;
+            for (const fulfillmentType of priceFulfillmentTypes) {
+              const mappedPriceCategoryId = normalizeIikoId(priceCategoryMapping?.[fulfillmentType]);
+              const variantPriceEntry = hasMultiplePriceCategories
+                ? variantPriceRowsByFulfillment.get(
+                    buildPriceLookupKey(variantRow.iikoVariantId, fulfillmentType)
+                  )
+                : null;
+              const priceRows = hasMultiplePriceCategories
+                ? variantPriceEntry?.prices || []
+                : variantRow.prices || [];
+              const priceCategoryId =
+                variantPriceEntry?.categoryId ||
+                mappedPriceCategoryId ||
+                priceCategoryInfo?.categoryId ||
+                null;
+              const priceCategoryName =
+                variantPriceEntry?.categoryName ||
+                (priceCategoryId ? priceCategoryNameById.get(priceCategoryId) || null : null) ||
+                priceCategoryInfo?.categoryName ||
+                null;
+              const cityVariantPrice = resolveIikoPriceFromRows(priceRows, preferredOrganizationIds);
+              if (cityVariantPrice === null) {
+                await connection.query(
+                  `DELETE FROM menu_variant_prices
+                   WHERE variant_id = ?
+                     AND city_id = ?
+                     AND fulfillment_type = ?`,
+                  [variantRow.id, targetCityId, fulfillmentType]
+                );
+                continue;
+              }
 
-            for (const fulfillmentType of ["delivery", "pickup"]) {
               await connection.query(
                 `INSERT INTO menu_variant_prices 
                  (variant_id, city_id, fulfillment_type, price, price_category_id, price_category_name, iiko_synced_at)

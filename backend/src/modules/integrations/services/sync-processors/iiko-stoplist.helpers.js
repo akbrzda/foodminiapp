@@ -1,9 +1,4 @@
 export function buildStopListEntryMap(data, targetBranches, autoReason) {
-  const resolveTerminalGroupId = (value = {}) =>
-    String(
-      value?.terminalGroupId || value?.terminal_group_id || value?.terminalGroup?.id || ""
-    ).trim();
-
   const resolveEntityIds = (value = {}) => {
     const ids = new Set();
     const push = (raw) => {
@@ -22,6 +17,12 @@ export function buildStopListEntryMap(data, targetBranches, autoReason) {
     push(value?.variant_id);
     push(value?.modifierId);
     push(value?.modifier_id);
+    push(value?.product?.id);
+    push(value?.product?.productId);
+    push(value?.item?.id);
+    push(value?.variant?.id);
+    push(value?.size?.id);
+    push(value?.modifier?.id);
     return [...ids];
   };
 
@@ -47,6 +48,19 @@ export function buildStopListEntryMap(data, targetBranches, autoReason) {
     if (Array.isArray(payload?.eventInfo?.terminal_groups_stop_lists_updates))
       return payload.eventInfo.terminal_groups_stop_lists_updates;
     return [];
+  };
+
+  const resolveTerminalGroupId = (value = {}) => {
+    const directId = String(
+      value?.terminalGroupId || value?.terminal_group_id || value?.terminalGroup?.id || ""
+    ).trim();
+    if (directId) return directId;
+
+    const hasNestedItems = resolveContainerItems(value).length > 0;
+    if (hasNestedItems) {
+      return String(value?.id || "").trim();
+    }
+    return "";
   };
 
   const parseStopListCreatedAt = (value) => {
