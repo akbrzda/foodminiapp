@@ -7,6 +7,7 @@ import { notifyMenuUpdated } from "../../../../websocket/runtime.js";
 import { buildStopListEntryMap, resolveStopListEntityMaps } from "./iiko-stoplist.helpers.js";
 
 const IIKO_STOPLIST_SYNC_REASON = "Синхронизация стоп-листа из iiko";
+const AUTO_NO_PRICE_REASON = "Не задана цена";
 
 async function invalidatePublicMenuCache() {
   try {
@@ -64,11 +65,20 @@ async function applyIikoStopListPayloadSync(data, { reason = "manual", branchId 
     if (targetBranchIds.length > 0) {
       const branchPlaceholders = targetBranchIds.map(() => "?").join(",");
       const [deleteResult] = await connection.query(
-        `DELETE FROM menu_stop_list
-         WHERE branch_id IN (${branchPlaceholders})
-           AND created_by IS NULL
-           AND reason = ?`,
-        [...targetBranchIds, IIKO_STOPLIST_SYNC_REASON],
+        `DELETE msl
+         FROM menu_stop_list msl
+         LEFT JOIN menu_items mi ON msl.entity_type = 'item' AND msl.entity_id = mi.id
+         LEFT JOIN item_variants iv ON msl.entity_type = 'variant' AND msl.entity_id = iv.id
+         LEFT JOIN modifiers mo ON msl.entity_type = 'modifier' AND msl.entity_id = mo.id
+         WHERE msl.branch_id IN (${branchPlaceholders})
+           AND msl.created_by IS NULL
+           AND NOT (msl.entity_type = 'item' AND COALESCE(msl.reason, '') = ?)
+           AND (
+             (msl.entity_type = 'item' AND COALESCE(NULLIF(TRIM(mi.iiko_item_id), ''), NULL) IS NOT NULL) OR
+             (msl.entity_type = 'variant' AND COALESCE(NULLIF(TRIM(iv.iiko_variant_id), ''), NULL) IS NOT NULL) OR
+             (msl.entity_type = 'modifier' AND COALESCE(NULLIF(TRIM(mo.iiko_modifier_id), ''), NULL) IS NOT NULL)
+           )`,
+        [...targetBranchIds, AUTO_NO_PRICE_REASON],
       );
       removedCount = Number(deleteResult?.affectedRows || 0);
     }
@@ -195,10 +205,18 @@ async function applyIikoStopListPayloadSync(data, { reason = "manual", branchId 
   const [[stopListTotalRows], [menuReadinessRows]] = await Promise.all([
     db.query(
       `SELECT COUNT(*) AS total
-       FROM menu_stop_list
-       WHERE created_by IS NULL
-         AND reason = ?`,
-      [IIKO_STOPLIST_SYNC_REASON],
+       FROM menu_stop_list msl
+       LEFT JOIN menu_items mi ON msl.entity_type = 'item' AND msl.entity_id = mi.id
+       LEFT JOIN item_variants iv ON msl.entity_type = 'variant' AND msl.entity_id = iv.id
+       LEFT JOIN modifiers mo ON msl.entity_type = 'modifier' AND msl.entity_id = mo.id
+       WHERE msl.created_by IS NULL
+         AND NOT (msl.entity_type = 'item' AND COALESCE(msl.reason, '') = ?)
+         AND (
+           (msl.entity_type = 'item' AND COALESCE(NULLIF(TRIM(mi.iiko_item_id), ''), NULL) IS NOT NULL) OR
+           (msl.entity_type = 'variant' AND COALESCE(NULLIF(TRIM(iv.iiko_variant_id), ''), NULL) IS NOT NULL) OR
+           (msl.entity_type = 'modifier' AND COALESCE(NULLIF(TRIM(mo.iiko_modifier_id), ''), NULL) IS NOT NULL)
+         )`,
+      [AUTO_NO_PRICE_REASON],
     ),
     db.query(
       `SELECT status
