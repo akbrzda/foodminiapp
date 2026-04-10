@@ -4,15 +4,59 @@
       <CardContent>
         <PageHeader title="Стоп-лист" description="Список временно недоступных блюд по филиалам">
           <template #actions>
-            <div class="flex flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
-              <div v-if="canShowIikoSyncControls" class="rounded-lg border border-border/60 bg-muted/20 px-3 py-2 text-left">
-                <div class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Последняя синхронизация iiko</div>
-                <div class="text-sm font-medium text-foreground">{{ stopListSyncLabel }}</div>
-                <div class="text-xs text-muted-foreground">{{ stopListSyncStatusLabel }}</div>
+            <div
+              class="flex flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end"
+            >
+              <div
+                v-if="canShowIikoSyncControls"
+                class="px-3 py-2 text-left"
+                :class="
+                  isStopListSyncOutdated
+                    ? 'border-red-200 bg-red-50/60'
+                    : 'border-border/60 bg-muted/20'
+                "
+              >
+                <div class="flex items-center gap-1.5">
+                  <div
+                    class="text-sm font-medium"
+                    :class="isStopListSyncOutdated ? 'text-red-600' : 'text-foreground'"
+                  >
+                    {{ stopListSyncLabel }}
+                  </div>
+                  <Popover v-if="stopListSyncAlertMessage">
+                    <PopoverTrigger asChild>
+                      <button
+                        type="button"
+                        class="inline-flex h-5 w-5 items-center justify-center rounded-full text-red-600/90 hover:bg-red-100"
+                        aria-label="Показать предупреждение о синхронизации"
+                      >
+                        <AlertTriangle :size="14" />
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent
+                      align="end"
+                      side="top"
+                      class="max-w-[240px] border-zinc-800 bg-zinc-900 p-3 text-xs leading-4 text-zinc-100"
+                    >
+                      {{ stopListSyncAlertMessage }}
+                    </PopoverContent>
+                  </Popover>
+                </div>
               </div>
-              <Button v-if="canManageStopList && canShowIikoSyncControls" variant="secondary" :disabled="syncLoading" @click="syncStopListNow">
+              <Button
+                v-if="canManageStopList && canShowIikoSyncControls"
+                variant="outline"
+                size="icon"
+                :class="
+                  isStopListSyncOutdated
+                    ? 'border-red-200 bg-red-50 text-red-600 hover:bg-red-100'
+                    : ''
+                "
+                :disabled="syncLoading"
+                :title="syncLoading ? 'Синхронизация...' : 'Синхронизировать стоп-лист'"
+                @click="syncStopListNow"
+              >
                 <RefreshCcw :size="16" />
-                {{ syncLoading ? "Синхронизация..." : "Синхронизировать стоп-лист" }}
               </Button>
               <Button v-if="canManageStopList" @click="openModal()">
                 <Plus :size="16" />
@@ -32,7 +76,10 @@
       <template #field-branch_id="{ value, updateField }">
         <Select :model-value="value" @update:model-value="updateField">
           <SelectTrigger class="w-full">
-            <span class="truncate text-start" :class="value === 'all' ? 'text-muted-foreground' : ''">
+            <span
+              class="truncate text-start"
+              :class="value === 'all' ? 'text-muted-foreground' : ''"
+            >
               {{
                 value === "all"
                   ? "Филиал: Все"
@@ -44,7 +91,11 @@
             <SelectItem value="all">Все</SelectItem>
             <SelectGroup v-for="city in referenceStore.cities" :key="city.id">
               <SelectLabel>{{ city.name }}</SelectLabel>
-              <SelectItem v-for="branch in referenceStore.branchesByCity[city.id] || []" :key="branch.id" :value="String(branch.id)">
+              <SelectItem
+                v-for="branch in referenceStore.branchesByCity[city.id] || []"
+                :key="branch.id"
+                :value="String(branch.id)"
+              >
                 {{ branch.name }}
               </SelectItem>
             </SelectGroup>
@@ -89,8 +140,22 @@
                   <div class="text-sm font-medium">{{ getBranchName(item.branch_id) }}</div>
                 </TableCell>
                 <TableCell>
-                  <Badge :variant="item.entity_type === 'item' ? 'default' : item.entity_type === 'variant' ? 'secondary' : 'outline'">
-                    {{ item.entity_type === "item" ? "Блюдо" : item.entity_type === "variant" ? "Вариант" : "Модификатор" }}
+                  <Badge
+                    :variant="
+                      item.entity_type === 'item'
+                        ? 'default'
+                        : item.entity_type === 'variant'
+                          ? 'secondary'
+                          : 'outline'
+                    "
+                  >
+                    {{
+                      item.entity_type === "item"
+                        ? "Блюдо"
+                        : item.entity_type === "variant"
+                          ? "Вариант"
+                          : "Модификатор"
+                    }}
                   </Badge>
                 </TableCell>
                 <TableCell>
@@ -98,20 +163,38 @@
                 </TableCell>
                 <TableCell>
                   <div class="flex flex-wrap gap-1">
-                    <Badge v-for="channel in getFulfillmentTypes(item.fulfillment_types)" :key="`${item.id}-${channel}`" variant="secondary">
+                    <Badge
+                      v-for="channel in getFulfillmentTypes(item.fulfillment_types)"
+                      :key="`${item.id}-${channel}`"
+                      variant="secondary"
+                    >
                       {{ getFulfillmentLabel(channel) }}
                     </Badge>
-                    <Badge v-if="getFulfillmentTypes(item.fulfillment_types).length === 0" variant="outline">Все каналы</Badge>
+                    <Badge
+                      v-if="getFulfillmentTypes(item.fulfillment_types).length === 0"
+                      variant="outline"
+                      >Все каналы</Badge
+                    >
                   </div>
                 </TableCell>
                 <TableCell>
-                  <div class="text-xs text-muted-foreground">{{ item.reason || "—" }}</div>
+                  <div class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                    <span>{{ getStopReasonLabel(item) }}</span>
+                    <Badge v-if="isLocalStop(item)" variant="outline">Поставлено в системе</Badge>
+                  </div>
                 </TableCell>
                 <TableCell>
-                  <div class="text-xs text-muted-foreground">{{ formatStopCreatedAt(item.created_at) }}</div>
+                  <div class="text-xs text-muted-foreground">
+                    {{ formatStopCreatedAt(item.created_at) }}
+                  </div>
                 </TableCell>
                 <TableCell class="text-right">
-                  <Button v-if="canManageStopList" variant="ghost" size="icon" @click="removeFromStopList(item)">
+                  <Button
+                    v-if="canManageStopList && isLocalStop(item)"
+                    variant="ghost"
+                    size="icon"
+                    @click="removeFromStopList(item)"
+                  >
                     <Trash2 :size="16" class="text-red-600" />
                   </Button>
                 </TableCell>
@@ -131,7 +214,11 @@
       @update:page="page = $event"
       @update:page-size="onPageSizeChange"
     />
-    <Dialog v-if="showModal" :open="showModal" @update:open="(value) => (value ? null : closeModal())">
+    <Dialog
+      v-if="showModal"
+      :open="showModal"
+      @update:open="(value) => (value ? null : closeModal())"
+    >
       <DialogContent class="w-full max-w-5xl">
         <DialogHeader>
           <DialogTitle>Добавить в стоп-лист</DialogTitle>
@@ -142,7 +229,10 @@
             <FieldGroup>
               <FieldGroup class="grid gap-4 md:grid-cols-2">
                 <Field>
-                  <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Филиал *</FieldLabel>
+                  <FieldLabel
+                    class="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                    >Филиал *</FieldLabel
+                  >
                   <FieldContent>
                     <Select v-model="form.branch_id" required>
                       <SelectTrigger class="w-full">
@@ -151,7 +241,11 @@
                       <SelectContent>
                         <SelectGroup v-for="city in referenceStore.cities" :key="city.id">
                           <SelectLabel>{{ city.name }}</SelectLabel>
-                          <SelectItem v-for="branch in referenceStore.branchesByCity[city.id] || []" :key="branch.id" :value="branch.id">
+                          <SelectItem
+                            v-for="branch in referenceStore.branchesByCity[city.id] || []"
+                            :key="branch.id"
+                            :value="branch.id"
+                          >
                             {{ branch.name }}
                           </SelectItem>
                         </SelectGroup>
@@ -160,7 +254,10 @@
                   </FieldContent>
                 </Field>
                 <Field>
-                  <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Тип *</FieldLabel>
+                  <FieldLabel
+                    class="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                    >Тип *</FieldLabel
+                  >
                   <FieldContent>
                     <Select v-model="form.type" @update:modelValue="onTypeChange" required>
                       <SelectTrigger class="w-full">
@@ -175,7 +272,10 @@
                 </Field>
               </FieldGroup>
               <Field v-if="isModifierType">
-                <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Модификатор *</FieldLabel>
+                <FieldLabel
+                  class="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                  >Модификатор *</FieldLabel
+                >
                 <FieldContent>
                   <div ref="modifierContainer" class="relative">
                     <Input
@@ -200,16 +300,24 @@
                       >
                         {{ modifier.name }}
                       </button>
-                      <div v-if="!loadingModifiers && filteredModifiers.length === 0" class="px-3 py-2 text-sm text-muted-foreground">
+                      <div
+                        v-if="!loadingModifiers && filteredModifiers.length === 0"
+                        class="px-3 py-2 text-sm text-muted-foreground"
+                      >
                         Ничего не найдено
                       </div>
                     </div>
                   </div>
-                  <p v-if="selectedModifier" class="text-xs text-muted-foreground">Выбрано: {{ selectedModifier.name }}</p>
+                  <p v-if="selectedModifier" class="text-xs text-muted-foreground">
+                    Выбрано: {{ selectedModifier.name }}
+                  </p>
                 </FieldContent>
               </Field>
               <Field>
-                <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Причина постановки на стоп</FieldLabel>
+                <FieldLabel
+                  class="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                  >Причина постановки на стоп</FieldLabel
+                >
                 <FieldContent>
                   <Select v-model="form.reason">
                     <SelectTrigger class="w-full">
@@ -217,13 +325,18 @@
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">Без причины</SelectItem>
-                      <SelectItem v-for="reason in reasons" :key="reason.id" :value="reason.name">{{ reason.name }}</SelectItem>
+                      <SelectItem v-for="reason in reasons" :key="reason.id" :value="reason.name">{{
+                        reason.name
+                      }}</SelectItem>
                     </SelectContent>
                   </Select>
                 </FieldContent>
               </Field>
               <Field>
-                <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Способы получения</FieldLabel>
+                <FieldLabel
+                  class="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                  >Способы получения</FieldLabel
+                >
                 <FieldContent>
                   <div class="grid gap-2 sm:grid-cols-3">
                     <Label
@@ -277,7 +390,10 @@
                   <Skeleton class="h-4 w-2/3" />
                 </div>
               </div>
-              <div v-else-if="filteredCategories.length === 0" class="px-4 py-6 text-center text-sm text-muted-foreground">
+              <div
+                v-else-if="filteredCategories.length === 0"
+                class="px-4 py-6 text-center text-sm text-muted-foreground"
+              >
                 Нет доступной продукции
               </div>
               <div v-else class="max-h-[420px] space-y-4 overflow-auto p-4">
@@ -292,7 +408,11 @@
                     {{ category.name }}
                   </Label>
                   <div class="space-y-1 pl-6">
-                    <Label v-for="item in category.items" :key="item.id" class="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Label
+                      v-for="item in category.items"
+                      :key="item.id"
+                      class="flex items-center gap-2 text-sm text-muted-foreground"
+                    >
                       <input
                         type="checkbox"
                         class="h-4 w-4 rounded border-input text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -305,11 +425,16 @@
                 </div>
               </div>
             </div>
-            <p class="text-xs text-muted-foreground">Выбрано блюд: {{ selectedProductIds.length }}</p>
+            <p class="text-xs text-muted-foreground">
+              Выбрано блюд: {{ selectedProductIds.length }}
+            </p>
           </div>
           <div v-else-if="step === timeStep" class="space-y-4">
-            <div class="rounded-lg border border-border bg-muted/20 p-4 text-sm text-muted-foreground">
-              По умолчанию стоп-лист устанавливается без ограничения по времени. Можно включить автоматическое снятие.
+            <div
+              class="rounded-lg border border-border bg-muted/20 p-4 text-sm text-muted-foreground"
+            >
+              По умолчанию стоп-лист устанавливается без ограничения по времени. Можно включить
+              автоматическое снятие.
             </div>
             <Label class="flex items-center gap-2 text-sm">
               <input
@@ -322,40 +447,61 @@
             <div v-if="form.auto_remove" class="space-y-3">
               <div class="text-sm text-muted-foreground">Время филиала: {{ branchTimeLabel }}</div>
               <div class="flex flex-wrap gap-2">
-                <Button type="button" variant="ghost" class="text-xs" @click="applyQuickTime(1)">Через 1 час</Button>
-                <Button type="button" variant="ghost" class="text-xs" @click="applyQuickTime(3)">Через 3 часа</Button>
-                <Button type="button" variant="ghost" class="text-xs" @click="applyQuickTime(5)">Через 5 часов</Button>
-                <Button type="button" variant="ghost" class="text-xs" @click="applyShiftEnd">По окончании смены</Button>
+                <Button type="button" variant="ghost" class="text-xs" @click="applyQuickTime(1)"
+                  >Через 1 час</Button
+                >
+                <Button type="button" variant="ghost" class="text-xs" @click="applyQuickTime(3)"
+                  >Через 3 часа</Button
+                >
+                <Button type="button" variant="ghost" class="text-xs" @click="applyQuickTime(5)"
+                  >Через 5 часов</Button
+                >
+                <Button type="button" variant="ghost" class="text-xs" @click="applyShiftEnd"
+                  >По окончании смены</Button
+                >
               </div>
               <FieldGroup class="grid gap-3 sm:grid-cols-[1.2fr_0.6fr_0.6fr]">
                 <Field>
-                  <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Дата</FieldLabel>
+                  <FieldLabel
+                    class="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                    >Дата</FieldLabel
+                  >
                   <FieldContent>
                     <Input v-model="removeDate" type="date" />
                   </FieldContent>
                 </Field>
                 <Field>
-                  <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Часы</FieldLabel>
+                  <FieldLabel
+                    class="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                    >Часы</FieldLabel
+                  >
                   <FieldContent>
                     <Select v-model="removeHour">
                       <SelectTrigger class="w-full">
                         <SelectValue placeholder="Часы" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem v-for="hour in hours" :key="hour" :value="hour">{{ hour }}</SelectItem>
+                        <SelectItem v-for="hour in hours" :key="hour" :value="hour">{{
+                          hour
+                        }}</SelectItem>
                       </SelectContent>
                     </Select>
                   </FieldContent>
                 </Field>
                 <Field>
-                  <FieldLabel class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Минуты</FieldLabel>
+                  <FieldLabel
+                    class="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                    >Минуты</FieldLabel
+                  >
                   <FieldContent>
                     <Select v-model="removeMinute">
                       <SelectTrigger class="w-full">
                         <SelectValue placeholder="Минуты" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem v-for="minute in minutes" :key="minute" :value="minute">{{ minute }}</SelectItem>
+                        <SelectItem v-for="minute in minutes" :key="minute" :value="minute">{{
+                          minute
+                        }}</SelectItem>
                       </SelectContent>
                     </Select>
                   </FieldContent>
@@ -366,8 +512,15 @@
         </form>
         <DialogFooter class="flex flex-wrap gap-2">
           <BackButton type="button" @click="handleBack" :disabled="step === 1" />
-          <Button v-if="!isFinalStep" type="button" @click="handleNext" :disabled="!canProceed"> Следующий шаг </Button>
-          <Button v-else-if="canManageStopList" type="button" @click="submitStopList" :disabled="saving || !canSubmit">
+          <Button v-if="!isFinalStep" type="button" @click="handleNext" :disabled="!canProceed">
+            Следующий шаг
+          </Button>
+          <Button
+            v-else-if="canManageStopList"
+            type="button"
+            @click="submitStopList"
+            :disabled="saving || !canSubmit"
+          >
             <Save :size="16" />
             {{ saving ? "Сохранение..." : "Поставить" }}
           </Button>
@@ -379,17 +532,33 @@
 <script setup>
 import { devError } from "@/shared/utils/logger";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { Plus, RefreshCcw, Save, Trash2 } from "lucide-vue-next";
+import { AlertTriangle, Plus, RefreshCcw, Save, Trash2 } from "lucide-vue-next";
 import api from "@/shared/api/client.js";
 import Badge from "@/shared/components/ui/badge/Badge.vue";
 import BackButton from "@/shared/components/BackButton.vue";
 import Button from "@/shared/components/ui/button/Button.vue";
 import Card from "@/shared/components/ui/card/Card.vue";
 import CardContent from "@/shared/components/ui/card/CardContent.vue";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/shared/components/ui/dialog/index.js";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/shared/components/ui/dialog/index.js";
+import { Popover, PopoverContent, PopoverTrigger } from "@/shared/components/ui/popover";
 import BaseFilters from "@/shared/components/filters/BaseFilters.vue";
 import Input from "@/shared/components/ui/input/Input.vue";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/shared/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/shared/components/ui/select";
 import PageHeader from "@/shared/components/PageHeader.vue";
 import Table from "@/shared/components/ui/table/Table.vue";
 import TableBody from "@/shared/components/ui/table/TableBody.vue";
@@ -409,7 +578,8 @@ import { useAuthStore } from "@/shared/stores/auth.js";
 const referenceStore = useReferenceStore();
 const authStore = useAuthStore();
 const { showErrorNotification, showSuccessNotification } = useNotifications();
-const { shouldRestore, saveContext, restoreContext, restoreScroll } = useListContext("menu-stop-list");
+const { shouldRestore, saveContext, restoreContext, restoreScroll } =
+  useListContext("menu-stop-list");
 const canManageStopList = computed(() => authStore.hasPermission("menu.stop_list.manage"));
 const stopList = ref([]);
 const page = ref(1);
@@ -505,30 +675,50 @@ const fulfillmentLabelMap = {
   delivery: "Доставка",
 };
 const allowedFulfillmentValues = ["pickup", "delivery"];
+const IIKO_SYNC_STOPLIST_REASON = "Синхронизация стоп-листа из iiko";
 const hours = Array.from({ length: 24 }, (_, index) => String(index).padStart(2, "0"));
 const minutes = Array.from({ length: 60 }, (_, index) => String(index).padStart(2, "0"));
 const paginatedStopList = computed(() => {
   const start = (page.value - 1) * pageSize.value;
   return filteredStopList.value.slice(start, start + pageSize.value);
 });
+const availableBranchIds = computed(
+  () => new Set(referenceStore.branches.map((branch) => String(branch.id)))
+);
 const filteredStopList = computed(() => {
-  const search = filters.value.search.trim().toLowerCase();
+  const search = String(filters.value.search || "")
+    .trim()
+    .toLowerCase();
+  const branchFilter = String(filters.value.branch_id || "all");
+  const entityTypeFilter = String(filters.value.entity_type || "all");
+  const fulfillmentFilter = String(filters.value.fulfillment_type || "all");
+
   return stopList.value.filter((item) => {
-    if (filters.value.branch_id !== "all" && String(item.branch_id) !== filters.value.branch_id) {
+    const hasLoadedBranches = availableBranchIds.value.size > 0;
+    if (hasLoadedBranches && !availableBranchIds.value.has(String(item.branch_id))) {
       return false;
     }
-    if (filters.value.entity_type !== "all" && item.entity_type !== filters.value.entity_type) {
+    if (branchFilter !== "all" && String(item.branch_id) !== branchFilter) {
+      return false;
+    }
+    if (entityTypeFilter !== "all" && item.entity_type !== entityTypeFilter) {
       return false;
     }
     const fulfillmentTypes = getFulfillmentTypes(item.fulfillment_types);
     const isAllChannelsStop = fulfillmentTypes.length === 0;
-    if (filters.value.fulfillment_type !== "all" && !isAllChannelsStop && !fulfillmentTypes.includes(filters.value.fulfillment_type)) {
+    if (
+      fulfillmentFilter !== "all" &&
+      !isAllChannelsStop &&
+      !fulfillmentTypes.includes(fulfillmentFilter)
+    ) {
       return false;
     }
     if (!search) {
       return true;
     }
-    const raw = `${item.id} ${item.entity_name || ""} ${item.reason || ""}`.toLowerCase();
+    const raw = String(
+      `${item.id} ${item.entity_name || ""} ${getStopReasonLabel(item)}`
+    ).toLowerCase();
     return raw.includes(search);
   });
 });
@@ -536,7 +726,9 @@ const isModifierType = computed(() => form.value.type === "modifier");
 const isProductType = computed(() => form.value.type === "product");
 const timeStep = computed(() => (isProductType.value ? 3 : 2));
 const isFinalStep = computed(() => step.value === timeStep.value);
-const canShowIikoSyncControls = computed(() => integrationSettingsLoaded.value && isIikoIntegrationEnabled.value);
+const canShowIikoSyncControls = computed(
+  () => integrationSettingsLoaded.value && isIikoIntegrationEnabled.value
+);
 const canProceedFromStep1 = computed(() => {
   if (!form.value.branch_id || !form.value.type) return false;
   if (!form.value.fulfillment_types.length) return false;
@@ -563,7 +755,9 @@ const filteredModifiers = computed(() => {
 const filteredCategories = computed(() => {
   const query = productSearch.value.trim().toLowerCase();
   let list = categories.value.map((category) => {
-    const filteredItems = query ? category.items.filter((item) => item.name.toLowerCase().includes(query)) : category.items;
+    const filteredItems = query
+      ? category.items.filter((item) => item.name.toLowerCase().includes(query))
+      : category.items;
     return { ...category, items: filteredItems };
   });
   list = list.filter((category) => category.items.length > 0);
@@ -577,14 +771,35 @@ const filteredCategories = computed(() => {
   }
   return list;
 });
-const allProductIds = computed(() => categories.value.flatMap((category) => category.items.map((item) => item.id)));
+const allProductIds = computed(() =>
+  categories.value.flatMap((category) => category.items.map((item) => item.id))
+);
 const allProductsSelected = computed(() => {
   if (allProductIds.value.length === 0) return false;
   return allProductIds.value.every((id) => selectedProductIds.value.includes(id));
 });
 const stopListSyncLabel = computed(() => {
   if (!stopListSyncInfo.value?.created_at) return "Еще не запускалась";
-  return formatStopCreatedAt(stopListSyncInfo.value.created_at);
+  return formatStopSyncRelativeTime(stopListSyncInfo.value.created_at);
+});
+const stopListSyncAgeMinutes = computed(() => {
+  if (!stopListSyncInfo.value?.created_at) return null;
+  const syncDate = new Date(stopListSyncInfo.value.created_at);
+  if (Number.isNaN(syncDate.getTime())) return null;
+  return Math.floor((now.value.getTime() - syncDate.getTime()) / (60 * 1000));
+});
+const isStopListSyncOutdated = computed(() => {
+  if (!stopListSyncInfo.value?.created_at) return true;
+  const ageMinutes = stopListSyncAgeMinutes.value;
+  if (ageMinutes === null) return true;
+  return ageMinutes >= 180;
+});
+const stopListSyncAlertMessage = computed(() => {
+  if (!isStopListSyncOutdated.value || syncLoading.value) return null;
+  if (!stopListSyncInfo.value?.created_at) {
+    return "Давно не было обновлений. Запустите синхронизацию, чтобы обновить данные из POS.";
+  }
+  return "Синхронизация давно не запускалась. Рекомендуется обновить данные из POS.";
 });
 const stopListSyncStatusLabel = computed(() => {
   const status = String(stopListSyncInfo.value?.status || "").trim();
@@ -596,12 +811,18 @@ const stopListSyncStatusLabel = computed(() => {
   return `Статус: ${status}`;
 });
 const getBranchName = (branchId) => {
-  return referenceStore.branches.find((b) => b.id === branchId)?.name || "Неизвестно";
+  return referenceStore.branches.find((b) => String(b.id) === String(branchId))?.name || "Неизвестно";
 };
 const getFulfillmentTypes = (value) => {
   if (!value) return [];
   if (Array.isArray(value)) {
-    const normalized = Array.from(new Set(value.map((item) => String(item || "").trim()).filter((item) => allowedFulfillmentValues.includes(item))));
+    const normalized = Array.from(
+      new Set(
+        value
+          .map((item) => String(item || "").trim())
+          .filter((item) => allowedFulfillmentValues.includes(item))
+      )
+    );
     if (normalized.length === allowedFulfillmentValues.length) return [];
     return normalized;
   }
@@ -610,7 +831,11 @@ const getFulfillmentTypes = (value) => {
       const parsed = JSON.parse(value);
       if (!Array.isArray(parsed)) return [];
       const normalized = Array.from(
-        new Set(parsed.map((item) => String(item || "").trim()).filter((item) => allowedFulfillmentValues.includes(item))),
+        new Set(
+          parsed
+            .map((item) => String(item || "").trim())
+            .filter((item) => allowedFulfillmentValues.includes(item))
+        )
       );
       if (normalized.length === allowedFulfillmentValues.length) return [];
       return normalized;
@@ -621,6 +846,46 @@ const getFulfillmentTypes = (value) => {
   return [];
 };
 const getFulfillmentLabel = (value) => fulfillmentLabelMap[value] || value;
+function isLocalStop(item) {
+  return item?.created_by !== null && item?.created_by !== undefined;
+}
+
+function getStopReasonLabel(item) {
+  const reason = String(item?.reason || "").trim();
+  if (!reason) return "—";
+
+  const isAutoIikoEntry = item?.created_by === null;
+  if (isAutoIikoEntry && reason === IIKO_SYNC_STOPLIST_REASON) {
+    return "Блюдо отсутствует в выгрузке данной точки";
+  }
+
+  if (isAutoIikoEntry && /disabled|hidden|ishidden|isactive=false/i.test(reason)) {
+    return "Отключено в POS";
+  }
+
+  return reason;
+}
+const formatStopSyncRelativeTime = (value) => {
+  if (!value) return "—";
+  const syncDate = new Date(value);
+  if (Number.isNaN(syncDate.getTime())) return "—";
+
+  const diffMs = now.value.getTime() - syncDate.getTime();
+  if (diffMs <= 0) return "только что";
+
+  const diffMinutes = Math.floor(diffMs / (60 * 1000));
+  if (diffMinutes < 60) {
+    return `${diffMinutes} мин. назад`;
+  }
+
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) {
+    return `${diffHours} ч. назад`;
+  }
+
+  const diffDays = Math.floor(diffHours / 24);
+  return `${diffDays} д. назад`;
+};
 const formatStopCreatedAt = (value) => {
   if (!value) return "—";
   return formatDate(value, {
@@ -733,9 +998,15 @@ const loadCategoriesAndItems = async () => {
   if (!branch?.city_id) return;
   loadingCategories.value = true;
   try {
-    const categoriesResponse = await api.get(`/api/menu/admin/categories?city_id=${branch.city_id}`);
+    const categoriesResponse = await api.get(
+      `/api/menu/admin/categories?city_id=${branch.city_id}`
+    );
     const baseCategories = categoriesResponse.data.categories || [];
-    const itemsResponses = await Promise.all(baseCategories.map((category) => api.get(`/api/menu/admin/categories/${category.id}/products`)));
+    const itemsResponses = await Promise.all(
+      baseCategories.map((category) =>
+        api.get(`/api/menu/admin/categories/${category.id}/products`)
+      )
+    );
     categories.value = baseCategories.map((category, index) => ({
       ...category,
       items: itemsResponses[index]?.data?.items || [],
@@ -883,7 +1154,7 @@ const submitStopList = async () => {
     const existingStopSet = new Set(
       (stopList.value || [])
         .filter((entry) => Number(entry.branch_id) === branchId)
-        .map((entry) => `${entry.entity_type}:${Number(entry.entity_id)}`),
+        .map((entry) => `${entry.entity_type}:${Number(entry.entity_id)}`)
     );
 
     const payloadBase = {
@@ -906,7 +1177,9 @@ const submitStopList = async () => {
         entity_id: modifierId,
       });
     } else {
-      const duplicateProductIds = selectedProductIds.value.map((id) => Number(id)).filter((id) => existingStopSet.has(`item:${id}`));
+      const duplicateProductIds = selectedProductIds.value
+        .map((id) => Number(id))
+        .filter((id) => existingStopSet.has(`item:${id}`));
       if (duplicateProductIds.length > 0) {
         showErrorNotification("Часть выбранных позиций уже находится в стоп-листе этого филиала");
         return;
@@ -917,7 +1190,7 @@ const submitStopList = async () => {
           ...payloadBase,
           entity_type: "item",
           entity_id: id,
-        }),
+        })
       );
       await Promise.all(requests);
     }
@@ -964,14 +1237,22 @@ const syncStopListNow = async () => {
     }
 
     if (syncResult?.status === "failed" || syncResult?.status === "error") {
-      showErrorNotification(syncResult?.log?.error_message || "Синхронизация стоп-листа завершилась с ошибкой");
+      showErrorNotification(
+        syncResult?.log?.error_message || "Синхронизация стоп-листа завершилась с ошибкой"
+      );
       return;
     }
 
     await loadStopList({ preservePage: true });
-    showSuccessNotification("Задача синхронизации запущена. Обновление списка может завершиться чуть позже");
+    showSuccessNotification(
+      "Задача синхронизации запущена. Обновление списка может завершиться чуть позже"
+    );
   } catch (error) {
-    showErrorNotification(error?.response?.data?.error || error?.response?.data?.reason || "Не удалось запустить синхронизацию стоп-листа");
+    showErrorNotification(
+      error?.response?.data?.error ||
+        error?.response?.data?.reason ||
+        "Не удалось запустить синхронизацию стоп-листа"
+    );
   } finally {
     stopListSyncPollController = null;
     syncLoading.value = false;
@@ -981,7 +1262,10 @@ onMounted(async () => {
   try {
     await referenceStore.fetchCitiesAndBranches();
     await loadIntegrationSettings();
-    await Promise.all([loadReasons(), ...(isIikoIntegrationEnabled.value ? [loadStopListSyncInfo()] : [])]);
+    await Promise.all([
+      loadReasons(),
+      ...(isIikoIntegrationEnabled.value ? [loadStopListSyncInfo()] : []),
+    ]);
     if (shouldRestore.value) {
       const context = restoreContext();
       if (context) {
@@ -1023,7 +1307,7 @@ watch(
     if (isProductType.value) {
       await loadCategoriesAndItems();
     }
-  },
+  }
 );
 watch(
   () => modifierListOpen.value,
@@ -1046,7 +1330,7 @@ watch(
     };
     outsideHandler.value = closeOnOutside;
     document.addEventListener("click", closeOnOutside);
-  },
+  }
 );
 watch(
   () => showModal.value,
@@ -1057,7 +1341,7 @@ watch(
       document.removeEventListener("click", outsideHandler.value);
       outsideHandler.value = null;
     }
-  },
+  }
 );
 watch(
   () => modifierQuery.value,
@@ -1065,18 +1349,23 @@ watch(
     if (selectedModifier.value && value !== selectedModifier.value.name) {
       selectedModifier.value = null;
     }
-  },
+  }
 );
 watch(
   () => [page.value, pageSize.value],
   () => {
     saveContext({}, { page: page.value, pageSize: pageSize.value });
-  },
+  }
 );
 watch(
-  () => [filters.value.branch_id, filters.value.entity_type, filters.value.fulfillment_type, filters.value.search],
+  () => [
+    filters.value.branch_id,
+    filters.value.entity_type,
+    filters.value.fulfillment_type,
+    filters.value.search,
+  ],
   () => {
     page.value = 1;
-  },
+  }
 );
 </script>

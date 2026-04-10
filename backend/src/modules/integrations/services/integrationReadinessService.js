@@ -54,7 +54,6 @@ const MENU_ENTITY_CONFIG = {
   },
 };
 
-const AUTO_NO_PRICE_REASON = "Не задана цена";
 
 function normalizeString(value) {
   return String(value || "")
@@ -423,13 +422,11 @@ export async function refreshStopListReadiness() {
        LEFT JOIN item_variants iv ON msl.entity_type = 'variant' AND msl.entity_id = iv.id
        LEFT JOIN modifiers mo ON msl.entity_type = 'modifier' AND msl.entity_id = mo.id
        WHERE msl.created_by IS NULL
-         AND NOT (msl.entity_type = 'item' AND COALESCE(msl.reason, '') = ?)
          AND (
            (msl.entity_type = 'item' AND COALESCE(NULLIF(TRIM(mi.iiko_item_id), ''), NULL) IS NOT NULL) OR
            (msl.entity_type = 'variant' AND COALESCE(NULLIF(TRIM(iv.iiko_variant_id), ''), NULL) IS NOT NULL) OR
            (msl.entity_type = 'modifier' AND COALESCE(NULLIF(TRIM(mo.iiko_modifier_id), ''), NULL) IS NOT NULL)
          )`,
-      [AUTO_NO_PRICE_REASON],
     ),
     db.query(
       `SELECT COUNT(*) AS total

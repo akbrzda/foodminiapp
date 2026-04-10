@@ -7,7 +7,6 @@ import { notifyMenuUpdated } from "../../../../websocket/runtime.js";
 import { buildStopListEntryMap, resolveStopListEntityMaps } from "./iiko-stoplist.helpers.js";
 
 const IIKO_STOPLIST_SYNC_REASON = "Синхронизация стоп-листа из iiko";
-const AUTO_NO_PRICE_REASON = "Не задана цена";
 
 async function invalidatePublicMenuCache() {
   try {
@@ -62,26 +61,7 @@ async function applyIikoStopListPayloadSync(data, { reason = "manual", branchId 
   try {
     await connection.beginTransaction();
 
-    if (targetBranchIds.length > 0) {
-      const branchPlaceholders = targetBranchIds.map(() => "?").join(",");
-      const [deleteResult] = await connection.query(
-        `DELETE msl
-         FROM menu_stop_list msl
-         LEFT JOIN menu_items mi ON msl.entity_type = 'item' AND msl.entity_id = mi.id
-         LEFT JOIN item_variants iv ON msl.entity_type = 'variant' AND msl.entity_id = iv.id
-         LEFT JOIN modifiers mo ON msl.entity_type = 'modifier' AND msl.entity_id = mo.id
-         WHERE msl.branch_id IN (${branchPlaceholders})
-           AND msl.created_by IS NULL
-           AND NOT (msl.entity_type = 'item' AND COALESCE(msl.reason, '') = ?)
-           AND (
-             (msl.entity_type = 'item' AND COALESCE(NULLIF(TRIM(mi.iiko_item_id), ''), NULL) IS NOT NULL) OR
-             (msl.entity_type = 'variant' AND COALESCE(NULLIF(TRIM(iv.iiko_variant_id), ''), NULL) IS NOT NULL) OR
-             (msl.entity_type = 'modifier' AND COALESCE(NULLIF(TRIM(mo.iiko_modifier_id), ''), NULL) IS NOT NULL)
-           )`,
-        [...targetBranchIds, AUTO_NO_PRICE_REASON],
-      );
-      removedCount = Number(deleteResult?.affectedRows || 0);
-    }
+    const desiredEntriesByKey = new Map();
 
     for (const branch of targetBranches) {
       const branchScopedEntries = new Map();
@@ -128,21 +108,81 @@ async function applyIikoStopListPayloadSync(data, { reason = "manual", branchId 
           continue;
         }
         matchedCount += 1;
+        const key = `${branch.id}:${entityType}:${entityId}`;
+        const nextCreatedAtTs = stopMeta?.createdAt
+          ? new Date(stopMeta.createdAt).getTime()
+          : 0;
+        const current = desiredEntriesByKey.get(key);
+        const currentCreatedAtTs = current?.createdAt
+          ? new Date(current.createdAt).getTime()
+          : 0;
+        if (!current || nextCreatedAtTs > currentCreatedAtTs) {
+          desiredEntriesByKey.set(key, {
+            branchId: branch.id,
+            entityType,
+            entityId,
+            reason: stopMeta?.reason || IIKO_STOPLIST_SYNC_REASON,
+            createdAt: stopMeta?.createdAt || null,
+          });
+        }
+      }
+    }
 
+    const existingByKey = new Map();
+    if (targetBranchIds.length > 0) {
+      const branchPlaceholders = targetBranchIds.map(() => "?").join(",");
+      const [existingRows] = await connection.query(
+        `SELECT msl.id, msl.branch_id, msl.entity_type, msl.entity_id, msl.reason, msl.created_at
+         FROM menu_stop_list msl
+         LEFT JOIN menu_items mi ON msl.entity_type = 'item' AND msl.entity_id = mi.id
+         LEFT JOIN item_variants iv ON msl.entity_type = 'variant' AND msl.entity_id = iv.id
+         LEFT JOIN modifiers mo ON msl.entity_type = 'modifier' AND msl.entity_id = mo.id
+         WHERE msl.branch_id IN (${branchPlaceholders})
+           AND msl.created_by IS NULL
+           AND (
+             (msl.entity_type = 'item' AND COALESCE(NULLIF(TRIM(mi.iiko_item_id), ''), NULL) IS NOT NULL) OR
+             (msl.entity_type = 'variant' AND COALESCE(NULLIF(TRIM(iv.iiko_variant_id), ''), NULL) IS NOT NULL) OR
+             (msl.entity_type = 'modifier' AND COALESCE(NULLIF(TRIM(mo.iiko_modifier_id), ''), NULL) IS NOT NULL)
+           )`,
+        targetBranchIds,
+      );
+
+      for (const row of existingRows) {
+        const key = `${row.branch_id}:${row.entity_type}:${row.entity_id}`;
+        existingByKey.set(key, row);
+      }
+
+      for (const [key, row] of existingByKey.entries()) {
+        if (desiredEntriesByKey.has(key)) continue;
+        await connection.query("DELETE FROM menu_stop_list WHERE id = ?", [row.id]);
+        removedCount += 1;
+      }
+    }
+
+    for (const [key, desired] of desiredEntriesByKey.entries()) {
+      const existing = existingByKey.get(key) || null;
+      if (existing) {
         await connection.query(
-          `INSERT INTO menu_stop_list (branch_id, entity_type, entity_id, fulfillment_types, reason, auto_remove, remove_at, created_by, created_at)
-           VALUES (?, ?, ?, NULL, ?, 0, NULL, NULL, COALESCE(?, NOW()))
-           ON DUPLICATE KEY UPDATE
-             fulfillment_types = NULL,
-             reason = VALUES(reason),
-             auto_remove = 0,
-             remove_at = NULL,
-             created_by = NULL,
-             created_at = VALUES(created_at)`,
-          [branch.id, entityType, entityId, stopMeta?.reason || IIKO_STOPLIST_SYNC_REASON, stopMeta?.createdAt || null],
+          `UPDATE menu_stop_list
+           SET fulfillment_types = NULL,
+               reason = ?,
+               auto_remove = 0,
+               remove_at = NULL,
+               created_by = NULL,
+               created_at = COALESCE(?, created_at)
+           WHERE id = ?`,
+          [desired.reason, desired.createdAt, existing.id],
         );
         updatedCount += 1;
+        continue;
       }
+
+      await connection.query(
+        `INSERT INTO menu_stop_list (branch_id, entity_type, entity_id, fulfillment_types, reason, auto_remove, remove_at, created_by, created_at)
+         VALUES (?, ?, ?, NULL, ?, 0, NULL, NULL, COALESCE(?, NOW()))`,
+        [desired.branchId, desired.entityType, desired.entityId, desired.reason, desired.createdAt],
+      );
+      updatedCount += 1;
     }
 
     await connection.commit();
@@ -210,13 +250,11 @@ async function applyIikoStopListPayloadSync(data, { reason = "manual", branchId 
        LEFT JOIN item_variants iv ON msl.entity_type = 'variant' AND msl.entity_id = iv.id
        LEFT JOIN modifiers mo ON msl.entity_type = 'modifier' AND msl.entity_id = mo.id
        WHERE msl.created_by IS NULL
-         AND NOT (msl.entity_type = 'item' AND COALESCE(msl.reason, '') = ?)
          AND (
            (msl.entity_type = 'item' AND COALESCE(NULLIF(TRIM(mi.iiko_item_id), ''), NULL) IS NOT NULL) OR
            (msl.entity_type = 'variant' AND COALESCE(NULLIF(TRIM(iv.iiko_variant_id), ''), NULL) IS NOT NULL) OR
            (msl.entity_type = 'modifier' AND COALESCE(NULLIF(TRIM(mo.iiko_modifier_id), ''), NULL) IS NOT NULL)
          )`,
-      [AUTO_NO_PRICE_REASON],
     ),
     db.query(
       `SELECT status

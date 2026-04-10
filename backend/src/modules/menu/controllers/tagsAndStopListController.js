@@ -3,7 +3,6 @@ import logger from "../../../utils/logger.js";
 import { notifyMenuUpdated } from "../../../websocket/runtime.js";
 import { getIikoClientOrNull, getIntegrationSettings } from "../../integrations/services/integrationConfigService.js";
 
-const AUTO_NO_PRICE_REASON = "Не задана цена";
 const IIKO_STOPLIST_SYNC_REASON = "Синхронизация стоп-листа из iiko";
 
 // Вспомогательные функции
@@ -32,36 +31,6 @@ async function invalidateAllMenuCache() {
   }
 }
 
-function normalizeFulfillmentTypes(value) {
-  if (!value) return [];
-  if (Array.isArray(value)) {
-    return value
-      .map((item) => String(item || "").trim())
-      .filter(Boolean)
-      .sort();
-  }
-  if (typeof value === "string") {
-    try {
-      const parsed = JSON.parse(value);
-      return normalizeFulfillmentTypes(parsed);
-    } catch (error) {
-      return [];
-    }
-  }
-  return [];
-}
-
-function resolveNoPriceFulfillmentTypes(row) {
-  const hasVariants = Number(row.has_variants) === 1;
-  const deliveryPositive = hasVariants ? Number(row.variant_delivery_positive) === 1 : Number(row.item_delivery_positive) === 1;
-  const pickupPositive = hasVariants ? Number(row.variant_pickup_positive) === 1 : Number(row.item_pickup_positive) === 1;
-
-  const missing = [];
-  if (!deliveryPositive) missing.push("delivery");
-  if (!pickupPositive) missing.push("pickup");
-  return missing;
-}
-
 function extractProductSizeId(externalVariantId) {
   const value = String(externalVariantId || "").trim();
   if (!value) return "";
@@ -80,10 +49,6 @@ async function resolveIikoStopListChangeContext({ branchId, entityType, entityId
   const isIikoExternalMode = settings.iikoEnabled && menuMode === "external";
   if (!isIikoExternalMode) {
     return { shouldSync: false, skipReason: "Режим iiko для меню не активен" };
-  }
-
-  if (createdBy === null && String(reason || "").trim() === AUTO_NO_PRICE_REASON) {
-    return { shouldSync: false, skipReason: "Автоматический локальный стоп-лист по нулевой цене" };
   }
 
   if (createdBy === null && String(reason || "").trim() === IIKO_STOPLIST_SYNC_REASON) {
@@ -208,161 +173,6 @@ async function syncStopListChangeToIiko({ operation, branchId, entityType, entit
     shouldSync: true,
     synced: true,
   };
-}
-
-async function syncAutoNoPriceStopList(branchId = null) {
-  const normalizedBranchId = Number(branchId);
-  const branchFilter = Number.isInteger(normalizedBranchId) && normalizedBranchId > 0 ? normalizedBranchId : null;
-  const branchWhere = branchFilter ? "WHERE id = ?" : "";
-  const branchParams = branchFilter ? [branchFilter] : [];
-
-  const [branches] = await db.query(
-    `SELECT id, city_id
-     FROM branches
-     ${branchWhere}`,
-    branchParams,
-  );
-  if (!Array.isArray(branches) || branches.length === 0) return;
-
-  const branchIds = branches.map((row) => Number(row.id)).filter(Number.isInteger);
-  const cityIds = [...new Set(branches.map((row) => Number(row.city_id)).filter(Number.isInteger))];
-  if (branchIds.length === 0 || cityIds.length === 0) return;
-
-  const [rows] = await db.query(
-    `SELECT
-       mi.id AS item_id,
-       mic.city_id,
-       COALESCE(vs.has_variants, 0) AS has_variants,
-       COALESCE(ip.delivery_positive, 0) AS item_delivery_positive,
-       COALESCE(ip.pickup_positive, 0) AS item_pickup_positive,
-       COALESCE(vp.delivery_positive, 0) AS variant_delivery_positive,
-       COALESCE(vp.pickup_positive, 0) AS variant_pickup_positive
-     FROM menu_items mi
-     JOIN menu_item_cities mic ON mic.item_id = mi.id AND mic.is_active = TRUE
-     LEFT JOIN (
-       SELECT item_id, 1 AS has_variants
-       FROM item_variants
-       WHERE is_active = TRUE
-       GROUP BY item_id
-     ) vs ON vs.item_id = mi.id
-     LEFT JOIN (
-       SELECT
-         item_id,
-         city_id,
-         MAX(CASE WHEN fulfillment_type = 'delivery' AND price > 0 THEN 1 ELSE 0 END) AS delivery_positive,
-         MAX(CASE WHEN fulfillment_type = 'pickup' AND price > 0 THEN 1 ELSE 0 END) AS pickup_positive
-       FROM menu_item_prices
-       WHERE city_id IN (${cityIds.map(() => "?").join(", ")})
-       GROUP BY item_id, city_id
-     ) ip ON ip.item_id = mi.id AND ip.city_id = mic.city_id
-     LEFT JOIN (
-       SELECT
-         iv.item_id,
-         mvp.city_id,
-         MAX(CASE WHEN mvp.fulfillment_type = 'delivery' AND mvp.price > 0 THEN 1 ELSE 0 END) AS delivery_positive,
-         MAX(CASE WHEN mvp.fulfillment_type = 'pickup' AND mvp.price > 0 THEN 1 ELSE 0 END) AS pickup_positive
-       FROM item_variants iv
-       JOIN menu_variant_prices mvp ON mvp.variant_id = iv.id
-       WHERE iv.is_active = TRUE
-         AND mvp.city_id IN (${cityIds.map(() => "?").join(", ")})
-       GROUP BY iv.item_id, mvp.city_id
-     ) vp ON vp.item_id = mi.id AND vp.city_id = mic.city_id
-     WHERE mi.is_active = TRUE
-       AND mic.city_id IN (${cityIds.map(() => "?").join(", ")})`,
-    [...cityIds, ...cityIds, ...cityIds],
-  );
-
-  const noPriceByCity = new Map();
-  for (const row of rows) {
-    const cityId = Number(row.city_id);
-    const itemId = Number(row.item_id);
-    if (!Number.isInteger(cityId) || !Number.isInteger(itemId)) continue;
-    const missingFulfillment = resolveNoPriceFulfillmentTypes(row);
-    if (missingFulfillment.length === 0) continue;
-    if (!noPriceByCity.has(cityId)) {
-      noPriceByCity.set(cityId, new Map());
-    }
-    noPriceByCity.get(cityId).set(itemId, missingFulfillment);
-  }
-
-  const [existingRows] = await db.query(
-    `SELECT id, branch_id, entity_id, reason, created_by, fulfillment_types
-     FROM menu_stop_list
-     WHERE entity_type = 'item'
-       AND branch_id IN (${branchIds.map(() => "?").join(", ")})`,
-    branchIds,
-  );
-
-  const existingByKey = new Map();
-  for (const row of existingRows) {
-    const key = `${row.branch_id}:${row.entity_id}`;
-    existingByKey.set(key, row);
-  }
-
-  const desiredByKey = new Map();
-  for (const branch of branches) {
-    const branchIdValue = Number(branch.id);
-    const branchCityId = Number(branch.city_id);
-    if (!Number.isInteger(branchIdValue) || !Number.isInteger(branchCityId)) continue;
-    const cityItems = noPriceByCity.get(branchCityId);
-    if (!cityItems) continue;
-    for (const [itemId, missingFulfillment] of cityItems.entries()) {
-      const key = `${branchIdValue}:${itemId}`;
-      const existing = existingByKey.get(key);
-      if (existing && !(existing.created_by === null && String(existing.reason || "") === AUTO_NO_PRICE_REASON)) {
-        continue;
-      }
-      desiredByKey.set(key, {
-        branchId: branchIdValue,
-        itemId,
-        fulfillmentTypes: missingFulfillment,
-      });
-    }
-  }
-
-  const connection = await db.getConnection();
-  try {
-    await connection.beginTransaction();
-
-    for (const row of existingRows) {
-      const isAutoNoPrice = row.created_by === null && String(row.reason || "") === AUTO_NO_PRICE_REASON;
-      if (!isAutoNoPrice) continue;
-      const key = `${row.branch_id}:${row.entity_id}`;
-      if (!desiredByKey.has(key)) {
-        await connection.query("DELETE FROM menu_stop_list WHERE id = ?", [row.id]);
-        continue;
-      }
-
-      const desired = desiredByKey.get(key);
-      const currentFulfillment = normalizeFulfillmentTypes(row.fulfillment_types);
-      const nextFulfillment = normalizeFulfillmentTypes(desired.fulfillmentTypes);
-      if (JSON.stringify(currentFulfillment) === JSON.stringify(nextFulfillment)) {
-        continue;
-      }
-      await connection.query(
-        `UPDATE menu_stop_list
-         SET fulfillment_types = ?
-         WHERE id = ?`,
-        [JSON.stringify(nextFulfillment), row.id],
-      );
-    }
-
-    for (const [key, desired] of desiredByKey.entries()) {
-      if (existingByKey.has(key)) continue;
-      await connection.query(
-        `INSERT INTO menu_stop_list (branch_id, entity_type, entity_id, fulfillment_types, reason, auto_remove, remove_at, created_by)
-         VALUES (?, 'item', ?, ?, ?, 0, NULL, NULL)`,
-        [desired.branchId, desired.itemId, JSON.stringify(desired.fulfillmentTypes), AUTO_NO_PRICE_REASON],
-      );
-    }
-
-    await connection.commit();
-  } catch (error) {
-    await connection.rollback();
-    throw error;
-  } finally {
-    connection.release();
-  }
 }
 
 // GET /admin/tags - Получение всех тегов
@@ -706,13 +516,24 @@ export const updateItemCategories = async (req, res, next) => {
 export const getStopList = async (req, res, next) => {
   try {
     const { branch_id } = req.query;
-    await syncAutoNoPriceStopList(branch_id);
-
     const params = [];
-    const whereBranch = branch_id ? "WHERE msl.branch_id = ?" : "";
+    const whereConditions = ["b.is_active = TRUE"];
     if (branch_id) {
+      whereConditions.push("b.id = ?");
       params.push(branch_id);
     }
+    whereConditions.push(`(
+      msl.created_by IS NOT NULL
+      OR (
+        msl.created_by IS NULL
+        AND COALESCE(msl.reason, '') <> _utf8mb4'Не задана цена'
+        AND (
+          (msl.entity_type = 'item' AND COALESCE(NULLIF(TRIM(mi.iiko_item_id), ''), NULL) IS NOT NULL)
+          OR (msl.entity_type = 'variant' AND COALESCE(NULLIF(TRIM(iv.iiko_variant_id), ''), NULL) IS NOT NULL)
+          OR (msl.entity_type = 'modifier' AND COALESCE(NULLIF(TRIM(m.iiko_modifier_id), ''), NULL) IS NOT NULL)
+        )
+      )
+    )`);
 
     const [stopList] = await db.query(
       `SELECT msl.id, msl.branch_id, msl.entity_type, msl.entity_id, msl.fulfillment_types,
@@ -721,15 +542,16 @@ export const getStopList = async (req, res, next) => {
               CASE 
                 WHEN msl.entity_type = 'item' THEN mi.name
                 WHEN msl.entity_type = 'variant' THEN CONCAT(mi2.name, ' - ', iv.name)
-                WHEN msl.entity_type = 'modifier' THEN m.name
+               WHEN msl.entity_type = 'modifier' THEN m.name
               END as entity_name
        FROM menu_stop_list msl
+       INNER JOIN branches b ON b.id = msl.branch_id
        LEFT JOIN admin_users au ON au.id = msl.created_by
        LEFT JOIN menu_items mi ON msl.entity_type = 'item' AND msl.entity_id = mi.id
        LEFT JOIN item_variants iv ON msl.entity_type = 'variant' AND msl.entity_id = iv.id
        LEFT JOIN menu_items mi2 ON iv.item_id = mi2.id
        LEFT JOIN modifiers m ON msl.entity_type = 'modifier' AND msl.entity_id = m.id
-       ${whereBranch}
+       WHERE ${whereConditions.join(" AND ")}
        ORDER BY msl.created_at DESC`,
       params,
     );
@@ -870,7 +692,7 @@ export const addToStopList = async (req, res, next) => {
       return res.status(400).json({ error: "remove_at is required for auto_remove" });
     }
 
-    const [branches] = await db.query("SELECT id FROM branches WHERE id = ?", [branch_id]);
+    const [branches] = await db.query("SELECT id FROM branches WHERE id = ? AND is_active = TRUE", [branch_id]);
     if (branches.length === 0) {
       return res.status(404).json({ error: "Branch not found" });
     }
