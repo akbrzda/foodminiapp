@@ -1542,7 +1542,8 @@ const loadTelegramSettings = async () => {
   try {
     const [settingsResponse, citiesResponse] = await Promise.all([api.get("/api/settings/admin"), api.get("/api/cities/admin/all")]);
     applySettingsResponse(settingsResponse.data);
-    telegramCities.value = Array.isArray(citiesResponse.data?.cities) ? citiesResponse.data.cities : [];
+    const cities = Array.isArray(citiesResponse.data?.cities) ? citiesResponse.data.cities : [];
+    telegramCities.value = cities.filter((city) => city?.is_active === true || city?.is_active === 1);
     telegramSettingsLoaded.value = true;
   } catch (error) {
     devError("Failed to load telegram start settings:", error);

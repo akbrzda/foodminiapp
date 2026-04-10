@@ -205,7 +205,7 @@ const filterFields = computed(() => [
     placeholder: "Выберите город",
     type: "select",
     defaultValue: "",
-    options: referenceStore.cities.map((city) => ({
+    options: referenceStore.allCities.map((city) => ({
       value: String(city.id),
       label: city.name,
     })),
@@ -280,7 +280,7 @@ const deleteBranch = async (branch) => {
 };
 
 onMounted(async () => {
-  await referenceStore.loadCities();
+  await referenceStore.loadCities({ includeInactive: true });
 
   if (shouldRestore.value) {
     const context = restoreContext();

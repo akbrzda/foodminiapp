@@ -24,7 +24,7 @@
                     <SelectValue placeholder="Выберите город" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem v-for="city in referenceStore.cities" :key="city.id" :value="city.id">
+                    <SelectItem v-for="city in availableCities" :key="city.id" :value="city.id">
                       {{ city.name }}
                     </SelectItem>
                   </SelectContent>
@@ -292,6 +292,7 @@ const currentBranchName = ref("");
 const iikoOrganizationByTerminalGroupId = ref({});
 const phoneError = ref("");
 const cityId = ref(route.query.cityId ? Number(route.query.cityId) : null);
+const availableCities = computed(() => (isEditing.value ? referenceStore.allCities : referenceStore.cities));
 const form = ref({
   name: "",
   address: "",
@@ -445,7 +446,7 @@ const initBranchMap = () => {
   if (form.value.latitude && form.value.longitude) {
     center = [form.value.latitude, form.value.longitude];
   } else if (cityId.value) {
-    const selectedCity = referenceStore.cities.find((city) => city.id === Number(cityId.value));
+    const selectedCity = availableCities.value.find((city) => city.id === Number(cityId.value));
     if (selectedCity?.latitude && selectedCity?.longitude) {
       center = [selectedCity.latitude, selectedCity.longitude];
     }
@@ -487,7 +488,7 @@ const initBranchMap = () => {
 
 const geocodeAddress = async () => {
   if (!form.value.address || !cityId.value) return;
-  const selectedCity = referenceStore.cities.find((city) => city.id === parseInt(cityId.value, 10));
+  const selectedCity = availableCities.value.find((city) => city.id === parseInt(cityId.value, 10));
   const cityName = selectedCity?.name || "";
   const addressWithCity = cityName ? `${form.value.address}, ${cityName}` : form.value.address;
   try {
@@ -726,7 +727,7 @@ onMounted(async () => {
     devError("Ошибка загрузки Яндекс Карт:", error);
     showErrorNotification("Не удалось загрузить Яндекс Карты");
   }
-  await referenceStore.loadCities();
+  await referenceStore.loadCities({ includeInactive: true });
   await loadIikoBranches();
   if (!cityId.value) {
     if (isEditing.value) {
@@ -734,8 +735,8 @@ onMounted(async () => {
       goBack();
       return;
     }
-    if (referenceStore.cities.length) {
-      cityId.value = referenceStore.cities[0].id;
+    if (availableCities.value.length) {
+      cityId.value = availableCities.value[0].id;
     }
   }
   await loadBranch();

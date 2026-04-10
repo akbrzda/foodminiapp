@@ -4,6 +4,7 @@ import { devError } from "@/shared/utils/logger";
 export const useReferenceStore = defineStore("reference", {
   state: () => ({
     cities: [],
+    allCities: [],
     branchesByCity: {},
     loading: false,
     citiesPromise: null,
@@ -16,15 +17,23 @@ export const useReferenceStore = defineStore("reference", {
     },
   },
   actions: {
-    async loadCities({ force = false } = {}) {
-      if (this.loading && this.citiesPromise) return this.citiesPromise;
-      if (this.cities.length > 0 && !force) return;
+    async loadCities({ force = false, includeInactive = false } = {}) {
+      if (this.loading && this.citiesPromise) {
+        await this.citiesPromise;
+        return includeInactive ? this.allCities : this.cities;
+      }
+      if (!force) {
+        if (includeInactive && this.allCities.length > 0) return this.allCities;
+        if (!includeInactive && this.cities.length > 0) return this.cities;
+      }
       this.loading = true;
       this.citiesPromise = api
         .get("/api/cities/admin/all")
         .then((response) => {
-          this.cities = response.data.cities || [];
-          return this.cities;
+          const cities = Array.isArray(response.data?.cities) ? response.data.cities : [];
+          this.allCities = cities;
+          this.cities = cities.filter((city) => city?.is_active === true || city?.is_active === 1);
+          return includeInactive ? this.allCities : this.cities;
         })
         .catch((error) => {
           devError("Ошибка загрузки городов:", error);
