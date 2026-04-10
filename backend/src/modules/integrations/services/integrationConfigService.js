@@ -53,6 +53,18 @@ export async function getIntegrationSettings() {
     return result;
   };
 
+  const normalizedOrderTypeMapping = normalizeOrderTypeMapping(settings.iiko_order_type_mapping);
+  const iikoPriceCategoriesMapping = Object.entries(normalizedOrderTypeMapping).reduce(
+    (acc, [localOrderType, mapping]) => {
+      const priceCategoryId = String(mapping?.priceCategoryId || "").trim();
+      if (priceCategoryId) {
+        acc[String(localOrderType || "").trim()] = priceCategoryId;
+      }
+      return acc;
+    },
+    {}
+  );
+
   return {
     iikoEnabled: Boolean(settings.iiko_enabled),
     iikoAutoSyncEnabled: settings.iiko_auto_sync_enabled !== false,
@@ -64,7 +76,8 @@ export async function getIntegrationSettings() {
     iikoPriceCategoryId: settings.iiko_price_category_id || "",
     iikoDeliveryProductId: settings.iiko_delivery_product_id || "",
     iikoPreserveLocalNames: settings.iiko_preserve_local_names !== false,
-    iikoOrderTypeMapping: normalizeOrderTypeMapping(settings.iiko_order_type_mapping),
+    iikoOrderTypeMapping: normalizedOrderTypeMapping,
+    iikoPriceCategoriesMapping,
     iikoPaymentTypeMapping: normalizePaymentTypeMapping(settings.iiko_payment_type_mapping),
     iikoBonusDiscountTypeId: String(settings.iiko_bonus_discount_type_id || "").trim(),
     iikoWebhookSecret: settings.iiko_webhook_secret || "",

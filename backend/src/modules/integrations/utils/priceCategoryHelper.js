@@ -7,10 +7,21 @@
  */
 export function getPriceCategoryMapping(integrationSettings) {
   try {
-    const mapping = integrationSettings?.iikoPriceCategoriesMapping;
-    if (!mapping || typeof mapping !== "object") {
-      return {};
-    }
+    const directMapping = integrationSettings?.iikoPriceCategoriesMapping;
+    const orderTypeMapping = integrationSettings?.iikoOrderTypeMapping;
+    const mapping =
+      directMapping && typeof directMapping === "object" && !Array.isArray(directMapping)
+        ? directMapping
+        : orderTypeMapping && typeof orderTypeMapping === "object" && !Array.isArray(orderTypeMapping)
+          ? Object.entries(orderTypeMapping).reduce((acc, [fulfillmentType, value]) => {
+              const priceCategoryId = String(value?.priceCategoryId || "").trim();
+              if (priceCategoryId) {
+                acc[fulfillmentType] = priceCategoryId;
+              }
+              return acc;
+            }, {})
+          : null;
+    if (!mapping) return {};
 
     // Валидируем структуру
     const result = {};
