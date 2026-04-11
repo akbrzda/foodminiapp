@@ -2,12 +2,26 @@ import db from "../../config/database.js";
 import { logger } from "../../utils/logger.js";
 import { getRoleByCode } from "../access/index.js";
 import { authRepository } from "./auth.repository.js";
+import { isPlatformRoleCode } from "../platform-core/platform-auth.constants.js";
 
 export const resolveAdminRoleContext = async (roleCode) => {
   const normalizedCode = String(roleCode || "")
     .trim()
     .toLowerCase();
-  return getRoleByCode(db, normalizedCode);
+  const roleFromDb = await getRoleByCode(db, normalizedCode);
+  if (roleFromDb) return roleFromDb;
+
+  if (isPlatformRoleCode(normalizedCode)) {
+    return {
+      id: null,
+      code: normalizedCode,
+      name: normalizedCode,
+      is_active: 1,
+      is_system: 1,
+    };
+  }
+
+  return null;
 };
 
 export const getAdminScope = async (adminId, roleCode) => {

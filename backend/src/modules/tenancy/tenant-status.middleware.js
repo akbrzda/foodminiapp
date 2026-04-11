@@ -1,5 +1,5 @@
 import { tenancyConfig } from "../../config/tenancy.js";
-import { getTenantStatusCode, isTenantStatusBlocked } from "./tenant-status.service.js";
+import { platformCoreTenantService } from "./platform-core-tenant.service.js";
 
 export const requireActiveTenant = (req, res, next) => {
   if (!tenancyConfig.runtimeEnabled) return next();
@@ -13,10 +13,10 @@ export const requireActiveTenant = (req, res, next) => {
     });
   }
 
-  if (isTenantStatusBlocked(context.status)) {
+  if (platformCoreTenantService.isBlockedStatus(context.status)) {
     return res.status(403).json({
       error: "Tenant access is blocked",
-      code: getTenantStatusCode(context.status),
+      code: platformCoreTenantService.getBlockedStatusCode(context.status),
       tenant_status: context.status,
     });
   }

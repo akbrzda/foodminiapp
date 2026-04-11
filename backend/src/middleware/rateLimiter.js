@@ -173,10 +173,17 @@ export const unauthorizedBanShield = (options = {}) => {
     strikeWindowMs = 5 * 60 * 1000, // 5 минут
     maxStrikes = 15, // 15 неуспешных попыток
     banMs = 30 * 60 * 1000, // 30 минут
+    skipLocalInNonProduction = true,
   } = options;
 
   return async (req, res, next) => {
     const ip = resolveClientIpKey(req);
+    const isNonProduction = String(process.env.NODE_ENV || "").trim().toLowerCase() !== "production";
+    const isLocalIp = ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1";
+    if (skipLocalInNonProduction && isNonProduction && isLocalIp) {
+      return next();
+    }
+
     const banKey = `auth_shield:ban:${ip}`;
 
     try {

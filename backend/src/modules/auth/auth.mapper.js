@@ -1,4 +1,12 @@
+import { isPlatformRoleCode } from "../platform-core/platform-auth.constants.js";
+
+const resolveAuthScope = (roleCode) => (isPlatformRoleCode(roleCode) ? "platform" : "tenant");
+
 export const buildAdminAuthPayload = ({ user, roleContext, cities, branches, permissions }) => ({
+  auth_scope: resolveAuthScope(roleContext.code),
+  platform_role: isPlatformRoleCode(roleContext.code) ? roleContext.code : null,
+  tenant_role: isPlatformRoleCode(roleContext.code) ? null : roleContext.code,
+  tenant_id: null,
   id: user.id,
   email: user.email,
   role: roleContext.code,
@@ -12,6 +20,10 @@ export const buildAdminAuthPayload = ({ user, roleContext, cities, branches, per
 });
 
 export const buildAdminSessionUser = ({ user, roleContext, cities, branches, permissions }) => ({
+  auth_scope: resolveAuthScope(roleContext.code),
+  platform_role: isPlatformRoleCode(roleContext.code) ? roleContext.code : null,
+  tenant_role: isPlatformRoleCode(roleContext.code) ? null : roleContext.code,
+  tenant_id: null,
   ...user,
   role_name: roleContext.name,
   cities,
@@ -22,7 +34,11 @@ export const buildAdminSessionUser = ({ user, roleContext, cities, branches, per
   branches,
 });
 
-export const buildClientAuthPayload = ({ userId }) => ({
+export const buildClientAuthPayload = ({ userId, tenantId = null }) => ({
+  auth_scope: "tenant",
+  platform_role: null,
+  tenant_role: "client",
+  tenant_id: tenantId,
   id: userId,
   type: "client",
 });

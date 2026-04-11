@@ -79,3 +79,47 @@ test("tenant status middleware: returns 403 for blocked tenant status", async ()
   assert.equal(res.payload.body?.code, "TENANT_SUSPENDED");
 });
 
+test("tenant status middleware: returns unified code for cancelled status", async () => {
+  const previousEnabled = tenancyConfig.runtimeEnabled;
+  tenancyConfig.runtimeEnabled = true;
+
+  let nextCalled = false;
+  const req = {
+    tenantContext: {
+      isResolved: true,
+      status: "cancelled",
+    },
+  };
+  const res = buildRes();
+  await requireActiveTenant(req, res, () => {
+    nextCalled = true;
+  });
+
+  tenancyConfig.runtimeEnabled = previousEnabled;
+  assert.equal(nextCalled, false);
+  assert.equal(res.payload.statusCode, 403);
+  assert.equal(res.payload.body?.code, "TENANT_SUSPENDED");
+});
+
+test("tenant status middleware: returns deleted code for deleted status", async () => {
+  const previousEnabled = tenancyConfig.runtimeEnabled;
+  tenancyConfig.runtimeEnabled = true;
+
+  let nextCalled = false;
+  const req = {
+    tenantContext: {
+      isResolved: true,
+      status: "deleted",
+    },
+  };
+  const res = buildRes();
+  await requireActiveTenant(req, res, () => {
+    nextCalled = true;
+  });
+
+  tenancyConfig.runtimeEnabled = previousEnabled;
+  assert.equal(nextCalled, false);
+  assert.equal(res.payload.statusCode, 403);
+  assert.equal(res.payload.body?.code, "TENANT_DELETED");
+});
+

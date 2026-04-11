@@ -4,6 +4,13 @@ import { tenancyConfig } from "../../config/tenancy.js";
 class TenantDbManager {
   constructor() {
     this.pools = new Map();
+    this.stats = {
+      evictions: 0,
+      cleanupClosed: 0,
+      connectionErrors: 0,
+      lastErrorAt: null,
+      lastErrorMessage: null,
+    };
   }
 
   createPool(dbName) {
@@ -29,6 +36,7 @@ class TenantDbManager {
     const [oldestDbName, oldestMeta] = oldest;
     this.pools.delete(oldestDbName);
     await oldestMeta.pool.end();
+    this.stats.evictions += 1;
   }
 
   async getPool(dbName) {
@@ -39,9 +47,16 @@ class TenantDbManager {
     }
 
     await this.evictIfNeeded();
-    const pool = this.createPool(dbName);
-    this.pools.set(dbName, { pool, lastUsedAt: Date.now() });
-    return pool;
+    try {
+      const pool = this.createPool(dbName);
+      this.pools.set(dbName, { pool, lastUsedAt: Date.now() });
+      return pool;
+    } catch (error) {
+      this.stats.connectionErrors += 1;
+      this.stats.lastErrorAt = new Date().toISOString();
+      this.stats.lastErrorMessage = error?.message || "Unknown tenant pool error";
+      throw error;
+    }
   }
 
   async cleanupIdlePools() {
@@ -55,6 +70,7 @@ class TenantDbManager {
     for (const [dbName, pool] of toClose) {
       this.pools.delete(dbName);
       await pool.end();
+      this.stats.cleanupClosed += 1;
     }
   }
 
@@ -63,6 +79,11 @@ class TenantDbManager {
       poolsCount: this.pools.size,
       maxPools: tenancyConfig.maxTenantPools,
       idleMs: tenancyConfig.poolIdleMs,
+      evictions: this.stats.evictions,
+      cleanupClosed: this.stats.cleanupClosed,
+      connectionErrors: this.stats.connectionErrors,
+      lastErrorAt: this.stats.lastErrorAt,
+      lastErrorMessage: this.stats.lastErrorMessage,
     };
   }
 
@@ -77,4 +98,3 @@ class TenantDbManager {
 }
 
 export const tenantDbManager = new TenantDbManager();
-

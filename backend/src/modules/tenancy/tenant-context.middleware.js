@@ -1,7 +1,7 @@
 import { tenancyConfig } from "../../config/tenancy.js";
 import { logger } from "../../utils/logger.js";
 import { parseTenantSlugFromHost, normalizeTenantSlug } from "./slug.js";
-import { tenantRegistryRepository } from "./tenant-registry.repository.js";
+import { platformCoreTenantService } from "./platform-core-tenant.service.js";
 
 const getTrustedHeaderValue = (req) => {
   const headerName = tenancyConfig.trustedHeaderName;
@@ -62,7 +62,7 @@ export const attachTenantContext = async (req, res, next) => {
   }
 
   try {
-    const tenant = await tenantRegistryRepository.getBySlug(candidateSlug);
+    const tenant = await platformCoreTenantService.getBySlug(candidateSlug);
     if (!tenant) {
       if (tenancyConfig.shadowMode) {
         logger.system.warn("Tenant not found in shadow mode", {
@@ -94,4 +94,3 @@ export const attachTenantContext = async (req, res, next) => {
     });
   }
 };
-

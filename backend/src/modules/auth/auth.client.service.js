@@ -224,7 +224,7 @@ const sendStartMessagesForNewUser = async ({ userId, isNewUser }) => {
   }
 };
 
-export const loginMiniApp = async ({ platform, initData, phone, ipAddress }) => {
+export const loginMiniApp = async ({ platform, initData, phone, ipAddress, tenantId = null }) => {
   const parsedUser = parseMiniAppUser(initData);
   if (!parsedUser?.id) {
     throw new ValidationError("MiniApp data is required");
@@ -297,6 +297,7 @@ export const loginMiniApp = async ({ platform, initData, phone, ipAddress }) => 
 
   const authPayload = buildClientAuthPayload({
     userId,
+    tenantId,
   });
   const tokens = buildTokensForClient(authPayload);
   const csrfToken = createCsrfToken();

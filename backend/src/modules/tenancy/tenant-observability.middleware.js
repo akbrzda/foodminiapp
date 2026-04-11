@@ -11,6 +11,7 @@ export const logTenantAccess = (moduleName) => (req, _res, next) => {
     method: req.method,
     path: req.originalUrl || req.url,
     tenant_id: context.tenantId,
+    slug: context.slug,
     tenant_slug: context.slug,
     tenant_status: context.status,
     tenant_source: context.source,

@@ -35,6 +35,7 @@ export const authController = {
         initData,
         phone,
         ipAddress: getRequestIp(req),
+        tenantId: Number(req.tenantContext?.tenantId || 0) || null,
       });
 
       setAccessCookie(res, result.tokens.accessToken, result.tokens.accessMaxAge, { type: "client" });

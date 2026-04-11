@@ -2,6 +2,7 @@ import axios from "axios";
 import { useAuthStore } from "@/shared/stores/auth.js";
 import { fetchCsrfToken, setCsrfToken, withCsrfHeader } from "@/shared/api/csrf.js";
 import { runLogoutFlow } from "@/shared/services/auth/authUiFlow.js";
+import { getTenantSlug } from "@/shared/utils/tenant.js";
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || "http://localhost:3000",
@@ -70,6 +71,14 @@ const refreshToken = async () => {
 };
 api.interceptors.request.use(async (config) => {
   const method = String(config.method || "get").toUpperCase();
+  const requestPath = String(config.url || "");
+  const tenantAwarePath = requestPath.startsWith("/api/settings") || requestPath.startsWith("/api/orders");
+  const tenantSlug = getTenantSlug();
+  if (tenantAwarePath && tenantSlug) {
+    config.headers = config.headers || {};
+    config.headers["X-Tenant-Slug"] = tenantSlug;
+  }
+
   if (!["GET", "HEAD", "OPTIONS"].includes(method)) {
     config.headers = await withCsrfHeader(config.headers || {});
   }

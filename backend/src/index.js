@@ -14,6 +14,7 @@ import {
 } from "./middleware/rateLimiter.js";
 import { hppMiddleware } from "./middleware/hpp.js";
 import { createCsrfProtection } from "./middleware/csrf.js";
+import { authenticateToken, requirePlatformAccess } from "./middleware/auth.js";
 import { router as authRoutes } from "./modules/auth/index.js";
 import { router as deliveryRoutes } from "./modules/delivery/index.js";
 import { router as usersRoutes } from "./modules/users/index.js";
@@ -32,6 +33,7 @@ import { router as settingsRoutes } from "./modules/settings/index.js";
 import { router as broadcastsRoutes } from "./modules/broadcasts/index.js";
 import { router as subscriptionCampaignsRoutes } from "./modules/subscription-campaigns/index.js";
 import { router as storiesRoutes } from "./modules/stories/index.js";
+import { router as platformCoreRoutes } from "./modules/platform-core/index.js";
 import {
   adminRouter as integrationsAdminRoutes,
   webhooksRouter as integrationsWebhooksRoutes,
@@ -323,6 +325,7 @@ app.use("/api/stories", storiesRoutes);
 app.use("/api/admin/integrations", integrationsAdminRoutes);
 app.use("/api/webhooks/iiko", integrationsWebhooksRoutes);
 app.use("/api/internal", tenancyRoutes);
+app.use("/api/platform", authenticateToken, requirePlatformAccess, platformCoreRoutes);
 app.use(notFoundHandler);
 app.use(errorHandler);
 const server = http.createServer(app);

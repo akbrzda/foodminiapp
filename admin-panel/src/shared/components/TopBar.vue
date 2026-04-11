@@ -23,6 +23,12 @@
           </template>
         </BreadcrumbList>
       </Breadcrumb>
+      <span
+        v-if="tenantSlug"
+        class="hidden rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-[11px] font-medium text-emerald-700 md:inline-flex"
+      >
+        Tenant: {{ tenantSlug }}
+      </span>
     </div>
     <div class="ml-auto flex items-center gap-1.5 px-3 py-2 sm:gap-2 sm:px-4">
       <div class="hidden items-center gap-2 md:flex">
@@ -76,6 +82,7 @@ import Separator from "@/shared/components/ui/separator/Separator.vue";
 import { useOrdersStore } from "@/modules/orders/stores/orders.js";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/components/ui/select";
 import { useTheme } from "@/shared/composables/useTheme.js";
+import { getTenantSlug } from "@/shared/utils/tenant.js";
 
 defineProps({
   title: { type: String, default: "" },
@@ -126,6 +133,7 @@ const items = computed(() => {
     to: index < matched.length - 1 ? normalizePath(record.path) : null,
   }));
 });
+const tenantSlug = computed(() => getTenantSlug());
 const openShiftPage = () => {
   window.open("/shift", "_blank");
 };

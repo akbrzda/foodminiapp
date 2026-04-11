@@ -1,6 +1,7 @@
 import express from "express";
 import { tenancyConfig } from "../../config/tenancy.js";
 import { tenantDbManager } from "./tenant-db-manager.js";
+import { platformCoreTenantService } from "./platform-core-tenant.service.js";
 
 const router = express.Router();
 
@@ -26,13 +27,13 @@ router.get("/tenant-runtime-ready", (req, res) => {
 
   const context = req.tenantContext || null;
   const isResolved = Boolean(context?.isResolved);
-  const isStatusAllowed = !["suspended", "cancelled", "deleted"].includes(
-    String(context?.status || "")
-      .trim()
-      .toLowerCase()
-  );
+  const isStatusAllowed = !platformCoreTenantService.isBlockedStatus(context?.status);
 
   const isReady = !tenancyConfig.runtimeEnabled || (isResolved && isStatusAllowed);
+  const reasons = [];
+  if (tenancyConfig.runtimeEnabled && !isResolved) reasons.push("TENANT_UNRESOLVED");
+  if (tenancyConfig.runtimeEnabled && isResolved && !isStatusAllowed) reasons.push("TENANT_BLOCKED");
+  if ((tenantDbManager.getStats()?.connectionErrors || 0) > 0) reasons.push("TENANT_DB_CONNECTION_ERRORS");
 
   return res.status(isReady ? 200 : 503).json({
     status: isReady ? "ok" : "fail",
@@ -41,6 +42,7 @@ router.get("/tenant-runtime-ready", (req, res) => {
       tenant_resolved: isResolved ? "ok" : "fail",
       tenant_status: isStatusAllowed ? "ok" : "fail",
     },
+    reasons,
     tenancy: context,
     dbManager: tenantDbManager.getStats(),
   });

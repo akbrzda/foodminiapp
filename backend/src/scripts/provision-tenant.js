@@ -81,11 +81,21 @@ const main = async () => {
 
   try {
     await rootConnection.query(`CREATE DATABASE IF NOT EXISTS \`${dbName}\``);
-    await platformConnection.query(
+    const [tenantInsert] = await platformConnection.query(
       `INSERT INTO tenants (slug, db_name, name, contact_email, status)
        VALUES (?, ?, ?, ?, 'trial')`,
       [normalizedSlug, dbName, tenantName, contactEmail]
     );
+
+    const tenantId = Number(tenantInsert?.insertId || 0) || null;
+    if (tenantId) {
+      await platformConnection.query(
+        `INSERT INTO tenant_db_migrations (tenant_id, migration_name, status, metadata)
+         VALUES (?, ?, 'pending', ?)
+         ON DUPLICATE KEY UPDATE status = VALUES(status), metadata = VALUES(metadata)`,
+        [tenantId, "tenant_schema_bootstrap", JSON.stringify({ source: "provision-tenant" })]
+      );
+    }
 
     console.info(
       JSON.stringify(
@@ -93,6 +103,7 @@ const main = async () => {
           success: true,
           slug: normalizedSlug,
           dbName,
+          tenantId,
           platformDbName: tenancyConfig.platformDbName,
           nextStep: "Run tenant schema migrations for the new database",
         },
@@ -109,4 +120,3 @@ main().catch((error) => {
   console.error("Tenant provisioning failed:", error.message);
   process.exit(1);
 });
-

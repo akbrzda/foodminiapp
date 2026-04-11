@@ -5,3 +5,4 @@ export { getTenantPoolByRequest, getTenantConnectionByRequest } from "./tenant-c
 export { router } from "./routes.js";
 export { tenantDbManager } from "./tenant-db-manager.js";
 export { closePlatformCorePool } from "./platform-core.db.js";
+export { platformCoreTenantService } from "./platform-core-tenant.service.js";

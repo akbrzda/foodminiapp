@@ -90,6 +90,10 @@ export const issueWsTicket = async ({ user, ipAddress }) => {
   const payload = JSON.stringify({
     id: user.id,
     role: user.role ?? null,
+    auth_scope: user.auth_scope ?? null,
+    platform_role: user.platform_role ?? null,
+    tenant_role: user.tenant_role ?? null,
+    tenant_id: user.tenant_id ?? null,
     cities: Array.isArray(user.cities) ? user.cities : [],
     permissions: Array.isArray(user.permissions) ? user.permissions : [],
     city_ids: Array.isArray(user.city_ids) ? user.city_ids : [],
@@ -146,6 +150,7 @@ export const refreshSession = async ({ refreshTokens, ipAddress }) => {
 
     const payload = buildClientAuthPayload({
       userId: user.id,
+      tenantId: Number(decoded?.tenant_id || 0) || null,
     });
 
     tokens = buildTokensForClient(payload);
@@ -176,6 +181,13 @@ export const refreshSession = async ({ refreshTokens, ipAddress }) => {
 
     tokens = buildTokensForAdmin(payload);
     await logger.auth.refreshSuccess(admin.id, "admin", ipAddress);
+    await safeLogAdminAuthAction({
+      adminUserId: admin.id,
+      action: "auth_refresh_success",
+      description: "Успешное обновление админ-сессии",
+      ipAddress,
+      userAgent: null,
+    });
   } else {
     throw authError.invalidRefreshPayload();
   }

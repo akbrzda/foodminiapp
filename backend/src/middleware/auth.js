@@ -5,6 +5,8 @@ import { JWT_ISSUER, JWT_ACCESS_AUDIENCES, extractBearerToken, getJwtSecret } fr
 import { canPermission, getDefaultRolePermissions } from "../modules/access/index.js";
 import db from "../config/database.js";
 import { getAccessTokenCandidates } from "../modules/auth/auth.cookies.js";
+import { safeLogAdminAuthAction } from "../modules/auth/auth.admin.helpers.js";
+import { isPlatformRoleCode } from "../modules/platform-core/platform-auth.constants.js";
 
 const normalizeCityIds = (value) => {
   if (Array.isArray(value)) {
@@ -84,10 +86,20 @@ export const authenticateToken = async (req, res, next) => {
       cities: normalizeCityIds(user?.cities),
       permissions: normalizePermissions(user?.permissions, user?.role),
     };
+    req.user.auth_scope = String(req.user?.auth_scope || "").trim().toLowerCase() || null;
+    req.user.platform_role = String(req.user?.platform_role || "").trim().toLowerCase() || null;
+    req.user.tenant_role = String(req.user?.tenant_role || "").trim().toLowerCase() || null;
 
     if (req.user?.type === "admin") {
       const adminId = Number(req.user?.id);
       if (!Number.isInteger(adminId) || adminId <= 0) {
+        await safeLogAdminAuthAction({
+          adminUserId: req.user?.id,
+          action: "auth_session_invalidated",
+          description: "Некорректный admin id в access token",
+          ipAddress: req.ip,
+          userAgent: req.get("user-agent"),
+        });
         return res.status(401).json({ error: "Invalid admin session" });
       }
 
@@ -99,12 +111,26 @@ export const authenticateToken = async (req, res, next) => {
         [adminId],
       );
       if (admins.length === 0 || !admins[0].is_active) {
+        await safeLogAdminAuthAction({
+          adminUserId: adminId,
+          action: "auth_session_invalidated",
+          description: "Аккаунт админа не найден или деактивирован",
+          ipAddress: req.ip,
+          userAgent: req.get("user-agent"),
+        });
         return res.status(401).json({ error: "Admin account not found or inactive" });
       }
 
       const tokenPermissionVersion = Number(req.user?.permission_version);
       const currentPermissionVersion = Number(admins[0].permission_version || 1);
       if (!Number.isInteger(tokenPermissionVersion) || tokenPermissionVersion !== currentPermissionVersion) {
+        await safeLogAdminAuthAction({
+          adminUserId: adminId,
+          action: "auth_session_invalidated",
+          description: "Устаревшая версия прав в токене",
+          ipAddress: req.ip,
+          userAgent: req.get("user-agent"),
+        });
         return res.status(401).json({ error: "Session permissions outdated. Please login again." });
       }
     }
@@ -163,6 +189,68 @@ export const requirePermission = (...permissions) => {
 
     next();
   };
+};
+
+export const requirePlatformAccess = (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({
+      error: "Authentication required",
+    });
+  }
+
+  if (req.user.type !== "admin") {
+    return res.status(403).json({
+      error: "Insufficient permissions",
+    });
+  }
+
+  const roleCode = String(req.user.platform_role || req.user.role || "")
+    .trim()
+    .toLowerCase();
+  const scope = String(req.user.auth_scope || "").trim().toLowerCase();
+  if (scope === "platform" && isPlatformRoleCode(roleCode)) {
+    return next();
+  }
+
+  return res.status(403).json({
+    error: "Platform access required",
+  });
+};
+
+export const requireTenantAccess = (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({
+      error: "Authentication required",
+    });
+  }
+
+  // Клиентские токены считаем tenant-scoped по определению.
+  if (req.user.type === "client") {
+    return next();
+  }
+
+  if (req.user.type !== "admin") {
+    return res.status(403).json({
+      error: "Insufficient permissions",
+    });
+  }
+
+  const scope = String(req.user.auth_scope || "").trim().toLowerCase();
+  if (scope !== "tenant") {
+    return res.status(403).json({
+      error: "Tenant access required",
+    });
+  }
+
+  const contextTenantId = Number(req.tenantContext?.tenantId || 0);
+  const tokenTenantId = Number(req.user?.tenant_id || 0);
+  if (contextTenantId > 0 && tokenTenantId > 0 && contextTenantId !== tokenTenantId) {
+    return res.status(403).json({
+      error: "Tenant context mismatch",
+    });
+  }
+
+  return next();
 };
 
 export const checkCityAccess = (req, res, next) => {

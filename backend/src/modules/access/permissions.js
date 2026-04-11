@@ -86,12 +86,29 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     "locations.delivery_zones.manage",
     "menu.stop_list.manage",
   ],
+  platform_owner: ACCESS_PERMISSION_DEFINITIONS.map((permission) => permission.code),
+  platform_support: [
+    "dashboard.view",
+    "orders.view",
+    "clients.view",
+    "system.logs.view",
+    "system.settings.manage",
+  ],
+  platform_finance: [
+    "dashboard.view",
+    "clients.view",
+    "orders.view",
+    "system.logs.view",
+  ],
 };
 
 export const SYSTEM_ROLE_DEFINITIONS = [
   { code: "ceo", name: "CEO", is_system: true },
   { code: "admin", name: "Администратор", is_system: true },
   { code: "manager", name: "Менеджер", is_system: true },
+  { code: "platform_owner", name: "Platform Owner", is_system: true },
+  { code: "platform_support", name: "Platform Support", is_system: true },
+  { code: "platform_finance", name: "Platform Finance", is_system: true },
 ];
 
 export const getDefaultRolePermissions = (roleCode) => {
