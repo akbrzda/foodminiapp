@@ -923,11 +923,6 @@ const loadStopListSyncInfo = async () => {
         limit: 1,
         _ts: Date.now(),
       },
-      headers: {
-        "Cache-Control": "no-cache, no-store, must-revalidate",
-        Pragma: "no-cache",
-        Expires: "0",
-      },
     });
     stopListSyncInfo.value = response.data?.rows?.[0] || null;
     return stopListSyncInfo.value;
