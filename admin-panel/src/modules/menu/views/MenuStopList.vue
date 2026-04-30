@@ -811,7 +811,9 @@ const stopListSyncStatusLabel = computed(() => {
   return `Статус: ${status}`;
 });
 const getBranchName = (branchId) => {
-  return referenceStore.branches.find((b) => String(b.id) === String(branchId))?.name || "Неизвестно";
+  return (
+    referenceStore.branches.find((b) => String(b.id) === String(branchId))?.name || "Неизвестно"
+  );
 };
 const getFulfillmentTypes = (value) => {
   if (!value) return [];
