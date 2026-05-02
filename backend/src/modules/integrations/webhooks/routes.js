@@ -182,6 +182,43 @@ function extractEventInfoPayload(payload) {
   return payload?.eventInfo && typeof payload.eventInfo === "object" ? payload.eventInfo : {};
 }
 
+function resolveStopListUpdates(payload = {}) {
+  const eventInfoPayload = extractEventInfoPayload(payload);
+  return Array.isArray(payload?.terminalGroupsStopListsUpdates)
+    ? payload.terminalGroupsStopListsUpdates
+    : Array.isArray(payload?.terminal_groups_stop_lists_updates)
+      ? payload.terminal_groups_stop_lists_updates
+      : Array.isArray(payload?.terminalGroupStopListsUpdates)
+        ? payload.terminalGroupStopListsUpdates
+        : Array.isArray(payload?.terminal_group_stop_lists_updates)
+          ? payload.terminal_group_stop_lists_updates
+          : Array.isArray(payload?.terminalGroupStopLists)
+            ? payload.terminalGroupStopLists
+            : Array.isArray(payload?.terminal_group_stop_lists)
+              ? payload.terminal_group_stop_lists
+              : Array.isArray(payload?.stopLists)
+                ? payload.stopLists
+                : Array.isArray(payload?.organizationStopLists)
+                  ? payload.organizationStopLists
+                  : Array.isArray(eventInfoPayload?.terminalGroupsStopListsUpdates)
+                    ? eventInfoPayload.terminalGroupsStopListsUpdates
+                    : Array.isArray(eventInfoPayload?.terminal_groups_stop_lists_updates)
+                      ? eventInfoPayload.terminal_groups_stop_lists_updates
+                      : Array.isArray(eventInfoPayload?.terminalGroupStopListsUpdates)
+                        ? eventInfoPayload.terminalGroupStopListsUpdates
+                        : Array.isArray(eventInfoPayload?.terminal_group_stop_lists_updates)
+                          ? eventInfoPayload.terminal_group_stop_lists_updates
+                          : Array.isArray(eventInfoPayload?.terminalGroupStopLists)
+                            ? eventInfoPayload.terminalGroupStopLists
+                            : Array.isArray(eventInfoPayload?.terminal_group_stop_lists)
+                              ? eventInfoPayload.terminal_group_stop_lists
+                              : Array.isArray(eventInfoPayload?.stopLists)
+                                ? eventInfoPayload.stopLists
+                                : Array.isArray(eventInfoPayload?.organizationStopLists)
+                                  ? eventInfoPayload.organizationStopLists
+                                  : [];
+}
+
 function detectWebhookPayloadKind(payload = {}) {
   const eventType = String(payload?.eventType || payload?.event_type || "")
     .trim()
@@ -191,13 +228,7 @@ function detectWebhookPayloadKind(payload = {}) {
     return "order-status";
 
   const eventInfoPayload = extractEventInfoPayload(payload);
-  const hasStopListUpdates =
-    Array.isArray(payload?.terminalGroupsStopListsUpdates) ||
-    Array.isArray(payload?.terminal_groups_stop_lists_updates) ||
-    Array.isArray(payload?.terminalGroupStopLists) ||
-    Array.isArray(payload?.terminal_group_stop_lists) ||
-    Array.isArray(eventInfoPayload?.terminalGroupsStopListsUpdates) ||
-    Array.isArray(eventInfoPayload?.terminal_groups_stop_lists_updates);
+  const hasStopListUpdates = resolveStopListUpdates(payload).length > 0;
   if (hasStopListUpdates) return "stoplist";
 
   const orderInfoPayload =
@@ -377,20 +408,7 @@ async function processOrderStatusWebhookPayload(payload = {}, options = {}) {
 }
 
 async function processStopListWebhookPayload(payload = {}) {
-  const eventInfoPayload = extractEventInfoPayload(payload);
-  const updates = Array.isArray(payload?.terminalGroupsStopListsUpdates)
-    ? payload.terminalGroupsStopListsUpdates
-    : Array.isArray(payload?.terminal_groups_stop_lists_updates)
-      ? payload.terminal_groups_stop_lists_updates
-      : Array.isArray(payload?.terminalGroupStopLists)
-        ? payload.terminalGroupStopLists
-        : Array.isArray(payload?.terminal_group_stop_lists)
-          ? payload.terminal_group_stop_lists
-          : Array.isArray(eventInfoPayload?.terminalGroupsStopListsUpdates)
-            ? eventInfoPayload.terminalGroupsStopListsUpdates
-            : Array.isArray(eventInfoPayload?.terminal_groups_stop_lists_updates)
-              ? eventInfoPayload.terminal_groups_stop_lists_updates
-              : [];
+  const updates = resolveStopListUpdates(payload);
   const terminalGroupIds = updates
     .map((update) =>
       String(update?.id || update?.terminalGroupId || update?.terminal_group_id || "").trim()
